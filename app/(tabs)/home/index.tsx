@@ -28,7 +28,7 @@ const movimientos: ResourceProps[] = [
     description:
       "Administra las ventas a clientes, emisión de pedidos y seguimiento de entregas.",
     color: palette.textSecondary,
-    link: "/(tabs)/home/roles",
+    link: "/(tabs)/home/sales/form",
     background: palette.card,
     icon: require("../../../assets/images/dashboard/sales.png"),
   },
@@ -60,7 +60,7 @@ const catalogos: ResourceProps[] = [
     label: "Productos",
     description:
       "Administra el catálogo de productos disponibles para venta y compra, con detalles, precios y stock.",
-    link: "/(tabs)/home/roles",
+    link: "/(tabs)/home/products" as any,
     backgroundColor: palette.surface,
     color: palette.textSecondary,
     icon: require("../../../assets/images/dashboard/products.png"),
@@ -70,7 +70,7 @@ const catalogos: ResourceProps[] = [
     label: "Categorías",
     description:
       "Organiza los productos en grupos lógicos para facilitar búsquedas y reportes.",
-    link: "/(tabs)/home/roles",
+    link: "/(tabs)/home/categories",
     backgroundColor: palette.card,
     color: palette.textSecondary,
     icon: require("../../../assets/images/dashboard/categories.png"),
@@ -130,6 +130,16 @@ const catalogos: ResourceProps[] = [
     link: "/(tabs)/home/users",
     backgroundColor: palette.warning,
     color: palette.textSecondary,
+  },
+  {
+    key: "trabajadores",
+    label: "Trabajadores",
+    description:
+      "Administra la información de empleados, asignaciones de roles y ubicaciones de trabajo.",
+    link: "/(tabs)/home/workers",
+    backgroundColor: palette.info,
+    color: "#fff",
+    icon: require("../../../assets/images/dashboard/use.png"),
   },
   {
     key: "roles",
@@ -204,7 +214,7 @@ export default function HomeScreen() {
           <DashboardButton
             title="Sucursales"
             description="Gestiona las ubicaciones físicas y almacenes de la organización."
-            link="/(tabs)/home/roles"
+            link="/(tabs)/home/locations"
             backgroundColor={palette.primary}
             color="#fff"
             icon={require("../../../assets/images/dashboard/location.png")}

@@ -1,4 +1,5 @@
 import { IndexParams } from "@/utils/services/crudService";
+import { getIn, useFormikContext } from "formik";
 import React, { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { Text } from "react-native-paper";
@@ -21,7 +22,7 @@ export interface AppProSelectProps {
   // Dependencias
   dependsOn?: {
     field: string; // Campo del modelo padre
-    value: any; // Valor del campo padre
+    value?: any; // Valor del campo padre (opcional, se obtiene del form si no se especifica)
     parentModel?: ServicePath; // Modelo padre (opcional, por defecto usa el mismo modelo)
   };
 
@@ -39,6 +40,7 @@ export interface AppProSelectProps {
   label?: string;
 
   // Callbacks
+  onChange?: (value: any) => void;
   onDataLoaded?: (data: any[]) => void;
   onError?: (error: string) => void;
 }
@@ -67,6 +69,22 @@ export default function AppProSelect(props: AppProSelectProps) {
 
   const selectDataContext = useSelectData();
   const [internalData, setInternalData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const form = useFormikContext<any>();
+
+  // Obtener valor de dependencia del form si no se pasa directamente
+  const dependencyValue = useMemo(() => {
+    if (!dependsOn) return null;
+
+    // Si se pasa value directamente, usarlo
+    if (dependsOn.value !== undefined) {
+      return dependsOn.value;
+    }
+
+    // Si no, obtenerlo del form
+    return getIn(dependsOn.field, form.values);
+  }, [dependsOn?.field, dependsOn?.value, form.values]);
 
   // Construir parámetros de fetch considerando dependencias
   const effectiveFetchParams = useMemo(() => {
@@ -74,60 +92,77 @@ export default function AppProSelect(props: AppProSelectProps) {
 
     if (
       dependsOn &&
-      dependsOn.value !== undefined &&
-      dependsOn.value !== null &&
-      dependsOn.value !== ""
+      dependencyValue !== undefined &&
+      dependencyValue !== null &&
+      dependencyValue !== ""
     ) {
       params = {
         ...params,
-        [dependsOn.field]: dependsOn.value,
+        [dependsOn.field]: dependencyValue,
       };
     }
 
     return params;
-  }, [fetchParams, dependsOn]);
-
-  // Obtener datos del contexto
-  const cachedData = selectDataContext.getCachedData(
-    model,
-    effectiveFetchParams
-  );
+  }, [fetchParams, dependsOn?.field, dependencyValue]);
 
   // Efecto para hacer fetch cuando sea necesario
   useEffect(() => {
     // Si depende de otro campo y no tiene valor, no hacer fetch
     if (
       dependsOn &&
-      (dependsOn.value === undefined ||
-        dependsOn.value === null ||
-        dependsOn.value === "")
+      (dependencyValue === undefined ||
+        dependencyValue === null ||
+        dependencyValue === "")
     ) {
       setInternalData([]);
+      setIsLoading(false);
+      setError(null);
       return;
     }
 
+    // Obtener datos del contexto dentro del efecto
+    const cachedData = selectDataContext.getCachedData(
+      model,
+      effectiveFetchParams
+    );
+
+    // Actualizar estados locales
+    setInternalData(cachedData.data || []);
+    setIsLoading(cachedData.loading);
+    setError(cachedData.error);
+
     // Hacer fetch si no hay datos en cache o si están expirados
-    if (!cachedData.data.length && !cachedData.loading && !cachedData.error) {
+    if (
+      !(cachedData.data || []).length &&
+      !cachedData.loading &&
+      !cachedData.error
+    ) {
       selectDataContext.fetchData(model, effectiveFetchParams);
     }
-  }, [model, effectiveFetchParams, dependsOn, selectDataContext, cachedData]);
+  }, [
+    model,
+    effectiveFetchParams,
+    dependsOn?.field,
+    dependencyValue,
+    selectDataContext,
+  ]);
 
-  // Actualizar datos internos cuando cambien los datos del cache
+  // Efectos separados para los callbacks para evitar bucles
   useEffect(() => {
-    setInternalData(cachedData.data);
-
-    if (cachedData.data.length > 0 && onDataLoaded) {
-      onDataLoaded(cachedData.data);
+    if (internalData.length > 0 && onDataLoaded) {
+      onDataLoaded(internalData);
     }
+  }, [internalData.length, onDataLoaded]);
 
-    if (cachedData.error && onError) {
-      onError(cachedData.error);
+  useEffect(() => {
+    if (error && onError) {
+      onError(error);
     }
-  }, [cachedData.data, cachedData.error, onDataLoaded, onError]);
+  }, [error, onError]);
 
   // Convertir datos internos al formato esperado por AppSelect
   const selectData = useMemo(() => {
-    return internalData.map((item) => ({
+    return (internalData || []).map((item) => ({
       value: String(item[valueField]),
       label: String(item[labelField] || item[valueField] || "Sin nombre"),
     }));
@@ -136,23 +171,16 @@ export default function AppProSelect(props: AppProSelectProps) {
   // Manejar cambio de valor
   const handleChange = (newValue: string[] | number[]) => {
     if (onChange) {
-      // Convertir strings a numbers si el valueField original es numérico
-      const sampleItem = internalData[0];
-      if (sampleItem && typeof sampleItem[valueField] === "number") {
-        const numericValue = newValue.map((v) => Number(v));
-        onChange(numericValue);
-      } else {
-        onChange(newValue);
-      }
+      onChange(newValue);
     }
   };
 
   // Renderizar estados especiales
   if (
     dependsOn &&
-    (dependsOn.value === undefined ||
-      dependsOn.value === null ||
-      dependsOn.value === "")
+    (dependencyValue === undefined ||
+      dependencyValue === null ||
+      dependencyValue === "")
   ) {
     return (
       <View style={containerStyle}>
@@ -178,7 +206,7 @@ export default function AppProSelect(props: AppProSelectProps) {
     );
   }
 
-  if (cachedData.loading) {
+  if (isLoading) {
     return (
       <View style={containerStyle}>
         {label && (
@@ -203,7 +231,7 @@ export default function AppProSelect(props: AppProSelectProps) {
     );
   }
 
-  if (cachedData.error) {
+  if (error) {
     return (
       <View style={containerStyle}>
         {label && (
@@ -222,7 +250,7 @@ export default function AppProSelect(props: AppProSelectProps) {
           {...restProps}
         />
         <Text style={{ fontSize: 12, color: "red", marginTop: 4 }}>
-          Error: {cachedData.error}
+          Error: {error}
         </Text>
       </View>
     );

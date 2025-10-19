@@ -25,6 +25,10 @@ export default function _layout() {
       />
       <Stack.Screen name="roles" />
       <Stack.Screen name="locations" />
+      <Stack.Screen name="users" />
+      <Stack.Screen name="workers" />
+      <Stack.Screen name="categories" />
+      <Stack.Screen name="products" />
     </Stack>
   );
 }

@@ -30,7 +30,6 @@ function MakeForm<TProps extends Record<string, any>>(
         name={name}
         readonly={readonly}
         shouldUpdate={(prevProps, nextProps) => {
-          console.log("Prev props:", prevProps);
           const prevFormik = prevProps.formik;
           const nextFormik = nextProps.formik;
 
@@ -80,8 +79,6 @@ function MakeForm<TProps extends Record<string, any>>(
             hasError,
             readonly: readonly || false,
           };
-
-          console.log("Readonly in HOC:", injectedProps.readonly);
 
           return (
             <View style={[styles.container, containerStyle]}>

@@ -15,15 +15,107 @@ namespace App {
 
     interface Worker {
       id: number;
-      first_name: string;
-      last_name: string;
-      email?: string;
-      phone?: string;
       position?: string;
-      company_id?: number;
+      department?: string;
+      hire_date?: string;
+      salary?: string;
+      is_active: boolean;
+      company_id: number;
+      user_id?: number;
+      created_at: string;
+      updated_at: string;
+
+      // Relaciones (formato display en listado)
+      company_name?: string;
+      user_name?: string;
+      user_email?: string;
+
+      // Relaciones (formato completo)
+      company?: {
+        id: number;
+        name: string;
+      };
+      user?: {
+        id: number;
+        name: string;
+        email: string;
+      };
+      roles?: Array<{
+        id: number;
+        name: string;
+        description?: string;
+      }>;
+      companies?: Array<{
+        id: number;
+        name: string;
+      }>;
+      locations?: Array<{
+        id: number;
+        name: string;
+      }>;
+    }
+
+    interface Product {
+      id: number;
+      name: string;
+      code: string;
+      description?: string;
+      purchase_price?: number;
+      sale_price?: number;
+      unit_id?: number;
+      category_id?: number;
+      company_id: number;
       is_active: boolean;
       created_at: string;
       updated_at: string;
+
+      // Relaciones (formato display)
+      company_name?: string;
+      category_name?: string;
+      unit_name?: string;
+
+      // Relaciones (formato completo)
+      company?: {
+        id: number;
+        name: string;
+      };
+      category?: Category;
+      unit?: Unit;
+    }
+
+    interface Category {
+      id: number;
+      name: string;
+      description?: string;
+      company_id: number;
+      is_active: boolean;
+      created_at: string;
+      updated_at: string;
+
+      // Relaciones (formato display en listado)
+      company_name?: string;
+
+      // Relaciones (formato completo)
+      company?: {
+        id: number;
+        name: string;
+        business_name?: string;
+      };
+    }
+      }>;
+      locations?: Array<{
+        id: number;
+        name: string;
+        address?: string;
+      }>;
+
+      // Para formularios
+      name?: string;
+      email?: string;
+      password?: string;
+      role_ids?: number[];
+      company_ids?: number[];
+      location_ids?: number[];
     }
 
     interface Role {
@@ -69,14 +161,27 @@ namespace App {
       name: string;
       code: string;
       description?: string;
-      unit_id: number;
+      purchase_price?: number;
+      sale_price?: number;
+      unit_id?: number;
       category_id?: number;
       company_id: number;
       is_active: boolean;
       created_at: string;
       updated_at: string;
-      unit?: Unit;
+      
+      // Relaciones (formato display)
+      company_name?: string;
+      category_name?: string;
+      unit_name?: string;
+      
+      // Relaciones (formato completo)
+      company?: {
+        id: number;
+        name: string;
+      };
       category?: Category;
+      unit?: Unit;
     }
 
     interface Category {

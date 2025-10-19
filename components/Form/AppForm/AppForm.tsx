@@ -10,7 +10,13 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { KeyboardAvoidingView, ScrollView, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  ScrollView,
+  StyleProp,
+  View,
+  ViewStyle,
+} from "react-native";
 import { Button } from "react-native-paper";
 
 // Ref interface que expone todos los métodos
@@ -69,6 +75,8 @@ interface FormProps<T> {
   showSubmitButton?: boolean;
   showResetButton?: boolean;
   readonly?: boolean;
+  showButtons?: boolean;
+  style?: StyleProp<ViewStyle>;
 }
 
 const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
@@ -215,94 +223,105 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     <AppFormContext.Provider value={contextValue}>
       <FormikProvider value={formInstance}>
         <View style={{ flex: 1 }}>
-          <ScrollView style={{ padding: 16 }}>{props.children}</ScrollView>
+          <ScrollView style={[{ padding: 16 }, props.style]}>
+            {props.children}
+          </ScrollView>
 
-          <KeyboardAvoidingView behavior="padding" keyboardVerticalOffset={100}>
-            {readonly ? (
-              <>
-                <View style={{ padding: 16 }}>
-                  <View style={{ gap: 8 }}>
-                    <View>
-                      <Button
-                        mode="contained"
-                        onPress={() => {
-                          setReadonly(false);
-                        }}
-                      >
-                        Editar Registro
-                      </Button>
-                    </View>
+          {props.showButtons !== undefined ||
+            (!props.showButtons && (
+              <KeyboardAvoidingView
+                behavior="padding"
+                keyboardVerticalOffset={100}
+              >
+                {readonly ? (
+                  <>
+                    <View style={{ padding: 16 }}>
+                      <View style={{ gap: 8 }}>
+                        <View>
+                          <Button
+                            mode="contained"
+                            onPress={() => {
+                              setReadonly(false);
+                            }}
+                          >
+                            Editar Registro
+                          </Button>
+                        </View>
 
-                    <View>
-                      <Button
-                        mode="outlined"
-                        onPress={async () => {
-                          if (props.id && props.api) {
-                            try {
-                              setLoading(true);
-                              await props.api.destroy(props.id);
-                              formInstance.resetForm();
-                            } catch (error) {
-                              console.error("Error deleting record:", error);
-                            } finally {
-                              setLoading(false);
+                        <View>
+                          <Button
+                            mode="outlined"
+                            onPress={async () => {
+                              if (props.id && props.api) {
+                                try {
+                                  setLoading(true);
+                                  await props.api.destroy(props.id);
+                                  formInstance.resetForm();
+                                } catch (error) {
+                                  console.error(
+                                    "Error deleting record:",
+                                    error
+                                  );
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }
+                            }}
+                            theme={{ colors: { primary: "#fff" } }}
+                            disabled={
+                              !formInstance.isValid ||
+                              formInstance.isSubmitting ||
+                              loading
                             }
-                          }
-                        }}
-                        theme={{ colors: { primary: "#fff" } }}
-                        disabled={
-                          !formInstance.isValid ||
-                          formInstance.isSubmitting ||
-                          loading
-                        }
-                        textColor={palette.red}
-                        loading={loading}
-                      >
-                        Eliminar
-                      </Button>
+                            textColor={palette.red}
+                            loading={loading}
+                          >
+                            Eliminar
+                          </Button>
+                        </View>
+                      </View>
                     </View>
-                  </View>
-                </View>
-              </>
-            ) : (
-              (props.showSubmitButton !== false ||
-                props.showResetButton !== false) && (
-                <View style={{ padding: 16 }}>
-                  <View style={{ gap: 8 }}>
-                    {props.showSubmitButton !== false && (
-                      <View>
-                        <Button
-                          mode="contained"
-                          onPress={() => formInstance.handleSubmit()}
-                          disabled={
-                            !formInstance.isValid ||
-                            formInstance.isSubmitting ||
-                            loading
-                          }
-                          loading={loading}
-                        >
-                          {props.submitButtonText ||
-                            (props.id ? "Actualizar" : "Crear")}
-                        </Button>
-                      </View>
-                    )}
+                  </>
+                ) : (
+                  (props.showSubmitButton !== false ||
+                    props.showResetButton !== false) && (
+                    <View style={{ padding: 16 }}>
+                      <View style={{ gap: 8 }}>
+                        {props.showSubmitButton !== false && (
+                          <View>
+                            <Button
+                              mode="contained"
+                              onPress={() => formInstance.handleSubmit()}
+                              disabled={
+                                !formInstance.isValid ||
+                                formInstance.isSubmitting ||
+                                loading
+                              }
+                              loading={loading}
+                            >
+                              {props.submitButtonText ||
+                                (props.id ? "Actualizar" : "Crear")}
+                            </Button>
+                          </View>
+                        )}
 
-                    {props.showResetButton !== false && (
-                      <View>
-                        <Button
-                          mode="outlined"
-                          onPress={() => formInstance.resetForm()}
-                          disabled={loading}
-                        >
-                          {props.resetButtonText || "Resetear"}
-                        </Button>
+                        {props.showResetButton !== false && (
+                          <View>
+                            <Button
+                              mode="outlined"
+                              onPress={() => formInstance.resetForm()}
+                              disabled={loading}
+                            >
+                              {props.resetButtonText || "Resetear"}
+                            </Button>
+                          </View>
+                        )}
                       </View>
-                    )}
-                  </View>
-                </View>
-              )
-            )}
-          </KeyboardAvoidingView>
+                    </View>
+                  )
+                )}
+              </KeyboardAvoidingView>
+            ))}
         </View>
       </FormikProvider>
     </AppFormContext.Provider>

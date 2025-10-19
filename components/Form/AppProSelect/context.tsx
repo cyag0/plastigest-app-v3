@@ -12,18 +12,19 @@ import React, {
 type ServicePath =
   | "roles"
   | "users"
-  | "companies"
+  | "admin.companies"
   | "products"
   | "categories"
   | "units"
   | "customers"
   | "suppliers"
-  | "locations"
+  | "admin.locations"
   | "movements"
   | "purchaseOrders"
   | "salesOrders"
   | "admin.roles"
-  | "admin.permissions";
+  | "admin.permissions"
+  | "admin.workers";
 
 // Interfaz para los datos cacheados
 interface CachedData {
@@ -98,37 +99,37 @@ export function SelectDataProvider({
   }, []);
 
   // Función para obtener datos cacheados
-  const getCachedData = useCallback(
-    (model: ServicePath, params?: IndexParams): CachedData => {
-      const cacheKey = getCacheKey(model, params);
-      const cachedItem = cache[cacheKey];
+  const getCachedData = (
+    model: ServicePath,
+    params?: IndexParams
+  ): CachedData => {
+    const cacheKey = getCacheKey(model, params);
+    const cachedItem = cache[cacheKey];
 
-      if (!cachedItem) {
-        return {
-          data: [],
-          loading: false,
-          error: null,
-          lastFetch: null,
-        };
-      }
+    if (!cachedItem) {
+      return {
+        data: [],
+        loading: false,
+        error: null,
+        lastFetch: null,
+      };
+    }
 
-      // Verificar si el cache ha expirado
-      const now = Date.now();
-      const isExpired =
-        cachedItem.lastFetch && now - cachedItem.lastFetch > cacheDuration;
+    // Verificar si el cache ha expirado
+    const now = Date.now();
+    const isExpired =
+      cachedItem.lastFetch && now - cachedItem.lastFetch > cacheDuration;
 
-      if (isExpired) {
-        return {
-          ...cachedItem,
-          data: [],
-          error: "Cache expired",
-        };
-      }
+    if (isExpired) {
+      return {
+        ...cachedItem,
+        data: [],
+        error: "Cache expired",
+      };
+    }
 
-      return cachedItem;
-    },
-    [cache, getCacheKey, cacheDuration]
-  );
+    return cachedItem;
+  };
 
   // Función para hacer fetch de datos
   const fetchData = useCallback(

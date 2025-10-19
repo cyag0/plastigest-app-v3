@@ -12,8 +12,8 @@ export default function UserIndexScreen() {
   return (
     <>
       <AppList
-        title="Users"
-        service={Services.admin.roles}
+        title="Workers"
+        service={Services.admin.workers}
         renderCard={({ item }) => ({})}
         onItemPress={(entity) => {
           navigation.push("/(tabs)/home/users/form");
@@ -22,7 +22,7 @@ export default function UserIndexScreen() {
           /* console.log("hola");
           modalRef.current?.show(); */
 
-          navigation.push("/(tabs)/home/roles/form");
+          navigation.push("/(tabs)/home/users/form");
         }}
         searchPlaceholder="Buscar roles..."
       />
