@@ -1,4 +1,5 @@
 import palette from "@/constants/palette";
+import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
 import { CrudService } from "@/utils/services/crudService";
 import { FormikProps, FormikProvider, useFormik } from "formik";
 import React, {
@@ -77,6 +78,8 @@ interface FormProps<T> {
   readonly?: boolean;
   showButtons?: boolean;
   style?: StyleProp<ViewStyle>;
+  containerStyle?: StyleProp<ViewStyle>;
+  disableScroll?: boolean;
 }
 
 const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
@@ -182,13 +185,21 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     }
   }
 
-  async function handleSubmit(values: T) {
+  async function handleSubmit(_values: T) {
     try {
       setLoading(true);
 
+      console.log("values", _values);
+
+      const values = (await objectToFormDataWithNestedInputsAsync(
+        _values
+      )) as any;
+
+      console.log("formdata ", values);
+
       // Si se pasa handleSubmit personalizado, usarlo
       if (props.onSubmit) {
-        await props.onSubmit(values, formInstance);
+        await props.onSubmit(values as T, formInstance);
       }
       // Si no hay handleSubmit pero hay API, usar store automático
       else if (props.api) {
@@ -196,21 +207,57 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
 
         // Si hay ID, es actualización
         if (props.id) {
-          response = await props.api.update(props.id, values);
+          response = await props.api.update(props.id, values as T);
         }
         // Si no hay ID, es creación
         else {
-          response = await props.api.store(values);
+          response = await props.api.store(values as T);
         }
 
-        props.onSuccess?.(response.data, values);
+        props.onSuccess?.(response.data, _values);
       }
     } catch (error) {
       console.error("Error submitting form:", error);
-      props.onError?.(error, values);
+      props.onError?.(error, _values);
     } finally {
       setLoading(false);
     }
+  }
+
+  // Función helper para detectar si hay archivos en los valores
+  function hasFiles(obj: any): boolean {
+    if (!obj || typeof obj !== "object") return false;
+
+    for (const key in obj) {
+      const value = obj[key];
+
+      // Verificar si es un archivo individual
+      if (value && typeof value === "object" && value.uri) {
+        return true;
+      }
+
+      // Verificar si es un array de archivos
+      if (Array.isArray(value) && value.length > 0) {
+        if (
+          value.some((item) => item && typeof item === "object" && item.uri)
+        ) {
+          return true;
+        }
+      }
+
+      // Verificar recursivamente en objetos anidados
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value)
+      ) {
+        if (hasFiles(value)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   // Context value
@@ -223,7 +270,11 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     <AppFormContext.Provider value={contextValue}>
       <FormikProvider value={formInstance}>
         <View style={{ flex: 1 }}>
-          <ScrollView style={[{ padding: 16 }, props.style]}>
+          <ScrollView
+            scrollEnabled={!props.disableScroll}
+            style={[{ padding: 16 }, props.style]}
+            contentContainerStyle={props.containerStyle}
+          >
             {props.children}
           </ScrollView>
 

@@ -96,7 +96,13 @@ export function createCrudService<T = any>(endpoint: string): CrudService<T> {
      * @param data - Datos a actualizar
      */
     update: (id: number | string, data: Partial<T>) => {
-      return axiosClient.put<LaravelResponse<T>>(`${baseUrl}/${id}`, data);
+      if (data instanceof FormData) {
+        data.append("_method", "PUT");
+      } else {
+        data = { ...data, _method: "PUT" };
+      }
+
+      return axiosClient.post<LaravelResponse<T>>(`${baseUrl}/${id}`, data);
     },
 
     /**

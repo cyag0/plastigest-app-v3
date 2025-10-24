@@ -2,8 +2,14 @@ import palette from "@/constants/palette";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
-import { Alert, StyleSheet, View } from "react-native";
-import { Button, Card, IconButton, Text } from "react-native-paper";
+import { Alert, Image, StyleSheet, View } from "react-native";
+import {
+  Button,
+  Card,
+  IconButton,
+  Text,
+  TouchableRipple,
+} from "react-native-paper";
 import MakeForm from "../AppForm/hoc";
 
 export interface UploadedFile {
@@ -25,6 +31,8 @@ interface AppUploadProps {
   disabled?: boolean;
   error?: boolean;
   helperText?: string;
+  itemStyle?: (file: UploadedFile, index: number) => any;
+  onItemPress?: (file: UploadedFile, index: number) => void;
 }
 
 export default function AppUpload(props: AppUploadProps) {
@@ -232,43 +240,72 @@ export default function AppUpload(props: AppUploadProps) {
       {/* Selected Files */}
       {value.length > 0 && (
         <View style={styles.filesContainer}>
-          {value.map((file, index) => (
-            <Card key={index} style={styles.fileCard}>
-              <Card.Content style={styles.fileContent}>
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <View style={styles.fileInfo}>
-                    <IconButton
-                      icon={getFileIcon(file.type)}
-                      size={24}
-                      iconColor={palette.primary}
-                    />
-                    <View style={styles.fileDetails}>
-                      <Text variant="bodyMedium" numberOfLines={1}>
-                        {file.name}
-                      </Text>
-                      {file.size && (
-                        <Text
-                          variant="bodySmall"
-                          style={{ color: palette.textSecondary }}
-                        >
-                          {formatFileSize(file.size)}
-                        </Text>
+          {value.map((file, index) => {
+            const itemStyle = props.itemStyle
+              ? props.itemStyle(file, index)
+              : {};
+
+            const isImage = file.type.startsWith("image/");
+
+            return (
+              <TouchableRipple
+                key={index}
+                onPress={() => {
+                  props.onItemPress?.(file, index);
+                }}
+              >
+                <Card style={[styles.fileCard, itemStyle]}>
+                  <Card.Content style={styles.fileContent}>
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center" }}
+                    >
+                      <View style={styles.fileInfo}>
+                        {isImage ? (
+                          <Image
+                            source={{
+                              uri: file.uri,
+                            }}
+                            style={{ width: 56, height: 56, borderRadius: 8 }}
+                          />
+                        ) : (
+                          <IconButton
+                            icon={getFileIcon(file.type)}
+                            size={24}
+                            iconColor={palette.primary}
+                          />
+                        )}
+                        <View style={styles.fileDetails}>
+                          <Text variant="bodyMedium" numberOfLines={1}>
+                            {file.name}
+                          </Text>
+                          {file.size && (
+                            <Text
+                              variant="bodySmall"
+                              style={{ color: palette.textSecondary }}
+                            >
+                              {formatFileSize(file.size)}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+
+                      {!disabled && (
+                        <IconButton
+                          icon="close"
+                          size={20}
+                          iconColor={palette.error}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleRemoveFile(index);
+                          }}
+                        />
                       )}
                     </View>
-                  </View>
-
-                  {!disabled && (
-                    <IconButton
-                      icon="close"
-                      size={20}
-                      iconColor={palette.error}
-                      onPress={() => handleRemoveFile(index)}
-                    />
-                  )}
-                </View>
-              </Card.Content>
-            </Card>
-          ))}
+                  </Card.Content>
+                </Card>
+              </TouchableRipple>
+            );
+          })}
         </View>
       )}
 

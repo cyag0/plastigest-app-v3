@@ -8,7 +8,6 @@ import Services from "@/utils/services";
 import { useLocalSearchParams } from "expo-router";
 import React, { useRef } from "react";
 import { ScrollView, View } from "react-native";
-import { Text } from "react-native-paper";
 
 interface ProductFormData {
   name: string;
@@ -38,6 +37,8 @@ export default function ProductsForm(props: ProductsFormProps) {
 
   const { company } = useSelectedCompany();
 
+  const [mainImage, setMainImage] = React.useState<any>(null);
+
   return (
     <AppForm
       ref={formRef}
@@ -50,14 +51,6 @@ export default function ProductsForm(props: ProductsFormProps) {
     >
       <ScrollView style={{ flex: 1 }}>
         <View style={{ padding: 16 }}>
-          {/* Información básica del producto */}
-          <Text
-            variant="titleMedium"
-            style={{ marginBottom: 16, fontWeight: "bold" }}
-          >
-            Información del Producto
-          </Text>
-
           <FormInput
             name="name"
             label="Nombre del Producto"

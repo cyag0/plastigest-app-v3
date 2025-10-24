@@ -13,15 +13,8 @@ const axiosClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: API_TIMEOUT,
   headers: {
-    "Content-Type": "application/json",
     Accept: "application/json",
-    // Agregar headers para CORS
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
   },
-  // Configuración adicional para CORS
-  withCredentials: false,
 });
 
 // Interceptor para requests - agregar token de autenticación
