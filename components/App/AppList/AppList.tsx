@@ -58,16 +58,23 @@ const AppListTitle = ({
   </View>
 );
 
+type AppListDescriptionProps = {
+  children: React.ReactNode;
+  style?: any;
+} & React.ComponentProps<typeof Text>;
+
 const AppListDescription = ({
   children,
   style = {},
-}: {
-  children: React.ReactNode;
-  style?: any;
-}) => (
+  ...textProps
+}: AppListDescriptionProps) => (
   <View style={styles.descriptionContainer}>
     {typeof children === "string" ? (
-      <Text variant="bodyMedium" style={[styles.cardDescription, style]}>
+      <Text
+        variant="bodyMedium"
+        style={[styles.cardDescription, style]}
+        {...textProps}
+      >
         {children}
       </Text>
     ) : (
@@ -303,9 +310,9 @@ function AppList<T extends { id: number | string }>({
 
           return (
             <AppListCard key={item.id} onPress={() => handleItemPress(item)}>
-              <View style={styles.cardMain}>
+              <View style={[styles.cardMain]}>
                 {cardProps.left && (
-                  <View style={styles.cardLeft}>{cardProps.left}</View>
+                  <View style={[styles.cardLeft]}>{cardProps.left}</View>
                 )}
 
                 <View style={styles.cardCenter}>

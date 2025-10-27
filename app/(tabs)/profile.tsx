@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useRouter } from "expo-router";
 import React from "react";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
@@ -17,6 +18,7 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user, logout, isLoading, selectedCompany } = useAuth();
+  const { selectedLocation } = useSelectedLocation();
 
   const handleLogout = () => {
     console.log("Logout initiated");
@@ -266,15 +268,22 @@ export default function ProfileScreen() {
                   { color: theme.colors.onSurfaceVariant },
                 ]}
               >
-                Nombre:
-              </Text>
-              <Text
-                variant="bodyMedium"
-                style={{ color: theme.colors.onSurface }}
-              >
-                {"No asignada"}
+                Nombre: {selectedLocation?.name || "No asignada"}
               </Text>
             </View>
+            {/*    {selectedLocation?.address && (
+              <View style={styles.infoRow}>
+                <Text
+                  variant="bodySmall"
+                  style={[
+                    styles.infoLabel,
+                    { color: theme.colors.onSurfaceVariant },
+                  ]}
+                >
+                  📍 {selectedLocation.address}
+                </Text>
+              </View>
+            )} */}
           </Surface>
         </View>
 
@@ -302,6 +311,17 @@ export default function ProfileScreen() {
             icon="building"
           >
             Cambiar Compañía
+          </Button>
+
+          <Button
+            mode="outlined"
+            onPress={() => {
+              router.push("/(stacks)/selectLocation");
+            }}
+            style={styles.actionButton}
+            icon="map-marker"
+          >
+            Cambiar Ubicación
           </Button>
 
           <Button

@@ -49,6 +49,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="purchases"
+        options={{
+          title: "Compras",
+          tabBarIcon: ({ color, focused }) => (
+            <Appbar.Action icon="cart" iconColor={color} size={24} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: "Perfil",

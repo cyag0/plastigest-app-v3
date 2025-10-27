@@ -33,6 +33,7 @@ interface AppUploadProps {
   helperText?: string;
   itemStyle?: (file: UploadedFile, index: number) => any;
   onItemPress?: (file: UploadedFile, index: number) => void;
+  readonly?: boolean;
 }
 
 export default function AppUpload(props: AppUploadProps) {
@@ -182,60 +183,62 @@ export default function AppUpload(props: AppUploadProps) {
       )}
  */}
       {/* Upload Area */}
-      <Card
-        style={[
-          styles.uploadArea,
-          {
-            borderColor: error ? palette.error : palette.border,
-            backgroundColor: disabled ? palette.surface : palette.background,
-          },
-          error && styles.errorBorder,
-        ]}
-      >
-        <Card.Content style={styles.uploadContent}>
-          <Text
-            variant="bodyMedium"
-            style={[
-              styles.placeholder,
-              { color: disabled ? palette.textSecondary : palette.text },
-            ]}
-          >
-            {value.length > 0
-              ? `${value.length} archivo(s) seleccionado(s)`
-              : placeholder}
-          </Text>
+      {!props.readonly && (
+        <Card
+          style={[
+            styles.uploadArea,
+            {
+              borderColor: error ? palette.error : palette.border,
+              backgroundColor: disabled ? palette.surface : palette.background,
+            },
+            error && styles.errorBorder,
+          ]}
+        >
+          <Card.Content style={styles.uploadContent}>
+            <Text
+              variant="bodyMedium"
+              style={[
+                styles.placeholder,
+                { color: disabled ? palette.textSecondary : palette.text },
+              ]}
+            >
+              {value.length > 0
+                ? `${value.length} archivo(s) seleccionado(s)`
+                : placeholder}
+            </Text>
 
-          <View style={styles.buttonContainer}>
-            {(accept === "images" || accept === "all") && (
-              <Button
-                mode="outlined"
-                onPress={handleImagePick}
-                disabled={disabled || uploading}
-                loading={uploading}
-                icon="image"
-                style={[styles.button, { borderColor: palette.primary }]}
-                textColor={palette.primary}
-              >
-                Galería
-              </Button>
-            )}
+            <View style={styles.buttonContainer}>
+              {(accept === "images" || accept === "all") && (
+                <Button
+                  mode="outlined"
+                  onPress={handleImagePick}
+                  disabled={disabled || uploading}
+                  loading={uploading}
+                  icon="image"
+                  style={[styles.button, { borderColor: palette.primary }]}
+                  textColor={palette.primary}
+                >
+                  Galería
+                </Button>
+              )}
 
-            {(accept === "documents" || accept === "all") && (
-              <Button
-                mode="outlined"
-                onPress={handleDocumentPick}
-                disabled={disabled || uploading}
-                loading={uploading}
-                icon="file-document"
-                style={[styles.button, { borderColor: palette.secondary }]}
-                textColor={palette.secondary}
-              >
-                Documentos
-              </Button>
-            )}
-          </View>
-        </Card.Content>
-      </Card>
+              {(accept === "documents" || accept === "all") && (
+                <Button
+                  mode="outlined"
+                  onPress={handleDocumentPick}
+                  disabled={disabled || uploading}
+                  loading={uploading}
+                  icon="file-document"
+                  style={[styles.button, { borderColor: palette.secondary }]}
+                  textColor={palette.secondary}
+                >
+                  Documentos
+                </Button>
+              )}
+            </View>
+          </Card.Content>
+        </Card>
+      )}
 
       {/* Selected Files */}
       {value.length > 0 && (
@@ -254,7 +257,17 @@ export default function AppUpload(props: AppUploadProps) {
                   props.onItemPress?.(file, index);
                 }}
               >
-                <Card style={[styles.fileCard, itemStyle]}>
+                <Card
+                  style={[
+                    styles.fileCard,
+                    itemStyle,
+                    {
+                      backgroundColor: props.readonly
+                        ? palette.background
+                        : palette.card,
+                    },
+                  ]}
+                >
                   <Card.Content style={styles.fileContent}>
                     <View
                       style={{ flexDirection: "row", alignItems: "center" }}
@@ -289,7 +302,7 @@ export default function AppUpload(props: AppUploadProps) {
                         </View>
                       </View>
 
-                      {!disabled && (
+                      {!disabled && !props.readonly && (
                         <IconButton
                           icon="close"
                           size={20}
@@ -310,7 +323,7 @@ export default function AppUpload(props: AppUploadProps) {
       )}
 
       {/* Helper Text */}
-      {helperText && (
+      {helperText && !props.readonly && (
         <Text
           variant="bodySmall"
           style={[
@@ -323,7 +336,7 @@ export default function AppUpload(props: AppUploadProps) {
       )}
 
       {/* File Limit Info */}
-      {multiple && (
+      {multiple && !props.readonly && (
         <Text
           variant="bodySmall"
           style={[styles.helperText, { color: palette.textSecondary }]}

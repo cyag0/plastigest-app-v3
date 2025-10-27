@@ -5,6 +5,7 @@ import {
   PaperSelectProps,
 } from "react-native-paper-select/lib/typescript/interface/paperSelect.interface";
 import MakeForm from "../AppForm/hoc";
+import ReadonlyText from "../AppForm/ReadonlyText";
 
 interface AppSelectProps
   extends Omit<
@@ -19,12 +20,13 @@ interface AppSelectProps
     | "onSelection"
     | "selectedArrayList"
   > {
-  value?: number[] | string[];
-  onChange?: (value: string[] | number[]) => void;
+  value?: number[] | string[] | number | string;
+  onChange?: (value: string[] | number[] | string | number) => void;
   onBlur?: () => void;
   data?: Array<{ value: string; label: string }>;
   multiple?: boolean;
   hideSearchBox?: boolean;
+  readonly?: boolean;
 }
 
 export default function AppSelect(props: AppSelectProps) {
@@ -35,13 +37,28 @@ export default function AppSelect(props: AppSelectProps) {
       ? props.data.map((item) => ({ _id: item.value, value: item.label }))
       : [];
 
+  // Normalizar el valor a array para el procesamiento interno y convertir a strings
+  const normalizedValue = props.multiple
+    ? Array.isArray(props.value)
+      ? props.value.map((v) => String(v))
+      : props.value
+      ? [String(props.value)]
+      : []
+    : Array.isArray(props.value)
+    ? props.value.map((v) => String(v))
+    : props.value
+    ? [String(props.value)]
+    : [];
+
   const internalValue: ListItem[] =
-    (props.value || []).map((item) => {
-      const found = props.data?.find((d) => d.value === item);
-      return found
-        ? ({ _id: found.value, value: found.label } as ListItem)
-        : ({} as ListItem);
-    }) || [];
+    normalizedValue
+      .map((item) => {
+        const found = props.data?.find((d) => d.value === item);
+        return found
+          ? ({ _id: found.value, value: found.label } as ListItem)
+          : ({} as ListItem);
+      })
+      .filter((item) => item._id) || [];
 
   const internalValueString = internalValue
     .map((item) => item.value)
@@ -49,10 +66,38 @@ export default function AppSelect(props: AppSelectProps) {
 
   function handleOnChange(value: string, listItems: ListItem[]) {
     if (props.onChange) {
-      const newValues = listItems.map((item) => item._id);
+      const stringValues = listItems.map((item) => item._id);
 
-      props.onChange(newValues);
+      // Detectar si el valor original era numérico para mantener el tipo
+      const shouldReturnNumbers = (() => {
+        if (props.value === undefined || props.value === null) return false;
+        if (typeof props.value === "number") return true;
+        if (Array.isArray(props.value) && props.value.length > 0) {
+          return typeof props.value[0] === "number";
+        }
+        return false;
+      })();
+
+      // Convertir a números si es necesario
+      const newValues = shouldReturnNumbers
+        ? stringValues.map((v) => {
+            const num = Number(v);
+            return isNaN(num) ? v : num;
+          })
+        : stringValues;
+
+      if (props.multiple) {
+        // Para múltiple, devolver array
+        props.onChange(newValues);
+      } else {
+        // Para individual, devolver el primer valor o undefined
+        props.onChange(newValues.length > 0 ? newValues[0] : undefined);
+      }
     }
+  }
+
+  if (props.readonly) {
+    return <ReadonlyText text={internalValueString} />;
   }
 
   return (

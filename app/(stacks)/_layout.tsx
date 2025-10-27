@@ -25,6 +25,12 @@ export default function _layout() {
           title: "Seleccionar Empresa",
         }}
       />
+      <Stack.Screen
+        name="selectLocation"
+        options={{
+          title: "Seleccionar Ubicación",
+        }}
+      />
     </Stack>
   );
 }

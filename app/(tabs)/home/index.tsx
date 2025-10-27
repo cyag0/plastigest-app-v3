@@ -18,7 +18,7 @@ const movimientos: ResourceProps[] = [
     description:
       "Registra y gestiona las compras de productos a proveedores, incluyendo recepción y costos.",
     color: palette.primary,
-    link: "/(tabs)/home/roles",
+    link: "/(tabs)/home/purchases" as any,
     background: palette.surface,
     icon: require("../../../assets/images/dashboard/purchase.png"),
   },
@@ -100,7 +100,7 @@ const catalogos: ResourceProps[] = [
     label: "Proveedores",
     description:
       "Registra y consulta proveedores para compras y abastecimiento de productos.",
-    link: "/(tabs)/home/roles",
+    link: "/(tabs)/home/suppliers",
     backgroundColor: palette.secondary,
     color: "#fff",
   },

@@ -1,12 +1,6 @@
 import Services from "@/utils/services";
 import { IndexParams } from "@/utils/services/crudService";
-import React, {
-  createContext,
-  ReactNode,
-  useCallback,
-  useContext,
-  useState,
-} from "react";
+import React, { createContext, useCallback, useContext, useState } from "react";
 
 // Definir los modelos disponibles basándose en la estructura de Services
 type ServicePath =
@@ -14,6 +8,7 @@ type ServicePath =
   | "users"
   | "admin.companies"
   | "products"
+  | "products-raw-materials"
   | "categories"
   | "units"
   | "customers"
@@ -56,14 +51,10 @@ const SelectDataContext = createContext<SelectDataContextType | null>(null);
 
 // Provider del contexto
 interface SelectDataProviderProps {
-  children: ReactNode;
-  cacheDuration?: number; // Duración del cache en milisegundos (default: 5 minutos)
+  children: React.ReactNode;
 }
 
-export function SelectDataProvider({
-  children,
-  cacheDuration = 5 * 60 * 1000,
-}: SelectDataProviderProps) {
+export function SelectDataProvider({ children }: SelectDataProviderProps) {
   const [cache, setCache] = useState<Record<string, CachedData>>({});
 
   // Función para generar la clave del cache
@@ -115,19 +106,7 @@ export function SelectDataProvider({
       };
     }
 
-    // Verificar si el cache ha expirado
-    const now = Date.now();
-    const isExpired =
-      cachedItem.lastFetch && now - cachedItem.lastFetch > cacheDuration;
-
-    if (isExpired) {
-      return {
-        ...cachedItem,
-        data: [],
-        error: "Cache expired",
-      };
-    }
-
+    // El cache nunca expira, siempre retornar los datos existentes
     return cachedItem;
   };
 
@@ -146,12 +125,8 @@ export function SelectDataProvider({
         return;
       }
 
-      // Verificar si necesita hacer fetch
-      const now = Date.now();
-      const isExpired =
-        !existing?.lastFetch || now - existing.lastFetch > cacheDuration;
-
-      if (!force && existing && !isExpired) {
+      // Verificar si necesita hacer fetch (solo si no existe o se fuerza)
+      if (!force && existing && existing.lastFetch) {
         return;
       }
 
@@ -182,6 +157,7 @@ export function SelectDataProvider({
           data = [];
         }
 
+        const now = Date.now();
         setCache((prev) => ({
           ...prev,
           [cacheKey]: {
@@ -205,7 +181,7 @@ export function SelectDataProvider({
         }));
       }
     },
-    [cache, getCacheKey, cacheDuration, getService]
+    [cache, getCacheKey, getService]
   );
 
   // Función para limpiar cache

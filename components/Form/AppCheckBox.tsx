@@ -1,7 +1,8 @@
 import React from "react";
 import { View } from "react-native";
 import { Checkbox } from "react-native-paper";
-import MakeForm from "./AppForm/hoc";
+import MakeForm, { InputLabel } from "./AppForm/hoc";
+import ReadonlyText from "./AppForm/ReadonlyText";
 
 interface AppCheckBoxProps
   extends Omit<React.ComponentProps<typeof Checkbox>, "status"> {
@@ -20,6 +21,15 @@ export default function AppCheckBox(props: AppCheckBoxProps) {
     if (props.onChange && !readonly) {
       props.onChange(!props.value);
     }
+  }
+
+  if (readonly) {
+    return (
+      <View>
+        <InputLabel label={props.text || "Checkbox"} required={false} />
+        <ReadonlyText text={props.value ? "Sí" : "No"} />
+      </View>
+    );
   }
 
   return (

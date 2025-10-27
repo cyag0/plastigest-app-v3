@@ -29,6 +29,8 @@ export default function _layout() {
       <Stack.Screen name="workers" />
       <Stack.Screen name="categories" />
       <Stack.Screen name="products" />
+      <Stack.Screen name="suppliers" />
+      <Stack.Screen name="purchases" />
     </Stack>
   );
 }

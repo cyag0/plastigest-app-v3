@@ -12,6 +12,12 @@ const Services = {
   companies: {
     ...createCrudService<App.Entities.Company>("/auth/admin/companies"),
   },
+  purchases: {
+    ...createCrudService<App.Entities.Purchase>("/auth/admin/purchases"),
+  },
+  suppliers: {
+    ...createCrudService<App.Entities.Supplier>("/auth/admin/suppliers"),
+  },
 };
 
 export default Services;

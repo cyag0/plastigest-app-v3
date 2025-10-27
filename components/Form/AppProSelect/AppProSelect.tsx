@@ -10,8 +10,8 @@ import { ServicePath, useSelectData } from "./context";
 export interface AppProSelectProps {
   // Props principales
   model: ServicePath;
-  value?: string[] | number[];
-  onChange?: (value: string[] | number[]) => void;
+  value?: string[] | number[] | string | number;
+  onChange?: (value: string[] | number[] | string | number) => void;
   onBlur?: () => void;
 
   // Configuración de la data
@@ -34,13 +34,13 @@ export interface AppProSelectProps {
   hideSearchBox?: boolean;
   placeholder?: string;
   disabled?: boolean;
+  readonly?: boolean;
 
   // Props del contenedor
   containerStyle?: any;
   label?: string;
 
   // Callbacks
-  onChange?: (value: any) => void;
   onDataLoaded?: (data: any[]) => void;
   onError?: (error: string) => void;
 }
@@ -48,7 +48,7 @@ export interface AppProSelectProps {
 export default function AppProSelect(props: AppProSelectProps) {
   const {
     model,
-    value = [],
+    value,
     onChange,
     onBlur,
     labelField = "name",
@@ -131,7 +131,7 @@ export default function AppProSelect(props: AppProSelectProps) {
     setIsLoading(cachedData.loading);
     setError(cachedData.error);
 
-    // Hacer fetch si no hay datos en cache o si están expirados
+    // Hacer fetch si no hay datos en cache
     if (
       !(cachedData.data || []).length &&
       !cachedData.loading &&
@@ -264,7 +264,7 @@ export default function AppProSelect(props: AppProSelectProps) {
         </Text>
       )}
       <AppSelect
-        value={value}
+        value={value ?? (multiple ? [] : undefined)}
         onChange={handleChange}
         onBlur={onBlur}
         data={selectData}

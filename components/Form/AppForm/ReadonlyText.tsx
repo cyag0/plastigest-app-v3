@@ -13,7 +13,7 @@ export default function ReadonlyText(props: ReadonlyTextProps) {
         color: palette.accent,
       }}
     >
-      {props.text}
+      {props.text || "-"}
     </Text>
   );
 }
