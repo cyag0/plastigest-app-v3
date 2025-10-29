@@ -46,6 +46,13 @@ interface AuthContextType {
   loadCompanies: () => Promise<void>;
   selectCompany: (company: Company) => Promise<void>;
   clearCompanySelection: () => Promise<void>;
+
+  selectLocation: (location: any) => Promise<void>;
+  location: {
+    id: number;
+    name: string;
+    description?: string;
+  };
 }
 
 // Context
@@ -57,14 +64,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [user, setUser] = useState<User | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<any>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
 
   // Variables de entorno
   const USER_DATA_KEY = process.env.EXPO_PUBLIC_USER_DATA_KEY || "user_data";
-  const COMPANY_DATA_KEY =
-    process.env.EXPO_PUBLIC_COMPANY_DATA_KEY || "selected_company";
+  const COMPANY_DATA_KEY = "selected_company";
+  const LOCATION_DATA_KEY = "selected_location";
   const COMPANIES_DATA_KEY =
     process.env.EXPO_PUBLIC_COMPANIES_DATA_KEY || "companies_list";
 
@@ -118,6 +126,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
+  // Seleccionar ubicación
+  const selectLocation = async (location: any) => {
+    try {
+      setSelectedLocation(location);
+      await AsyncStorage.setItem(LOCATION_DATA_KEY, JSON.stringify(location));
+    } catch (error) {
+      console.error("Error selecting location:", error);
+    }
+  };
+
   // Limpiar selección de compañía
   const clearCompanySelection = async () => {
     try {
@@ -148,8 +166,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         // Cargar compañía seleccionada desde caché
         try {
           const cachedCompany = await AsyncStorage.getItem(COMPANY_DATA_KEY);
+          const cachedLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
+
           if (cachedCompany) {
             setSelectedCompany(JSON.parse(cachedCompany));
+          }
+
+          if (cachedLocation) {
+            setSelectedLocation(JSON.parse(cachedLocation));
           }
         } catch (error) {
           console.error("Error loading cached company:", error);
@@ -174,6 +198,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setUser(null);
       setSelectedCompany(null);
       setCompanies([]);
+      setSelectedLocation(null);
     } finally {
       setIsLoading(false);
     }
@@ -271,6 +296,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     loadCompanies,
     selectCompany,
     clearCompanySelection,
+    selectLocation,
+    location: selectedLocation,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

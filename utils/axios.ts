@@ -6,6 +6,8 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:8080/api";
 const API_TIMEOUT = parseInt(process.env.EXPO_PUBLIC_API_TIMEOUT || "10000");
 const AUTH_TOKEN_KEY = process.env.EXPO_PUBLIC_AUTH_TOKEN_KEY || "auth_token";
 const USER_DATA_KEY = process.env.EXPO_PUBLIC_USER_DATA_KEY || "user_data";
+const SELECTED_COMPANY_KEY = "selected_company";
+const SELECTED_LOCATION_KEY = "selected_location";
 const LOG_REQUESTS = process.env.EXPO_PUBLIC_LOG_REQUESTS === "true";
 
 // Crear instancia de axios
@@ -28,6 +30,32 @@ axiosClient.interceptors.request.use(
         config.headers.Authorization = `Bearer ${token}`;
       }
 
+      // Obtener company y location seleccionados
+      const selectedCompanyData = await AsyncStorage.getItem(SELECTED_COMPANY_KEY);
+      const selectedLocationData = await AsyncStorage.getItem(SELECTED_LOCATION_KEY);
+
+      if (selectedCompanyData && config.headers) {
+        try {
+          const company = JSON.parse(selectedCompanyData);
+          if (company.id) {
+            config.headers['X-Company-ID'] = company.id.toString();
+          }
+        } catch (parseError) {
+          console.error("Error parsing company data:", parseError);
+        }
+      }
+
+      if (selectedLocationData && config.headers) {
+        try {
+          const location = JSON.parse(selectedLocationData);
+          if (location.id) {
+            config.headers['X-Location-ID'] = location.id.toString();
+          }
+        } catch (parseError) {
+          console.error("Error parsing location data:", parseError);
+        }
+      }
+
       // Log requests solo si está habilitado en las variables de entorno
       if (LOG_REQUESTS) {
         console.log("Request:", {
@@ -40,7 +68,7 @@ axiosClient.interceptors.request.use(
 
       return config;
     } catch (error) {
-      console.error("Error getting token from storage:", error);
+      console.error("Error getting data from storage:", error);
       return config;
     }
   },
@@ -105,6 +133,73 @@ export const removeAuthToken = async (): Promise<void> => {
     await AsyncStorage.removeItem(USER_DATA_KEY);
   } catch (error) {
     console.error("Error removing token:", error);
+  }
+};
+
+// Funciones helper para manejo de empresa seleccionada
+export const setSelectedCompany = async (company: any): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(SELECTED_COMPANY_KEY, JSON.stringify(company));
+  } catch (error) {
+    console.error("Error saving selected company:", error);
+  }
+};
+
+export const getSelectedCompany = async (): Promise<any | null> => {
+  try {
+    const companyData = await AsyncStorage.getItem(SELECTED_COMPANY_KEY);
+    return companyData ? JSON.parse(companyData) : null;
+  } catch (error) {
+    console.error("Error getting selected company:", error);
+    return null;
+  }
+};
+
+export const removeSelectedCompany = async (): Promise<void> => {
+  try {
+    await AsyncStorage.removeItem(SELECTED_COMPANY_KEY);
+  } catch (error) {
+    console.error("Error removing selected company:", error);
+  }
+};
+
+// Funciones helper para manejo de ubicación seleccionada
+export const setSelectedLocation = async (location: any): Promise<void> => {
+  try {
+    await AsyncStorage.setItem(SELECTED_LOCATION_KEY, JSON.stringify(location));
+  } catch (error) {
+    console.error("Error saving selected location:", error);
+  }
+};
+
+export const getSelectedLocation = async (): Promise<any | null> => {
+  try {
+    const locationData = await AsyncStorage.getItem(SELECTED_LOCATION_KEY);
+    return locationData ? JSON.parse(locationData) : null;
+  } catch (error) {
+    console.error("Error getting selected location:", error);
+    return null;
+  }
+};
+
+export const removeSelectedLocation = async (): Promise<void> => {
+  try {
+    await AsyncStorage.removeItem(SELECTED_LOCATION_KEY);
+  } catch (error) {
+    console.error("Error removing selected location:", error);
+  }
+};
+
+// Función para limpiar toda la información de sesión
+export const clearAllStorage = async (): Promise<void> => {
+  try {
+    await Promise.all([
+      removeAuthToken(),
+      removeSelectedCompany(),
+      removeSelectedLocation(),
+    ]);
+  } catch (error) {
+    console.error("Error clearing all storage:", error);
   }
 };
 

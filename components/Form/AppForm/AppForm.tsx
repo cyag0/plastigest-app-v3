@@ -72,6 +72,7 @@ interface FormProps<T> {
   onSuccess?: (response: any, values: T) => void;
   onError?: (error: any, values: T) => void;
   submitButtonText?: string;
+  additionalSubmitButtons?: React.ReactNode;
   resetButtonText?: string;
   showSubmitButton?: boolean;
   showResetButton?: boolean;
@@ -366,6 +367,10 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
                               {props.resetButtonText || "Resetear"}
                             </Button>
                           </View>
+                        )}
+
+                        {props.additionalSubmitButtons && (
+                          props.additionalSubmitButtons
                         )}
                       </View>
                     </View>

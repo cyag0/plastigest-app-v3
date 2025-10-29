@@ -160,7 +160,7 @@ export default function IngredientsTable({
                     name={`${name}.${index}.ingredient_id`}
                     model="products"
                     fetchParams={{
-                      product_type: "raw_material",
+                      product_type: ["raw_material"],
                     }}
                     placeholder="Seleccione materia prima"
                   />

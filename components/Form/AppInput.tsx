@@ -21,8 +21,6 @@ export default function AppInput(props: AppInputProps) {
 
   const readonly = props.readonly || false;
 
-  console.log("Readonly change:", readonly);
-
   return (
     <View>
       {!readonly ? (

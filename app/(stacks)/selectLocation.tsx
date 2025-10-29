@@ -1,4 +1,5 @@
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -32,12 +33,15 @@ export default function SelectLocationScreen() {
     selectLocation,
     isLoadingLocations,
     loadLocations,
+    clearLocationSelection,
   } = useSelectedLocation();
 
   const [selectedLocationId, setSelectedLocationId] = useState<number | null>(
     currentLocation?.id || null
   );
   const [loading, setLoading] = useState(false);
+
+  const auth = useAuth();
 
   // Cargar ubicaciones al montar el componente
   useEffect(() => {
@@ -65,6 +69,8 @@ export default function SelectLocationScreen() {
 
       // Seleccionar la ubicación usando el hook
       await selectLocation(locationToSelect);
+
+      auth.selectLocation(locationToSelect);
 
       Alert.alert(
         "Ubicación seleccionada",

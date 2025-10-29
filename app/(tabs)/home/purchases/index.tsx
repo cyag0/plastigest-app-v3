@@ -7,6 +7,52 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Chip, Text } from "react-native-paper";
 
+// Helper function to get status configuration
+const getStatusConfig = (status: string) => {
+  switch (status) {
+    case "draft":
+      return {
+        label: "BORRADOR",
+        icon: "📝",
+        backgroundColor: "#FEF3C7",
+        borderColor: "#F59E0B",
+        textColor: "#92400E",
+      };
+    case "ordered":
+      return {
+        label: "PEDIDO",
+        icon: "📋",
+        backgroundColor: "#DBEAFE",
+        borderColor: "#3B82F6",
+        textColor: "#1E40AF",
+      };
+    case "in_transit":
+      return {
+        label: "EN TRANSPORTE",
+        icon: "🚚",
+        backgroundColor: "#EDE9FE",
+        borderColor: "#8B5CF6",
+        textColor: "#5B21B6",
+      };
+    case "received":
+      return {
+        label: "RECIBIDO",
+        icon: "📦",
+        backgroundColor: "#D1FAE5",
+        borderColor: "#10B981",
+        textColor: "#065F46",
+      };
+    default:
+      return {
+        label: "DESCONOCIDO",
+        icon: "❓",
+        backgroundColor: "#F3F4F6",
+        borderColor: "#9CA3AF",
+        textColor: "#374151",
+      };
+  }
+};
+
 export default function PurchasesIndex() {
   const router = useRouter();
 
@@ -25,75 +71,93 @@ export default function PurchasesIndex() {
       <AppList
         title="Compras"
         service={Services.purchases}
-        renderCard={({ item }: { item: App.Entities.Purchase }) => ({
-          title: (
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <AppList.Title>Compra #{item.purchase_number}</AppList.Title>
-              <Chip
-                mode="flat"
-                style={[
-                  styles.statusChip,
-                  {
-                    backgroundColor:
-                      item.status === "open" ? "#FEF3C7" : "#D1FAE5",
-                    borderColor: item.status === "open" ? "#F59E0B" : "#10B981",
-                  },
-                ]}
-                textStyle={[
-                  styles.statusText,
-                  {
-                    color: item.status === "open" ? "#92400E" : "#065F46",
-                  },
-                ]}
-                compact
+        renderCard={({ item }: { item: App.Entities.Purchase }) => {
+          const statusConfig = getStatusConfig(item.status);
+
+          return {
+            title: (
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
               >
-                {item.status === "open" ? "ABIERTA" : "CERRADA"}
-              </Chip>
-            </View>
-          ),
-          description: (
-            <>
-              <AppList.Description numberOfLines={2}>
-                {item.supplier_name
-                  ? `Proveedor: ${item.supplier_name}`
-                  : "Sin proveedor especificado"}
-              </AppList.Description>
-              <View style={{ marginTop: 8 }}>
-                <Text
-                  style={{
-                    fontSize: 16,
-                    fontWeight: "bold",
-                    color: palette.primary,
-                  }}
+                <AppList.Title>
+                  Compra #{item.document_number || item.id}
+                </AppList.Title>
+                <Chip
+                  mode="flat"
+                  style={[
+                    styles.statusChip,
+                    {
+                      backgroundColor: statusConfig.backgroundColor,
+                      borderColor: statusConfig.borderColor,
+                    },
+                  ]}
+                  textStyle={[
+                    styles.statusText,
+                    {
+                      color: statusConfig.textColor,
+                    },
+                  ]}
+                  compact
                 >
-                  ${parseFloat(item.total_amount?.toString() || "0").toFixed(2)}
-                </Text>
+                  {statusConfig.label}
+                </Chip>
               </View>
-            </>
-          ),
-          subtitle: `Fecha: ${new Date(
-            item.purchase_date
-          ).toLocaleDateString()}`,
-          bottomContent: (
-            <View style={styles.bottomContent}>
-              {item.location_name && (
-                <Text style={styles.locationText}>📍 {item.location_name}</Text>
-              )}
-              {item.details_count !== undefined && (
-                <Text style={styles.itemsText}>
-                  📦 {item.details_count} productos
-                </Text>
-              )}
-            </View>
-          ),
-        })}
-        onItemPress={(entity: App.Entities.Purchase) => {
+            ),
+            description: (
+              <>
+                <AppList.Description numberOfLines={2}>
+                  {item.supplier_name
+                    ? `Proveedor: ${item.supplier_name}`
+                    : "Sin proveedor especificado"}
+                </AppList.Description>
+                {item.products_summary && (
+                  <AppList.Description
+                    numberOfLines={1}
+                    style={{ marginTop: 4 }}
+                  >
+                    Productos: {item.products_summary}
+                  </AppList.Description>
+                )}
+                <View style={{ marginTop: 8 }}>
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: "bold",
+                      color: palette.primary,
+                    }}
+                  >
+                    $
+                    {parseFloat(item.total_amount?.toString() || "0").toFixed(
+                      2
+                    )}
+                  </Text>
+                </View>
+              </>
+            ),
+            subtitle: `Fecha: ${new Date(
+              item.purchase_date || item.movement_date
+            ).toLocaleDateString()}`,
+            bottomContent: (
+              <View style={styles.bottomContent}>
+                {item.location_name && (
+                  <Text style={styles.locationText}>
+                    📍 {item.location_name}
+                  </Text>
+                )}
+                {item.details_count !== undefined && (
+                  <Text style={styles.itemsText}>
+                    📦 {item.details_count} productos
+                  </Text>
+                )}
+              </View>
+            ),
+          };
+        }}
+        onItemPress={(entity: any) => {
           router.push(`/(tabs)/home/purchases/${entity.id}` as any);
         }}
         onPressCreate={() => {

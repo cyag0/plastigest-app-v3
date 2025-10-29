@@ -1,46 +1,277 @@
 import AppForm from "@/components/Form/AppForm/AppForm";
 import AppInput from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
+import { useFormikContext } from "formik";
 import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import {
+  Dimensions,
+  Image,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import {
   Avatar,
   Button,
   Card,
+  Chip,
   Text,
+  TextInput,
   TouchableRipple,
 } from "react-native-paper";
 import { SalesProvider, useSales } from "./salesContext";
 
-export default function SalesForm() {
+interface POSFormProps {
+  type?: "sales" | "purchases";
+  supplier_id?: number;
+  initialCart?: any[];
+  onCartChange?: (cart: any[], total: number) => void;
+  onConfirm?: (cart: any[], total: number) => void;
+  onBack?: () => void;
+  onClose?: () => void;
+  readonly?: boolean;
+}
+
+export default function SalesForm(props: POSFormProps = {}) {
+  const params = useLocalSearchParams();
+
+  // Extraer parámetros de la URL si no se pasan como props
+  const type = props.type || (params.type as "sales" | "purchases") || "sales";
+  const supplier_id =
+    props.supplier_id ||
+    (params.supplier_id ? parseInt(params.supplier_id as string) : undefined);
+  const initialCart =
+    props.initialCart || (params.cart ? JSON.parse(params.cart as string) : []);
+  const returnTo = params.returnTo as string;
+
+  const handleBack =
+    props.onBack ||
+    props.onClose ||
+    (() => {
+      if (returnTo === "purchases") {
+        router.back();
+      } else {
+        router.back();
+      }
+    });
+
   return (
-    <SalesProvider>
-      <App />
+    <SalesProvider
+      type={type}
+      //supplierId={supplier_id}
+      initialCart={initialCart}
+      onConfirm={props.onConfirm}
+    >
+      <App
+        type={type}
+        onBack={handleBack}
+        readonly={props.readonly}
+        onClose={props.onClose}
+      />
     </SalesProvider>
   );
 }
 
-function App() {
+interface AppProps {
+  type: "sales" | "purchases";
+  onBack?: () => void;
+  readonly?: boolean;
+  onClose?: () => void;
+}
+
+function App({ type, onBack, readonly, onClose }: AppProps) {
+  const title = type === "sales" ? "Punto de Venta" : "Gestión de Compras";
+  const params = useLocalSearchParams();
+  const { cart, cartTotal, cartItemsCount } = useSales();
+
+  // Detección de móvil
+  const screenWidth = Dimensions.get("window").width;
+  const isMobile = screenWidth < 768;
+
+  // Estado para modal del carrito en móviles
+  const [showCartModal, setShowCartModal] = React.useState(false);
+
+  // Función mejorada de regreso que incluye el carrito
+  const handleBackWithCart = () => {
+    if (onClose) {
+      onClose();
+    } else if (onBack) {
+      onBack();
+    }
+  };
+
   return (
     <AppForm
       disableScroll
       showButtons={false}
       style={[{ backgroundColor: palette.background, padding: 0 }]}
-      containerStyle={{ flexDirection: "row", gap: 16, height: "100%" }}
+      containerStyle={{
+        flexDirection: isMobile ? "column" : "row",
+        gap: isMobile ? 0 : 16,
+        height: "100%",
+      }}
     >
-      <View style={{ flex: 1, padding: 16 }}>
-        <SelectCategories />
-        <ArticlesList />
+      {/* Header con título y botón de regreso */}
+      {(onBack || type === "purchases") && (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            flexDirection: "row",
+            alignItems: "center",
+            backgroundColor: "white",
+            padding: 16,
+            elevation: 2,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
+          }}
+        >
+          {(onBack || params.returnTo) && (
+            <Button mode="text" onPress={handleBackWithCart} icon="arrow-left">
+              Regresar
+            </Button>
+          )}
+        </View>
+      )}
+
+      <View
+        style={{
+          flex: 1,
+          padding: 16,
+          paddingTop: onBack || type === "purchases" ? 80 : 16,
+        }}
+      >
+        <SelectCategories type={type} />
+        <ArticlesList type={type} readonly={readonly} />
       </View>
-      <View style={{ width: 300, flexBasis: 400 }}>
-        <SideCart />
-      </View>
+
+      {/* SideCart solo en desktop */}
+      {!isMobile && (
+        <View style={{ width: 300, flexBasis: 400 }}>
+          <SideCart type={type} readonly={readonly} onClose={onClose} />
+        </View>
+      )}
+
+      {/* Botón flotante del carrito en móviles */}
+      {isMobile && cartItemsCount > 0 && (
+        <View
+          style={{
+            position: "absolute",
+            bottom: 20,
+            right: 20,
+            zIndex: 100,
+          }}
+        >
+          <Button
+            mode="contained"
+            onPress={() => setShowCartModal(true)}
+            style={{
+              backgroundColor: "#333",
+              borderRadius: 30,
+              elevation: 8,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+            }}
+            contentStyle={{
+              paddingHorizontal: 20,
+              paddingVertical: 12,
+            }}
+            labelStyle={{
+              fontSize: 16,
+              fontWeight: "bold",
+            }}
+            icon={"cart"}
+          >
+            Carrito • {cartItemsCount}
+          </Button>
+        </View>
+      )}
+
+      {/* Modal del carrito para móviles */}
+      {isMobile && (
+        <Modal
+          visible={showCartModal}
+          animationType="slide"
+          presentationStyle="formSheet"
+          onRequestClose={() => setShowCartModal(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: palette.background }}>
+            {/* Header del modal */}
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: 16,
+                backgroundColor: "white",
+                elevation: 2,
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.1,
+                shadowRadius: 4,
+              }}
+            >
+              <Text
+                variant="titleLarge"
+                style={{
+                  fontWeight: "bold",
+                  color: palette.primary,
+                }}
+              >
+                {type === "purchases" ? "Compras" : "Carrito"}
+              </Text>
+              <Button
+                mode="text"
+                onPress={() => setShowCartModal(false)}
+                icon="close"
+              >
+                Cerrar
+              </Button>
+            </View>
+
+            {/* Contenido del carrito */}
+            <View style={{ flex: 1, padding: 16 }}>
+              <SideCart type={type} readonly={readonly} />
+            </View>
+          </View>
+        </Modal>
+      )}
     </AppForm>
   );
 }
 
-function SelectCategories() {
-  const { categories, selectedCategories, setSelectedCategories } = useSales();
+interface SelectCategoriesProps {
+  type: "sales" | "purchases";
+}
+
+function SelectCategories({ type }: SelectCategoriesProps) {
+  const {
+    categories,
+    selectedCategories,
+    setSelectedCategories,
+    searchText,
+    setSearchText,
+  } = useSales();
+
+  const title =
+    type === "sales" ? "Selecciona la Categoría" : "Filtrar por Categoría";
+  const placeholder =
+    type === "sales"
+      ? "Ej. Aceite de coco, Agua de coco"
+      : "Buscar materias primas...";
+
+  const screenWidth = Dimensions.get("window").width;
+  const isMobile = screenWidth < 768;
 
   function Category({
     category,
@@ -108,11 +339,13 @@ function SelectCategories() {
   return (
     <View>
       <View style={styles.titleContainer}>
-        <View style={{ flex: 1 }}>
-          <Text variant="titleLarge" style={{ fontWeight: "bold" }}>
-            Selecciona la Categoría
-          </Text>
-        </View>
+        {!isMobile && (
+          <View style={{ flex: 1 }}>
+            <Text variant="titleLarge" style={{ fontWeight: "bold" }}>
+              {title}
+            </Text>
+          </View>
+        )}
 
         <View style={{ flex: 1 }}>
           <View
@@ -121,7 +354,14 @@ function SelectCategories() {
               overflow: "hidden",
             }}
           >
-            <AppInput mode="flat" label={"Ej. Aceite de coco, Agua de coco"} />
+            <AppInput
+              mode="flat"
+              label={"Buscar productos..."}
+              value={searchText}
+              onChange={setSearchText}
+              placeholder={placeholder}
+              left={<TextInput.Icon icon="magnify" />}
+            />
           </View>
         </View>
       </View>
@@ -148,16 +388,17 @@ function SelectCategories() {
 }
 
 function Article({ product }: { product: App.Entities.Product }) {
-  const imageUri =
-    (product as any).image ??
-    (product as any).images?.[0]?.url ??
-    "https://via.placeholder.com/80";
+  const { addToCart, getCartQuantity, updateQuantity, type } = useSales();
+  const imageUri = product.main_image?.uri;
+
+  const cartQuantity = getCartQuantity(product.id);
 
   return (
     <TouchableRipple
       onPress={() => {
-        // si el contexto provee una acción para añadir al carrito, la llamamos
-        /* if (typeof addToCart === "function") addToCart(product); */
+        if (cartQuantity === 0) {
+          addToCart(product, 1);
+        }
       }}
     >
       <Card
@@ -181,11 +422,44 @@ function Article({ product }: { product: App.Entities.Product }) {
               marginBottom: 12,
             }}
           >
-            <Avatar.Image
-              source={{ uri: imageUri }}
-              size={100}
-              style={{ backgroundColor: "#f0f0f0", borderRadius: 6 }}
-            />
+            <View style={{ position: "relative" }}>
+              <Image
+                source={{ uri: imageUri }}
+                style={{
+                  backgroundColor: "#f0f0f0",
+                  borderRadius: 6,
+                  width: 100,
+                  height: 100,
+                }}
+              />
+              {cartQuantity > 0 && (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: -5,
+                    right: -5,
+                    backgroundColor: palette.primary,
+                    borderRadius: 12,
+                    minWidth: 24,
+                    height: 24,
+                    justifyContent: "center",
+                    alignItems: "center",
+                    borderWidth: 2,
+                    borderColor: "white",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "white",
+                      fontSize: 12,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {cartQuantity}
+                  </Text>
+                </View>
+              )}
+            </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontWeight: "bold", marginBottom: 4 }}>
                 {(product as any).name}
@@ -194,53 +468,131 @@ function Article({ product }: { product: App.Entities.Product }) {
                 {(product as any).description}
               </Text>
 
-              <Text
-                variant="bodyMedium"
+              <View
                 style={{
-                  marginTop: 4,
-                  fontWeight: "bold",
-                  fontSize: 16,
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginTop: 8,
                 }}
               >
-                {(() => {
-                  const price =
-                    (product as any).sale_price ?? (product as any).price;
-                  if (price === null || price === undefined || price === "")
-                    return "N/A";
-                  try {
-                    const num = Number(price);
-                    return new Intl.NumberFormat("es-MX", {
-                      style: "currency",
-                      currency: "MXN",
-                    }).format(isNaN(num) ? 0 : num);
-                  } catch {
-                    return `MXN ${price}`;
-                  }
-                })()}
-              </Text>
-            </View>
-            <View style={{ alignItems: "flex-end" }}>
-              <Text>
-                {(product as any).price ? `$${(product as any).price}` : ""}
-              </Text>
+                <Text
+                  variant="bodyMedium"
+                  style={{
+                    fontWeight: "bold",
+                    fontSize: 16,
+                    color: palette.primary,
+                  }}
+                >
+                  {(() => {
+                    const isPurchase = type === "purchases";
+
+                    const price = (product as any)[
+                      isPurchase ? "purchase_price" : "sale_price"
+                    ];
+                    if (price === null || price === undefined || price === "")
+                      return "N/A";
+                    try {
+                      const num = Number(price);
+                      return new Intl.NumberFormat("es-MX", {
+                        style: "currency",
+                        currency: "MXN",
+                      }).format(isNaN(num) ? 0 : num);
+                    } catch {
+                      return `MXN ${price}`;
+                    }
+                  })()}
+                </Text>
+
+                <View style={{ alignItems: "flex-end" }}>
+                  {(product as any).current_stock !== undefined && (
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        color:
+                          (product as any).current_stock > 0
+                            ? palette.primary
+                            : palette.red,
+                        fontWeight: "500",
+                      }}
+                    >
+                      Stock: {(product as any).current_stock}
+                    </Text>
+                  )}
+                  {(product as any).current_stock <=
+                    ((product as any).minimum_stock || 0) &&
+                    (product as any).minimum_stock > 0 && (
+                      <Chip
+                        style={{
+                          backgroundColor: palette.background,
+                        }}
+                        textStyle={{
+                          fontSize: 10,
+                          color: palette.error,
+                        }}
+                      >
+                        Stock Bajo
+                      </Chip>
+                    )}
+                </View>
+              </View>
             </View>
           </View>
 
-          <Button
-            mode="contained"
-            onPress={() => {
-              // Acción para añadir al carrito
-            }}
-          >
-            Añadir al carrito
-          </Button>
+          {cartQuantity > 0 ? (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: "#f0f0f0",
+                borderRadius: 8,
+                padding: 4,
+              }}
+            >
+              <Button
+                mode="outlined"
+                onPress={() => updateQuantity(product.id, cartQuantity - 1)}
+                style={{ minWidth: 40 }}
+                contentStyle={{ paddingHorizontal: 8 }}
+              >
+                -
+              </Button>
+              <Text
+                style={{
+                  fontWeight: "bold",
+                  fontSize: 16,
+                  marginHorizontal: 16,
+                }}
+              >
+                {cartQuantity}
+              </Text>
+              <Button
+                mode="outlined"
+                onPress={() => addToCart(product, 1)}
+                style={{ minWidth: 40 }}
+                contentStyle={{ paddingHorizontal: 8 }}
+              >
+                +
+              </Button>
+            </View>
+          ) : (
+            <Button mode="contained" onPress={() => addToCart(product, 1)}>
+              Añadir al carrito
+            </Button>
+          )}
         </Card.Content>
       </Card>
     </TouchableRipple>
   );
 }
 
-function ArticlesList() {
+interface ArticlesListProps {
+  type: "sales" | "purchases";
+  readonly?: boolean;
+}
+
+function ArticlesList({ type, readonly }: ArticlesListProps) {
   const {
     selectedCategories,
     products = [],
@@ -358,7 +710,27 @@ function ArticlesList() {
   );
 }
 
-function SideCart() {
+interface SideCartProps {
+  name?: string;
+  type?: "sales" | "purchases";
+  readonly?: boolean;
+  onClose?: () => void;
+}
+
+export function SideCart(props: SideCartProps) {
+  const form = useFormikContext<any>();
+  const params = useLocalSearchParams();
+  const returnTo = params.returnTo as string;
+  const {
+    cart,
+    cartTotal,
+    cartItemsCount,
+    updateQuantity,
+    removeFromCart,
+    clearCart,
+    onConfirm,
+  } = useSales();
+
   return (
     <View
       style={{
@@ -366,11 +738,264 @@ function SideCart() {
         backgroundColor: "#fff",
         padding: 16,
         borderRadius: 8,
+        display: "flex",
+        flexDirection: "column",
       }}
     >
-      <Text variant="titleMedium" style={[styles.fontBold]}>
-        Pedido
-      </Text>
+      {/* Header del carrito */}
+      <View
+        style={{
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: 16,
+        }}
+      >
+        <Text variant="titleMedium" style={[styles.fontBold]}>
+          <MaterialCommunityIcons
+            name={props.type === "purchases" ? "package" : "cart"}
+            size={24}
+            color="#000"
+          />
+          {props.type === "purchases" ? "Compras" : "Carrito"} ({cartItemsCount}
+          )
+        </Text>
+        {cart.length > 0 && (
+          <Button
+            mode="text"
+            onPress={clearCart}
+            textColor={palette.error}
+            contentStyle={{ paddingHorizontal: 8 }}
+          >
+            Limpiar
+          </Button>
+        )}
+      </View>
+
+      {/* Lista de productos en el carrito */}
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
+        {cart.length === 0 ? (
+          <View
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              padding: 32,
+            }}
+          >
+            <Text
+              style={{
+                textAlign: "center",
+                color: "#666",
+                fontSize: 16,
+              }}
+            >
+              Carrito vacío
+            </Text>
+            <Text
+              style={{
+                textAlign: "center",
+                color: "#999",
+                fontSize: 14,
+                marginTop: 8,
+              }}
+            >
+              Agrega productos para comenzar
+            </Text>
+          </View>
+        ) : (
+          <View style={{ gap: 12 }}>
+            {cart.map((item) => (
+              <Card
+                key={item.id}
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  elevation: 1,
+                }}
+              >
+                <Card.Content style={{ padding: 12 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text
+                        style={{
+                          fontWeight: "bold",
+                          fontSize: 14,
+                          marginBottom: 2,
+                        }}
+                        numberOfLines={2}
+                      >
+                        {item.name}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: "#666",
+                          marginBottom: 4,
+                        }}
+                      >
+                        {item.code}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: "#666",
+                        }}
+                      >
+                        {new Intl.NumberFormat("es-MX", {
+                          style: "currency",
+                          currency: "MXN",
+                        }).format(item.price)}{" "}
+                        c/u
+                      </Text>
+                    </View>
+
+                    <Button
+                      mode="text"
+                      onPress={() => removeFromCart(item.id)}
+                      textColor={palette.error}
+                      contentStyle={{ padding: 4 }}
+                    >
+                      ✕
+                    </Button>
+                  </View>
+
+                  {/* Controles de cantidad */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        backgroundColor: "#e9ecef",
+                        borderRadius: 6,
+                        padding: 2,
+                      }}
+                    >
+                      <Button
+                        mode="text"
+                        onPress={() =>
+                          updateQuantity(item.id, item.quantity - 1)
+                        }
+                        contentStyle={{ padding: 4 }}
+                        style={{ minWidth: 32 }}
+                      >
+                        -
+                      </Button>
+                      <Text
+                        style={{
+                          fontWeight: "bold",
+                          fontSize: 16,
+                          marginHorizontal: 12,
+                          minWidth: 20,
+                          textAlign: "center",
+                        }}
+                      >
+                        {item.quantity}
+                      </Text>
+                      <Button
+                        mode="text"
+                        onPress={() =>
+                          updateQuantity(item.id, item.quantity + 1)
+                        }
+                        contentStyle={{ padding: 4 }}
+                        style={{ minWidth: 32 }}
+                      >
+                        +
+                      </Button>
+                    </View>
+
+                    <Text
+                      style={{
+                        fontWeight: "bold",
+                        fontSize: 16,
+                        color: palette.primary,
+                      }}
+                    >
+                      {new Intl.NumberFormat("es-MX", {
+                        style: "currency",
+                        currency: "MXN",
+                      }).format(item.total)}
+                    </Text>
+                  </View>
+                </Card.Content>
+              </Card>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Footer con total y botones */}
+      {cart.length > 0 && (
+        <View
+          style={{
+            marginTop: 16,
+            paddingTop: 16,
+            borderTopWidth: 1,
+            borderTopColor: "#e0e0e0",
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "bold",
+              }}
+            >
+              Total:
+            </Text>
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: "bold",
+                color: palette.primary,
+              }}
+            >
+              {new Intl.NumberFormat("es-MX", {
+                style: "currency",
+                currency: "MXN",
+              }).format(cartTotal)}
+            </Text>
+          </View>
+
+          {!props.readonly && (
+            <Button
+              mode="contained"
+              onPress={() => {
+                const action = props.type === "purchases" ? "compra" : "venta";
+                onConfirm && onConfirm(cart, cartTotal);
+              }}
+              style={{
+                backgroundColor: palette.primary,
+              }}
+            >
+              {props.type === "purchases"
+                ? returnTo === "purchases"
+                  ? "✅ Confirmar y Regresar"
+                  : "📦 Confirmar Selección"
+                : "💳 Proceder con la Venta"}
+            </Button>
+          )}
+        </View>
+      )}
     </View>
   );
 }

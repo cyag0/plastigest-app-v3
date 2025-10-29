@@ -23,8 +23,6 @@ function MakeForm<TProps extends Record<string, any>>(
     const formContext = useAppForm();
     const readonly = props.readonly || formContext?.readonly || false;
 
-    console.log("Readonly formcintext:", readonly);
-
     return (
       <FastField
         name={name}
