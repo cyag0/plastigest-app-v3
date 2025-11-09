@@ -73,5 +73,57 @@ namespace App {
         notes?: string | null;
       }>;
     }
+
+    namespace Adjustment {
+      // Tipos de ajuste
+      type AdjustmentType = "increase" | "decrease";
+
+      interface AdjustmentDetail {
+        id?: number;
+        product_id: number;
+        quantity: number;
+        unit_price: number;
+        total_cost?: number;
+        product_name?: string;
+        product_code?: string;
+        product_image?: any;
+      }
+
+      interface Adjustment {
+        id: number;
+        adjustment_number: string;
+        adjustment_date: string;
+        adjustment_type: AdjustmentType;
+        status: string;
+        total_cost: number;
+        reason?: string;
+        adjusted_by?: string;
+        location?: {
+          id: number;
+          name: string;
+        };
+        details?: AdjustmentDetail[];
+        content?: any;
+        comments?: string;
+        created_at?: string;
+        updated_at?: string;
+      }
+
+      interface CreateAdjustmentData {
+        location_id: number;
+        company_id: number;
+        movement_date: string;
+        document_number?: string;
+        comments?: string;
+        adjustment_type: AdjustmentType;
+        reason?: string;
+        adjusted_by?: string;
+        details: Array<{
+          product_id: number;
+          quantity: number;
+          unit_price: number;
+        }>;
+      }
+    }
   }
 }

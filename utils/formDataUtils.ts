@@ -68,11 +68,17 @@ export const objectToFormDataWithNestedInputsAsync = async (
               );
             }
           } else {
-            formData.append(arrayKey, item);
+            // Convertir booleanos a 0 o 1
+            const itemValue =
+              typeof item === "boolean" ? (item ? "1" : "0") : item;
+            formData.append(arrayKey, itemValue);
           }
         }
       } else {
-        formData.append(formKey, value);
+        // Convertir booleanos a 0 o 1
+        const finalValue =
+          typeof value === "boolean" ? (value ? "1" : "0") : value;
+        formData.append(formKey, finalValue);
       }
     }
   }

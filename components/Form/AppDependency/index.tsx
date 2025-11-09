@@ -26,7 +26,7 @@ interface AppDependencyProps {
  */
 export default function AppDependency({ name, children }: AppDependencyProps) {
   const { values } = useFormikContext();
-  const value = getIn(values, name);
+  const value = getIn(values, name) || null;
 
   return <>{children(value)}</>;
 }

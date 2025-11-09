@@ -1,17 +1,23 @@
 import AppList from "@/components/App/AppList/AppList";
+import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { View, ActivityIndicator } from "react-native";
-import { useSelectedCompany } from "@/hooks/useSelectedCompany";
+import { ActivityIndicator, View } from "react-native";
 
 export default function UnidadesScreen() {
   const router = useRouter();
-  const { company, availableCompanies, selectCompany, isLoading } = useSelectedCompany();
+  const { company, availableCompanies, selectCompany, isLoading } =
+    useSelectedCompany();
 
   useEffect(() => {
     // Seleccionar automáticamente la primera empresa si no hay ninguna seleccionada
-    if (!company && availableCompanies && availableCompanies.length > 0 && !isLoading) {
+    if (
+      !company &&
+      availableCompanies &&
+      availableCompanies.length > 0 &&
+      !isLoading
+    ) {
       console.log("Auto-selecting first company:", availableCompanies[0]);
       selectCompany(availableCompanies[0]);
     }
@@ -19,7 +25,7 @@ export default function UnidadesScreen() {
 
   if (isLoading || !company) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" />
       </View>
     );
@@ -32,12 +38,22 @@ export default function UnidadesScreen() {
         service={Services.home.unidades}
         renderCard={({ item }) => ({
           title: `${item.name} (${item.symbol})`,
-          description: `${item.type} ${item.is_base ? '- Base' : `- ${item.conversion_rate}x`}${item.description ? ' - ' + item.description : ''}`,
+          description: `${item.type} ${
+            item.is_base ? "- Base" : `- ${item.conversion_rate}x`
+          }${item.description ? " - " + item.description : ""}`,
         })}
         onPressCreate={() => router.push("/(tabs)/home/unidades/form" as any)}
         detailRoute={(item) => `/(tabs)/home/unidades/${item.id}` as any}
         searchPlaceholder="Buscar unidades..."
         defaultFilters={{ company_id: company.id }}
+        onItemPress={(item) => {
+          router.push(`/(tabs)/home/unidades/${item.id}` as any);
+        }}
+        menu={{
+          onEdit(item) {
+            router.push(`/(tabs)/home/unidades/${item.id}/edit` as any);
+          },
+        }}
       />
     </View>
   );

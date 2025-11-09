@@ -1,6 +1,6 @@
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
-import { Href, useNavigation, useRouter } from "expo-router";
+import { Href, useRouter } from "expo-router";
 import * as React from "react";
 import {
   Image,
@@ -53,13 +53,13 @@ const movimientos: ResourceProps[] = [
     icon: require("../../../assets/images/dashboard/transfer.png"),
   },
   {
-    key: "empresa",
-    label: "Uso de la empresa",
+    key: "ajustes",
+    label: "Ajuste",
     description:
-      "Registra el uso interno de productos para actividades propias de la compañía.",
+      "Registra los ajustes de inventario por mermas, extravíos u otras causas.",
     color: palette.textSecondary,
     background: palette.background,
-    link: "/(tabs)/home/roles",
+    link: "/(tabs)/home/adjustment",
     icon: require("../../../assets/images/dashboard/use.png"),
   },
 ];
@@ -175,8 +175,6 @@ interface ResourceProps {
 
 export default function HomeScreen() {
   const [selected, setSelected] = React.useState("compras");
-
-  const naviagator = useNavigation();
 
   const appContext = useAuth();
 
@@ -351,7 +349,7 @@ function DashboardButton(props: DashboardButtonProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: palette.background,
   },
   title: {
     marginBottom: 8,

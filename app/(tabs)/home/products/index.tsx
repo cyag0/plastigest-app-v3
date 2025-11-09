@@ -149,6 +149,15 @@ export default function ProductsIndex() {
                 )} */}
             </View>
           ),
+          bottom: [
+            {
+              label: "Stock",
+              value:
+                item.current_stock !== null && item.current_stock !== undefined
+                  ? item.current_stock
+                  : 0,
+            },
+          ],
         })}
         onItemPress={(entity: any) => {
           router.push(`/(tabs)/home/products/${entity.id}` as any);

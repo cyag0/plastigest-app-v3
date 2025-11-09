@@ -2,6 +2,12 @@ import admin from "./admin/admin";
 import { createCrudService } from "./crudService";
 import saleService from "./saleService";
 
+const movements = {
+  adjustments: createCrudService<App.Entities.Adjustment.Adjustment>(
+    "/auth/admin/adjustments"
+  ),
+};
+
 const Services = {
   admin,
   categories: {
@@ -26,6 +32,7 @@ const Services = {
   suppliers: {
     ...createCrudService<App.Entities.Supplier>("/auth/admin/suppliers"),
   },
+  movements,
   home: {
     clientes: createCrudService<any>("/auth/admin/customers"),
     proveedores: createCrudService<any>("/api/proveedores"),

@@ -33,7 +33,10 @@ interface CardContentProps {
   description?: React.ReactNode;
   left?: React.ReactNode;
   right?: React.ReactNode;
-  bottom?: React.ReactNode;
+  bottom?: Array<{
+    label: string;
+    value: string | number;
+  }>;
 }
 
 // Componente para el menú de acciones de cada item
@@ -205,6 +208,10 @@ interface AppListProps<T> {
 
   // Props para eventos
   onItemPress?: (item: T) => void;
+  menu?: {
+    onEdit?: (item: T) => void;
+    onDelete?: (item: T) => void;
+  };
 
   showDivider?: boolean;
 }
@@ -224,6 +231,7 @@ function AppList<T extends { id: number | string }>({
   usePagination = true,
   itemsPerPage = 20,
   onItemPress,
+  menu,
   showDivider = true,
 }: AppListProps<T>) {
   // Estados
@@ -317,10 +325,19 @@ function AppList<T extends { id: number | string }>({
   };
 
   const handleEdit = (item: T) => {
-    handleItemPress(item);
+    if (menu?.onEdit) {
+      menu.onEdit(item);
+    } else {
+      handleItemPress(item);
+    }
   };
 
   const handleDelete = async (item: T) => {
+    if (menu?.onDelete) {
+      menu.onDelete(item);
+      return;
+    }
+
     const confirmed = await alerts.confirm(
       `¿Estás seguro de que deseas eliminar este elemento?`,
       {
@@ -417,6 +434,7 @@ function AppList<T extends { id: number | string }>({
         onChangeText={setSearchQuery}
         value={searchQuery}
         style={styles.searchbar}
+        mode="bar"
         onClearIconPress={() => setSearchQuery("")}
       />
       <Filters />
@@ -486,7 +504,52 @@ function AppList<T extends { id: number | string }>({
               )}
 
               {cardProps.bottom ? (
-                <View>{cardProps.bottom}</View>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    padding: 4,
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    //flexWrap: "wrap",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      padding: 4,
+                      alignItems: "center",
+                    }}
+                  >
+                    <AppList.Description>ID: </AppList.Description>
+                    <AppList.Description
+                      style={{
+                        color: palette.textSecondary,
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {(item.id || "").toString()}
+                    </AppList.Description>
+                  </View>
+                  {cardProps.bottom.map((item, idx) => (
+                    <View
+                      key={idx}
+                      style={{ flexDirection: "row", alignItems: "center" }}
+                    >
+                      <AppList.Description>
+                        {item.label + ": "}
+                      </AppList.Description>
+                      <AppList.Description
+                        style={{
+                          color: palette.textSecondary,
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {item.value.toString()}
+                      </AppList.Description>
+                    </View>
+                  ))}
+                </View>
               ) : (
                 <View
                   style={{

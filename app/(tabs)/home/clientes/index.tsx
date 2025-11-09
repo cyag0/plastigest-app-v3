@@ -1,26 +1,21 @@
 import AppList from "@/components/App/AppList/AppList";
+import { useAuth } from "@/contexts/AuthContext";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
-import React, { useEffect } from "react";
-import { View, ActivityIndicator } from "react-native";
-import { useSelectedCompany } from "@/hooks/useSelectedCompany";
+import React from "react";
+import { View } from "react-native";
+import { Text } from "react-native-paper";
 
 export default function ClientesScreen() {
   const router = useRouter();
-  const { company, availableCompanies, selectCompany, isLoading } = useSelectedCompany();
+  const auth = useAuth();
 
-  useEffect(() => {
-    // Seleccionar automáticamente la primera empresa si no hay ninguna seleccionada
-    if (!company && availableCompanies && availableCompanies.length > 0 && !isLoading) {
-      console.log("Auto-selecting first company:", availableCompanies[0]);
-      selectCompany(availableCompanies[0]);
-    }
-  }, [company, availableCompanies, isLoading]);
+  const company = auth.selectedCompany;
 
-  if (isLoading || !company) {
+  if (!company) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text>Selecciona una empresa para continuar</Text>
       </View>
     );
   }
@@ -32,12 +27,22 @@ export default function ClientesScreen() {
         service={Services.home.clientes}
         renderCard={({ item }) => ({
           title: item.name,
-          description: `${item.rfc ? item.rfc + ' - ' : ''}${item.phone || item.email || ''}`,
+          description: `${item.rfc ? item.rfc + " - " : ""}${
+            item.phone || item.email || ""
+          }`,
         })}
         onPressCreate={() => router.push("/(tabs)/home/clientes/form" as any)}
-        detailRoute={(item) => `/(tabs)/home/clientes/${item.id}` as any}
+        //detailRoute={(item) => `/(tabs)/home/clientes/${item.id}` as any}
         searchPlaceholder="Buscar clientes..."
         defaultFilters={{ company_id: company.id }}
+        onItemPress={(item) => {
+          router.push(`/(tabs)/home/clientes/${item.id}` as any);
+        }}
+        menu={{
+          onEdit(item) {
+            router.push(`/(tabs)/home/clientes/${item.id}/edit` as any);
+          },
+        }}
       />
     </View>
   );
