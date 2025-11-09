@@ -1,4 +1,5 @@
 import palette from "@/constants/palette";
+import { useAlerts } from "@/hooks/useAlerts";
 import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
 import { CrudService } from "@/utils/services/crudService";
 import { FormikProps, FormikProvider, useFormik } from "formik";
@@ -91,6 +92,8 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   const formRef = useRef<AppFormRef<T>>(null);
   const [readonly, setReadonly] = useState(!!props.readonly);
 
+  const alerts = useAlerts();
+
   useEffect(() => {
     loadInitialValues();
   }, [props.id, props.initialValues]);
@@ -179,6 +182,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       }
     } catch (error) {
       console.error("Error loading initial values:", error);
+      alerts.error("Error al cargar los datos del formulario");
       props.onError?.(error, {} as T);
       formInstance.setValues({} as T);
     } finally {
@@ -189,8 +193,6 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   async function handleSubmit(_values: T) {
     try {
       setLoading(true);
-
-      console.log("values", _values);
 
       const values = (await objectToFormDataWithNestedInputsAsync(
         _values
@@ -209,16 +211,21 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         // Si hay ID, es actualización
         if (props.id) {
           response = await props.api.update(props.id, values as T);
+          alerts.success("Actualizado correctamente");
         }
         // Si no hay ID, es creación
         else {
           response = await props.api.store(values as T);
+          alerts.success("Creado correctamente");
         }
 
         props.onSuccess?.(response.data, _values);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error submitting form:", error);
+      const errorMessage =
+        error?.response?.data?.message || error?.message || "Error al guardar";
+      alerts.error(errorMessage);
       props.onError?.(error, _values);
     } finally {
       setLoading(false);
@@ -343,7 +350,18 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
                           <View>
                             <Button
                               mode="contained"
-                              onPress={() => formInstance.handleSubmit()}
+                              onPress={() => {
+                                const isValid = formInstance.validateForm();
+
+                                if (!isValid) {
+                                  alerts.error(
+                                    "Por favor, completa todos los campos requeridos."
+                                  );
+                                  return;
+                                }
+
+                                formInstance.handleSubmit();
+                              }}
                               disabled={
                                 !formInstance.isValid ||
                                 formInstance.isSubmitting ||
@@ -369,9 +387,8 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
                           </View>
                         )}
 
-                        {props.additionalSubmitButtons && (
-                          props.additionalSubmitButtons
-                        )}
+                        {props.additionalSubmitButtons &&
+                          props.additionalSubmitButtons}
                       </View>
                     </View>
                   )

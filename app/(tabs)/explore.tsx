@@ -1,3 +1,4 @@
+import AlertsExampleScreen from "@/components/AppAlert/AlertsExample";
 import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { FormRef } from "@/components/Form/AppForm/AppForm";
@@ -19,10 +20,16 @@ export default function TestScreen() {
           .required("El nombre es requerido")
           .min(3, "El nombre debe tener al menos 3 caracteres"),
         is_person: Yup.boolean().required("Debe seleccionar una opción"),
+        date: Yup.date().required("La fecha es requerida"),
+        time: Yup.string().required("La hora es requerida"),
+        gender: Yup.string().required("El género es requerido"),
+        select: Yup.array().min(1, "Debe seleccionar al menos una opción"),
       })}
       initialValues={{ name: "", is_person: false }}
       ref={formRef}
     >
+      <AlertsExampleScreen />
+
       <FormInput name="name" label={"Nombre"} />
       <FormCheckBox name="is_person" label="¿Es una persona?" />
       <FormDatePicker name="date" label="Selecciona una fecha" />
@@ -47,21 +54,6 @@ export default function TestScreen() {
         name="select"
         label="Selecciona una opción"
       />
-      {/*    <Divider>Hola</Divider>
-      <AppCheckBox name="is_person" label="¿Es una persona?" />
-
-      <AppRadioButton
-        name="gender"
-        label="Género"
-        options={[
-          { label: "Masculino", value: "male" },
-          { label: "Femenino", value: "female" },
-          { label: "Otro", value: "other" },
-        ]}
-      />
-
-      <AppTimePicker name="time" label="Selecciona una hora" />
-      <AppDatePicker name="date" label="Selecciona una fecha" /> */}
     </AppForm>
   );
 }

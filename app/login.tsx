@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { useAlerts } from "@/hooks/useAlerts";
 import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -20,6 +21,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function LoginScreen() {
   const theme = useTheme();
   const { login, isLoading } = useAuth();
+  const alerts = useAlerts();
 
   // Estados del formulario
   const [email, setEmail] = useState("");
@@ -67,6 +69,7 @@ export default function LoginScreen() {
     const isPasswordValid = validatePassword(password);
 
     if (!isEmailValid || !isPasswordValid) {
+      alerts.error("Por favor completa todos los campos correctamente");
       return;
     }
 
@@ -76,28 +79,36 @@ export default function LoginScreen() {
 
       if (!result.success) {
         // Mostrar error específico según el tipo
+        let errorMessage = "";
         if (
           result.error?.includes("CORS") ||
           result.error?.includes("Network")
         ) {
-          setError(
-            "Error de conexión. Verifica que el servidor esté ejecutándose."
-          );
+          errorMessage =
+            "Error de conexión. Verifica que el servidor esté ejecutándose.";
         } else {
-          setError(result.error || "Error desconocido");
+          errorMessage = result.error || "Error desconocido";
         }
+
+        setError(errorMessage);
+        alerts.error(errorMessage);
+      } else {
+        alerts.success("Sesión iniciada correctamente");
       }
     } catch (error: any) {
       console.error("Login error:", error);
 
+      let errorMessage = "";
       // Manejar diferentes tipos de errores
       if (error.code === "NETWORK_ERROR" || error.message?.includes("CORS")) {
-        setError(
-          "Error de conexión con el servidor. Verifica la configuración CORS."
-        );
+        errorMessage =
+          "Error de conexión con el servidor. Verifica la configuración CORS.";
       } else {
-        setError("Error al iniciar sesión. Intenta nuevamente.");
+        errorMessage = "Error al iniciar sesión. Intenta nuevamente.";
       }
+
+      setError(errorMessage);
+      alerts.error(errorMessage);
     }
   };
 

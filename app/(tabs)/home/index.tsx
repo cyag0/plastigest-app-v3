@@ -13,6 +13,16 @@ import { Card, Text } from "react-native-paper";
 
 const movimientos: ResourceProps[] = [
   {
+    key: "produccion",
+    label: "Producción",
+    description:
+      "Registra y gestiona las órdenes de producción, incluyendo planificación y seguimiento.",
+    color: palette.error,
+    link: "/(tabs)/home/production" as any,
+    background: palette.surface,
+    icon: require("../../../assets/images/dashboard/purchase.png"),
+  },
+  {
     key: "compras",
     label: "Compras",
     description:
@@ -28,7 +38,7 @@ const movimientos: ResourceProps[] = [
     description:
       "Administra las ventas a clientes, emisión de pedidos y seguimiento de entregas.",
     color: palette.textSecondary,
-    link: "/(tabs)/home/sales/form",
+    link: "/(tabs)/home/sales",
     background: palette.card,
     icon: require("../../../assets/images/dashboard/sales.png"),
   },

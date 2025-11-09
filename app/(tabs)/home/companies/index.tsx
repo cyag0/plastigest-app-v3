@@ -1,6 +1,6 @@
 import AppList from "@/components/App/AppList/AppList";
-import { AppModalRef } from "@/components/Modal/AppModal";
-import FilterModal from "@/components/Modal/FilterModal";
+import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
+import FilterModal from "@/components/Feedback/Modal/FilterModal";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";

@@ -83,9 +83,9 @@ export default function PurchasesIndex() {
                   alignItems: "center",
                 }}
               >
-                <AppList.Title>
+                <Text variant="titleMedium" style={{ color: palette.error }}>
                   Compra #{item.document_number || item.id}
-                </AppList.Title>
+                </Text>
                 <Chip
                   mode="flat"
                   style={[
@@ -109,18 +109,15 @@ export default function PurchasesIndex() {
             ),
             description: (
               <>
-                <AppList.Description numberOfLines={2}>
+                <Text variant="bodyMedium" numberOfLines={2}>
                   {item.supplier_name
                     ? `Proveedor: ${item.supplier_name}`
                     : "Sin proveedor especificado"}
-                </AppList.Description>
+                </Text>
                 {item.products_summary && (
-                  <AppList.Description
-                    numberOfLines={1}
-                    style={{ marginTop: 4 }}
-                  >
+                  <Text numberOfLines={1} style={{ marginTop: 4 }}>
                     Productos: {item.products_summary}
-                  </AppList.Description>
+                  </Text>
                 )}
                 <View style={{ marginTop: 8 }}>
                   <Text
@@ -137,23 +134,6 @@ export default function PurchasesIndex() {
                   </Text>
                 </View>
               </>
-            ),
-            subtitle: `Fecha: ${new Date(
-              item.purchase_date || item.movement_date
-            ).toLocaleDateString()}`,
-            bottomContent: (
-              <View style={styles.bottomContent}>
-                {item.location_name && (
-                  <Text style={styles.locationText}>
-                    📍 {item.location_name}
-                  </Text>
-                )}
-                {item.details_count !== undefined && (
-                  <Text style={styles.itemsText}>
-                    📦 {item.details_count} productos
-                  </Text>
-                )}
-              </View>
             ),
           };
         }}

@@ -5,8 +5,9 @@ import AppForm, {
   useAppForm,
 } from "@/components/Form/AppForm/AppForm";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
-import PurchaseStepper from "@/components/PurchaseStepper";
-import TicketView from "@/components/TicketView";
+import PurchaseStepper from "@/components/Views/PurchaseStepper";
+import TicketView from "@/components/Views/TicketView";
+import { useAlerts } from "@/hooks/useAlerts";
 import { usePurchaseValidation } from "@/hooks/usePurchaseValidation";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
@@ -17,7 +18,7 @@ import { useFormikContext } from "formik";
 import React, { useEffect, useRef, useState } from "react";
 import { Dimensions, Modal, ScrollView, View } from "react-native";
 import { Button, Divider, Text } from "react-native-paper";
-import SalesForm from "../sales/form";
+import SalesForm from "../sales/POS";
 
 interface PurchaseFormData {
   id?: number;
@@ -190,6 +191,7 @@ export default function PurchasesForm(props: PurchasesFormProps) {
 
   const { company } = useSelectedCompany();
   const { selectedLocation } = useSelectedLocation();
+  const alerts = useAlerts();
 
   const [supplierId, setSupplierId] = useState<number>();
 
@@ -197,6 +199,20 @@ export default function PurchasesForm(props: PurchasesFormProps) {
   const handleStatusChange = async (newStatus: string) => {
     try {
       if (!purchaseId) return;
+
+      // Confirmar cambio de estado
+      const confirmed = await alerts.confirm(
+        `¿Confirmas el cambio de estado de la compra?`,
+        {
+          title: "Cambiar estado",
+          okText: "Confirmar",
+          cancelText: "Cancelar",
+        }
+      );
+
+      if (!confirmed) {
+        return;
+      }
 
       const response = await axios.post(
         `/auth/admin/purchases/${purchaseId}/transition`,
@@ -210,9 +226,7 @@ export default function PurchasesForm(props: PurchasesFormProps) {
         formRef.current?.reload();
 
         // Mostrar mensaje de éxito
-        console.log(
-          `Estado actualizado exitosamente a: ${response.data.message}`
-        );
+        alerts.success(`Estado actualizado a: ${response.data.message}`);
       }
     } catch (error: any) {
       console.error("Error changing status:", error);
@@ -220,10 +234,8 @@ export default function PurchasesForm(props: PurchasesFormProps) {
       // Mostrar mensaje de error específico
       const errorMessage =
         error.response?.data?.message || "Error al cambiar el estado";
-      console.error("Error:", errorMessage);
 
-      // Aquí podrías mostrar un toast o alert con el error
-      alert(`Error: ${errorMessage}`);
+      alerts.error(`Error: ${errorMessage}`);
     }
   };
 

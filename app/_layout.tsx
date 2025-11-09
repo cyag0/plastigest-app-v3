@@ -9,6 +9,7 @@ import { SelectDataProvider } from "@/components/Form/AppProSelect";
 import NavigationHandler from "@/components/NavigationHandler";
 import palette from "@/constants/palette";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AlertsProvider } from "@/hooks/useAlerts";
 import { MD3LightTheme, PaperProvider } from "react-native-paper";
 import { es, registerTranslation } from "react-native-paper-dates";
 
@@ -48,7 +49,9 @@ export default function RootLayout() {
         <SelectDataProvider>
           <NavigationHandler>
             <CompanyRequiredWrapper>
-              <App />
+              <AlertsProvider>
+                <App />
+              </AlertsProvider>
             </CompanyRequiredWrapper>
           </NavigationHandler>
         </SelectDataProvider>

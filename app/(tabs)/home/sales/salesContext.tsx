@@ -1,5 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useAsync } from "@/hooks/AHooks";
+import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import React, { createContext, ReactNode, useContext } from "react";
 
@@ -17,6 +18,7 @@ interface CartItem {
   total_price?: number; // Para compatibilidad con backend de compras
   current_stock?: number;
   product_type?: string;
+  main_image?: { uri: string }; // Imagen del producto
 }
 
 interface SalesContextProps {
@@ -42,6 +44,7 @@ interface SalesContextProps {
   getCartQuantity: (productId: number) => number;
   onConfirm?: (cart: any[], total: number) => void;
   type: "sales" | "purchases";
+  reloadProducts: () => Promise<void>;
 }
 
 interface SalesProviderProps {
@@ -78,11 +81,12 @@ export const SalesProvider = ({
   const [loading, setLoading] = React.useState<boolean>(false);
 
   const auth = useAuth();
+  const alerts = useAlerts();
 
-  useAsync(async () => {
+  const loadProducts = React.useCallback(async () => {
     setLoading(true);
     try {
-      const productParams = {
+      const productParams: any = {
         all: true,
         location_id: auth.location?.id,
       };
@@ -138,6 +142,10 @@ export const SalesProvider = ({
     } finally {
       setLoading(false);
     }
+  }, [auth.location?.id, type]);
+
+  useAsync(async () => {
+    await loadProducts();
   });
 
   const categoriesIds = React.useMemo<number[]>(
@@ -172,7 +180,7 @@ export const SalesProvider = ({
             newQuantity > product.current_stock
           ) {
             // No permitir agregar más que el stock disponible
-            alert(
+            alerts.error(
               `No se puede agregar más cantidad. Stock disponible: ${product.current_stock}, ya tienes: ${currentCartQuantity} en el carrito.`
             );
             return currentCart;
@@ -191,7 +199,7 @@ export const SalesProvider = ({
             product.current_stock !== undefined &&
             quantity > product.current_stock
           ) {
-            alert(
+            alerts.error(
               `No se puede agregar esta cantidad. Stock disponible: ${product.current_stock}`
             );
             return currentCart;
@@ -210,6 +218,7 @@ export const SalesProvider = ({
             total_price: price * quantity, // Para compatibilidad con backend
             current_stock: product.current_stock,
             product_type: product.product_type,
+            main_image: product.main_image, // Incluir imagen del producto
           };
           return [...currentCart, newItem];
         }
@@ -234,7 +243,7 @@ export const SalesProvider = ({
               item.current_stock !== undefined &&
               newQuantity > item.current_stock
             ) {
-              alert(
+              alerts.error(
                 `No se puede establecer esta cantidad. Stock disponible: ${item.current_stock}`
               );
               return item; // No cambiar la cantidad
@@ -383,6 +392,7 @@ export const SalesProvider = ({
     getCartQuantity,
     onConfirm,
     type,
+    reloadProducts: loadProducts,
   };
 
   return (

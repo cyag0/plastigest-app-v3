@@ -1,5 +1,6 @@
 import admin from "./admin/admin";
 import { createCrudService } from "./crudService";
+import saleService from "./saleService";
 
 const Services = {
   admin,
@@ -14,6 +15,13 @@ const Services = {
   },
   purchases: {
     ...createCrudService<App.Entities.Purchase>("/auth/admin/purchases"),
+  },
+  sales: {
+    ...createCrudService<App.Entities.Sale>("/auth/admin/sales"),
+    ...saleService,
+  },
+  productions: {
+    ...createCrudService<any>("/auth/admin/productions"),
   },
   suppliers: {
     ...createCrudService<App.Entities.Supplier>("/auth/admin/suppliers"),

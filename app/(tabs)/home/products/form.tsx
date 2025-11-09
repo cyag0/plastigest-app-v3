@@ -173,65 +173,55 @@ export default function ProductsForm(props: ProductsFormProps) {
             <FormInput name="current_location_id" />
           </View>
 
-          <AppDependency name="product_type">
-            {(value) => {
-              return (
-                value !== "processed" && (
-                  <>
-                    {/* Sección de Información de Sucursal */}
-                    <View style={{ marginTop: 24, marginBottom: 16 }}>
-                      <Text
-                        style={{
-                          fontSize: 18,
-                          fontWeight: "bold",
-                          color: "#333",
-                        }}
-                      >
-                        Información en{" "}
-                        {selectedLocation?.name || "esta sucursal"}
-                      </Text>
-                      <View
-                        style={{
-                          height: 2,
-                          backgroundColor: "#e0e0e0",
-                          marginTop: 8,
-                        }}
-                      />
-                    </View>
+          {/* Sección de Información de Sucursal */}
+          <View style={{ marginTop: 24, marginBottom: 16 }}>
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "bold",
+                color: "#333",
+              }}
+            >
+              Información en {selectedLocation?.name || "esta sucursal"}
+            </Text>
+            <View
+              style={{
+                height: 2,
+                backgroundColor: "#e0e0e0",
+                marginTop: 8,
+              }}
+            />
+          </View>
 
-                    <FormCheckBox
-                      name="is_active"
-                      text={`Producto Activo en ${
-                        selectedLocation?.name || "esta sucursal"
-                      }`}
-                    />
+          <FormCheckBox
+            name="is_active"
+            text={`Producto Activo en ${
+              selectedLocation?.name || "esta sucursal"
+            }`}
+          />
 
-                    <FormInput
-                      name="current_stock"
-                      label="Stock Actual"
-                      placeholder="0.00"
-                      keyboardType="numeric"
-                      readonly
-                    />
+          <FormInput
+            name="current_stock"
+            label="Stock Actual"
+            placeholder="0.00"
+            keyboardType="numeric"
+            //@ts-ignore
+            readonly
+          />
 
-                    <FormInput
-                      name="minimum_stock"
-                      label="Stock Mínimo"
-                      placeholder="0.00"
-                      keyboardType="numeric"
-                    />
+          <FormInput
+            name="minimum_stock"
+            label="Stock Mínimo"
+            placeholder="0.00"
+            keyboardType="numeric"
+          />
 
-                    <FormInput
-                      name="maximum_stock"
-                      label="Stock Máximo"
-                      placeholder="0.00"
-                      keyboardType="numeric"
-                    />
-                  </>
-                )
-              );
-            }}
-          </AppDependency>
+          <FormInput
+            name="maximum_stock"
+            label="Stock Máximo"
+            placeholder="0.00"
+            keyboardType="numeric"
+          />
         </View>
       </ScrollView>
     );

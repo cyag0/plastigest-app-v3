@@ -1,7 +1,7 @@
 import AppBar from "@/components/App/AppBar";
 import { Stack } from "expo-router";
 
-export default function PurchasesLayout() {
+export default function ProductionLayout() {
   return (
     <Stack
       screenOptions={{
@@ -19,26 +19,26 @@ export default function PurchasesLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: "Compras",
+          title: "Producción",
           headerShown: false,
         }}
       />
       <Stack.Screen
         name="form"
         options={{
-          title: "Nueva Compra",
+          title: "Nueva Producción",
         }}
       />
       <Stack.Screen
         name="[id]/index"
         options={{
-          title: "Detalle de Compra",
+          title: "Detalle de Producción",
         }}
       />
       <Stack.Screen
         name="[id]/edit"
         options={{
-          title: "Editar Compra",
+          title: "Editar Producción",
         }}
       />
     </Stack>

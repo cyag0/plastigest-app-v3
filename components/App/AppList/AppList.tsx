@@ -1,16 +1,25 @@
 import AppBar from "@/components/App/AppBar";
 import palette from "@/constants/palette";
+import { useAlerts } from "@/hooks/useAlerts";
 import {
   CrudService,
   IndexParams,
   LaravelPaginatedResponse,
   handleApiError,
 } from "@/utils/services/crudService";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import * as React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { ActivityIndicator, Card, Searchbar, Text } from "react-native-paper";
+import {
+  ActivityIndicator,
+  Card,
+  Divider,
+  Menu,
+  Searchbar,
+  Text,
+} from "react-native-paper";
 
 // Tipos para las props del componente
 interface CardRenderProps<T> {
@@ -23,6 +32,64 @@ interface CardContentProps {
   description?: React.ReactNode;
   left?: React.ReactNode;
   right?: React.ReactNode;
+  bottom?: React.ReactNode;
+}
+
+// Componente para el menú de acciones de cada item
+interface ItemMenuProps<T> {
+  item: T;
+  onEdit: (item: T) => void;
+  onDelete: (item: T) => void;
+  onViewDetails?: (item: T) => void;
+}
+
+function ItemMenu<T>({
+  item,
+  onEdit,
+  onDelete,
+  onViewDetails,
+}: ItemMenuProps<T>) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <Menu
+      visible={visible}
+      onDismiss={() => setVisible(false)}
+      anchor={
+        <MaterialCommunityIcons
+          size={20}
+          style={{ padding: 8 }}
+          name="dots-vertical"
+          onPress={() => setVisible(true)}
+        />
+      }
+    >
+      <Menu.Item
+        onPress={() => {
+          setVisible(false);
+          onViewDetails?.(item);
+        }}
+        title="Ver detalles"
+        leadingIcon="eye"
+      />
+      <Menu.Item
+        onPress={() => {
+          setVisible(false);
+          onEdit(item);
+        }}
+        title="Editar"
+        leadingIcon="pencil"
+      />
+      <Menu.Item
+        onPress={() => {
+          setVisible(false);
+          onDelete(item);
+        }}
+        title="Eliminar"
+        leadingIcon="delete"
+      />
+    </Menu>
+  );
 }
 
 // Componentes estáticos para AppList
@@ -35,8 +102,29 @@ const AppListCard = ({
   onPress?: () => void;
   style?: any;
 }) => (
-  <Card style={[styles.card, style]} onPress={onPress}>
-    <Card.Content style={styles.cardContent}>{children}</Card.Content>
+  <Card
+    style={[
+      styles.card,
+      style,
+      {
+        elevation: 0,
+        boxShadow: "none",
+        borderWidth: 0,
+        backgroundColor: palette.background,
+        outline: "none",
+        padding: 0,
+      },
+    ]}
+    mode="contained"
+    onPress={onPress}
+  >
+    <Card.Content
+      style={{
+        padding: 0,
+      }}
+    >
+      {children}
+    </Card.Content>
   </Card>
 );
 
@@ -46,17 +134,24 @@ const AppListTitle = ({
 }: {
   children: React.ReactNode;
   style?: any;
-}) => (
-  <View style={styles.titleContainer}>
-    {typeof children === "string" ? (
-      <Text variant="titleMedium" style={[styles.cardTitle, style]}>
-        {children}
-      </Text>
-    ) : (
-      children
-    )}
-  </View>
-);
+}) => {
+  console.log(typeof children);
+
+  if (typeof children === "object") {
+    console.log("Children is an object:", children);
+  }
+  return (
+    <View style={styles.titleContainer}>
+      {typeof children === "string" ? (
+        <Text variant="titleMedium" style={[styles.cardTitle, style]}>
+          {children}
+        </Text>
+      ) : (
+        children
+      )}
+    </View>
+  );
+};
 
 type AppListDescriptionProps = {
   children: React.ReactNode;
@@ -71,7 +166,7 @@ const AppListDescription = ({
   <View style={styles.descriptionContainer}>
     {typeof children === "string" ? (
       <Text
-        variant="bodyMedium"
+        variant="bodySmall"
         style={[styles.cardDescription, style]}
         {...textProps}
       >
@@ -109,6 +204,8 @@ interface AppListProps<T> {
 
   // Props para eventos
   onItemPress?: (item: T) => void;
+
+  showDivider?: boolean;
 }
 
 function AppList<T extends { id: number | string }>({
@@ -126,6 +223,7 @@ function AppList<T extends { id: number | string }>({
   usePagination = true,
   itemsPerPage = 20,
   onItemPress,
+  showDivider = true,
 }: AppListProps<T>) {
   // Estados
   const [data, setData] = useState<T[]>([]);
@@ -135,7 +233,8 @@ function AppList<T extends { id: number | string }>({
   const [showSearch, setShowSearch] = useState(false);
   const [pagination, setPagination] = useState<any>(null);
 
-  // Navigation
+  // Hooks
+  const alerts = useAlerts();
   const navigation = useNavigation();
 
   // Ya no configuramos el header nativo, usamos Appbar
@@ -182,7 +281,7 @@ function AppList<T extends { id: number | string }>({
     } catch (error) {
       const apiError = handleApiError(error);
       console.error("Error loading data:", apiError);
-      // Aquí podrías mostrar un toast o alert con el error
+      alerts.error("Error al cargar los datos: " + apiError.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -214,6 +313,34 @@ function AppList<T extends { id: number | string }>({
 
   const handleRefresh = () => {
     loadData(true);
+  };
+
+  const handleEdit = (item: T) => {
+    handleItemPress(item);
+  };
+
+  const handleDelete = async (item: T) => {
+    const confirmed = await alerts.confirm(
+      `¿Estás seguro de que deseas eliminar este elemento?`,
+      {
+        title: "Confirmar eliminación",
+        okText: "Eliminar",
+        cancelText: "Cancelar",
+      }
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await service.destroy(item.id);
+      alerts.success("Elemento eliminado exitosamente");
+      loadData(true);
+    } catch (error: any) {
+      const errorMessage = handleApiError(error);
+      alerts.error(errorMessage.message || "Error al eliminar el elemento");
+    }
   };
 
   if (loading && !refreshing) {
@@ -284,16 +411,14 @@ function AppList<T extends { id: number | string }>({
         }
       />
 
-      {/* Buscador */}
-      {showSearch && (
-        <Searchbar
-          placeholder={searchPlaceholder}
-          onChangeText={setSearchQuery}
-          value={searchQuery}
-          style={styles.searchbar}
-          onClearIconPress={() => setSearchQuery("")}
-        />
-      )}
+      <Searchbar
+        placeholder={searchPlaceholder}
+        onChangeText={setSearchQuery}
+        value={searchQuery}
+        style={styles.searchbar}
+        onClearIconPress={() => setSearchQuery("")}
+      />
+      <Filters />
 
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
@@ -309,29 +434,75 @@ function AppList<T extends { id: number | string }>({
           const cardProps = renderCard({ item, index });
 
           return (
-            <AppListCard key={item.id} onPress={() => handleItemPress(item)}>
-              <View style={[styles.cardMain]}>
-                {cardProps.left && (
-                  <View style={[styles.cardLeft]}>{cardProps.left}</View>
-                )}
-
-                <View style={styles.cardCenter}>
-                  {cardProps.title && (
-                    <AppListTitle>{cardProps.title}</AppListTitle>
+            <>
+              <AppListCard
+                key={item.id} /* onPress={() => handleItemPress(item)} */
+              >
+                <View
+                  style={[
+                    styles.cardMain,
+                    {
+                      padding: 4,
+                      alignItems: "center",
+                    },
+                  ]}
+                >
+                  {cardProps.left && (
+                    <View style={[styles.cardLeft]}>{cardProps.left}</View>
                   )}
 
-                  {cardProps.description && (
-                    <AppListDescription>
-                      {cardProps.description}
-                    </AppListDescription>
+                  <View style={styles.cardCenter}>
+                    {cardProps.title && (
+                      <AppListTitle>{cardProps.title}</AppListTitle>
+                    )}
+
+                    {cardProps.description && (
+                      <AppListDescription>
+                        {cardProps.description}
+                      </AppListDescription>
+                    )}
+                  </View>
+
+                  {cardProps.right && (
+                    <View style={styles.cardRight}>{cardProps.right}</View>
                   )}
+
+                  <ItemMenu
+                    item={item}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onViewDetails={handleItemPress}
+                  />
                 </View>
+              </AppListCard>
+              {showDivider && (
+                <Divider
+                  style={{
+                    height: 2,
+                    backgroundColor: palette.border,
+                  }}
+                />
+              )}
 
-                {cardProps.right && (
-                  <View style={styles.cardRight}>{cardProps.right}</View>
-                )}
-              </View>
-            </AppListCard>
+              {cardProps.bottom ? (
+                <View>{cardProps.bottom}</View>
+              ) : (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    padding: 4,
+                    alignItems: "center",
+                  }}
+                >
+                  <AppList.Description>ID: </AppList.Description>
+                  <AppList.Description
+                    style={{ color: palette.textSecondary, fontWeight: "bold" }}
+                  >
+                    {(item.id || "").toString()}
+                  </AppList.Description>
+                </View>
+              )}
+            </>
           );
         })}
       </ScrollView>
@@ -345,6 +516,44 @@ function AppList<T extends { id: number | string }>({
           </Text>
         </View>
       )}
+    </View>
+  );
+}
+
+function Filters() {
+  return (
+    <View style={{ margin: 16, marginBottom: 4, flexDirection: "row", gap: 8 }}>
+      <View style={{ flexDirection: "row", gap: 2, alignItems: "center" }}>
+        <AppListDescription style={{ opacity: 1 }}>
+          Categorías:
+        </AppListDescription>
+        <AppListDescription
+          style={{ color: palette.error, fontWeight: "bold", opacity: 1 }}
+        >
+          Todas
+        </AppListDescription>
+        <MaterialCommunityIcons
+          name="chevron-down"
+          size={16}
+          color={palette.error}
+          onPress={() => {}}
+        />
+      </View>
+
+      <View style={{ flexDirection: "row", gap: 2, alignItems: "center" }}>
+        <AppListDescription style={{ opacity: 1 }}>Stock:</AppListDescription>
+        <AppListDescription
+          style={{ color: palette.error, fontWeight: "bold", opacity: 1 }}
+        >
+          Bajo
+        </AppListDescription>
+        <MaterialCommunityIcons
+          name="chevron-down"
+          size={16}
+          color={palette.error}
+          onPress={() => {}}
+        />
+      </View>
     </View>
   );
 }
@@ -363,6 +572,7 @@ const styles = StyleSheet.create({
   scrollContainer: {
     padding: 16,
     paddingBottom: 100,
+    gap: 8,
   },
   searchbar: {
     margin: 16,
@@ -371,12 +581,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   card: {
-    marginBottom: 12,
+    //marginBottom: 12,
     backgroundColor: "#fff",
-    elevation: 2,
+    //elevation: 2,
   },
   cardContent: {
-    padding: 16,
+    padding: 0,
   },
   cardMain: {
     flexDirection: "row",
@@ -399,6 +609,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontWeight: "bold",
     color: palette.textSecondary,
+    lineHeight: 16,
   },
   descriptionContainer: {
     marginBottom: 0,
@@ -406,6 +617,7 @@ const styles = StyleSheet.create({
   cardDescription: {
     color: palette.textSecondary,
     opacity: 0.7,
+    lineHeight: 14,
   },
   loadingText: {
     marginTop: 16,
