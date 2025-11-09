@@ -90,7 +90,7 @@ const catalogos: ResourceProps[] = [
     label: "Unidades",
     description:
       "Define las unidades de medida (kg, pieza, caja, etc.) para controlar inventarios y ventas.",
-    link: "/(tabs)/home/roles",
+    link: "/(tabs)/home/unidades",
     backgroundColor: palette.info,
     color: palette.textSecondary,
     icon: require("../../../assets/images/dashboard/units.png"),
@@ -100,7 +100,7 @@ const catalogos: ResourceProps[] = [
     label: "Clientes",
     description:
       "Gestiona la información de tus clientes, historial de compras y datos de contacto.",
-    link: "/(tabs)/home/roles",
+    link: "/(tabs)/home/clientes",
     backgroundColor: palette.background,
     color: palette.textSecondary,
     icon: require("../../../assets/images/dashboard/clients.png"),

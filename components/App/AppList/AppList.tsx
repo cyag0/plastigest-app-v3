@@ -9,6 +9,7 @@ import {
 } from "@/utils/services/crudService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { router } from "expo-router";
 import * as React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -307,7 +308,7 @@ function AppList<T extends { id: number | string }>({
       onItemPress(item);
     } else if (detailRoute) {
       const route = detailRoute(item);
-      (navigation as any).navigate(route);
+      router.push(route as any);
     }
   };
 
