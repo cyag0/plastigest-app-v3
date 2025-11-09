@@ -136,36 +136,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // Verificar si hay token guardado
       const token = await getAuthToken();
 
-      if (token) {
-        // Verificar si el token es válido consultando al servidor
-        const response = await authAPI.me();
-        const userData = response.data;
-
-        // Guardar datos del usuario
-        setUser(userData);
-        await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
-
-        // Cargar compañía seleccionada desde caché
-        try {
-          const cachedCompany = await AsyncStorage.getItem(COMPANY_DATA_KEY);
-          if (cachedCompany) {
-            setSelectedCompany(JSON.parse(cachedCompany));
-          }
-        } catch (error) {
-          console.error("Error loading cached company:", error);
-        }
-
-        // Cargar lista de compañías
-        await loadCompanies();
-      } else {
+      if (!token) {
         // No hay token, usuario no autenticado
         setUser(null);
         setSelectedCompany(null);
         setCompanies([]);
+        setIsLoading(false);
+        return;
       }
-    } catch (error) {
-      console.error("Error checking auth status:", error);
-      // Si hay error (token inválido, servidor no disponible, etc.)
+
+      // Verificar si el token es válido consultando al servidor
+      const response = await authAPI.me();
+      const userData = response.data;
+
+      // Guardar datos del usuario
+      setUser(userData);
+      await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
+
+      // Cargar compañía seleccionada desde caché
+      try {
+        const cachedCompany = await AsyncStorage.getItem(COMPANY_DATA_KEY);
+        if (cachedCompany) {
+          setSelectedCompany(JSON.parse(cachedCompany));
+        }
+      } catch (error) {
+        console.error("Error loading cached company:", error);
+      }
+
+      // Cargar lista de compañías
+      await loadCompanies();
+    } catch (error: any) {
+      // Si es un error 401, significa que el token expiró o es inválido
+      // No mostramos error porque es un caso esperado
+      if (error?.response?.status !== 401) {
+        console.error("Error checking auth status:", error);
+      }
+      
       // Limpiar todo y mostrar login
       await removeAuthToken();
       await AsyncStorage.removeItem(USER_DATA_KEY);

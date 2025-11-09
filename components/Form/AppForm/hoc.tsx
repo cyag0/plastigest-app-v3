@@ -71,8 +71,14 @@ function MakeForm<TProps extends Record<string, any>>(
 
           const hasError = Boolean(meta.error && meta.touched);
 
+          // Convertir el valor a string si es necesario para inputs de texto
+          let fieldValue = field.value;
+          if (fieldValue !== null && fieldValue !== undefined && typeof fieldValue !== 'string' && typeof fieldValue !== 'boolean') {
+            fieldValue = String(fieldValue);
+          }
+
           const injectedProps: InjectedFormProps = {
-            value: field.value,
+            value: fieldValue,
             onChange,
             onBlur,
             error: meta.error,
