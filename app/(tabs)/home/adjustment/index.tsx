@@ -25,66 +25,68 @@ export default function AdjustmentsIndex() {
       }}
       onPressCreate={() => router.push("/home/adjustment/form")}
       renderCard={({ item }: { item: Adjustment }) => {
-        const isIncrease = item.adjustment_type === "increase";
+        const isIncrease = item.movement_type === "entry";
+
+        // Mapeo de tipos de razón a etiquetas legibles
+        const reasonLabels: Record<string, string> = {
+          adjustment: "Ajuste",
+          return: "Retorno",
+          damage: "Daño",
+          loss: "Pérdida",
+          shrinkage: "Merma",
+        };
 
         return {
-          title: (
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
-            >
-              <Text
-                variant="titleMedium"
-                style={{ fontWeight: "bold", color: palette.textSecondary }}
-              >
-                {item.adjustment_number}
-              </Text>
-              <MaterialCommunityIcons
-                name={isIncrease ? "arrow-up-circle" : "arrow-down-circle"}
-                size={18}
-                color={isIncrease ? palette.success : palette.error}
-              />
-            </View>
-          ),
+          title: item.adjustment_number || `Ajuste #${item.id}`,
           description: (
             <>
               <AppList.Description>
-                {item.adjustment_date} • {item.reason || "Sin motivo"}
+                {(item.details?.length || 0) + " producto(s)"}
               </AppList.Description>
-              {item.location && (
-                <AppList.Description>
-                  📍 {item.location.name}
-                </AppList.Description>
-              )}
             </>
           ),
           right: (
             <View style={{ justifyContent: "center", alignItems: "flex-end" }}>
-              <AppList.Title
-                style={{
-                  color: isIncrease ? palette.success : palette.error,
-                }}
-              >
-                {isIncrease ? "+" : "-"}${item.total_cost?.toFixed(2) || "0.00"}
-              </AppList.Title>
-              <AppList.Description>
-                {item.details?.length || 0} producto(s)
-              </AppList.Description>
+              <MaterialCommunityIcons
+                name={isIncrease ? "arrow-up-circle" : "arrow-down-circle"}
+                size={32}
+                color={isIncrease ? palette.success : palette.red}
+              />
             </View>
           ),
           bottom: [
             {
-              label: "Tipo",
-              value: isIncrease ? "Incremento" : "Decremento",
+              label: "Fecha",
+              value: formatDate(item.movement_date) || "Sin fecha",
             },
-            ...(item.adjusted_by
-              ? [{ label: "Ajustado por", value: item.adjusted_by }]
-              : []),
+            {
+              label: "Acción",
+              value:
+                reasonLabels[item.movement_reason] ||
+                item.movement_reason ||
+                "Sin especificar",
+            },
           ],
         };
       }}
-      detailRoute={(item) => `/home/adjustment/${item.id}`}
+      onItemPress={(item) => router.push(`/home/adjustment/${item.id}` as any)}
       searchPlaceholder="Buscar ajustes..."
       emptyMessage="No hay ajustes registrados"
+      menu={{
+        showView: true,
+        showEdit: false,
+        showDelete: false,
+      }}
     />
   );
+}
+
+function formatDate(dateString: string) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString;
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy} ${mm} ${dd}`;
 }

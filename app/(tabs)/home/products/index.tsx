@@ -157,10 +157,19 @@ export default function ProductsIndex() {
                   ? item.current_stock
                   : 0,
             },
+            {
+              label: "Creado en",
+              value: formatDate(item.created_at),
+            },
           ],
         })}
         onItemPress={(entity: any) => {
           router.push(`/(tabs)/home/products/${entity.id}` as any);
+        }}
+        menu={{
+          onEdit(item) {
+            router.push(`/(tabs)/home/products/${item.id}/edit` as any);
+          },
         }}
         onPressCreate={() => {
           router.push("/(tabs)/home/products/form" as any);
@@ -169,6 +178,11 @@ export default function ProductsIndex() {
       />
     </>
   );
+}
+
+function formatDate(dateString: string) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString();
 }
 
 const styles = StyleSheet.create({

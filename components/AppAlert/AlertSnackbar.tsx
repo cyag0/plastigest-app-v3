@@ -1,15 +1,25 @@
 import palette from "@/constants/palette";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React from "react";
+import React, { forwardRef, useImperativeHandle, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { Portal, Snackbar } from "react-native-paper";
 
-interface AlertSnackbarProps {
+type AlertType = "info" | "warning" | "error" | "success";
+
+interface SnackbarOptions {
+  type: AlertType;
+  duration: number;
+}
+
+interface SnackbarState {
   visible: boolean;
   message: string;
-  type?: "info" | "warning" | "error" | "success";
-  duration?: number;
-  onDismiss: () => void;
+  type: AlertType;
+  duration: number;
+}
+
+export interface AlertSnackbarRef {
+  show: (message: string, options: SnackbarOptions) => void;
 }
 
 /**
@@ -20,16 +30,32 @@ interface AlertSnackbarProps {
  *
  * Se muestra en la parte inferior de la pantalla con un ícono y color
  * correspondiente al tipo de alerta.
+ * Expone métodos imperativos mediante useImperativeHandle.
  */
-export default function AlertSnackbar({
-  visible,
-  message,
-  type = "info",
-  duration = 3000,
-  onDismiss,
-}: AlertSnackbarProps) {
+const AlertSnackbar = forwardRef<AlertSnackbarRef>((props, ref) => {
+  const [state, setState] = useState<SnackbarState>({
+    visible: false,
+    message: "",
+    type: "info",
+    duration: 3000,
+  });
+
+  useImperativeHandle(ref, () => ({
+    show: (message: string, options: SnackbarOptions) => {
+      setState({
+        visible: true,
+        message,
+        type: options.type,
+        duration: options.duration,
+      });
+    },
+  }));
+
+  const handleDismiss = () => {
+    setState({ ...state, visible: false });
+  };
   const getConfig = () => {
-    switch (type) {
+    switch (state.type) {
       case "success":
         return {
           icon: "check-circle",
@@ -63,13 +89,13 @@ export default function AlertSnackbar({
   return (
     <Portal>
       <Snackbar
-        visible={visible}
-        onDismiss={onDismiss}
-        duration={duration}
+        visible={state.visible}
+        onDismiss={handleDismiss}
+        duration={state.duration}
         style={[styles.snackbar, { backgroundColor: config.backgroundColor }]}
         action={{
           label: "Cerrar",
-          onPress: onDismiss,
+          onPress: handleDismiss,
           textColor: config.color,
         }}
       >
@@ -80,12 +106,18 @@ export default function AlertSnackbar({
             color={config.color}
             style={styles.icon}
           />
-          <Text style={[styles.text, { color: config.color }]}>{message}</Text>
+          <Text style={[styles.text, { color: config.color }]}>
+            {state.message}
+          </Text>
         </View>
       </Snackbar>
     </Portal>
   );
-}
+});
+
+AlertSnackbar.displayName = "AlertSnackbar";
+
+export default AlertSnackbar;
 
 const styles = StyleSheet.create({
   snackbar: {

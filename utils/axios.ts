@@ -31,14 +31,18 @@ axiosClient.interceptors.request.use(
       }
 
       // Obtener company y location seleccionados
-      const selectedCompanyData = await AsyncStorage.getItem(SELECTED_COMPANY_KEY);
-      const selectedLocationData = await AsyncStorage.getItem(SELECTED_LOCATION_KEY);
+      const selectedCompanyData = await AsyncStorage.getItem(
+        SELECTED_COMPANY_KEY
+      );
+      const selectedLocationData = await AsyncStorage.getItem(
+        SELECTED_LOCATION_KEY
+      );
 
       if (selectedCompanyData && config.headers) {
         try {
           const company = JSON.parse(selectedCompanyData);
           if (company.id) {
-            config.headers['X-Company-ID'] = company.id.toString();
+            config.headers["X-Company-ID"] = company.id.toString();
           }
         } catch (parseError) {
           console.error("Error parsing company data:", parseError);
@@ -49,21 +53,11 @@ axiosClient.interceptors.request.use(
         try {
           const location = JSON.parse(selectedLocationData);
           if (location.id) {
-            config.headers['X-Location-ID'] = location.id.toString();
+            config.headers["X-Location-ID"] = location.id.toString();
           }
         } catch (parseError) {
           console.error("Error parsing location data:", parseError);
         }
-      }
-
-      // Log requests solo si está habilitado en las variables de entorno
-      if (LOG_REQUESTS) {
-        console.log("Request:", {
-          method: config.method?.toUpperCase(),
-          url: config.url,
-          headers: config.headers,
-          data: config.data,
-        });
       }
 
       return config;
@@ -81,13 +75,6 @@ axiosClient.interceptors.request.use(
 // Interceptor para responses - manejar errores globalmente
 axiosClient.interceptors.response.use(
   (response: AxiosResponse) => {
-    // Log responses solo si está habilitado
-    if (LOG_REQUESTS) {
-      console.log("Response:", {
-        status: response.status,
-        data: response.data,
-      });
-    }
     return response;
   },
   async (error: any) => {

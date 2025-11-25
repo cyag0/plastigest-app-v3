@@ -15,12 +15,13 @@ import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
-  Card,
   Divider,
   Menu,
   Searchbar,
   Text,
+  IconButton,
 } from "react-native-paper";
+import AppListFilterBar, { FilterConfig } from "./AppListFilter";
 
 // Tipos para las props del componente
 interface CardRenderProps<T> {
@@ -45,6 +46,9 @@ interface ItemMenuProps<T> {
   onEdit: (item: T) => void;
   onDelete: (item: T) => void;
   onViewDetails?: (item: T) => void;
+  showView?: boolean;
+  showEdit?: boolean;
+  showDelete?: boolean;
 }
 
 function ItemMenu<T>({
@@ -52,6 +56,9 @@ function ItemMenu<T>({
   onEdit,
   onDelete,
   onViewDetails,
+  showView = true,
+  showEdit = true,
+  showDelete = true,
 }: ItemMenuProps<T>) {
   const [visible, setVisible] = useState(false);
 
@@ -64,34 +71,50 @@ function ItemMenu<T>({
           size={20}
           style={{ padding: 8 }}
           name="dots-vertical"
+          color={palette.textSecondary}
           onPress={() => setVisible(true)}
         />
       }
+      contentStyle={{
+        backgroundColor: palette.background,
+      }}
     >
-      <Menu.Item
-        onPress={() => {
-          setVisible(false);
-          onViewDetails?.(item);
-        }}
-        title="Ver detalles"
-        leadingIcon="eye"
-      />
-      <Menu.Item
-        onPress={() => {
-          setVisible(false);
-          onEdit(item);
-        }}
-        title="Editar"
-        leadingIcon="pencil"
-      />
-      <Menu.Item
-        onPress={() => {
-          setVisible(false);
-          onDelete(item);
-        }}
-        title="Eliminar"
-        leadingIcon="delete"
-      />
+      {showView && (
+        <Menu.Item
+          onPress={() => {
+            setVisible(false);
+            onViewDetails?.(item);
+          }}
+          title="Ver detalles"
+          leadingIcon="eye"
+          titleStyle={{ color: palette.text }}
+          style={{ backgroundColor: palette.background }}
+        />
+      )}
+      {showEdit && (
+        <Menu.Item
+          onPress={() => {
+            setVisible(false);
+            onEdit(item);
+          }}
+          title="Editar"
+          leadingIcon="pencil"
+          titleStyle={{ color: palette.text }}
+          style={{ backgroundColor: palette.background }}
+        />
+      )}
+      {showDelete && (
+        <Menu.Item
+          onPress={() => {
+            setVisible(false);
+            onDelete(item);
+          }}
+          title="Eliminar"
+          leadingIcon="delete"
+          titleStyle={{ color: palette.error }}
+          style={{ backgroundColor: palette.background }}
+        />
+      )}
     </Menu>
   );
 }
@@ -106,48 +129,37 @@ const AppListCard = ({
   onPress?: () => void;
   style?: any;
 }) => (
-  <Card
+  <View
     style={[
-      styles.card,
-      style,
       {
         elevation: 0,
         boxShadow: "none",
         borderWidth: 0,
-        backgroundColor: palette.background,
         outline: "none",
-        padding: 0,
       },
     ]}
-    mode="contained"
-    onPress={onPress}
   >
-    <Card.Content
-      style={{
-        padding: 0,
-      }}
-    >
-      {children}
-    </Card.Content>
-  </Card>
+    {children}
+  </View>
 );
 
 const AppListTitle = ({
   children,
   style = {},
+  textProps,
 }: {
   children: React.ReactNode;
   style?: any;
+  textProps?: React.ComponentProps<typeof Text>;
 }) => {
-  console.log(typeof children);
-
-  if (typeof children === "object") {
-    console.log("Children is an object:", children);
-  }
   return (
     <View style={styles.titleContainer}>
       {typeof children === "string" ? (
-        <Text variant="titleMedium" style={[styles.cardTitle, style]}>
+        <Text
+          variant="titleMedium"
+          style={[styles.cardTitle, style]}
+          {...textProps}
+        >
           {children}
         </Text>
       ) : (
@@ -198,6 +210,7 @@ interface AppListProps<T> {
 
   // Props para filtros adicionales
   defaultFilters?: Partial<IndexParams>;
+  filters?: FilterConfig[]; // Configuración de filtros
 
   // Props para personalizar comportamiento
   refreshOnFocus?: boolean;
@@ -211,6 +224,9 @@ interface AppListProps<T> {
   menu?: {
     onEdit?: (item: T) => void;
     onDelete?: (item: T) => void;
+    showView?: ((item: T) => boolean) | boolean;
+    showEdit?: ((item: T) => boolean) | boolean;
+    showDelete?: ((item: T) => boolean) | boolean;
   };
 
   showDivider?: boolean;
@@ -225,6 +241,7 @@ function AppList<T extends { id: number | string }>({
   searchPlaceholder = "Buscar...",
   emptyMessage = "No hay elementos para mostrar",
   defaultFilters = {},
+  filters = [],
   refreshOnFocus = true,
   showFab = true,
   fabLabel = "Agregar",
@@ -241,6 +258,7 @@ function AppList<T extends { id: number | string }>({
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [pagination, setPagination] = useState<any>(null);
+  const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
 
   // Hooks
   const alerts = useAlerts();
@@ -267,6 +285,7 @@ function AppList<T extends { id: number | string }>({
 
       const params: IndexParams = {
         ...defaultFilters,
+        ...activeFilters, // Agregar filtros activos
         search: searchQuery || undefined,
       };
 
@@ -300,7 +319,7 @@ function AppList<T extends { id: number | string }>({
   // Efectos
   useEffect(() => {
     loadData();
-  }, [searchQuery]);
+  }, [searchQuery, activeFilters]);
 
   useFocusEffect(
     useCallback(() => {
@@ -311,6 +330,10 @@ function AppList<T extends { id: number | string }>({
   );
 
   // Handlers
+  const handleFilterChange = (filterValues: Record<string, any>) => {
+    setActiveFilters(filterValues);
+  };
+
   const handleItemPress = (item: T) => {
     if (onItemPress) {
       onItemPress(item);
@@ -437,7 +460,13 @@ function AppList<T extends { id: number | string }>({
         mode="bar"
         onClearIconPress={() => setSearchQuery("")}
       />
-      <Filters />
+
+      {/* Barra de filtros */}
+      <AppListFilterBar
+        filters={filters}
+        values={activeFilters}
+        onChange={handleFilterChange}
+      />
 
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
@@ -452,6 +481,27 @@ function AppList<T extends { id: number | string }>({
         {data.map((item, index) => {
           const cardProps = renderCard({ item, index });
 
+          const showView =
+            typeof menu?.showView === "boolean"
+              ? menu?.showView
+              : typeof menu?.showView === "function"
+              ? menu.showView(item)
+              : true;
+
+          const showEdit =
+            typeof menu?.showEdit === "boolean"
+              ? menu?.showEdit
+              : typeof menu?.showEdit === "function"
+              ? menu.showEdit(item)
+              : true;
+
+          const showDelete =
+            typeof menu?.showDelete === "boolean"
+              ? menu?.showDelete
+              : typeof menu?.showDelete === "function"
+              ? menu.showDelete(item)
+              : true;
+
           return (
             <>
               <AppListCard
@@ -461,8 +511,8 @@ function AppList<T extends { id: number | string }>({
                   style={[
                     styles.cardMain,
                     {
-                      padding: 4,
                       alignItems: "center",
+                      gap: 8,
                     },
                   ]}
                 >
@@ -470,7 +520,7 @@ function AppList<T extends { id: number | string }>({
                     <View style={[styles.cardLeft]}>{cardProps.left}</View>
                   )}
 
-                  <View style={styles.cardCenter}>
+                  <View style={[styles.cardCenter]}>
                     {cardProps.title && (
                       <AppListTitle>{cardProps.title}</AppListTitle>
                     )}
@@ -491,6 +541,9 @@ function AppList<T extends { id: number | string }>({
                     onEdit={handleEdit}
                     onDelete={handleDelete}
                     onViewDetails={handleItemPress}
+                    showView={showView}
+                    showEdit={showEdit}
+                    showDelete={showDelete}
                   />
                 </View>
               </AppListCard>
@@ -584,44 +637,6 @@ function AppList<T extends { id: number | string }>({
   );
 }
 
-function Filters() {
-  return (
-    <View style={{ margin: 16, marginBottom: 4, flexDirection: "row", gap: 8 }}>
-      <View style={{ flexDirection: "row", gap: 2, alignItems: "center" }}>
-        <AppListDescription style={{ opacity: 1 }}>
-          Categorías:
-        </AppListDescription>
-        <AppListDescription
-          style={{ color: palette.error, fontWeight: "bold", opacity: 1 }}
-        >
-          Todas
-        </AppListDescription>
-        <MaterialCommunityIcons
-          name="chevron-down"
-          size={16}
-          color={palette.error}
-          onPress={() => {}}
-        />
-      </View>
-
-      <View style={{ flexDirection: "row", gap: 2, alignItems: "center" }}>
-        <AppListDescription style={{ opacity: 1 }}>Stock:</AppListDescription>
-        <AppListDescription
-          style={{ color: palette.error, fontWeight: "bold", opacity: 1 }}
-        >
-          Bajo
-        </AppListDescription>
-        <MaterialCommunityIcons
-          name="chevron-down"
-          size={16}
-          color={palette.error}
-          onPress={() => {}}
-        />
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -634,7 +649,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.background,
   },
   scrollContainer: {
-    padding: 16,
+    padding: 8,
     paddingBottom: 100,
     gap: 8,
   },
@@ -657,14 +672,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   cardLeft: {
-    marginRight: 12,
     justifyContent: "center",
   },
   cardCenter: {
     flex: 1,
   },
   cardRight: {
-    marginLeft: 12,
     justifyContent: "center",
   },
   titleContainer: {
@@ -714,4 +727,7 @@ AppList.Card = AppListCard;
 AppList.Title = AppListTitle;
 AppList.Description = AppListDescription;
 
+// Exportar tipos y componentes
+export { AppListFilterBar };
+export type { FilterConfig, FilterType, FilterOption } from "./AppListFilter";
 export default AppList;

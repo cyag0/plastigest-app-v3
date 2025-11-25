@@ -59,8 +59,20 @@ function MakeForm<TProps extends Record<string, any>>(
           meta: { error?: string; touched?: boolean };
           form: any;
         }) => {
+          if (name === "product_images") {
+            console.log(
+              "Rendering FormWrappedComponent for 'product_images' with props:",
+              field
+            );
+          }
+
           const onChange = (value: any) => {
+            // Primero actualizar Formik
             form.setFieldValue(name, value);
+            // Luego ejecutar el onChange del prop (si existe)
+            if (props.onChange) {
+              props.onChange(value);
+            }
           };
 
           const onBlur = () => {
@@ -71,9 +83,6 @@ function MakeForm<TProps extends Record<string, any>>(
 
           // Convertir el valor a string si es necesario para inputs de texto
           let fieldValue = field.value;
-          if (fieldValue !== null && fieldValue !== undefined && typeof fieldValue !== 'string' && typeof fieldValue !== 'boolean') {
-            fieldValue = String(fieldValue);
-          }
 
           const injectedProps: InjectedFormProps = {
             value: fieldValue,

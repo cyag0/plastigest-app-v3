@@ -5,7 +5,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React from "react";
 import { View } from "react-native";
-import { Chip, Text } from "react-native-paper";
+import { Text } from "react-native-paper";
 
 export default function SalesIndex() {
   const navigation = router;
@@ -13,13 +13,13 @@ export default function SalesIndex() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "draft":
-        return "#6c757d";
+        return palette.warning;
       case "processed":
-        return "#0dcaf0";
-      case "completed":
-        return "#198754";
+        return palette.info;
+      case "closed":
+        return palette.primary;
       case "cancelled":
-        return "#dc3545";
+        return palette.red;
       default:
         return "#6c757d";
     }
@@ -31,7 +31,7 @@ export default function SalesIndex() {
         return "file-document-edit-outline";
       case "processed":
         return "progress-clock";
-      case "completed":
+      case "closed":
         return "check-circle";
       case "cancelled":
         return "close-circle";
@@ -46,8 +46,8 @@ export default function SalesIndex() {
         return "Borrador";
       case "processed":
         return "Procesada";
-      case "completed":
-        return "Completada";
+      case "closed":
+        return "Cerrada";
       case "cancelled":
         return "Cancelada";
       default:
@@ -79,86 +79,40 @@ export default function SalesIndex() {
         navigation.push("/(tabs)/home/sales/form");
       }}
       renderCard={({ item: sale }) => ({
-        title: sale.sale_number || `Venta #${sale.id}`,
+        title: (
+          <>
+            <AppList.Title>
+              {sale.sale_number || `Venta #${sale.id}`}
+            </AppList.Title>
+          </>
+        ),
+        bottom: [
+          {
+            label: "Fecha",
+            value: new Date(sale.sale_date).toLocaleDateString("es-MX", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            }),
+          },
+          {
+            label: "Método de pago",
+            value:
+              sale.payment_method === "efectivo"
+                ? "Efectivo"
+                : sale.payment_method === "tarjeta"
+                ? "Tarjeta"
+                : "Transferencia",
+          },
+        ],
         description: (
           <View style={{ gap: 8, marginTop: 8 }}>
-            {/* Fecha */}
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-            >
-              <MaterialCommunityIcons
-                name="calendar"
-                size={14}
-                color={palette.textSecondary}
-              />
-              <Text
-                variant="bodySmall"
-                style={{ color: palette.textSecondary }}
-              >
-                {new Date(sale.sale_date).toLocaleDateString("es-MX", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })}
-              </Text>
-            </View>
-
-            {/* Ubicación */}
-            {sale.location?.name && (
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <MaterialCommunityIcons
-                  name="map-marker"
-                  size={14}
-                  color={palette.primary}
-                />
-                <Text variant="bodySmall">{sale.location.name}</Text>
-              </View>
-            )}
-
-            {/* Método de pago */}
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-            >
-              <MaterialCommunityIcons
-                name={getPaymentMethodIcon(sale.payment_method)}
-                size={14}
-                color={palette.primary}
-              />
-              <Text variant="bodySmall">
-                {sale.payment_method === "efectivo"
-                  ? "Efectivo"
-                  : sale.payment_method === "tarjeta"
-                  ? "Tarjeta"
-                  : "Transferencia"}
-              </Text>
-            </View>
-
-            {/* Cliente */}
-            {sale.content?.customer_name && (
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <MaterialCommunityIcons
-                  name="account"
-                  size={14}
-                  color={palette.primary}
-                />
-                <Text variant="bodySmall">{sale.content.customer_name}</Text>
-              </View>
-            )}
-
             {/* Productos y Total */}
             <View
               style={{
                 flexDirection: "row",
-                justifyContent: "space-between",
                 alignItems: "center",
-                marginTop: 8,
-                paddingTop: 8,
-                borderTopWidth: 1,
-                borderTopColor: "#e9ecef",
+                gap: 6,
               }}
             >
               <View
@@ -191,16 +145,14 @@ export default function SalesIndex() {
           </View>
         ),
         right: (
-          <Chip
-            icon={getStatusIcon(sale.status)}
+          <AppList.Description
             style={{
-              backgroundColor: getStatusColor(sale.status),
+              color: getStatusColor(sale.status),
+              fontWeight: "bold",
             }}
-            textStyle={{ color: "white", fontWeight: "600", fontSize: 10 }}
-            compact
           >
             {getStatusLabel(sale.status)}
-          </Chip>
+          </AppList.Description>
         ),
       })}
       searchPlaceholder="Buscar ventas..."

@@ -1,11 +1,14 @@
 import { FormCheckBox } from "@/components/Form/AppCheckBox";
+import AppDependency from "@/components/Form/AppDependency";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
-import { FormRadioButton } from "@/components/Form/AppRadioButton";
-import { useAuth } from "@/contexts/AuthContext";
+import { FormNumeric } from "@/components/Form/AppNumeric";
+import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { useAlerts } from "@/hooks/useAlerts";
+import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
 import { router } from "expo-router";
+import { useFormikContext } from "formik";
 import React, { useRef } from "react";
 import { View } from "react-native";
 import { Text } from "react-native-paper";
@@ -13,22 +16,31 @@ import * as Yup from "yup";
 
 interface UnidadFormData {
   name: string;
-  symbol: string;
-  description?: string;
-  type: string;
-  is_base: boolean;
-  conversion_rate: number;
-  is_active: boolean;
-  company_id?: number;
+  abbreviation: string;
+  company_id: number;
+  conversion: boolean;
+  base_unit_id?: number | null;
+  factor_to_base?: number | null;
 }
 
 const validationSchema = Yup.object().shape({
   name: Yup.string().required("El nombre es requerido"),
-  symbol: Yup.string().required("El símbolo es requerido"),
-  type: Yup.string().required("El tipo es requerido"),
-  conversion_rate: Yup.number()
-    .min(0.000001, "Debe ser mayor a 0")
-    .required("El factor de conversión es requerido"),
+  abbreviation: Yup.string().required("La abreviación es requerida"),
+  company_id: Yup.number().required("La compañía es requerida"),
+  conversion: Yup.boolean(),
+  base_unit_id: Yup.number().when("conversion", {
+    is: true,
+    then: (schema) => schema.required("Debe seleccionar la unidad base"),
+    otherwise: (schema) => schema.nullable(),
+  }),
+  factor_to_base: Yup.number().when("conversion", {
+    is: true,
+    then: (schema) =>
+      schema
+        .required("El factor de conversión es requerido")
+        .min(0.000001, "El factor debe ser mayor a 0"),
+    otherwise: (schema) => schema.nullable(),
+  }),
 });
 
 interface UnidadFormProps {
@@ -38,28 +50,19 @@ interface UnidadFormProps {
 
 const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
   const formRef = useRef<AppFormRef<UnidadFormData>>(null);
-
-  const auth = useAuth();
+  const { company } = useSelectedCompany();
   const alerts = useAlerts();
-  const company = auth.selectedCompany;
+
+  console.log("Selected Location:");
 
   if (!company) {
     alerts.error("Debe seleccionar una compañía antes de continuar.");
-
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text>Debe seleccionar una compañía primero.</Text>
       </View>
     );
   }
-
-  const unitTypes = [
-    { label: "Cantidad", value: "quantity" },
-    { label: "Longitud", value: "length" },
-    { label: "Peso", value: "weight" },
-    { label: "Volumen", value: "volume" },
-    { label: "Otro", value: "other" },
-  ];
 
   return (
     <AppForm
@@ -68,13 +71,11 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
       validationSchema={validationSchema}
       initialValues={{
         name: "",
-        symbol: "",
-        description: "",
-        type: "quantity",
-        is_base: false,
-        conversion_rate: 1.0,
-        is_active: true,
+        abbreviation: "",
         company_id: company.id,
+        conversion: false,
+        base_unit_id: null,
+        factor_to_base: 1,
       }}
       id={id}
       readonly={readonly}
@@ -87,29 +88,54 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
         label="Nombre *"
         placeholder="Ej: Pieza, Caja, Metro"
       />
-      <FormInput name="symbol" label="Símbolo *" placeholder="Ej: pz, cj, m" />
-      <FormRadioButton
-        name="type"
-        label="Tipo de Unidad *"
-        options={unitTypes}
-      />
-      <FormCheckBox name="is_base" text="¿Es unidad base?" />
+
       <FormInput
-        name="conversion_rate"
-        label="Factor de conversión *"
-        placeholder="Ej: 12 (1 caja = 12 piezas)"
-        keyboardType="decimal-pad"
+        name="abbreviation"
+        label="Abreviación *"
+        placeholder="Ej: pz, cj, m"
       />
-      <FormInput
-        name="description"
-        label="Descripción"
-        placeholder="Descripción opcional"
-        multiline
-        numberOfLines={3}
-      />
-      <FormCheckBox name="is_active" text="Activo" />
+
+      <FormCheckBox name="conversion" label="¿Es una unidad de conversión?" />
+
+      <AppDependency name="conversion">
+        {(value = false) => {
+          return (
+            value && (
+              <>
+                <FormProSelect
+                  name="base_unit_id"
+                  label="Equivale a"
+                  model="home.unidades"
+                  placeholder="Seleccione una unidad"
+                />
+                <FormNumeric
+                  name="factor_to_base"
+                  label="Factor de conversión *"
+                  placeholder="Ej: 12 (1 caja = 12 piezas)"
+                  keyboardType="decimal-pad"
+                />
+              </>
+            )
+          );
+        }}
+      </AppDependency>
     </AppForm>
   );
 };
+
+function ConversionSection() {
+  const form = useFormikContext<UnidadFormData>();
+
+  return (
+    <>
+      <Text
+        variant="bodySmall"
+        style={{ marginTop: -8, marginBottom: 16, opacity: 0.7 }}
+      >
+        Ejemplo: Si 1 caja = 12 piezas, el factor es 12
+      </Text>
+    </>
+  );
+}
 
 export default UnidadForm;

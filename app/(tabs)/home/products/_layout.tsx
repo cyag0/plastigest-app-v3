@@ -35,6 +35,12 @@ export default function ProductsLayout() {
           title: "Detalle del Producto",
         }}
       />
+      <Stack.Screen
+        name="[id]/edit"
+        options={{
+          title: "Editar Producto",
+        }}
+      />
     </Stack>
   );
 }

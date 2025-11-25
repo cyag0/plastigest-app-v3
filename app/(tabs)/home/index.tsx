@@ -1,348 +1,501 @@
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
-import { Href, useRouter } from "expo-router";
-import * as React from "react";
+import Services from "@/utils/services";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-  Image,
-  ImageSourcePropType,
+  ActivityIndicator,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
 } from "react-native";
-import { Card, Text } from "react-native-paper";
+import {
+  Badge,
+  Card,
+  Chip,
+  IconButton,
+  Text,
+  TouchableRipple,
+} from "react-native-paper";
 
-const movimientos: ResourceProps[] = [
+interface Operation {
+  key: string;
+  label: string;
+  description: string;
+  color: string;
+  backgroundColor: string;
+  icon: any;
+  link: string;
+  iconName: string;
+}
+
+interface RecentMovement {
+  id: number;
+  movement_type: string;
+  movement_type_label: string;
+  movement_reason: string;
+  movement_reason_label: string;
+  movement_date: string;
+  total_cost: number;
+  status: string;
+  location: any;
+  products_count: number;
+  generated_money: boolean;
+  money_type: string;
+  document_number: string | null;
+}
+
+const operations: Operation[] = [
   {
     key: "produccion",
     label: "Producción",
-    description:
-      "Registra y gestiona las órdenes de producción, incluyendo planificación y seguimiento.",
-    color: palette.error,
-    link: "/(tabs)/home/production" as any,
-    background: palette.surface,
-    icon: require("../../../assets/images/dashboard/purchase.png"),
+    description: "Órdenes de producción",
+    color: "#fff",
+    backgroundColor: palette.error,
+    icon: require("../../../assets/images/dashboard/categories.png"),
+    link: "/(tabs)/home/production",
+    iconName: "factory",
   },
   {
     key: "compras",
     label: "Compras",
-    description:
-      "Registra y gestiona las compras de productos a proveedores, incluyendo recepción y costos.",
-    color: palette.primary,
-    link: "/(tabs)/home/purchases" as any,
-    background: palette.surface,
-    icon: require("../../../assets/images/dashboard/purchase.png"),
+    description: "Compras a proveedores",
+    color: "#fff",
+    backgroundColor: palette.primary,
+    icon: require("../../../assets/images/dashboard/categories.png"),
+    link: "/(tabs)/home/purchases",
+    iconName: "cart",
   },
   {
     key: "ventas",
     label: "Ventas",
-    description:
-      "Administra las ventas a clientes, emisión de pedidos y seguimiento de entregas.",
-    color: palette.textSecondary,
+    description: "Ventas a clientes",
+    color: "#fff",
+    backgroundColor: palette.textSecondary,
+    icon: require("../../../assets/images/dashboard/categories.png"),
     link: "/(tabs)/home/sales",
-    background: palette.card,
-    icon: require("../../../assets/images/dashboard/sales.png"),
+    iconName: "cash-register",
   },
   {
     key: "transferencias",
     label: "Transferencias",
-    description:
-      "Mueve inventario entre sucursales o almacenes de la empresa de forma controlada.",
+    description: "Entre sucursales",
     color: "#fff",
-    background: palette.textSecondary,
-    link: "/(tabs)/home/locations",
-    icon: require("../../../assets/images/dashboard/transfer.png"),
+    backgroundColor: palette.accent,
+    icon: require("../../../assets/images/dashboard/categories.png"),
+    link: "/(tabs)/home/transfers",
+    iconName: "swap-horizontal",
   },
   {
     key: "ajustes",
-    label: "Ajuste",
-    description:
-      "Registra los ajustes de inventario por mermas, extravíos u otras causas.",
-    color: palette.textSecondary,
-    background: palette.background,
-    link: "/(tabs)/home/adjustment",
-    icon: require("../../../assets/images/dashboard/use.png"),
-  },
-];
-
-const catalogos: ResourceProps[] = [
-  {
-    key: "productos",
-    label: "Productos",
-    description:
-      "Administra el catálogo de productos disponibles para venta y compra, con detalles, precios y stock.",
-    link: "/(tabs)/home/products" as any,
-    backgroundColor: palette.surface,
-    color: palette.textSecondary,
-    icon: require("../../../assets/images/dashboard/products.png"),
-  },
-  {
-    key: "categorias",
-    label: "Categorías",
-    description:
-      "Organiza los productos en grupos lógicos para facilitar búsquedas y reportes.",
-    link: "/(tabs)/home/categories",
-    backgroundColor: palette.card,
-    color: palette.textSecondary,
-    icon: require("../../../assets/images/dashboard/categories.png"),
-  },
-  {
-    key: "unidades",
-    label: "Unidades",
-    description:
-      "Define las unidades de medida (kg, pieza, caja, etc.) para controlar inventarios y ventas.",
-    link: "/(tabs)/home/unidades",
-    backgroundColor: palette.info,
-    color: palette.textSecondary,
-    icon: require("../../../assets/images/dashboard/units.png"),
-  },
-  {
-    key: "clientes",
-    label: "Clientes",
-    description:
-      "Gestiona la información de tus clientes, historial de compras y datos de contacto.",
-    link: "/(tabs)/home/clientes",
-    backgroundColor: palette.background,
-    color: palette.textSecondary,
-    icon: require("../../../assets/images/dashboard/clients.png"),
-  },
-  {
-    key: "proveedores",
-    label: "Proveedores",
-    description:
-      "Registra y consulta proveedores para compras y abastecimiento de productos.",
-    link: "/(tabs)/home/suppliers",
+    label: "Ajustes",
+    description: "Mermas y correcciones",
+    color: "#fff",
     backgroundColor: palette.secondary,
-    color: "#fff",
-  },
-  {
-    key: "sucursales",
-    label: "Sucursales",
-    description:
-      "Administra las distintas ubicaciones físicas o almacenes de tu empresa.",
-    link: "/(tabs)/home/locations",
-    backgroundColor: palette.primary,
-    color: "#fff",
-  },
-  {
-    key: "companias",
-    label: "Compañías",
-    description:
-      "Configura los datos fiscales y generales de tu empresa o grupo empresarial.",
-    link: "/(tabs)/home/companies",
-    backgroundColor: palette.accent,
-    color: palette.textSecondary,
-  },
-  {
-    key: "usuarios",
-    label: "Usuarios",
-    description:
-      "Controla el acceso de los usuarios, sus datos y permisos dentro del sistema.",
-    link: "/(tabs)/home/users",
-    backgroundColor: palette.warning,
-    color: palette.textSecondary,
-  },
-  {
-    key: "trabajadores",
-    label: "Trabajadores",
-    description:
-      "Administra la información de empleados, asignaciones de roles y ubicaciones de trabajo.",
-    link: "/(tabs)/home/workers",
-    backgroundColor: palette.info,
-    color: "#fff",
-    icon: require("../../../assets/images/dashboard/use.png"),
-  },
-  {
-    key: "roles",
-    label: "Roles y Permisos",
-    description:
-      "Define los roles y permisos para gestionar la seguridad y accesos de la plataforma.",
-    link: "/(tabs)/home/roles",
-    backgroundColor: palette.error,
-    color: "#fff",
+    icon: require("../../../assets/images/dashboard/categories.png"),
+    link: "/(tabs)/home/adjustment",
+    iconName: "clipboard-edit",
   },
 ];
 
-interface ResourceProps {
-  key: string;
-  label: string;
-  description: string;
-  link: Href;
-  backgroundColor?: string;
-  background?: string;
-  color: string;
-  icon?: ImageSourcePropType;
-}
+type FilterType = "all" | "entry" | "exit" | "production" | "adjustment";
 
-export default function HomeScreen() {
-  const [selected, setSelected] = React.useState("compras");
+export default function OperationsScreen() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [recentMovements, setRecentMovements] = useState<RecentMovement[]>([]);
+  const [filter, setFilter] = useState<FilterType>("all");
 
-  const appContext = useAuth();
+  const auth = useAuth();
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const movementsResponse = await Services.reports.recentMovements({
+        limit: 20,
+      });
+      setRecentMovements(movementsResponse.data.data || []);
+    } catch (error) {
+      console.error("Error loading data:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadData();
+  };
+
+  const filteredMovements = recentMovements.filter((movement) => {
+    if (filter === "all") return true;
+    return movement.movement_type === filter;
+  });
+
+  const getMovementIcon = (type: string) => {
+    switch (type) {
+      case "entry":
+        return { name: "arrow-down-circle", color: palette.success };
+      case "exit":
+        return { name: "arrow-up-circle", color: palette.error };
+      case "transfer":
+        return { name: "swap-horizontal-circle", color: palette.info };
+      case "production":
+        return { name: "factory", color: palette.accent };
+      case "adjustment":
+        return { name: "clipboard-edit", color: palette.secondary };
+      default:
+        return { name: "help-circle", color: palette.textSecondary };
+    }
+  };
+
+  const getMoneyBadge = (moneyType: string) => {
+    switch (moneyType) {
+      case "income":
+        return { label: "Ingreso", color: palette.success };
+      case "expense":
+        return { label: "Egreso", color: palette.error };
+      default:
+        return { label: "Neutro", color: palette.textSecondary };
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={palette.primary} />
+        <Text style={{ marginTop: 16, color: palette.textSecondary }}>
+          Cargando operaciones...
+        </Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={[styles.container]}>
+    <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={{ gap: 12, padding: 20, paddingTop: 0 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[palette.primary]}
+          />
+        }
       >
-        <Text variant="titleMedium" style={styles.title}>
-          Menu
-        </Text>
-        {/*  <View style={{ marginVertical: 8 }}>
-          <AppInput
-            placeholder="Compras, ventas, productos..."
-            label={"Buscar en el menú..."}
-            left="magnify"
-          />
-        </View> */}
-        {/* Botones destacados */}
-        <View
-          style={{
-            flexDirection: "row",
-            flexWrap: "wrap",
-            gap: 12,
-          }}
-        >
-          <DashboardButton
-            title="Inventario"
-            description="Consulta y administra el stock disponible en tiempo real."
-            link="/(tabs)/home/roles"
-            backgroundColor={palette.textSecondary}
-            color="#fff"
-            icon={require("../../../assets/images/dashboard/inventory.png")}
-          />
-          <DashboardButton
-            title="Compañía"
-            description="Configura los datos generales y fiscales de tu empresa."
-            link={
-              `/(tabs)/home/companies/${appContext.selectedCompany?.id}` as any
-            }
-            backgroundColor={palette.background}
-            color="#000"
-            icon={require("../../../assets/images/dashboard/company.png")}
-          />
-          <DashboardButton
-            title="Sucursales"
-            description="Gestiona las ubicaciones físicas y almacenes de la organización."
-            link="/(tabs)/home/locations"
-            backgroundColor={palette.primary}
-            color="#fff"
-            icon={require("../../../assets/images/dashboard/location.png")}
-          />
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text variant="headlineSmall" style={{ fontWeight: "bold" }}>
+              Bienvenido {auth.user?.name || ""}!
+            </Text>
+            <Text
+              variant="bodySmall"
+              style={{ color: palette.textSecondary, marginTop: 4 }}
+            >
+              Gestiona los movimientos diarios de tu negocio
+            </Text>
+          </View>
         </View>
-        {/* Movimientos horizontal */}
-        <Text variant="titleMedium" style={styles.title}>
-          Movimientos
-        </Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 12 }}
-        >
-          {movimientos.map((mov) => (
-            <DashboardButton
-              key={mov.key}
-              title={mov.label}
-              description={mov.description}
-              link={mov.link}
-              backgroundColor={
-                selected === mov.key
-                  ? mov.color
-                  : mov.background || mov.backgroundColor || palette.surface
+
+        {/* Quick Actions - Horizontal Scroll */}
+        <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
+          <Text
+            variant="titleMedium"
+            style={{ fontWeight: "bold", marginBottom: 12 }}
+          >
+            Accesos Rápidos
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 12 }}
+          >
+            {operations.map((operation) => (
+              <TouchableRipple
+                key={operation.key}
+                onPress={() => router.push(operation.link as any)}
+                style={[
+                  styles.operationCard,
+                  { backgroundColor: operation.backgroundColor },
+                ]}
+              >
+                <View style={{ alignItems: "center", gap: 8 }}>
+                  <View
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: 28,
+                      backgroundColor: "rgba(255,255,255,0.2)",
+                      justifyContent: "center",
+                      alignItems: "center",
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={operation.iconName as any}
+                      size={28}
+                      color={operation.color}
+                    />
+                  </View>
+                  <Text
+                    variant="labelLarge"
+                    style={{
+                      color: operation.color,
+                      fontWeight: "bold",
+                      textAlign: "center",
+                    }}
+                  >
+                    {operation.label}
+                  </Text>
+                  <Text
+                    variant="bodySmall"
+                    style={{
+                      color: operation.color,
+                      opacity: 0.8,
+                      textAlign: "center",
+                    }}
+                  >
+                    {operation.description}
+                  </Text>
+                </View>
+              </TouchableRipple>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Filters */}
+        <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
+          <Text
+            variant="titleMedium"
+            style={{ fontWeight: "bold", marginBottom: 12 }}
+          >
+            Movimientos Recientes
+          </Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8 }}
+          >
+            <Chip
+              selected={filter === "all"}
+              onPress={() => setFilter("all")}
+              mode={filter === "all" ? "flat" : "outlined"}
+              selectedColor={palette.primary}
+            >
+              Todos ({recentMovements.length})
+            </Chip>
+            <Chip
+              selected={filter === "entry"}
+              onPress={() => setFilter("entry")}
+              mode={filter === "entry" ? "flat" : "outlined"}
+              selectedColor={palette.success}
+              icon="arrow-down-circle"
+            >
+              Entradas (
+              {
+                recentMovements.filter((m) => m.movement_type === "entry")
+                  .length
               }
-              icon={mov.icon || undefined}
-              color={selected === mov.key ? "#fff" : mov.color}
-              style={{
-                minWidth: 175,
-                flexBasis: 175,
-                minHeight: 120,
-                maxWidth: 250,
-                aspectRatio: undefined,
-              }}
-              // onPress={() => setSelected(mov.key)}
-            />
-          ))}
-        </ScrollView>
-        <Text variant="titleMedium" style={styles.title}>
-          Catálogos Principales
-        </Text>
-        {/* Catálogos principales grid */}
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-          {catalogos.map((cat) => (
-            <DashboardButton
-              key={cat.key}
-              title={cat.label}
-              description={cat.description}
-              link={cat.link}
-              backgroundColor={cat.backgroundColor || palette.surface}
-              color={cat.color}
-              style={{ minWidth: 120, flexBasis: "48%" }}
-              icon={cat.icon || undefined}
-            />
-          ))}
+              )
+            </Chip>
+            <Chip
+              selected={filter === "exit"}
+              onPress={() => setFilter("exit")}
+              mode={filter === "exit" ? "flat" : "outlined"}
+              selectedColor={palette.error}
+              icon="arrow-up-circle"
+            >
+              Salidas (
+              {recentMovements.filter((m) => m.movement_type === "exit").length}
+              )
+            </Chip>
+            <Chip
+              selected={filter === "production"}
+              onPress={() => setFilter("production")}
+              mode={filter === "production" ? "flat" : "outlined"}
+              selectedColor={palette.accent}
+              icon="factory"
+            >
+              Producción (
+              {
+                recentMovements.filter((m) => m.movement_type === "production")
+                  .length
+              }
+              )
+            </Chip>
+            <Chip
+              selected={filter === "adjustment"}
+              onPress={() => setFilter("adjustment")}
+              mode={filter === "adjustment" ? "flat" : "outlined"}
+              selectedColor={palette.secondary}
+              icon="clipboard-edit"
+            >
+              Ajustes (
+              {
+                recentMovements.filter((m) => m.movement_type === "adjustment")
+                  .length
+              }
+              )
+            </Chip>
+          </ScrollView>
+        </View>
+
+        {/* Recent Movements List */}
+        <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
+          {filteredMovements.length === 0 ? (
+            <Card style={{ backgroundColor: palette.card, padding: 24 }}>
+              <View style={{ alignItems: "center" }}>
+                <MaterialCommunityIcons
+                  name="inbox-outline"
+                  size={48}
+                  color={palette.textSecondary}
+                />
+                <Text
+                  variant="bodyLarge"
+                  style={{
+                    color: palette.textSecondary,
+                    marginTop: 12,
+                    textAlign: "center",
+                  }}
+                >
+                  No hay movimientos{filter !== "all" ? " de este tipo" : ""}
+                </Text>
+              </View>
+            </Card>
+          ) : (
+            <View style={{ gap: 8 }}>
+              {filteredMovements.map((movement) => {
+                const icon = getMovementIcon(movement.movement_type);
+                const moneyBadge = getMoneyBadge(movement.money_type);
+
+                return (
+                  <Card
+                    key={movement.id}
+                    style={{ backgroundColor: palette.card }}
+                  >
+                    <TouchableRipple
+                      onPress={() => {
+                        // Navigate to movement detail
+                        console.log("View movement:", movement.id);
+                      }}
+                    >
+                      <View style={styles.movementItem}>
+                        {/* Icon */}
+                        <View
+                          style={[
+                            styles.movementIcon,
+                            { backgroundColor: icon.color + "20" },
+                          ]}
+                        >
+                          <MaterialCommunityIcons
+                            name={icon.name as any}
+                            size={24}
+                            color={icon.color}
+                          />
+                        </View>
+
+                        {/* Content */}
+                        <View style={{ flex: 1 }}>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 8,
+                              marginBottom: 4,
+                            }}
+                          >
+                            <Text
+                              variant="titleSmall"
+                              style={{ fontWeight: "bold", flex: 1 }}
+                            >
+                              {movement.movement_reason_label}
+                            </Text>
+                            {movement.generated_money &&
+                              movement.total_cost > 0 && (
+                                <Badge
+                                  size={20}
+                                  style={{
+                                    backgroundColor: moneyBadge.color,
+                                  }}
+                                >
+                                  {moneyBadge.label}
+                                </Badge>
+                              )}
+                          </View>
+
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 12,
+                            }}
+                          >
+                            <Text
+                              variant="bodySmall"
+                              style={{ color: palette.textSecondary }}
+                            >
+                              📅{" "}
+                              {new Date(
+                                movement.movement_date
+                              ).toLocaleDateString("es-MX", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </Text>
+                            <Text
+                              variant="bodySmall"
+                              style={{ color: palette.textSecondary }}
+                            >
+                              📦 {movement.products_count}{" "}
+                              {movement.products_count === 1
+                                ? "producto"
+                                : "productos"}
+                            </Text>
+                          </View>
+
+                          {movement.generated_money &&
+                            movement.total_cost > 0 && (
+                              <Text
+                                variant="labelLarge"
+                                style={{
+                                  color: moneyBadge.color,
+                                  fontWeight: "bold",
+                                  marginTop: 4,
+                                }}
+                              >
+                                $
+                                {movement.total_cost.toLocaleString("es-MX", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </Text>
+                            )}
+                        </View>
+
+                        {/* Arrow */}
+                        <IconButton
+                          icon="chevron-right"
+                          size={20}
+                          iconColor={palette.textSecondary}
+                        />
+                      </View>
+                    </TouchableRipple>
+                  </Card>
+                );
+              })}
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
-  );
-}
-
-interface DashboardButtonProps {
-  title: string;
-  description?: string;
-  link: Href;
-  backgroundColor: string;
-  color: string;
-  icon?: ImageSourcePropType;
-  iconName?: string;
-  style?: React.ComponentProps<typeof Card>["style"];
-}
-
-function DashboardButton(props: DashboardButtonProps) {
-  const router = useRouter();
-
-  return (
-    <Card
-      onPress={() => {
-        console.log("Navigating to:", props.link);
-
-        router.push(props.link);
-      }}
-      style={{
-        flex: 1,
-        flexBasis: "48%",
-        minHeight: 100,
-        justifyContent: "center",
-        backgroundColor: props.backgroundColor,
-        ...(props.style && typeof props.style === "object" ? props.style : {}),
-      }}
-    >
-      <Card.Title
-        titleStyle={{ color: props.color, fontWeight: "bold", marginBottom: 0 }}
-        title={props.title}
-        subtitle={props.description}
-        subtitleNumberOfLines={3}
-        subtitleStyle={{
-          color: props.color,
-          opacity: 0.7,
-          fontSize: 11,
-          marginTop: -4,
-          lineHeight: 14,
-        }}
-        right={() => {
-          return (
-            props.icon && (
-              <Image
-                source={props.icon}
-                style={{
-                  height: 60,
-                  width: 60,
-                  aspectRatio: 1,
-                  backgroundColor: "transparent",
-                }}
-              />
-            )
-          );
-        }}
-      />
-    </Card>
   );
 }
 
@@ -351,9 +504,33 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.background,
   },
-  title: {
-    marginBottom: 8,
-    textAlign: "center",
-    fontWeight: "bold",
+  centerContent: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    paddingTop: 8,
+  },
+  operationCard: {
+    width: 140,
+    padding: 16,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  movementItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    gap: 12,
+  },
+  movementIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

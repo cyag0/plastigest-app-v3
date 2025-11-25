@@ -1,10 +1,11 @@
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import palette from "@/constants/palette";
+import { useAlerts } from "@/hooks/useAlerts";
 import { Ionicons } from "@expo/vector-icons";
 import { getIn, useFormikContext } from "formik";
 import React from "react";
-import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { Button } from "react-native-paper";
 import { useAppForm } from "../AppForm/AppForm";
 import { InputLabel } from "../AppForm/hoc";
@@ -28,6 +29,7 @@ export default function IngredientsTable({
   required = false,
 }: IngredientsTableProps) {
   const { values, setFieldValue } = useFormikContext();
+  const alert = useAlerts();
   const ingredients: Ingredient[] = getIn(values, name) || [];
 
   const formContext = useAppForm();
@@ -43,26 +45,24 @@ export default function IngredientsTable({
 
     const updatedIngredients = [...ingredients, newIngredient];
     setFieldValue(name, updatedIngredients);
+
+    alert.success("Ingrediente agregado exitosamente");
   };
 
-  const removeIngredient = (id: string) => {
-    Alert.alert(
-      "Confirmar eliminación",
+  const removeIngredient = async (id: string) => {
+    const res = await alert.confirm(
       "¿Está seguro que desea eliminar este ingrediente?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Eliminar",
-          style: "destructive",
-          onPress: () => {
-            const updatedIngredients = ingredients.filter(
-              (ingredient) => ingredient.id !== id
-            );
-            setFieldValue(name, updatedIngredients);
-          },
-        },
-      ]
+      {
+        title: "Confirmar eliminación",
+      }
     );
+
+    if (res) {
+      const updatedIngredients = ingredients.filter(
+        (ingredient) => ingredient.id !== id
+      );
+      setFieldValue(name, updatedIngredients);
+    }
   };
 
   return (
@@ -142,7 +142,7 @@ export default function IngredientsTable({
             </View>
 
             {/* Table Rows */}
-            {ingredients.map((ingredient, index) => (
+            {(ingredients || []).map((ingredient, index) => (
               <View
                 key={ingredient.id}
                 style={{

@@ -38,13 +38,20 @@ export interface IndexParams {
   page?: number;
   all?: boolean;
   paginated?: boolean; // Nuevo parámetro para solicitar paginación
+  product_unit_id?: number; // Para filtrar unidades por producto
+  [key: string]: any; // Permitir parámetros adicionales
 }
 
 // Interfaz para el servicio CRUD
 export interface CrudService<T> {
-  index: (
-    params?: IndexParams
-  ) => Promise<AxiosResponse<LaravelPaginatedResponse<T> | T[]>>;
+  index: (params?: IndexParams) => Promise<
+    AxiosResponse<
+      | LaravelPaginatedResponse<T>
+      | {
+          data: T[];
+        }
+    >
+  >;
   show: (id: number | string) => Promise<AxiosResponse<LaravelResponse<T>>>;
   store: (data: Partial<T>) => Promise<AxiosResponse<LaravelResponse<T>>>;
   update: (

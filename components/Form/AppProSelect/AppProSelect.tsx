@@ -83,7 +83,7 @@ export default function AppProSelect(props: AppProSelectProps) {
     }
 
     // Si no, obtenerlo del form
-    return getIn(dependsOn.field, form.values);
+    return getIn(form.values, dependsOn.field);
   }, [dependsOn?.field, dependsOn?.value, form.values]);
 
   // Construir parámetros de fetch considerando dependencias

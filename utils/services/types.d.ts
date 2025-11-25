@@ -55,6 +55,7 @@ namespace App {
       company_id?: number | null;
       category_id?: number | null;
       unit_id?: number | null;
+      unit?: any; // Unidad base del producto
       supplier_id?: number | null;
       product_type?: string | number | null;
       is_active: boolean;
@@ -62,6 +63,7 @@ namespace App {
       current_stock?: number | null;
       minimum_stock?: number | null;
       maximum_stock?: number | null;
+      available_units?: any[]; // Unidades disponibles (base + derivadas)
       created_at: string;
       updated_at: string;
       product_images?: any[]; // formatted file objects returned for editing
@@ -74,15 +76,67 @@ namespace App {
       }>;
     }
 
+    namespace InventoryCount {
+      interface Detail {
+        id?: number;
+        product_id: number;
+        location_id: number;
+        system_quantity: number;
+        counted_quantity: number;
+        difference?: number;
+        notes?: string | null;
+        inventory_count_id?: number;
+        product?: {
+          id: number;
+          name: string;
+          code?: string | null;
+          image?: string | null;
+          unit?: {
+            name: string;
+            abbreviation: string;
+          } | null;
+        };
+      }
+
+      interface InventoryCount {
+        id: number;
+        name: string;
+        count_date: string;
+        status: "completed" | "counting" | "planning" | "cancelled";
+        notes?: string | null;
+        location?: {
+          id: number;
+          name: string;
+        };
+        user?: {
+          id: number;
+          name: string;
+        };
+        details: {
+          [product_id: number]: Detail;
+        };
+        details_count?: number;
+        company_id?: number;
+        created_at?: string;
+        updated_at?: string;
+      }
+    }
+
     namespace Adjustment {
       // Tipos de ajuste
-      type AdjustmentType = "increase" | "decrease";
+      type AdjustmentType =
+        | "adjustment"
+        | "return"
+        | "damage"
+        | "loss"
+        | "shrinkage";
 
       interface AdjustmentDetail {
         id?: number;
         product_id: number;
         quantity: number;
-        unit_price: number;
+        unit_id: number;
+        unit_price?: number;
         total_cost?: number;
         product_name?: string;
         product_code?: string;

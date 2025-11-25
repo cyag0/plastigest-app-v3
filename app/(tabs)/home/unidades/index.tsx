@@ -18,7 +18,6 @@ export default function UnidadesScreen() {
       availableCompanies.length > 0 &&
       !isLoading
     ) {
-      console.log("Auto-selecting first company:", availableCompanies[0]);
       selectCompany(availableCompanies[0]);
     }
   }, [company, availableCompanies, isLoading]);
@@ -37,10 +36,14 @@ export default function UnidadesScreen() {
         title="Unidades"
         service={Services.home.unidades}
         renderCard={({ item }) => ({
-          title: `${item.name} (${item.symbol})`,
-          description: `${item.type} ${
-            item.is_base ? "- Base" : `- ${item.conversion_rate}x`
-          }${item.description ? " - " + item.description : ""}`,
+          title: `${item.name} (${item.abbreviation})`,
+          description: item.description,
+          bottom: [
+            {
+              label: "Creado el",
+              value: new Date(item.created_at).toLocaleDateString(),
+            },
+          ],
         })}
         onPressCreate={() => router.push("/(tabs)/home/unidades/form" as any)}
         detailRoute={(item) => `/(tabs)/home/unidades/${item.id}` as any}

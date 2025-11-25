@@ -1,7 +1,7 @@
 import AppBar from "@/components/App/AppBar";
 import { Stack } from "expo-router";
 
-export default function AdjustmentLayout() {
+export default function InventoryLayout() {
   return (
     <Stack
       screenOptions={{
@@ -9,7 +9,7 @@ export default function AdjustmentLayout() {
         header: ({ options, route }) => (
           <AppBar
             title={options.title || route.name}
-            //onSearchPress={() => console.log("Search pressed")}
+            onSearchPress={() => console.log("Search pressed")}
             onNotificationPress={() => console.log("Notifications pressed")}
             onProfilePress={() => console.log("Profile pressed")}
           />
@@ -19,26 +19,28 @@ export default function AdjustmentLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: "Ajustes",
+          title: "Inventario Semanal",
           headerShown: false,
         }}
       />
       <Stack.Screen
         name="form"
         options={{
-          title: "Nuevo Ajuste",
+          title: "Nuevo Inventario",
+          presentation: "modal",
         }}
       />
       <Stack.Screen
         name="[id]/index"
         options={{
-          title: "Ver Detalle del Ajuste",
+          title: "Detalle de Inventario",
         }}
       />
       <Stack.Screen
         name="[id]/edit"
         options={{
-          title: "Editar Ajuste",
+          title: "Editar Inventario",
+          presentation: "modal",
         }}
       />
     </Stack>

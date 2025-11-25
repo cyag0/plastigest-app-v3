@@ -1,3 +1,4 @@
+import api from "../axios";
 import admin from "./admin/admin";
 import { createCrudService } from "./crudService";
 import saleService from "./saleService";
@@ -31,6 +32,39 @@ const Services = {
   },
   suppliers: {
     ...createCrudService<App.Entities.Supplier>("/auth/admin/suppliers"),
+  },
+  inventory: {
+    ...createCrudService<any>("/auth/admin/inventory"),
+  },
+  inventoryCounts: {
+    ...createCrudService<App.Entities.InventoryCount.InventoryCount>(
+      "/auth/admin/inventory-counts"
+    ),
+  },
+  inventoryCountsDetails: {
+    ...createCrudService<App.Entities.InventoryCount.Detail>(
+      "/auth/admin/inventory-counts-details"
+    ),
+  },
+  reports: {
+    dashboard: async (params?: any) => {
+      const response = await api.get("/auth/admin/reports/dashboard", {
+        params,
+      });
+      return response;
+    },
+    recentMovements: async (params?: any) => {
+      const response = await api.get("/auth/admin/reports/recent-movements", {
+        params,
+      });
+      return response;
+    },
+    movementsByType: async (params?: any) => {
+      const response = await api.get("/auth/admin/reports/movements-by-type", {
+        params,
+      });
+      return response;
+    },
   },
   movements,
   home: {
