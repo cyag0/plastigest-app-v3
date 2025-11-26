@@ -13,10 +13,12 @@ import { PieChart, ProgressChart } from "react-native-chart-kit";
 import {
   Card,
   Divider,
+  Icon,
   IconButton,
   Text,
   TouchableRipple,
 } from "react-native-paper";
+import Carousel from "react-native-reanimated-carousel";
 
 interface InventoryStats {
   total_products: number;
@@ -176,6 +178,73 @@ export default function InventoryScreen() {
     ],
   };
 
+  function Statistic(props: { icon: string; value: number; label: string }) {
+    return (
+      <View
+        style={{
+          justifyContent: "center",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+          }}
+        >
+          <Icon source={props.icon} color={"#fff"} size={32} />
+          <Text
+            variant="headlineSmall"
+            style={{
+              color: "#fff",
+              fontWeight: "bold",
+            }}
+          >
+            {props.value}
+          </Text>
+        </View>
+        <Text
+          variant="labelMedium"
+          style={{
+            color: "#eee",
+            lineHeight: 8,
+          }}
+        >
+          {props.label}
+        </Text>
+      </View>
+    );
+  }
+
+  const statistics = [
+    {
+      icon: "cube-outline",
+      value: stats?.total_products || 0,
+      label: "Total Productos",
+    },
+    {
+      icon: "warehouse",
+      value: stats?.total_stock || 0,
+      label: "Stock Total",
+    },
+    {
+      icon: "cash",
+      value: stats?.inventory_value || 0,
+      label: "Valor Inventario",
+    },
+    /*     {
+      icon: "alert",
+      value: stats?.low_stock_products || 0,
+      label: "Stock Bajo",
+    },
+    {
+      icon: "close-circle-outline",
+      value: stats?.out_of_stock_products || 0,
+      label: "Sin Stock",
+    }, */
+  ];
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -184,300 +253,263 @@ export default function InventoryScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Stats Cards Horizontal Scroll */}
-        <View style={{ position: "relative", marginBottom: 24, height: 220 }}>
-          {/* Content */}
-          <View
-            style={{
-              position: "absolute",
-              top: 0,
-              width: "100%",
-              height: "100%",
-              zIndex: 20,
-            }}
-          >
-            <View>
-              <Text
-                variant="headlineLarge"
-                style={{
-                  color: "#fff",
-                  fontWeight: "bold",
-                  paddingHorizontal: 20,
-                  paddingTop: 20,
-                  marginBottom: 8,
-                }}
-              >
-                Inventario
-              </Text>
-              <Text
-                variant="bodyMedium"
-                style={{
-                  color: "#fff",
-                  opacity: 0.9,
-                  paddingHorizontal: 20,
-                }}
-              >
-                Gestiona y monitorea tu stock
-              </Text>
-            </View>
-            <View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 12, paddingBottom: 16 }}
-              >
-                <Card style={styles.statCard}>
-                  <Card.Content>
-                    <View style={styles.statIconContainer}>
-                      <IconButton
-                        icon="package-variant"
-                        iconColor={palette.primary}
-                        size={28}
-                        style={{ margin: 0 }}
-                      />
-                    </View>
-                    <Text variant="labelMedium" style={styles.statLabel}>
-                      Total Productos
-                    </Text>
-                    <Text variant="headlineSmall" style={styles.statValue}>
-                      {stats?.total_products || 0}
-                    </Text>
-                  </Card.Content>
-                </Card>
-
-                <Card style={styles.statCard}>
-                  <Card.Content>
-                    <View style={styles.statIconContainer}>
-                      <IconButton
-                        icon="cube-outline"
-                        iconColor={palette.info}
-                        size={28}
-                        style={{ margin: 0 }}
-                      />
-                    </View>
-                    <Text variant="labelMedium" style={styles.statLabel}>
-                      Stock Total
-                    </Text>
-                    <Text variant="headlineSmall" style={styles.statValue}>
-                      {stats?.total_stock?.toLocaleString() || 0}
-                    </Text>
-                  </Card.Content>
-                </Card>
-
-                <Card style={styles.statCard}>
-                  <Card.Content>
-                    <View style={styles.statIconContainer}>
-                      <IconButton
-                        icon="cash"
-                        iconColor={palette.success}
-                        size={28}
-                        style={{ margin: 0 }}
-                      />
-                    </View>
-                    <Text variant="labelMedium" style={styles.statLabel}>
-                      Valor Inventario
-                    </Text>
-                    <Text variant="headlineSmall" style={styles.statValue}>
-                      {formatCurrency(stats?.inventory_value || 0)}
-                    </Text>
-                  </Card.Content>
-                </Card>
-
-                <Card style={styles.statCard}>
-                  <Card.Content>
-                    <View style={styles.statIconContainer}>
-                      <IconButton
-                        icon="alert"
-                        iconColor={palette.error}
-                        size={14}
-                        style={{ margin: 0 }}
-                      />
-                    </View>
-                    <Text variant="labelMedium" style={styles.statLabel}>
-                      Stock Bajo
-                    </Text>
-                    <Text variant="headlineSmall" style={styles.statValue}>
-                      {stats?.low_stock_products || 0}
-                    </Text>
-                  </Card.Content>
-                </Card>
-              </ScrollView>
-            </View>
-          </View>
-          <View
-            style={{
-              flex: 0.7,
-              backgroundColor: palette.primary,
-            }}
-          ></View>
-          <View
-            style={{
-              flex: 0.3,
-            }}
-          ></View>
-        </View>
-
-        {/* Gráficas */}
-        <Text variant="titleLarge" style={styles.sectionTitle}>
-          Análisis de Inventario
-        </Text>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 12, paddingBottom: 16 }}
-        >
-          {/* Salud del Stock */}
-          <Card style={styles.chartCard}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.chartTitle}>
-                Salud del Stock
-              </Text>
-              <ProgressChart
-                data={stockHealthData}
-                width={Dimensions.get("window").width - 60}
-                height={200}
-                strokeWidth={16}
-                radius={32}
-                chartConfig={{
-                  backgroundColor: palette.background,
-                  backgroundGradientFrom: palette.background,
-                  backgroundGradientTo: palette.background,
-                  color: (opacity = 1, index = 0) => {
-                    const colors = [
-                      palette.success,
-                      palette.warning,
-                      palette.error,
-                    ];
-                    return colors[index] || palette.primary;
-                  },
-                  labelColor: (opacity = 1) => palette.text,
-                }}
-                hideLegend={false}
-              />
-            </Card.Content>
-          </Card>
-
-          {/* Productos por Categoría */}
-          {categoryData.length > 0 && (
-            <Card style={styles.chartCard}>
-              <Card.Content>
-                <Text variant="titleMedium" style={styles.chartTitle}>
-                  Productos por Categoría
-                </Text>
-                <PieChart
-                  data={categoryData}
-                  width={Dimensions.get("window").width - 60}
-                  height={200}
-                  chartConfig={{
-                    color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                    labelColor: (opacity = 1) => palette.text,
-                  }}
-                  accessor="population"
-                  backgroundColor="transparent"
-                  paddingLeft="15"
-                  absolute
-                />
-              </Card.Content>
-            </Card>
-          )}
-        </ScrollView>
-
-        {/* Opciones de Inventario */}
-        <Text variant="titleLarge" style={styles.sectionTitle}>
-          Acciones Rápidas
-        </Text>
-
-        <Card style={styles.optionsCard}>
-          <Card.Content style={{ padding: 0 }}>
-            {inventoryOptions.map((option, index) => (
-              <React.Fragment key={option.id}>
-                <TouchableRipple
-                  onPress={() => router.push(option.route as any)}
-                  style={styles.optionItem}
-                >
-                  <View style={styles.optionContent}>
+        <View style={{ height: 240, marginBottom: 16 }}>
+          <Carousel
+            loop
+            width={Dimensions.get("window").width - 40}
+            height={280}
+            autoPlay={true}
+            autoPlayInterval={2000}
+            pagingEnabled={true}
+            snapEnabled={true}
+            mode="parallax"
+            data={[
+              { type: "stats", color: palette.primary },
+              { type: "health", color: palette.info },
+              { type: "category", color: palette.accent },
+            ]}
+            scrollAnimationDuration={1000}
+            renderItem={({ item, index }: { item: any; index: number }) => {
+              if (item.type === "stats") {
+                return (
+                  <View
+                    style={{
+                      backgroundColor: palette.primary,
+                      borderRadius: 12,
+                      padding: 16,
+                      marginBottom: 24,
+                      flex: 1,
+                      justifyContent: "center",
+                      alignItems: "center",
+                    }}
+                  >
+                    {/* Content */}
                     <View
-                      style={[
-                        styles.optionIcon,
-                        { backgroundColor: option.color + "20" },
-                      ]}
+                      style={{
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
                     >
-                      <IconButton
-                        icon={option.icon}
-                        size={28}
-                        iconColor={option.color}
-                        style={{ margin: 0 }}
-                      />
-                    </View>
-
-                    <View style={styles.optionText}>
-                      <Text variant="titleMedium" style={styles.optionTitle}>
-                        {option.title}
+                      <Text
+                        variant="headlineLarge"
+                        style={{
+                          color: "#fff",
+                          fontWeight: "bold",
+                          paddingHorizontal: 20,
+                          paddingTop: 20,
+                          marginBottom: 8,
+                        }}
+                      >
+                        Inventario
                       </Text>
                       <Text
-                        variant="bodySmall"
-                        style={styles.optionDescription}
-                        numberOfLines={2}
+                        variant="bodyMedium"
+                        style={{
+                          color: "#fff",
+                          opacity: 0.9,
+                          paddingHorizontal: 20,
+                        }}
                       >
-                        {option.description}
+                        Gestiona y monitorea tu stock
                       </Text>
                     </View>
 
-                    {option.badge !== undefined && option.badge > 0 && (
-                      <View
-                        style={[
-                          styles.badge,
-                          { backgroundColor: option.color },
-                        ]}
-                      >
-                        <Text variant="labelSmall" style={styles.badgeText}>
-                          {option.badge}
-                        </Text>
-                      </View>
-                    )}
-
-                    <IconButton
-                      icon="chevron-right"
-                      size={24}
-                      iconColor={palette.textSecondary}
-                      style={{ margin: 0 }}
-                    />
+                    <View
+                      style={{
+                        gap: 16,
+                        paddingBottom: 16,
+                        marginTop: 20,
+                        flexDirection: "row",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {statistics.map((stat) => (
+                        <Statistic
+                          key={stat.label}
+                          icon={stat.icon}
+                          value={stat.value}
+                          label={stat.label}
+                        />
+                      ))}
+                    </View>
                   </View>
-                </TouchableRipple>
+                );
+              }
 
-                {index < inventoryOptions.length - 1 && (
-                  <Divider style={{ marginLeft: 80 }} />
+              if (item.type === "health") {
+                return (
+                  <Card
+                    style={[
+                      styles.chartCard,
+                      {
+                        backgroundColor: item.color + "15",
+                        borderWidth: 2,
+                        borderColor: item.color + "30",
+                      },
+                    ]}
+                  >
+                    <Card.Content>
+                      <Text variant="titleMedium" style={styles.chartTitle}>
+                        Salud del Stock
+                      </Text>
+                      <ProgressChart
+                        data={stockHealthData}
+                        width={Dimensions.get("window").width - 80}
+                        height={200}
+                        strokeWidth={16}
+                        radius={32}
+                        chartConfig={{
+                          backgroundColor: "transparent",
+                          backgroundGradientFrom: "transparent",
+                          backgroundGradientTo: "transparent",
+                          color: (opacity = 1, index = 0) => {
+                            const colors = [
+                              palette.success,
+                              palette.warning,
+                              palette.error,
+                            ];
+                            return colors[index] || palette.primary;
+                          },
+                          labelColor: (opacity = 1) => palette.text,
+                        }}
+                        hideLegend={false}
+                      />
+                    </Card.Content>
+                  </Card>
+                );
+              }
+
+              if (item.type === "category" && categoryData.length > 0) {
+                return (
+                  <Card
+                    style={[
+                      styles.chartCard,
+                      {
+                        backgroundColor: item.color + "15",
+                        borderWidth: 2,
+                        borderColor: item.color + "30",
+                      },
+                    ]}
+                  >
+                    <Card.Content>
+                      <Text variant="titleMedium" style={styles.chartTitle}>
+                        Productos por Categoría
+                      </Text>
+                      <PieChart
+                        data={categoryData}
+                        width={Dimensions.get("window").width - 80}
+                        height={200}
+                        chartConfig={{
+                          color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+                          labelColor: (opacity = 1) => palette.text,
+                        }}
+                        accessor="population"
+                        backgroundColor="transparent"
+                        paddingLeft="15"
+                        absolute
+                      />
+                    </Card.Content>
+                  </Card>
+                );
+              }
+
+              return null;
+            }}
+          />
+        </View>
+
+        {/* Opciones de Inventario */}
+        <View style={{ paddingHorizontal: 16 }}>
+          <Text variant="titleLarge" style={styles.sectionTitle}>
+            Acciones Rápidas
+          </Text>
+        </View>
+
+        {inventoryOptions.map((option, index) => (
+          <React.Fragment key={option.id}>
+            <TouchableRipple
+              onPress={() => router.push(option.route as any)}
+              style={styles.optionItem}
+            >
+              <View style={styles.optionContent}>
+                <View
+                  style={[
+                    styles.optionIcon,
+                    { backgroundColor: option.color + "20" },
+                  ]}
+                >
+                  <IconButton
+                    icon={option.icon}
+                    size={28}
+                    iconColor={option.color}
+                    style={{ margin: 0 }}
+                  />
+                </View>
+
+                <View style={styles.optionText}>
+                  <Text variant="titleMedium" style={styles.optionTitle}>
+                    {option.title}
+                  </Text>
+                  <Text
+                    variant="bodySmall"
+                    style={styles.optionDescription}
+                    numberOfLines={2}
+                  >
+                    {option.description}
+                  </Text>
+                </View>
+
+                {option.badge !== undefined && option.badge > 0 && (
+                  <View
+                    style={[styles.badge, { backgroundColor: option.color }]}
+                  >
+                    <Text variant="labelSmall" style={styles.badgeText}>
+                      {option.badge}
+                    </Text>
+                  </View>
                 )}
-              </React.Fragment>
-            ))}
-          </Card.Content>
-        </Card>
+
+                <IconButton
+                  icon="chevron-right"
+                  size={24}
+                  iconColor={palette.textSecondary}
+                  style={{ margin: 0 }}
+                />
+              </View>
+            </TouchableRipple>
+
+            {index < inventoryOptions.length - 1 && (
+              <Divider style={{ marginLeft: 80 }} />
+            )}
+          </React.Fragment>
+        ))}
 
         {/* Alertas */}
         {(stats?.low_stock_products || 0) > 0 && (
-          <Card style={styles.alertCard}>
-            <Card.Content>
-              <View style={styles.alertContent}>
-                <IconButton
-                  icon="alert-circle"
-                  size={24}
-                  iconColor={palette.error}
-                  style={{ margin: 0 }}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text variant="titleSmall" style={styles.alertTitle}>
-                    Productos con Stock Bajo
-                  </Text>
-                  <Text variant="bodySmall" style={styles.alertText}>
-                    Hay {stats?.low_stock_products} productos que necesitan
-                    reposición urgente. Revisa el inventario para evitar
-                    desabastecimiento.
-                  </Text>
+          <View style={{ paddingHorizontal: 16 }}>
+            <Card style={[styles.alertCard, { marginTop: 16 }]}>
+              <Card.Content>
+                <View style={styles.alertContent}>
+                  <IconButton
+                    icon="alert-circle"
+                    size={24}
+                    iconColor={palette.error}
+                    style={{ margin: 0 }}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text variant="titleSmall" style={styles.alertTitle}>
+                      Productos con Stock Bajo
+                    </Text>
+                    <Text variant="bodySmall" style={styles.alertText}>
+                      Hay {stats?.low_stock_products} productos que necesitan
+                      reposición urgente. Revisa el inventario para evitar
+                      desabastecimiento.
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            </Card.Content>
-          </Card>
+              </Card.Content>
+            </Card>
+          </View>
         )}
       </ScrollView>
     </View>
@@ -494,7 +526,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   scrollContent: {
-    padding: 20,
+    paddingTop: 0,
     paddingBottom: 40,
   },
   header: {

@@ -10,6 +10,7 @@ import NavigationHandler from "@/components/NavigationHandler";
 import palette from "@/constants/palette";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AlertsProvider } from "@/hooks/useAlerts";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { MD3LightTheme, PaperProvider } from "react-native-paper";
 import { es, registerTranslation } from "react-native-paper-dates";
 
@@ -20,6 +21,9 @@ export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
+
+  // Inicializar notificaciones push
+  usePushNotifications();
 
   const theme = {
     ...MD3LightTheme,
