@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSUserNotificationsUsageDescription": "Esta aplicación necesita permisos para enviarte notificaciones importantes sobre tu inventario."
-      }
+      },
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "adaptiveIcon": {
@@ -24,9 +25,10 @@
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "NOTIFICATIONS"
+        "NOTIFICATIONS",
+        "POST_NOTIFICATIONS"
       ],
-      "useNextNotificationsApi": true
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "bundler": "metro",
@@ -45,12 +47,14 @@
         }
       ],
       "expo-web-browser",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
       [
-        "expo-notifications",
+        "expo-camera",
         {
-          "icon": "./assets/images/notification-icon.png",
-          "color": "#ffffff",
-          "sounds": []
+          "cameraPermission": "Permite a $(PRODUCT_NAME) acceder a tu cámara para escanear códigos de barras.",
+          "microphonePermission": "Permite a $(PRODUCT_NAME) acceder a tu micrófono.",
+          "recordAudioAndroid": false
         }
       ]
     ],

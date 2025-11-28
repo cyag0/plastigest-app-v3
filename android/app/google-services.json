@@ -1,0 +1,29 @@
+{
+    "project_info": {
+        "project_number": "554935375196",
+        "project_id": "plastigest-976ac",
+        "storage_bucket": "plastigest-976ac.firebasestorage.app"
+    },
+    "client": [
+        {
+            "client_info": {
+                "mobilesdk_app_id": "1:554935375196:android:e63fd3c5d72c539afbdd99",
+                "android_client_info": {
+                    "package_name": "com.alejandrotrejo.plastigest"
+                }
+            },
+            "oauth_client": [],
+            "api_key": [
+                {
+                    "current_key": "AIzaSyCQFNhWpRmZniAg_sPvtQAG5NBDTiYVyaE"
+                }
+            ],
+            "services": {
+                "appinvite_service": {
+                    "other_platform_oauth_client": []
+                }
+            }
+        }
+    ],
+    "configuration_version": "1"
+}

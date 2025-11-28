@@ -1,113 +1,134 @@
-import axios from "@/utils/axios";
+import axiosClient from "@/utils/axios";
+import messaging from "@react-native-firebase/messaging";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
 import { useEffect, useState } from "react";
-import { Platform } from "react-native";
+import { PermissionsAndroid, Platform } from "react-native";
+
+interface RemoteMessage {
+  messageId?: string;
+  data?: { [key: string]: string };
+  notification?: {
+    title?: string;
+    body?: string;
+  };
+}
 
 export function usePushNotifications() {
-  const [expoPushToken, setExpoPushToken] = useState<string | undefined>();
-  const [notification, setNotification] = useState<
-    Notifications.Notification | undefined
-  >();
+  const [fcmToken, setFcmToken] = useState<string | undefined>();
+  const [notification, setNotification] = useState<RemoteMessage | undefined>();
 
   useEffect(() => {
-    registerForPushNotificationsAsync().then((token) => {
-      setExpoPushToken(token);
+    // Solicitar permisos y obtener token
+    requestUserPermission().then((token) => {
       if (token) {
-        // Registrar el token en el backend
+        setFcmToken(token);
         registerTokenInBackend(token);
       }
     });
 
-    // Listener para notificaciones recibidas
-    const notificationListener = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        setNotification(notification);
+    // Listener para notificaciones en primer plano
+    const unsubscribeForeground = messaging().onMessage(
+      async (remoteMessage) => {
+        console.log("Notificación recibida en primer plano:", remoteMessage);
+        setNotification(remoteMessage);
       }
     );
 
-    // Listener para cuando el usuario toca la notificación
-    const responseListener =
-      Notifications.addNotificationResponseReceivedListener((response) => {
-        console.log("Notificación tocada:", response);
+    // Listener para cuando el usuario toca la notificación (app en background)
+    messaging().onNotificationOpenedApp((remoteMessage) => {
+      console.log("Notificación abrió la app desde background:", remoteMessage);
+      handleNotificationAction(remoteMessage);
+    });
+
+    // Listener para cuando la app se abre desde una notificación (app cerrada)
+    messaging()
+      .getInitialNotification()
+      .then((remoteMessage) => {
+        if (remoteMessage) {
+          console.log("App abierta desde notificación:", remoteMessage);
+          handleNotificationAction(remoteMessage);
+        }
       });
 
+    // Listener para actualización de token
+    const unsubscribeTokenRefresh = messaging().onTokenRefresh((token) => {
+      console.log("FCM Token actualizado:", token);
+      setFcmToken(token);
+      registerTokenInBackend(token);
+    });
+
     return () => {
-      Notifications.removeNotificationSubscription(notificationListener);
-      Notifications.removeNotificationSubscription(responseListener);
+      unsubscribeForeground();
+      unsubscribeTokenRefresh();
     };
   }, []);
 
   return {
-    expoPushToken,
+    fcmToken,
     notification,
   };
 }
 
-async function registerForPushNotificationsAsync() {
-  let token;
+async function requestUserPermission(): Promise<string | undefined> {
+  try {
+    // Solicitar permisos en Android 13+
+    if (Platform.OS === "android" && Platform.Version >= 33) {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+      );
 
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("default", {
-      name: "default",
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: "#FF231F7C",
-    });
-  }
-
-  if (Device.isDevice) {
-    const { status: existingStatus } =
-      await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
+      if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+        console.log("Permisos de notificación denegados");
+        return undefined;
+      }
     }
 
-    if (finalStatus !== "granted") {
-      console.log("No se obtuvieron permisos para notificaciones push");
-      return;
+    // Solicitar permisos de Firebase Messaging
+    const authStatus = await messaging().requestPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+
+    if (!enabled) {
+      console.log("Permisos de notificación denegados");
+      return undefined;
     }
 
-    // Obtener el token de Expo Push
-    token = (
-      await Notifications.getExpoPushTokenAsync({
-        projectId: Constants.expoConfig?.extra?.eas?.projectId,
-      })
-    ).data;
-
-    console.log("Token de notificación:", token);
-  } else {
-    console.log("Debe usar un dispositivo físico para notificaciones push");
+    // Obtener FCM token
+    const token = await messaging().getToken();
+    console.log("FCM Token:", token);
+    return token;
+  } catch (error) {
+    console.error("Error al solicitar permisos:", error);
+    return undefined;
   }
-
-  return token;
 }
 
 async function registerTokenInBackend(token: string) {
   try {
     const deviceInfo = {
       token,
-      device_type: Platform.OS, // 'ios' | 'android' | 'web'
+      device_type: Platform.OS, // 'ios' | 'android'
       device_name: Device.deviceName || "Unknown",
       app_version: Constants.expoConfig?.version || "1.0.0",
     };
 
-    await axios.post("/device-tokens/register", deviceInfo);
-    console.log("Token registrado en el backend");
+    await axiosClient.post("/auth/admin/device-tokens/register", deviceInfo);
+    console.log("FCM Token registrado en el backend");
   } catch (error) {
     console.error("Error al registrar token en el backend:", error);
   }
 }
 
-// Configurar el comportamiento de las notificaciones
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+function handleNotificationAction(remoteMessage: RemoteMessage) {
+  // Manejar la acción cuando el usuario toca la notificación
+  if (remoteMessage.data) {
+    console.log("Datos de la notificación:", remoteMessage.data);
+
+    // Ejemplo: navegar a una pantalla específica según el tipo
+    // if (remoteMessage.data.type === 'low_stock') {
+    //   navigation.navigate('Products', { id: remoteMessage.data.product_id });
+    // }
+  }
+}
