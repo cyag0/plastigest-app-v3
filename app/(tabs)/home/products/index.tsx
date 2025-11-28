@@ -2,15 +2,35 @@ import AppList from "@/components/App/AppList/AppList";
 import palette from "@/constants/palette";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
-import { useRouter } from "expo-router";
+import { Href, useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 
-export default function ProductsIndex() {
-  const router = useRouter();
+interface ProductsIndexProps {
+  route?: Href;
+}
 
+export default function ProductsIndex(props: ProductsIndexProps) {
+  const router = useRouter();
+  const params = useLocalSearchParams();
   const { selectedLocation, isLoadingLocations } = useSelectedLocation();
+
+  const route: Href = props.route || "/(tabs)/home/products";
+
+  // Determinar filtros iniciales basados en parámetros
+  const getDefaultFilters = () => {
+    const filters: any = {
+      location_id: selectedLocation?.id,
+    };
+
+    // Si viene el parámetro filter=low_stock, agregar el filtro
+    if (params.filter === "low_stock") {
+      filters.low_stock = "1";
+    }
+
+    return filters;
+  };
 
   if (isLoadingLocations) {
     return <Text>Cargando...</Text>;
@@ -21,9 +41,29 @@ export default function ProductsIndex() {
       <AppList
         title="Productos"
         service={Services.products}
-        defaultFilters={{
-          location_id: selectedLocation?.id,
-        }}
+        defaultFilters={getDefaultFilters()}
+        filters={[
+          {
+            type: "simple",
+            name: "is_active",
+            label: "Estado",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Activos", value: "1" },
+              { label: "Inactivos", value: "0" },
+            ],
+          },
+          {
+            type: "simple",
+            name: "low_stock",
+            label: "Stock",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Stock bajo", value: "1" },
+              { label: "Stock normal", value: "0" },
+            ],
+          },
+        ]}
         renderCard={({ item }: { item: any }) => ({
           title: item.name,
           description: (
@@ -76,16 +116,38 @@ export default function ProductsIndex() {
                 </AppList.Title>
               )}
 
-              {item.sale_price && (
-                <AppList.Description
-                  style={{
-                    fontWeight: "bold",
-                    color: item.is_active ? palette.success : palette.error,
-                  }}
-                >
-                  {item.is_active ? "Activo" : "Inactivo"}
-                </AppList.Description>
-              )}
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: 8,
+                  alignItems: "center",
+                }}
+              >
+                {item.current_stock !== null &&
+                  item.current_stock !== undefined &&
+                  item.current_stock <= (item.minimum_stock || 0) &&
+                  item.minimum_stock > 0 && (
+                    <AppList.Description
+                      style={{
+                        fontWeight: "bold",
+                        color: palette.warning,
+                      }}
+                    >
+                      Stock bajo
+                    </AppList.Description>
+                  )}
+
+                {item.sale_price && (
+                  <AppList.Description
+                    style={{
+                      fontWeight: "bold",
+                      color: item.is_active ? palette.success : palette.error,
+                    }}
+                  >
+                    {item.is_active ? "Activo" : "Inactivo"}
+                  </AppList.Description>
+                )}
+              </View>
               {/* <Chip
                 mode="flat"
                 style={[
@@ -164,15 +226,15 @@ export default function ProductsIndex() {
           ],
         })}
         onItemPress={(entity: any) => {
-          router.push(`/(tabs)/home/products/${entity.id}` as any);
+          router.push(`${route}/${entity.id}` as any);
         }}
         menu={{
           onEdit(item) {
-            router.push(`/(tabs)/home/products/${item.id}/edit` as any);
+            router.push(`${route}/${item.id}/edit` as any);
           },
         }}
         onPressCreate={() => {
-          router.push("/(tabs)/home/products/form" as any);
+          router.push(`${route}/form` as any);
         }}
         fabLabel="Nuevo Producto"
       />

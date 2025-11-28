@@ -1,6 +1,16 @@
 // Tipos para las entidades de la aplicación
 namespace App {
   namespace Entities {
+    interface User {
+      id: number;
+      name: string;
+      email: string;
+      is_active: boolean;
+      password?: string;
+      created_at: string;
+      updated_at: string;
+    }
+
     interface Company {
       id: number;
       name: string;

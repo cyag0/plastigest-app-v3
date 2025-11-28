@@ -1,4 +1,5 @@
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
@@ -17,103 +18,128 @@ interface AdminOption {
   icon: string;
   route: string;
   color: string;
-  category: "company" | "catalog" | "users" | "settings";
+  category: "company" | "catalog" | "users" | "settings" | "general";
 }
-
-const adminOptions: AdminOption[] = [
-  // Configuración de la Empresa
-  {
-    id: "company",
-    title: "Compañía",
-    description: "Gestiona los datos fiscales y generales de la empresa",
-    icon: "office-building",
-    route: "/(tabs)/home/companies",
-    color: palette.primary,
-    category: "company",
-  },
-  {
-    id: "locations",
-    title: "Sucursales",
-    description: "Administra ubicaciones físicas y almacenes",
-    icon: "map-marker-multiple",
-    route: "/(tabs)/home/locations",
-    color: palette.info,
-    category: "company",
-  },
-
-  // Gestión de Personal
-  {
-    id: "workers",
-    title: "Trabajadores",
-    description: "Administra empleados, roles y asignaciones",
-    icon: "account-group",
-    route: "/(tabs)/home/workers",
-    color: palette.accent,
-    category: "users",
-  },
-  {
-    id: "users",
-    title: "Usuarios del Sistema",
-    description: "Controla accesos y permisos de usuarios",
-    icon: "account-key",
-    route: "/(tabs)/home/users",
-    color: palette.secondary,
-    category: "users",
-  },
-  {
-    id: "roles",
-    title: "Roles y Permisos",
-    description: "Define roles y gestiona permisos de acceso",
-    icon: "shield-account",
-    route: "/(tabs)/home/roles",
-    color: palette.error,
-    category: "users",
-  },
-
-  // Catálogos
-  {
-    id: "categories",
-    title: "Categorías",
-    description: "Organiza productos en grupos lógicos",
-    icon: "shape",
-    route: "/(tabs)/home/categories",
-    color: palette.primary,
-    category: "catalog",
-  },
-  {
-    id: "units",
-    title: "Unidades de Medida",
-    description: "Define unidades para inventarios (kg, pza, caja, etc.)",
-    icon: "weight-kilogram",
-    route: "/(tabs)/home/unidades",
-    color: palette.warning,
-    category: "catalog",
-  },
-  {
-    id: "suppliers",
-    title: "Proveedores",
-    description: "Registra y gestiona proveedores de productos",
-    icon: "truck-delivery",
-    route: "/(tabs)/home/suppliers",
-    color: palette.info,
-    category: "catalog",
-  },
-  {
-    id: "clients",
-    title: "Clientes",
-    description: "Gestiona información y historial de clientes",
-    icon: "account-multiple",
-    route: "/(tabs)/home/clientes",
-    color: palette.accent,
-    category: "catalog",
-  },
-];
 
 export default function AdministrationScreen() {
   const router = useRouter();
 
+  const { selectedCompany } = useAuth();
+
+  const adminOptions: AdminOption[] = [
+    // Configuración de la Empresa
+    {
+      id: "general-company",
+      title: "Compañías",
+      description: "Gestiona los datos fiscales y generales de la empresa",
+      icon: "office-building",
+      route: "/(tabs)/administration/companies",
+      color: palette.primary,
+      category: "general",
+    },
+    {
+      id: "general-users",
+      title: "Usuarios del Sistema",
+      description: "Controla accesos y permisos de usuarios",
+      icon: "account-key",
+      route: "/(tabs)/administration/users",
+      color: palette.secondary,
+      category: "general",
+    },
+
+    {
+      id: "company",
+      title: "Compañía",
+      description: "Gestiona los datos fiscales y generales de la empresa",
+      icon: "office-building",
+      route:
+        "/(tabs)/administration/companies/" +
+        (selectedCompany ? selectedCompany.id : ""),
+      color: palette.primary,
+      category: "company",
+    },
+    {
+      id: "locations",
+      title: "Sucursales",
+      description: "Administra ubicaciones físicas y almacenes",
+      icon: "map-marker-multiple",
+      route: "/(tabs)/administration/locations",
+      color: palette.info,
+      category: "company",
+    },
+    /*     {
+      id: "users",
+      title: "Usuarios del Sistema",
+      description: "Controla accesos y permisos de usuarios",
+      icon: "account-key",
+      route: "/(tabs)/home/users",
+      color: palette.secondary,
+      category: "users",
+    }, */
+
+    // Gestión de Personal
+    {
+      id: "workers",
+      title: "Trabajadores",
+      description: "Administra empleados, roles y asignaciones",
+      icon: "account-group",
+      route: "/(tabs)/administration/workers",
+      color: palette.accent,
+      category: "users",
+    },
+    {
+      id: "roles",
+      title: "Roles y Permisos",
+      description: "Define roles y gestiona permisos de acceso",
+      icon: "shield-account",
+      route: "/(tabs)/home/roles",
+      color: palette.error,
+      category: "users",
+    },
+
+    // Catálogos
+    {
+      id: "categories",
+      title: "Categorías",
+      description: "Organiza productos en grupos lógicos",
+      icon: "shape",
+      route: "/(tabs)/home/categories",
+      color: palette.primary,
+      category: "catalog",
+    },
+    {
+      id: "units",
+      title: "Unidades de Medida",
+      description: "Define unidades para inventarios (kg, pza, caja, etc.)",
+      icon: "weight-kilogram",
+      route: "/(tabs)/home/unidades",
+      color: palette.warning,
+      category: "catalog",
+    },
+    {
+      id: "suppliers",
+      title: "Proveedores",
+      description: "Registra y gestiona proveedores de productos",
+      icon: "truck-delivery",
+      route: "/(tabs)/home/suppliers",
+      color: palette.info,
+      category: "catalog",
+    },
+    {
+      id: "clients",
+      title: "Clientes",
+      description: "Gestiona información y historial de clientes",
+      icon: "account-multiple",
+      route: "/(tabs)/home/clientes",
+      color: palette.accent,
+      category: "catalog",
+    },
+  ];
+
   const getCategoryTitle = (category: string) => {
     switch (category) {
+      case "general":
+        return "Configuración General";
       case "company":
         return "Configuración de la Empresa";
       case "users":
@@ -138,7 +164,7 @@ export default function AdministrationScreen() {
     }
   };
 
-  const categories = ["company", "users", "catalog"] as const;
+  const categories = ["general", "company", "users", "catalog"] as const;
 
   return (
     <View style={styles.container}>

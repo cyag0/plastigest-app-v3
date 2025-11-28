@@ -57,10 +57,6 @@ export default function AdjustmentForm(props: AdjustmentFormProps) {
   const { selectedLocation } = useSelectedLocation();
   const formRef = useRef<AppFormRef<AdjustmentFormData>>(null);
 
-  const handleAddProduct = () => {};
-
-  const handleRemoveProduct = (index: number) => {};
-
   return (
     <AppForm
       readonly={props.readonly}
@@ -339,111 +335,38 @@ function ProductCard({ index, onRemove, adjustmentType }: ProductCardProps) {
           required
         />
 
+        <FormSelectSimple
+          name={`details.${index}.unit_id`}
+          label="Unidad"
+          required
+          data={availableUnits.map((unit) => ({
+            label: `${unit.name} (${unit.abbreviation})`,
+            value: unit.id.toString(),
+          }))}
+          disabled={loading || availableUnits.length === 0}
+        />
+
         <View
-          style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}
+          style={{
+            flex: 1,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+          }}
         >
-          <View style={{ flex: 1 }}>
-            <FormSelectSimple
-              name={`details.${index}.unit_id`}
-              label="Unidad"
-              required
-              data={availableUnits.map((unit) => ({
-                label: `${unit.name} (${unit.abbreviation})`,
-                value: unit.id.toString(),
-              }))}
-              disabled={loading || availableUnits.length === 0}
-            />
-          </View>
-
-          <View
-            style={{
-              flex: 1,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 8,
-            }}
-          >
-            {!formContext.readonly && (
-              <IconButton
-                icon="minus"
-                size={24}
-                onPress={() => {
-                  const currentQuantity = parseFloat(
-                    form.values.details[index]?.quantity || "0"
-                  );
-                  if (currentQuantity > 0) {
-                    const newQuantity = currentQuantity - 1;
-
-                    // Validar que el stock resultante no sea negativo en decrementos
-                    if (!isIncrement) {
-                      const newQuantityInBaseUnit =
-                        selectedUnit?.base_unit_id === null
-                          ? newQuantity
-                          : newQuantity *
-                            parseFloat(selectedUnit?.factor_to_base || 1);
-
-                      if (currentStock - newQuantityInBaseUnit < 0) {
-                        setShowStockWarning(true);
-                        return;
-                      }
-                    }
-
-                    form.setFieldValue(
-                      `details.${index}.quantity`,
-                      newQuantity.toString()
-                    );
-                    setShowStockWarning(false);
-                  }
-                }}
-              />
-            )}
-            <View style={{ flex: 1 }}>
-              <FormNumeric
-                name={`details.${index}.quantity`}
-                label="Cantidad"
-                keyboardType="numeric"
-                dense
-                onChange={(value) => {
-                  const numValue = parseFloat(value || "0");
-
-                  // Validar que no sea menor a 0
-                  if (numValue < 0) {
-                    form.setFieldValue(`details.${index}.quantity`, "0");
-                    setShowStockWarning(false);
-                    return;
-                  }
+          {!formContext.readonly && (
+            <IconButton
+              icon="minus"
+              size={24}
+              onPress={() => {
+                const currentQuantity = parseFloat(
+                  form.values.details[index]?.quantity || "0"
+                );
+                if (currentQuantity > 0) {
+                  const newQuantity = currentQuantity - 1;
 
                   // Validar que el stock resultante no sea negativo en decrementos
-                  if (!isIncrement && productData) {
-                    const quantityInBaseUnit =
-                      selectedUnit?.base_unit_id === null
-                        ? numValue
-                        : numValue *
-                          parseFloat(selectedUnit?.factor_to_base || 1);
-
-                    if (currentStock - quantityInBaseUnit < 0) {
-                      setShowStockWarning(true);
-                      // No revertir el valor, solo mostrar advertencia
-                      return;
-                    }
-                  }
-
-                  setShowStockWarning(false);
-                }}
-              />
-            </View>
-            {!formContext.readonly && (
-              <IconButton
-                icon="plus"
-                size={24}
-                onPress={() => {
-                  const currentQuantity = parseFloat(
-                    form.values.details[index]?.quantity || "0"
-                  );
-                  const newQuantity = currentQuantity + 1;
-
-                  // Validar que el stock resultante no sea negativo en decrementos
-                  if (!isIncrement && productData) {
+                  if (!isIncrement) {
                     const newQuantityInBaseUnit =
                       selectedUnit?.base_unit_id === null
                         ? newQuantity
@@ -461,10 +384,77 @@ function ProductCard({ index, onRemove, adjustmentType }: ProductCardProps) {
                     newQuantity.toString()
                   );
                   setShowStockWarning(false);
-                }}
-              />
-            )}
+                }
+              }}
+            />
+          )}
+          <View style={{ flex: 1 }}>
+            <FormNumeric
+              name={`details.${index}.quantity`}
+              label="Cantidad"
+              keyboardType="numeric"
+              dense
+              onChange={(value) => {
+                const numValue = parseFloat(value || "0");
+
+                // Validar que no sea menor a 0
+                if (numValue < 0) {
+                  form.setFieldValue(`details.${index}.quantity`, "0");
+                  setShowStockWarning(false);
+                  return;
+                }
+
+                // Validar que el stock resultante no sea negativo en decrementos
+                if (!isIncrement && productData) {
+                  const quantityInBaseUnit =
+                    selectedUnit?.base_unit_id === null
+                      ? numValue
+                      : numValue *
+                        parseFloat(selectedUnit?.factor_to_base || 1);
+
+                  if (currentStock - quantityInBaseUnit < 0) {
+                    setShowStockWarning(true);
+                    // No revertir el valor, solo mostrar advertencia
+                    return;
+                  }
+                }
+
+                setShowStockWarning(false);
+              }}
+            />
           </View>
+          {!formContext.readonly && (
+            <IconButton
+              icon="plus"
+              size={24}
+              onPress={() => {
+                const currentQuantity = parseFloat(
+                  form.values.details[index]?.quantity || "0"
+                );
+                const newQuantity = currentQuantity + 1;
+
+                // Validar que el stock resultante no sea negativo en decrementos
+                if (!isIncrement && productData) {
+                  const newQuantityInBaseUnit =
+                    selectedUnit?.base_unit_id === null
+                      ? newQuantity
+                      : newQuantity *
+                        parseFloat(selectedUnit?.factor_to_base || 1);
+
+                  if (currentStock - newQuantityInBaseUnit < 0) {
+                    setShowStockWarning(true);
+                    return;
+                  }
+                }
+
+                form.setFieldValue(
+                  `details.${index}.quantity`,
+                  newQuantity.toString()
+                );
+                setShowStockWarning(false);
+              }}
+            />
+          )}
         </View>
 
         {/* Mostrar conversión si aplica */}

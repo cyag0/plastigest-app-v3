@@ -25,6 +25,14 @@ export default function _layout() {
         name="weekly-inventory"
         options={{ title: "Inventario", headerShown: false }}
       />
+      <Stack.Screen
+        name="products"
+        options={{ title: "Productos", headerShown: false }}
+      />
+      <Stack.Screen
+        name="adjustment"
+        options={{ title: "Ajustes", headerShown: false }}
+      />
     </Stack>
   );
 }

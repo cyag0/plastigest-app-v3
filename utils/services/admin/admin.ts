@@ -2,6 +2,7 @@ import companies from "./companies";
 import locations from "./locations";
 import permissions from "./permissions";
 import roles from "./roles";
+import users from "./users";
 import workers from "./workers";
 
 export default {
@@ -9,5 +10,6 @@ export default {
   roles,
   companies,
   locations,
-  workers
+  workers,
+  users,
 };

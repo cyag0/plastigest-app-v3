@@ -1,14 +1,14 @@
+import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Avatar,
-  Button,
-  Divider,
-  Surface,
+  Card,
   Text,
   useTheme,
 } from "react-native-paper";
@@ -91,266 +91,320 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      style={[styles.container, { backgroundColor: palette.surface }]}
     >
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.content}
       >
-        {/* Header con avatar y nombre */}
-        <Surface
-          style={[styles.headerCard, { backgroundColor: theme.colors.surface }]}
-          elevation={2}
+        {/* Modern Header */}
+        <View
+          style={[styles.headerSection, { backgroundColor: palette.primary }]}
         >
-          <View style={styles.avatarContainer}>
-            <View style={{ alignItems: "flex-start" }}>
-              <Text
-                variant="headlineSmall"
-                style={[styles.userName, { color: theme.colors.onSurface }]}
-              >
+          <View style={styles.headerTop}>
+            <View style={{ flex: 1 }}>
+              <Text variant="displaySmall" style={styles.headerName}>
                 {user.name || "Cesar Yahir Alarcon"}
               </Text>
-              <Text
-                variant="bodyMedium"
-                style={[
-                  styles.userEmail,
-                  { color: theme.colors.onSurfaceVariant },
-                ]}
-              >
+              <Text variant="bodyLarge" style={styles.headerEmail}>
                 {user.email || "correo@ejemplo.com"}
               </Text>
+              {user.email_verified_at && (
+                <View style={styles.verifiedBadge}>
+                  <MaterialCommunityIcons
+                    name="check-circle"
+                    size={16}
+                    color={palette.success}
+                  />
+                  <Text variant="bodySmall" style={styles.verifiedText}>
+                    Email Verificado
+                  </Text>
+                </View>
+              )}
             </View>
             <Avatar.Text
-              size={80}
+              size={100}
               label={getInitials(user.name || "Cesar Yahir")}
-              labelStyle={{ color: "#fff" }}
-              style={[styles.avatar, { backgroundColor: theme.colors.primary }]}
+              labelStyle={{
+                color: palette.primary,
+                fontSize: 36,
+                fontWeight: "bold",
+              }}
+              style={[styles.avatar, { backgroundColor: "#fff" }]}
             />
           </View>
-        </Surface>
-
-        {/* Información del perfil */}
-        <Surface
-          style={[styles.infoCard, { backgroundColor: theme.colors.surface }]}
-          elevation={1}
-        >
-          <Text
-            variant="titleMedium"
-            style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
-          >
-            Información del Perfil
-          </Text>
-
-          <View style={styles.infoRow}>
-            <Text
-              variant="bodyMedium"
-              style={[
-                styles.infoLabel,
-                { color: theme.colors.onSurfaceVariant },
-              ]}
-            >
-              ID de Usuario:
-            </Text>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurface }}
-            >
-              {user.id}
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text
-              variant="bodyMedium"
-              style={[
-                styles.infoLabel,
-                { color: theme.colors.onSurfaceVariant },
-              ]}
-            >
-              Fecha de registro:
-            </Text>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurface }}
-            >
-              {formatDate(user.created_at)}
-            </Text>
-          </View>
-
-          <View style={styles.infoRow}>
-            <Text
-              variant="bodyMedium"
-              style={[
-                styles.infoLabel,
-                { color: theme.colors.onSurfaceVariant },
-              ]}
-            >
-              Última actualización:
-            </Text>
-            <Text
-              variant="bodyMedium"
-              style={{ color: theme.colors.onSurface }}
-            >
-              {formatDate(user.updated_at)}
-            </Text>
-          </View>
-
-          {user.email_verified_at && (
-            <>
-              <Divider style={styles.divider} />
-              <View style={styles.infoRow}>
-                <Text
-                  variant="bodyMedium"
-                  style={[
-                    styles.infoLabel,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                >
-                  Email verificado:
-                </Text>
-                <Text
-                  variant="bodyMedium"
-                  style={{ color: theme.colors.primary }}
-                >
-                  ✓ Verificado
-                </Text>
-              </View>
-            </>
-          )}
-        </Surface>
-
-        {/* Card de Compañía Actual */}
-        <View style={{ flexDirection: "row", gap: 16 }}>
-          <Surface
-            style={[
-              styles.infoCard,
-              { backgroundColor: theme.colors.surface, flex: 1 },
-            ]}
-            elevation={1}
-          >
-            <Text
-              variant="titleMedium"
-              style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
-            >
-              Compañía Actual
-            </Text>
-            <View style={styles.infoRow}>
-              <Text
-                variant="bodyMedium"
-                style={[
-                  styles.infoLabel,
-                  { color: theme.colors.onSurfaceVariant },
-                ]}
-              >
-                Nombre: {selectedCompany?.name || "No asignada"}
-              </Text>
-            </View>
-          </Surface>
-          {/* Card de Sucursal Actual */}
-          <Surface
-            style={[
-              styles.infoCard,
-              { backgroundColor: theme.colors.surface, flex: 1 },
-            ]}
-            elevation={1}
-          >
-            <Text
-              variant="titleMedium"
-              style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
-            >
-              Sucursal Actual
-            </Text>
-            <View style={styles.infoRow}>
-              <Text
-                variant="bodyMedium"
-                style={[
-                  styles.infoLabel,
-                  { color: theme.colors.onSurfaceVariant },
-                ]}
-              >
-                Nombre: {selectedLocation?.name || "No asignada"}
-              </Text>
-            </View>
-            {/*    {selectedLocation?.address && (
-              <View style={styles.infoRow}>
-                <Text
-                  variant="bodySmall"
-                  style={[
-                    styles.infoLabel,
-                    { color: theme.colors.onSurfaceVariant },
-                  ]}
-                >
-                  📍 {selectedLocation.address}
-                </Text>
-              </View>
-            )} */}
-          </Surface>
         </View>
 
-        {/* Acciones */}
-        <Surface
+        {/* Quick Stats */}
+        <View style={styles.statsContainer}>
+          <Card
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: palette.success + "15",
+                shadowColor: "transparent",
+                shadowOffset: { width: 0, height: 0 },
+              },
+            ]}
+          >
+            <Card.Content style={styles.statContent}>
+              <MaterialCommunityIcons
+                name="office-building"
+                size={32}
+                color={palette.success}
+              />
+              <Text
+                variant="titleLarge"
+                style={{ color: palette.success, fontWeight: "bold" }}
+              >
+                {selectedCompany?.name || "N/A"}
+              </Text>
+              <Text
+                variant="bodySmall"
+                style={{ color: palette.textSecondary }}
+              >
+                Compañía Activa
+              </Text>
+            </Card.Content>
+          </Card>
+
+          <Card
+            style={[
+              styles.statCard,
+              {
+                backgroundColor: palette.primary + "15",
+              },
+            ]}
+          >
+            <Card.Content style={styles.statContent}>
+              <MaterialCommunityIcons
+                name="map-marker"
+                size={32}
+                color={palette.blue}
+              />
+              <Text
+                variant="titleLarge"
+                style={{
+                  color: palette.blue,
+                  textAlign: "center",
+                  fontWeight: "bold",
+                }}
+              >
+                {selectedLocation?.name || "N/A"}
+              </Text>
+              <Text
+                variant="bodySmall"
+                style={{ color: palette.textSecondary }}
+              >
+                Ubicación Activa
+              </Text>
+            </Card.Content>
+          </Card>
+        </View>
+
+        {/* Account Details */}
+        <Card
+          style={[styles.infoCard, { backgroundColor: palette.primary + "15" }]}
+        >
+          <Card.Content>
+            <Text variant="titleLarge" style={styles.sectionTitle}>
+              Detalles de la Cuenta
+            </Text>
+
+            <View style={styles.detailRow}>
+              <View style={styles.detailIconContainer}>
+                <MaterialCommunityIcons
+                  name="identifier"
+                  size={20}
+                  color={palette.primary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: palette.textSecondary }}
+                >
+                  ID de Usuario
+                </Text>
+                <Text variant="bodyLarge" style={{ fontWeight: "600" }}>
+                  #{user.id}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.detailRow}>
+              <View style={styles.detailIconContainer}>
+                <MaterialCommunityIcons
+                  name="calendar-plus"
+                  size={20}
+                  color={palette.success}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: palette.textSecondary }}
+                >
+                  Fecha de Registro
+                </Text>
+                <Text variant="bodyLarge" style={{ fontWeight: "600" }}>
+                  {formatDate(user.created_at)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.detailRow}>
+              <View style={styles.detailIconContainer}>
+                <MaterialCommunityIcons
+                  name="update"
+                  size={20}
+                  color={palette.info}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: palette.textSecondary }}
+                >
+                  Última Actualización
+                </Text>
+                <Text variant="bodyLarge" style={{ fontWeight: "600" }}>
+                  {formatDate(user.updated_at)}
+                </Text>
+              </View>
+            </View>
+          </Card.Content>
+        </Card>
+
+        {/* Acciones Rápidas */}
+        <Card
           style={[
             styles.actionsCard,
-            { backgroundColor: theme.colors.surface },
+            { backgroundColor: palette.warning + "15" },
           ]}
-          elevation={1}
         >
-          <Text
-            variant="titleMedium"
-            style={[styles.sectionTitle, { color: theme.colors.onSurface }]}
-          >
-            Acciones
-          </Text>
+          <Card.Content>
+            <Text variant="titleLarge" style={styles.sectionTitle}>
+              Acciones Rápidas
+            </Text>
 
-          <Button
-            mode="outlined"
-            onPress={() => {
-              router.push("/(stacks)/selectCompany");
-            }}
-            style={styles.actionButton}
-            icon="building"
-          >
-            Cambiar Compañía
-          </Button>
+            <View style={styles.actionGrid}>
+              <Card
+                style={[
+                  styles.actionItem,
+                  { backgroundColor: palette.primary + "15" },
+                ]}
+                onPress={() => router.push("/(stacks)/selectCompany")}
+              >
+                <Card.Content style={styles.actionItemContent}>
+                  <MaterialCommunityIcons
+                    name="office-building"
+                    size={32}
+                    color={palette.primary}
+                  />
+                  <Text
+                    variant="labelLarge"
+                    style={{
+                      color: palette.primary,
+                      fontWeight: "bold",
+                      marginTop: 8,
+                      textAlign: "center",
+                    }}
+                  >
+                    Cambiar Compañía
+                  </Text>
+                </Card.Content>
+              </Card>
 
-          <Button
-            mode="outlined"
-            onPress={() => {
-              router.push("/(stacks)/selectLocation");
-            }}
-            style={styles.actionButton}
-            icon="map-marker"
-          >
-            Cambiar Ubicación
-          </Button>
+              <Card
+                style={[
+                  styles.actionItem,
+                  { backgroundColor: palette.blue + "15" },
+                ]}
+                onPress={() => router.push("/(stacks)/selectLocation")}
+              >
+                <Card.Content style={styles.actionItemContent}>
+                  <MaterialCommunityIcons
+                    name="map-marker"
+                    size={32}
+                    color={palette.blue}
+                  />
+                  <Text
+                    variant="labelLarge"
+                    style={{
+                      color: palette.blue,
+                      fontWeight: "bold",
+                      marginTop: 8,
+                      textAlign: "center",
+                    }}
+                  >
+                    Cambiar Ubicación
+                  </Text>
+                </Card.Content>
+              </Card>
 
-          <Button
-            mode="outlined"
-            onPress={() => {
-              // TODO: Implementar cambio de contraseña
-              Alert.alert(
-                "Función no disponible",
-                "Esta función se implementará próximamente"
-              );
-            }}
-            style={styles.actionButton}
-            icon="lock-outline"
-          >
-            Cambiar Contraseña
-          </Button>
+              <Card
+                style={[
+                  styles.actionItem,
+                  { backgroundColor: palette.warning + "15" },
+                ]}
+                onPress={() => {
+                  Alert.alert(
+                    "Función no disponible",
+                    "Esta función se implementará próximamente"
+                  );
+                }}
+              >
+                <Card.Content style={styles.actionItemContent}>
+                  <MaterialCommunityIcons
+                    name="lock-reset"
+                    size={32}
+                    color={palette.warning}
+                  />
+                  <Text
+                    variant="labelLarge"
+                    style={{
+                      color: palette.warning,
+                      fontWeight: "bold",
+                      marginTop: 8,
+                      textAlign: "center",
+                    }}
+                  >
+                    Cambiar Contraseña
+                  </Text>
+                </Card.Content>
+              </Card>
 
-          <Button
-            mode="contained"
-            onPress={handleLogout}
-            style={[styles.actionButton, styles.logoutButton]}
-            buttonColor={theme.colors.error}
-            icon="logout"
-            loading={isLoading}
-            disabled={isLoading}
-          >
-            {isLoading ? "Cerrando sesión..." : "Cerrar Sesión"}
-          </Button>
-        </Surface>
+              <Card
+                style={[
+                  styles.actionItem,
+                  { backgroundColor: palette.red + "15" },
+                ]}
+                onPress={handleLogout}
+                disabled={isLoading}
+              >
+                <Card.Content style={styles.actionItemContent}>
+                  <MaterialCommunityIcons
+                    name="logout"
+                    size={32}
+                    color={palette.red}
+                  />
+                  <Text
+                    variant="labelLarge"
+                    style={{
+                      color: palette.red,
+                      fontWeight: "bold",
+                      marginTop: 8,
+                      textAlign: "center",
+                    }}
+                  >
+                    {isLoading ? "Saliendo..." : "Cerrar Sesión"}
+                  </Text>
+                </Card.Content>
+              </Card>
+            </View>
+          </Card.Content>
+        </Card>
 
         {/* Footer */}
         <View style={styles.footer}>
@@ -374,7 +428,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 16,
     paddingBottom: 32,
   },
   loadingContainer: {
@@ -391,58 +444,115 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
   },
-  headerCard: {
-    borderRadius: 12,
+  headerSection: {
+    paddingTop: 40,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
     marginBottom: 16,
-    padding: 24,
   },
-  avatarContainer: {
+  headerTop: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 16,
+    gap: 20,
   },
-  avatar: {
-    marginBottom: 16,
-  },
-  userName: {
-    fontWeight: "600",
+  headerName: {
+    color: "#fff",
+    fontWeight: "bold",
     marginBottom: 4,
   },
-  userEmail: {
-    textAlign: "center",
+  headerEmail: {
+    color: "rgba(255,255,255,0.9)",
+    marginBottom: 8,
   },
-  infoCard: {
-    borderRadius: 12,
-    marginBottom: 16,
-    padding: 16,
-  },
-  actionsCard: {
-    borderRadius: 12,
-    marginBottom: 16,
-    padding: 16,
-  },
-  sectionTitle: {
-    fontWeight: "600",
-    marginBottom: 16,
-  },
-  infoRow: {
+  verifiedBadge: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    alignSelf: "flex-start",
+  },
+  verifiedText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  avatar: {
+    borderWidth: 4,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  statsContainer: {
+    flexDirection: "row",
+    gap: 12,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 0 },
+    shadowColor: "transparent",
+  },
+  statContent: {
+    alignItems: "center",
+    gap: 8,
     paddingVertical: 8,
   },
-  infoLabel: {
+  infoCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 16,
+    backgroundColor: palette.red,
+    shadowOffset: { width: 0, height: 0 },
+    shadowColor: "transparent",
+  },
+  sectionTitle: {
+    fontWeight: "bold",
+    marginBottom: 20,
+    color: palette.text,
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.surface,
+  },
+  detailIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: palette.surface,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  actionsCard: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 16,
+    backgroundColor: palette.card,
+    shadowOffset: { width: 0, height: 0 },
+    shadowColor: "transparent",
+  },
+  actionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  actionItem: {
     flex: 1,
+    minWidth: "45%",
+    borderRadius: 12,
+    shadowOffset: { width: 0, height: 0 },
+    shadowColor: "transparent",
   },
-  divider: {
-    marginVertical: 8,
-  },
-  actionButton: {
-    marginBottom: 12,
-  },
-  logoutButton: {
-    marginTop: 8,
+  actionItemContent: {
+    alignItems: "center",
+    paddingVertical: 20,
   },
   footer: {
     alignItems: "center",

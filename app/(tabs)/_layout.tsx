@@ -80,13 +80,13 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="administration/index"
+        name="administration"
         options={{
           title: "Administración",
           tabBarIcon: ({ color, focused }) => (
             <Appbar.Action icon="cog" iconColor={color} size={24} />
           ),
-          headerShown: true,
+          headerShown: false,
           header: ({ options, route }) => (
             <AppBar
               title={options.title || route.name}

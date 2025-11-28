@@ -5,7 +5,9 @@ import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
 import { AlertsProvider } from "@/hooks/useAlerts";
+import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import axios from "@/utils/axios";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import React, { useRef } from "react";
@@ -44,6 +46,10 @@ export default function InventoryIndex() {
   const { selectedLocation, isLoadingLocations } = useSelectedLocation();
   const modalRef = useRef<AppModalRef>(null);
   const formRef = useRef<AppFormRef<any>>(null);
+  const { downloadPdfFromApi, isDownloading } = usePdfDownload({
+    onSuccess: (uri) => console.log("PDF abierto exitosamente:", uri),
+    onError: (error) => console.error("Error al descargar PDF:", error),
+  });
 
   if (isLoadingLocations) {
     return <Text>Cargando...</Text>;
@@ -184,6 +190,30 @@ export default function InventoryIndex() {
           onEdit(item) {
             router.push(`/home/inventory/${item.id}/edit` as any);
           },
+          customActions: [
+            {
+              title: isDownloading ? "Descargando..." : "Descargar PDF",
+              icon: "file-pdf-box",
+              color: palette.error,
+              show: (item: App.Entities.InventoryCount.InventoryCount) =>
+                item.status === "completed",
+              onPress: async (
+                item: App.Entities.InventoryCount.InventoryCount
+              ) => {
+                // Primero obtener la URL firmada
+                const response = await axios.get(
+                  `/auth/admin/inventory-counts/${item.id}/pdf-url`
+                );
+
+                if (response.data?.url) {
+                  // Descargar usando la URL firmada (pública)
+                  await downloadPdfFromApi(response.data.url, {
+                    fileName: `inventario_${item.id}.pdf`,
+                  });
+                }
+              },
+            },
+          ],
         }}
       />
 

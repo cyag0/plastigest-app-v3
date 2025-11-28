@@ -1,11 +1,14 @@
+import AppBar from "@/components/App/AppBar";
 import AppList from "@/components/App/AppList/AppList";
+import PurchaseStats from "@/components/Dashboard/PurchaseStats";
 import palette from "@/constants/palette";
 import { useAsync } from "@/hooks/AHooks";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
-import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Chip, Text } from "react-native-paper";
+import React, { useMemo, useState } from "react";
+import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Text } from "react-native-paper";
+import { SceneMap, TabView } from "react-native-tab-view";
 
 // Helper function to get status configuration
 const getStatusConfig = (status: string) => {
@@ -13,167 +16,244 @@ const getStatusConfig = (status: string) => {
     case "draft":
       return {
         label: "BORRADOR",
-        icon: "📝",
-        backgroundColor: "#FEF3C7",
-        borderColor: "#F59E0B",
-        textColor: "#92400E",
+        backgroundColor: palette.warning + "20",
+        borderColor: palette.warning,
+        textColor: palette.textSecondary,
       };
     case "ordered":
       return {
         label: "PEDIDO",
-        icon: "📋",
-        backgroundColor: "#DBEAFE",
-        borderColor: "#3B82F6",
-        textColor: "#1E40AF",
+        backgroundColor: palette.info + "20",
+        borderColor: palette.accent,
+        textColor: palette.textSecondary,
       };
     case "in_transit":
       return {
         label: "EN TRANSPORTE",
-        icon: "🚚",
-        backgroundColor: "#EDE9FE",
-        borderColor: "#8B5CF6",
-        textColor: "#5B21B6",
+        backgroundColor: palette.accent + "20",
+        borderColor: palette.accent,
+        textColor: palette.textSecondary,
       };
     case "received":
       return {
         label: "RECIBIDO",
-        icon: "📦",
-        backgroundColor: "#D1FAE5",
-        borderColor: "#10B981",
-        textColor: "#065F46",
+        backgroundColor: palette.success + "20",
+        borderColor: palette.success,
+        textColor: palette.textSecondary,
       };
     default:
       return {
         label: "DESCONOCIDO",
-        icon: "❓",
-        backgroundColor: "#F3F4F6",
-        borderColor: "#9CA3AF",
-        textColor: "#374151",
+        backgroundColor: palette.surface,
+        borderColor: palette.border,
+        textColor: palette.textSecondary,
       };
   }
 };
 
 export default function PurchasesIndex() {
   const router = useRouter();
+  const layout = useWindowDimensions();
+  const [index, setIndex] = useState(0);
+  const [routes] = useState([
+    { key: "list", title: "Lista de Compras" },
+    { key: "stats", title: "Estadísticas" },
+  ]);
 
   useAsync(async () => {
-    console.log("Loading purchases...");
-
-    const response = await Services.purchases.index({
-      all: true,
-    });
-
+    const response = await Services.purchases.index({ all: true });
     console.log("Purchases loaded:", response.data);
   });
 
-  return (
-    <>
-      <AppList
-        title="Compras"
-        service={Services.purchases}
-        renderCard={({ item }: { item: App.Entities.Purchase }) => {
-          const statusConfig = getStatusConfig(item.status);
+  const renderListRoute = useMemo(
+    () => () =>
+      (
+        <AppList
+          title="Compras"
+          service={Services.purchases}
+          showAppBar={false}
+          renderCard={({ item }: { item: any }) => {
+            const statusConfig = getStatusConfig(item.status);
 
-          return {
-            title: (
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <Text variant="titleMedium" style={{ color: palette.error }}>
-                  Compra #{item.document_number || item.id}
-                </Text>
-                <Chip
-                  mode="flat"
-                  style={[
-                    styles.statusChip,
-                    {
-                      backgroundColor: statusConfig.backgroundColor,
-                      borderColor: statusConfig.borderColor,
-                    },
-                  ]}
-                  textStyle={[
-                    styles.statusText,
-                    {
-                      color: statusConfig.textColor,
-                    },
-                  ]}
-                  compact
-                >
-                  {statusConfig.label}
-                </Chip>
-              </View>
-            ),
-            description: (
-              <>
-                <Text variant="bodyMedium" numberOfLines={2}>
-                  {item.supplier_name
-                    ? `Proveedor: ${item.supplier_name}`
-                    : "Sin proveedor especificado"}
-                </Text>
-                {item.products_summary && (
-                  <Text numberOfLines={1} style={{ marginTop: 4 }}>
-                    Productos: {item.products_summary}
-                  </Text>
-                )}
-                <View style={{ marginTop: 8 }}>
-                  <Text
-                    style={{
-                      fontSize: 16,
-                      fontWeight: "bold",
-                      color: palette.primary,
-                    }}
+            return {
+              title: `Compra #${item.document_number || item.id}`,
+              description: `Proveedor: ${
+                item.supplier_name || "Sin proveedor"
+              }`,
+              right: (
+                <View style={styles.rightContent}>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      {
+                        backgroundColor: statusConfig.backgroundColor,
+                        borderColor: statusConfig.borderColor,
+                      },
+                    ]}
                   >
-                    $
-                    {parseFloat(item.total_amount?.toString() || "0").toFixed(
-                      2
-                    )}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.statusText,
+                        { color: statusConfig.textColor },
+                      ]}
+                    >
+                      {statusConfig.label}
+                    </Text>
+                  </View>
                 </View>
-              </>
-            ),
-          };
-        }}
-        onItemPress={(entity: any) => {
-          router.push(`/(tabs)/home/purchases/${entity.id}` as any);
-        }}
-        onPressCreate={() => {
-          router.push("/(tabs)/home/purchases/form" as any);
-        }}
-        fabLabel="Nueva Compra"
+              ),
+              bottom: [
+                {
+                  label: "Fecha",
+                  value: new Date(item.created_at).toLocaleDateString("es-PE", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  }),
+                },
+                {
+                  label: "Productos",
+                  value: `${item.products_count || 0} items`,
+                },
+              ],
+            };
+          }}
+          onItemPress={(entity: any) => {
+            router.push(`/(tabs)/home/purchases/${entity.id}` as any);
+          }}
+          onPressCreate={() => {
+            router.push("/(tabs)/home/purchases/form" as any);
+          }}
+          fabLabel="Nueva Compra"
+        />
+      ),
+    [router]
+  );
+
+  const renderStatsRoute = useMemo(() => () => <PurchaseStats />, []);
+
+  const renderScene = useMemo(
+    () =>
+      SceneMap({
+        list: renderListRoute,
+        stats: renderStatsRoute,
+      }),
+    [renderListRoute, renderStatsRoute]
+  );
+
+  return (
+    <View style={styles.container}>
+      <AppBar
+        title={"Compras"}
+        showBackButton={true}
+        showNotificationButton={false}
+        showProfileButton={false}
+        showSearchButton={false}
       />
-    </>
+
+      {/* Tabs Header */}
+      <View style={styles.tabsContainer}>
+        <Pressable
+          style={[styles.tab, index === 0 && styles.tabActive]}
+          onPress={() => setIndex(0)}
+        >
+          <Text style={[styles.tabText, index === 0 && styles.tabTextActive]}>
+            Lista de Compras
+          </Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tab, index === 1 && styles.tabActive]}
+          onPress={() => setIndex(1)}
+        >
+          <Text style={[styles.tabText, index === 1 && styles.tabTextActive]}>
+            Estadísticas
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* Tab View */}
+      <TabView
+        navigationState={{ index, routes }}
+        renderScene={renderScene}
+        onIndexChange={setIndex}
+        initialLayout={{ width: layout.width }}
+        renderTabBar={() => null}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  statusChip: {
-    borderWidth: 1,
+  container: {
+    flex: 1,
+    backgroundColor: palette.background,
   },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "bold",
+  tabsContainer: {
+    flexDirection: "row",
+    backgroundColor: palette.surface,
+    borderBottomWidth: 2,
+    borderBottomColor: palette.border,
   },
-  bottomContent: {
+  tab: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    borderBottomWidth: 3,
+    borderBottomColor: "transparent",
+  },
+  tabActive: {
+    borderBottomColor: palette.error,
+  },
+  tabText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: palette.textSecondary,
+  },
+  tabTextActive: {
+    color: palette.error,
+  },
+  rightContent: {
+    alignItems: "flex-end",
+    gap: 8,
+  },
+  cardTitle: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
+    alignItems: "center",
+    gap: 8,
   },
-  locationText: {
-    fontSize: 12,
-    color: "#666",
+  cardTitleText: {
+    color: palette.text,
+    fontWeight: "600",
+    fontSize: 14,
     flex: 1,
   },
-  itemsText: {
+  cardDescription: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  supplierText: {
+    color: palette.textSecondary,
     fontSize: 12,
-    color: "#666",
     flex: 1,
-    textAlign: "right",
+  },
+  amountText: {
+    color: palette.primary,
+    fontWeight: "700",
+    fontSize: 16,
+  },
+  statusBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: "bold",
   },
 });

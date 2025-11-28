@@ -19,7 +19,6 @@ import {
   Menu,
   Searchbar,
   Text,
-  IconButton,
 } from "react-native-paper";
 import AppListFilterBar, { FilterConfig } from "./AppListFilter";
 
@@ -49,6 +48,13 @@ interface ItemMenuProps<T> {
   showView?: boolean;
   showEdit?: boolean;
   showDelete?: boolean;
+  customActions?: Array<{
+    title: string;
+    icon: string;
+    onPress: (item: T) => void;
+    color?: string;
+    show?: boolean | ((item: T) => boolean);
+  }>;
 }
 
 function ItemMenu<T>({
@@ -59,6 +65,7 @@ function ItemMenu<T>({
   showView = true,
   showEdit = true,
   showDelete = true,
+  customActions = [],
 }: ItemMenuProps<T>) {
   const [visible, setVisible] = useState(false);
 
@@ -79,6 +86,30 @@ function ItemMenu<T>({
         backgroundColor: palette.background,
       }}
     >
+      {customActions.map((action, index) => {
+        const shouldShow =
+          typeof action.show === "boolean"
+            ? action.show
+            : typeof action.show === "function"
+            ? action.show(item)
+            : true;
+
+        if (!shouldShow) return null;
+
+        return (
+          <Menu.Item
+            key={index}
+            onPress={() => {
+              setVisible(false);
+              action.onPress(item);
+            }}
+            title={action.title}
+            leadingIcon={action.icon}
+            titleStyle={{ color: action.color || palette.text }}
+            style={{ backgroundColor: palette.background }}
+          />
+        );
+      })}
       {showView && (
         <Menu.Item
           onPress={() => {
@@ -224,12 +255,22 @@ interface AppListProps<T> {
   menu?: {
     onEdit?: (item: T) => void;
     onDelete?: (item: T) => void;
+    onShow?: (item: T) => void;
+    onCreate?: () => void;
     showView?: ((item: T) => boolean) | boolean;
     showEdit?: ((item: T) => boolean) | boolean;
     showDelete?: ((item: T) => boolean) | boolean;
+    customActions?: Array<{
+      title: string;
+      icon: string;
+      onPress: (item: T) => void;
+      color?: string;
+      show?: boolean | ((item: T) => boolean);
+    }>;
   };
 
   showDivider?: boolean;
+  showAppBar?: boolean;
 }
 
 function AppList<T extends { id: number | string }>({
@@ -250,6 +291,7 @@ function AppList<T extends { id: number | string }>({
   onItemPress,
   menu,
   showDivider = true,
+  showAppBar = true,
 }: AppListProps<T>) {
   // Estados
   const [data, setData] = useState<T[]>([]);
@@ -335,7 +377,9 @@ function AppList<T extends { id: number | string }>({
   };
 
   const handleItemPress = (item: T) => {
-    if (onItemPress) {
+    if (menu?.onShow) {
+      menu.onShow(item);
+    } else if (onItemPress) {
       onItemPress(item);
     } else if (detailRoute) {
       const route = detailRoute(item);
@@ -352,6 +396,14 @@ function AppList<T extends { id: number | string }>({
       menu.onEdit(item);
     } else {
       handleItemPress(item);
+    }
+  };
+
+  const handleCreate = () => {
+    if (menu?.onCreate) {
+      menu.onCreate();
+    } else if (onPressCreate) {
+      onPressCreate();
     }
   };
 
@@ -388,13 +440,15 @@ function AppList<T extends { id: number | string }>({
     return (
       <View style={styles.container}>
         {/* AppBar para estado de loading */}
-        <AppBar
-          title={title}
-          showBackButton={true}
-          showSearchButton={false}
-          showNotificationButton={false}
-          showProfileButton={false}
-        />
+        {showAppBar && (
+          <AppBar
+            title={title}
+            showBackButton={true}
+            showSearchButton={false}
+            showNotificationButton={false}
+            showProfileButton={false}
+          />
+        )}
 
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={palette.primary} />
@@ -404,53 +458,27 @@ function AppList<T extends { id: number | string }>({
     );
   }
 
-  if (!loading && data.length === 0) {
-    return (
-      <View style={styles.container}>
-        {/* AppBar para estado vacío */}
+  return (
+    <View style={styles.container}>
+      {/* AppBar personalizado */}
+      {showAppBar && (
         <AppBar
           title={title}
           showBackButton={true}
-          showSearchButton={false}
           showNotificationButton={false}
           showProfileButton={false}
+          onSearchPress={() => setShowSearch(!showSearch)}
           rightActions={
-            showFab && onPressCreate ? (
+            showFab && (onPressCreate || menu?.onCreate) ? (
               <AppBar.Action
                 icon="plus"
                 iconColor={palette.error}
-                onPress={onPressCreate}
+                onPress={handleCreate}
               />
             ) : undefined
           }
         />
-
-        <View style={styles.centerContainer}>
-          <Text style={styles.emptyText}>{emptyMessage}</Text>
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <View style={styles.container}>
-      {/* AppBar personalizado */}
-      <AppBar
-        title={title}
-        showBackButton={true}
-        showNotificationButton={false}
-        showProfileButton={false}
-        onSearchPress={() => setShowSearch(!showSearch)}
-        rightActions={
-          showFab && onPressCreate ? (
-            <AppBar.Action
-              icon="plus"
-              iconColor={palette.error}
-              onPress={onPressCreate}
-            />
-          ) : undefined
-        }
-      />
+      )}
 
       <Searchbar
         placeholder={searchPlaceholder}
@@ -478,7 +506,7 @@ function AppList<T extends { id: number | string }>({
           />
         }
       >
-        {data.map((item, index) => {
+        {(data || []).map((item, index) => {
           const cardProps = renderCard({ item, index });
 
           const showView =
@@ -544,6 +572,7 @@ function AppList<T extends { id: number | string }>({
                     showView={showView}
                     showEdit={showEdit}
                     showDelete={showDelete}
+                    customActions={menu?.customActions}
                   />
                 </View>
               </AppListCard>
@@ -649,7 +678,7 @@ const styles = StyleSheet.create({
     backgroundColor: palette.background,
   },
   scrollContainer: {
-    padding: 8,
+    padding: 16,
     paddingBottom: 100,
     gap: 8,
   },
@@ -728,6 +757,6 @@ AppList.Title = AppListTitle;
 AppList.Description = AppListDescription;
 
 // Exportar tipos y componentes
+export type { FilterConfig, FilterOption, FilterType } from "./AppListFilter";
 export { AppListFilterBar };
-export type { FilterConfig, FilterType, FilterOption } from "./AppListFilter";
 export default AppList;

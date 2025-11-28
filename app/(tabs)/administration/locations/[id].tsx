@@ -40,7 +40,7 @@ export default function LocationDetailScreen() {
   };
 
   const handleEdit = () => {
-    router.push(`/(tabs)/home/locations/form?id=${locationId}`);
+    router.push(`/(tabs)/administration/locations/form?id=${locationId}`);
   };
 
   const handleDelete = () => {

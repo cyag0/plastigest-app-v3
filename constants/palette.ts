@@ -16,6 +16,7 @@ const palette = {
   textSecondary: "#725C3A", // Carob
   border: "#E5E0D8", // Almond
   red: "#A65A4D", // Terracotta Red
+  blue: "#8B9FA8", // Sage Blue
 };
 
 export default palette;

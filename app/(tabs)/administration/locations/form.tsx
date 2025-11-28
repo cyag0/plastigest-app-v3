@@ -1,4 +1,3 @@
-import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
@@ -141,7 +140,7 @@ export default function LocationFormScreen(props: LocationFormProps) {
       </View>
 
       {/* Estado */}
-      <View style={styles.section}>
+      {/* <View style={styles.section}>
         <Text variant="titleMedium" style={styles.sectionTitle}>
           Estado
         </Text>
@@ -156,18 +155,8 @@ export default function LocationFormScreen(props: LocationFormProps) {
             </Text>
           </View>
           <FormCheckBox name="is_active" label="" text="Sucursal activa" />
-          {/* <Switch
-            value={formInstance.values.is_active}
-            onValueChange={(value) => {
-              formInstance.setFieldValue("is_active", value);
-            }}
-            trackColor={{
-              false: palette.border,
-              true: palette.primary,
-            }}
-          /> */}
         </View>
-      </View>
+      </View> */}
     </AppForm>
   );
 }

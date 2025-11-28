@@ -6,13 +6,16 @@ import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import { FormUpload } from "@/components/Form/AppUpload";
 import IngredientsTable from "@/components/Form/IngredientsTable/IngredientsTable";
+import BarcodeScanner from "@/components/Form/BarcodeScanner";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFormikContext } from "formik";
-import React, { useEffect, useRef } from "react";
-import { Text, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { IconButton } from "react-native-paper";
+import palette from "@/constants/palette";
 
 interface ProductFormData {
   name: string;
@@ -51,6 +54,7 @@ export default function ProductsForm(props: ProductsFormProps) {
     props.id || (params.id ? parseInt(params.id as string) : undefined);
   const isEditing = !!productId;
   const formRef = useRef<AppFormRef<ProductFormData>>(null);
+  const [scannerVisible, setScannerVisible] = useState(false);
 
   const { company } = useSelectedCompany();
   const { selectedLocation } = useSelectedLocation();
@@ -106,11 +110,36 @@ export default function ProductsForm(props: ProductsFormProps) {
         numberOfLines={3}
       />
 
-      <FormInput
-        name="code"
-        label="Código del Producto"
-        placeholder="Ej: BP-2030"
-        required
+      {/* Código del Producto con Escáner */}
+      <View style={styles.codeInputContainer}>
+        <View style={styles.codeInput}>
+          <FormInput
+            name="code"
+            label="Código del Producto"
+            placeholder="Ej: BP-2030"
+            required
+            editable={false}
+            //@ts-ignore
+            readonly
+          />
+        </View>
+        <IconButton
+          icon="barcode-scan"
+          mode="contained"
+          containerColor={palette.primary}
+          iconColor="#fff"
+          size={24}
+          onPress={() => setScannerVisible(true)}
+          style={styles.scanButton}
+        />
+      </View>
+
+      <BarcodeScanner
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onScanned={(code) => {
+          formRef.current?.setFieldValue("code", code);
+        }}
       />
 
       <FormInput
@@ -253,3 +282,18 @@ function Test() {
   console.log("Form values:", form.values);
   return null;
 }
+
+const styles = StyleSheet.create({
+  codeInputContainer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    marginBottom: 16,
+  },
+  codeInput: {
+    flex: 1,
+  },
+  scanButton: {
+    marginBottom: 8,
+  },
+});

@@ -13,6 +13,7 @@ export default function _layout() {
         name="index"
         options={{
           headerShown: true,
+          title: "Inicio",
           header: ({ options, route }) => (
             <AppBar
               title={options.title || route.name}

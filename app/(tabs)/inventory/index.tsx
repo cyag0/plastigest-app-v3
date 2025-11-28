@@ -1,4 +1,5 @@
 import palette from "@/constants/palette";
+import Services from "@/utils/services";
 import { Href, useRouter } from "expo-router";
 import React from "react";
 import {
@@ -57,7 +58,7 @@ export default function InventoryScreen() {
       title: "Ver Inventario",
       description: "Consulta el stock actual de todos los productos",
       icon: "package-variant",
-      route: "/(tabs)/home/products",
+      route: "/(tabs)/inventory/products",
       color: palette.primary,
     },
     {
@@ -73,7 +74,7 @@ export default function InventoryScreen() {
       title: "Ajustes",
       description: "Registra ajustes de inventario por mermas o pérdidas",
       icon: "tune",
-      route: "/(tabs)/home/adjustment",
+      route: "/(tabs)/inventory/adjustment",
       color: palette.warning,
     },
     {
@@ -81,7 +82,7 @@ export default function InventoryScreen() {
       title: "Transferencias",
       description: "Mueve inventario entre sucursales",
       icon: "truck-fast",
-      route: "/(tabs)/home/locations",
+      route: "/(tabs)/inventory/products",
       color: palette.accent,
     },
     {
@@ -89,7 +90,7 @@ export default function InventoryScreen() {
       title: "Stock Bajo",
       description: "Productos que necesitan reposición",
       icon: "alert-circle",
-      route: "/(tabs)/home/products?filter=low_stock",
+      route: "/(tabs)/inventory/products?filter=low_stock",
       color: palette.error,
       badge: stats?.low_stock_products || 0,
     },
@@ -97,28 +98,12 @@ export default function InventoryScreen() {
 
   const loadData = async () => {
     try {
-      // Simulación de datos - reemplazar con llamada real a la API
-      const mockStats: InventoryStats = {
-        total_products: 150,
-        total_stock: 2850,
-        inventory_value: 285000,
-        low_stock_products: 12,
-        out_of_stock_products: 3,
-        products_by_category: {
-          "Materia Prima": 45,
-          "Producto Terminado": 65,
-          Empaques: 25,
-          Otros: 15,
-        },
-        stock_health: {
-          optimal: 70,
-          low: 15,
-          critical: 10,
-          out: 5,
-        },
-      };
+      // Llamada real a la API
+      const response = await Services.reports.inventoryStats({
+        scope: "location", // Cambiar a "general" para ver todas las sucursales
+      });
 
-      setStats(mockStats);
+      setStats(response.data.data);
     } catch (error) {
       console.error("Error loading inventory stats:", error);
     } finally {
@@ -342,9 +327,11 @@ export default function InventoryScreen() {
                     style={[
                       styles.chartCard,
                       {
-                        backgroundColor: item.color + "15",
+                        backgroundColor: palette.card,
                         borderWidth: 2,
                         borderColor: item.color + "30",
+                        boxShadow: "transparent",
+                        shadowColor: "transparent",
                       },
                     ]}
                   >
@@ -359,9 +346,9 @@ export default function InventoryScreen() {
                         strokeWidth={16}
                         radius={32}
                         chartConfig={{
-                          backgroundColor: "transparent",
-                          backgroundGradientFrom: "transparent",
-                          backgroundGradientTo: "transparent",
+                          backgroundColor: palette.card,
+                          backgroundGradientFrom: palette.card,
+                          backgroundGradientTo: palette.card,
                           color: (opacity = 1, index = 0) => {
                             const colors = [
                               palette.success,
@@ -388,6 +375,7 @@ export default function InventoryScreen() {
                         backgroundColor: item.color + "15",
                         borderWidth: 2,
                         borderColor: item.color + "30",
+                        shadowColor: "transparent",
                       },
                     ]}
                   >
@@ -413,7 +401,7 @@ export default function InventoryScreen() {
                 );
               }
 
-              return null;
+              return <View />;
             }}
           />
         </View>

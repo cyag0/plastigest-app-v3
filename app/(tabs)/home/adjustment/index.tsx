@@ -3,14 +3,20 @@ import palette from "@/constants/palette";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { Href, useRouter } from "expo-router";
 import React from "react";
 import { View } from "react-native";
 import { Text } from "react-native-paper";
 
-export default function AdjustmentsIndex() {
+interface AdjustmentsIndexProps {
+  route?: Href;
+}
+
+export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
   const router = useRouter();
   const { selectedLocation, isLoadingLocations } = useSelectedLocation();
+
+  const route: Href = props.route || "/(tabs)/home/adjustment";
 
   if (isLoadingLocations) {
     return <Text>Cargando...</Text>;
@@ -23,7 +29,7 @@ export default function AdjustmentsIndex() {
       defaultFilters={{
         location_id: selectedLocation?.id,
       }}
-      onPressCreate={() => router.push("/home/adjustment/form")}
+      onPressCreate={() => router.push(`${route}/form` as any)}
       renderCard={({ item }: { item: Adjustment }) => {
         const isIncrease = item.movement_type === "entry";
 
@@ -69,7 +75,7 @@ export default function AdjustmentsIndex() {
           ],
         };
       }}
-      onItemPress={(item) => router.push(`/home/adjustment/${item.id}` as any)}
+      onItemPress={(item) => router.push(`${route}/${item.id}` as any)}
       searchPlaceholder="Buscar ajustes..."
       emptyMessage="No hay ajustes registrados"
       menu={{
