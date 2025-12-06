@@ -282,7 +282,7 @@ export default function SelectCompanyScreen() {
               mode="contained"
               onPress={() => handleSelectCompany(selectedCompany)}
               style={styles.actionButton}
-              icon="building"
+              icon="office-building"
               loading={loading}
               disabled={loading}
             >

@@ -11,6 +11,8 @@ import {
   Surface,
   Text,
   useTheme,
+  Portal,
+  Dialog,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -19,25 +21,16 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout, isLoading, selectedCompany } = useAuth();
   const { selectedLocation } = useSelectedLocation();
+  const [showLogoutDialog, setShowLogoutDialog] = React.useState(false);
 
   const handleLogout = () => {
     console.log("Logout initiated");
+    setShowLogoutDialog(true);
+  };
 
-    Alert.alert(
-      "Cerrar Sesión",
-      "¿Estás seguro de que quieres cerrar sesión?",
-      [
-        {
-          text: "Cancelar",
-          style: "cancel",
-        },
-        {
-          text: "Cerrar Sesión",
-          style: "destructive",
-          onPress: logout,
-        },
-      ]
-    );
+  const confirmLogout = async () => {
+    setShowLogoutDialog(false);
+    await logout();
   };
 
   const formatDate = (dateString: string) => {
@@ -308,7 +301,7 @@ export default function ProfileScreen() {
               router.push("/(stacks)/selectCompany");
             }}
             style={styles.actionButton}
-            icon="building"
+            icon="office-building"
           >
             Cambiar Compañía
           </Button>
@@ -362,6 +355,22 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Diálogo de confirmación de logout */}
+      <Portal>
+        <Dialog visible={showLogoutDialog} onDismiss={() => setShowLogoutDialog(false)}>
+          <Dialog.Title>Cerrar Sesión</Dialog.Title>
+          <Dialog.Content>
+            <Text>¿Estás seguro de que quieres cerrar sesión?</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowLogoutDialog(false)}>Cancelar</Button>
+            <Button onPress={confirmLogout} textColor={theme.colors.error}>
+              Cerrar Sesión
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </SafeAreaView>
   );
 }

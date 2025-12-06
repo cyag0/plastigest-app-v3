@@ -227,7 +227,7 @@ export default function SelectCompanyScreen() {
             style={styles.actionButton}
             buttonColor={palette.primary}
             textColor="#fff"
-            icon="building"
+            icon="office-building"
             loading={loading}
             disabled={loading}
           >

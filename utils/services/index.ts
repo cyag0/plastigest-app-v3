@@ -1,6 +1,7 @@
 import admin from "./admin/admin";
 import { createCrudService } from "./crudService";
 import saleService from "./saleService";
+import transferService from "./transferService";
 
 const movements = {
   adjustments: createCrudService<App.Entities.Adjustment.Adjustment>(
@@ -39,6 +40,7 @@ const Services = {
     unidades: createCrudService<any>("/auth/admin/units"),
     customerNotes: createCrudService<any>("/auth/admin/customer-notes"),
   },
+  transfers: transferService,
 };
 
 export default Services;

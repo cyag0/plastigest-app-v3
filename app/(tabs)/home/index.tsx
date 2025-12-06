@@ -43,13 +43,33 @@ const movimientos: ResourceProps[] = [
     icon: require("../../../assets/images/dashboard/sales.png"),
   },
   {
-    key: "transferencias",
-    label: "Transferencias",
+    key: "peticiones",
+    label: "Peticiones",
     description:
-      "Mueve inventario entre sucursales o almacenes de la empresa de forma controlada.",
+      "Solicita productos desde sucursales que necesitan inventario.",
     color: "#fff",
-    background: palette.textSecondary,
-    link: "/(tabs)/home/locations",
+    background: "#FF9800",
+    link: "/(tabs)/home/petitions",
+    icon: require("../../../assets/images/dashboard/transfer.png"),
+  },
+  {
+    key: "envios",
+    label: "Envíos",
+    description:
+      "Prepara y despacha productos aprobados hacia otras ubicaciones.",
+    color: "#fff",
+    background: "#4CAF50",
+    link: "/(tabs)/home/shipments",
+    icon: require("../../../assets/images/dashboard/transfer.png"),
+  },
+  {
+    key: "recibos",
+    label: "Recibos",
+    description:
+      "Confirma la recepción de productos y registra las entregas recibidas.",
+    color: "#fff",
+    background: "#2196F3",
+    link: "/(tabs)/home/receipts",
     icon: require("../../../assets/images/dashboard/transfer.png"),
   },
   {

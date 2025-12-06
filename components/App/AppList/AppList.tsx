@@ -198,6 +198,7 @@ interface AppListProps<T> {
 
   // Props para filtros adicionales
   defaultFilters?: Partial<IndexParams>;
+  filtersComponent?: React.ReactNode;
 
   // Props para personalizar comportamiento
   refreshOnFocus?: boolean;
@@ -225,6 +226,7 @@ function AppList<T extends { id: number | string }>({
   searchPlaceholder = "Buscar...",
   emptyMessage = "No hay elementos para mostrar",
   defaultFilters = {},
+  filtersComponent,
   refreshOnFocus = true,
   showFab = true,
   fabLabel = "Agregar",
@@ -437,7 +439,7 @@ function AppList<T extends { id: number | string }>({
         mode="bar"
         onClearIconPress={() => setSearchQuery("")}
       />
-      <Filters />
+      {filtersComponent || <Filters />}
 
       <ScrollView
         contentContainerStyle={styles.scrollContainer}
@@ -453,9 +455,8 @@ function AppList<T extends { id: number | string }>({
           const cardProps = renderCard({ item, index });
 
           return (
-            <>
-              <AppListCard
-                key={item.id} /* onPress={() => handleItemPress(item)} */
+            <React.Fragment key={item.id}>
+              <AppListCard /* onPress={() => handleItemPress(item)} */
               >
                 <View
                   style={[
@@ -566,7 +567,7 @@ function AppList<T extends { id: number | string }>({
                   </AppList.Description>
                 </View>
               )}
-            </>
+            </React.Fragment>
           );
         })}
       </ScrollView>
