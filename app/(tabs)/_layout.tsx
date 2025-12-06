@@ -3,6 +3,7 @@ import React from "react";
 import { Platform } from "react-native";
 import { Appbar } from "react-native-paper";
 
+import AppBar from "@/components/App/AppBar";
 import palette from "@/constants/palette";
 import { useColorScheme } from "@/hooks/useColorScheme";
 
@@ -33,16 +34,36 @@ export default function TabLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: "Dashboard",
+          title: "Inicio",
           tabBarIcon: ({ color, focused }) => (
             <Appbar.Action icon="home" iconColor={color} size={24} />
           ),
         }}
       />
+
       <Tabs.Screen
-        name="explore"
+        name="inventory"
         options={{
-          title: "Reportes",
+          title: "Inventario",
+          tabBarIcon: ({ color, focused }) => (
+            <Appbar.Action icon="archive" iconColor={color} size={24} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="reports"
+        options={{
+          title: "Dashboard",
+          headerShown: true,
+          header: ({ options, route }) => (
+            <AppBar
+              title={options.title || route.name}
+              onSearchPress={() => console.log("Search pressed")}
+              onNotificationPress={() => console.log("Notifications pressed")}
+              onProfilePress={() => console.log("Profile pressed")}
+            />
+          ),
           tabBarIcon: ({ color, focused }) => (
             <Appbar.Action icon="compass-outline" iconColor={color} size={24} />
           ),
@@ -54,6 +75,25 @@ export default function TabLayout() {
           title: "Compras",
           tabBarIcon: ({ color, focused }) => (
             <Appbar.Action icon="cart" iconColor={color} size={24} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="administration"
+        options={{
+          title: "Administración",
+          tabBarIcon: ({ color, focused }) => (
+            <Appbar.Action icon="cog" iconColor={color} size={24} />
+          ),
+          headerShown: false,
+          header: ({ options, route }) => (
+            <AppBar
+              title={options.title || route.name}
+              onSearchPress={() => console.log("Search pressed")}
+              onNotificationPress={() => console.log("Notifications pressed")}
+              onProfilePress={() => console.log("Profile pressed")}
+            />
           ),
         }}
       />

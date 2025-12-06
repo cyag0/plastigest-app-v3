@@ -157,7 +157,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       if (token) {
         // Verificar si el token es válido consultando al servidor
         const response = await authAPI.me();
-        const userData = response.data;
+        const userData = response.data.user;
 
         // Guardar datos del usuario
         setUser(userData);
@@ -192,7 +192,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       // Verificar si el token es válido consultando al servidor
       const response = await authAPI.me();
-      const userData = response.data;
+      const userData = response.data.user;
 
       // Guardar datos del usuario
       setUser(userData);
@@ -237,7 +237,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     password: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      setIsLoading(true);
+      // setIsLoading(true);
 
       const response = await authAPI.login({ email, password });
       const { access_token, user: userData } = response.data;
@@ -268,7 +268,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       return { success: false, error: errorMessage };
     } finally {
-      setIsLoading(false);
+      //setIsLoading(false);
     }
   };
 

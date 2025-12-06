@@ -38,11 +38,8 @@ export default function AppBar({
 }: AppBarProps) {
   const router = useRouter();
   const showBackButton = _showBackButton && router.canGoBack();
-  console.log("Rendering AppBar with title:");
 
   const handleBack = () => {
-    console.log("Back pressed", router.canGoBack());
-
     if (router.canGoBack()) {
       router.back();
     }

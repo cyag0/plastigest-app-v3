@@ -8,6 +8,7 @@ export interface FormFieldProps {
   errorStyle?: object;
   containerStyle?: object;
   required?: boolean;
+  onChange?: (value: any) => void;
 }
 
 // Props que el HOC inyecta al componente envuelto

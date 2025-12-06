@@ -19,7 +19,8 @@ type ServicePath =
   | "salesOrders"
   | "admin.roles"
   | "admin.permissions"
-  | "admin.workers";
+  | "admin.workers"
+  | "home.unidades";
 
 // Interfaz para los datos cacheados
 interface CachedData {

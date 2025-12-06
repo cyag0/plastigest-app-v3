@@ -106,6 +106,10 @@ export default function AppSelect(props: AppSelectProps) {
       label={undefined}
       inputRef={selectRef}
       arrayList={arrayList}
+      textInputStyle={{
+        height: 48,
+        outlineWidth: 0,
+      }}
       onSelection={(value) => {
         handleOnChange(value.text, value.selectedList);
       }}
@@ -114,6 +118,11 @@ export default function AppSelect(props: AppSelectProps) {
       multiEnable={props.multiple || false}
       hideSearchBox={props.hideSearchBox}
       textInputMode="outlined"
+      textInputOutlineStyle={{
+        borderWidth: 0,
+        borderColor: "transparent",
+        padding: 4,
+      }}
     />
   );
 }

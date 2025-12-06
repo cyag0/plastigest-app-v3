@@ -6,12 +6,16 @@ import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import { FormUpload } from "@/components/Form/AppUpload";
 import IngredientsTable from "@/components/Form/IngredientsTable/IngredientsTable";
+import BarcodeScanner from "@/components/Form/BarcodeScanner";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
-import { useLocalSearchParams } from "expo-router";
-import React, { useEffect, useRef } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFormikContext } from "formik";
+import React, { useEffect, useRef, useState } from "react";
+import { StyleSheet, Text, View } from "react-native";
+import { IconButton } from "react-native-paper";
+import palette from "@/constants/palette";
 
 interface ProductFormData {
   name: string;
@@ -50,9 +54,11 @@ export default function ProductsForm(props: ProductsFormProps) {
     props.id || (params.id ? parseInt(params.id as string) : undefined);
   const isEditing = !!productId;
   const formRef = useRef<AppFormRef<ProductFormData>>(null);
+  const [scannerVisible, setScannerVisible] = useState(false);
 
   const { company } = useSelectedCompany();
   const { selectedLocation } = useSelectedLocation();
+  const router = useRouter();
 
   useEffect(() => {
     setTimeout(() => {
@@ -65,176 +71,18 @@ export default function ProductsForm(props: ProductsFormProps) {
     }, 500);
   }, []);
 
-  // Componente interno para usar useWatch dentro del FormProvider
-  const ProductFormContent = () => {
-    return (
-      <ScrollView style={{ flex: 1 }}>
-        <View style={{ padding: 16 }}>
-          <FormInput
-            name="name"
-            label="Nombre del Producto"
-            placeholder="Ej: Bolsa Plástica 20x30cm"
-            required
-          />
-
-          <FormInput
-            name="description"
-            label="Descripción"
-            placeholder="Descripción del producto"
-            multiline
-            numberOfLines={3}
-          />
-
-          <FormInput
-            name="code"
-            label="Código del Producto"
-            placeholder="Ej: BP-2030"
-            required
-          />
-
-          <FormInput
-            name="purchase_price"
-            label="Precio de Compra"
-            placeholder="0.00"
-            keyboardType="numeric"
-          />
-
-          <FormInput
-            name="sale_price"
-            label="Precio de Venta"
-            placeholder="0.00"
-            keyboardType="numeric"
-          />
-
-          <FormProSelect
-            name="company_id"
-            label="Empresa"
-            model="admin.companies"
-            placeholder="Seleccione una empresa"
-            required
-          />
-
-          <FormProSelect
-            name="category_id"
-            label="Categoría"
-            model="categories"
-            placeholder="Seleccione una categoría"
-          />
-
-          <FormSelectSimple
-            name="product_type"
-            label="Tipo de Producto"
-            required
-            data={[
-              { label: "Materia Prima", value: "raw_material" },
-              { label: "Producto Procesado", value: "processed" },
-              { label: "Producto Comercial", value: "commercial" },
-            ]}
-          />
-
-          <AppDependency name="product_type">
-            {(value) => {
-              switch (value) {
-                case "processed":
-                  return (
-                    <IngredientsTable
-                      name="ingredients"
-                      label="Ingredientes (Materias Primas)"
-                      required
-                    />
-                  ); // No mostrar nada adicional para materias primas
-                case "raw_material":
-                case "commercial":
-                  return (
-                    <FormProSelect
-                      name="supplier_id"
-                      label="Proveedor"
-                      model="suppliers"
-                      placeholder="Seleccione un proveedor (opcional)"
-                    />
-                  );
-              }
-            }}
-          </AppDependency>
-
-          <FormCheckBox name="for_sale" text="Producto Disponible para Venta" />
-
-          <FormUpload
-            name="product_images"
-            label="Imágenes del producto"
-            placeholder="Subir fotos del producto"
-            multiple
-            maxFiles={5}
-            accept="images"
-            helperText="Hasta 5 imágenes del producto (JPG, PNG)"
-          />
-
-          <View style={{ display: "none" }}>
-            <FormInput name="current_location_id" />
-          </View>
-
-          {/* Sección de Información de Sucursal */}
-          <View style={{ marginTop: 24, marginBottom: 16 }}>
-            <Text
-              style={{
-                fontSize: 18,
-                fontWeight: "bold",
-                color: "#333",
-              }}
-            >
-              Información en {selectedLocation?.name || "esta sucursal"}
-            </Text>
-            <View
-              style={{
-                height: 2,
-                backgroundColor: "#e0e0e0",
-                marginTop: 8,
-              }}
-            />
-          </View>
-
-          <FormCheckBox
-            name="is_active"
-            text={`Producto Activo en ${
-              selectedLocation?.name || "esta sucursal"
-            }`}
-          />
-
-          <FormInput
-            name="current_stock"
-            label="Stock Actual"
-            placeholder="0.00"
-            keyboardType="numeric"
-            //@ts-ignore
-            readonly
-          />
-
-          <FormInput
-            name="minimum_stock"
-            label="Stock Mínimo"
-            placeholder="0.00"
-            keyboardType="numeric"
-          />
-
-          <FormInput
-            name="maximum_stock"
-            label="Stock Máximo"
-            placeholder="0.00"
-            keyboardType="numeric"
-          />
-        </View>
-      </ScrollView>
-    );
-  };
-
   return (
     <AppForm
       ref={formRef}
       api={Services.products}
       id={productId}
       readonly={props.readonly}
+      onSuccess={() => {
+        router.back();
+      }}
       initialValues={{
         company_id: company?.id || undefined,
+        location_id: selectedLocation?.id || undefined,
         product_type: "raw_material", // Valor por defecto
         ingredients: [], // Array vacío por defecto
         for_sale: true, // Por defecto disponible para venta
@@ -245,7 +93,207 @@ export default function ProductsForm(props: ProductsFormProps) {
         maximum_stock: "", // Stock máximo opcional
       }}
     >
-      <ProductFormContent />
+      <FormInput
+        name="name"
+        label="Nombre del Producto"
+        placeholder="Ej: Bolsa Plástica 20x30cm"
+        required
+      />
+
+      <Test />
+
+      <FormInput
+        name="description"
+        label="Descripción"
+        placeholder="Descripción del producto"
+        multiline
+        numberOfLines={3}
+      />
+
+      {/* Código del Producto con Escáner */}
+      <View style={styles.codeInputContainer}>
+        <View style={styles.codeInput}>
+          <FormInput
+            name="code"
+            label="Código del Producto"
+            placeholder="Ej: BP-2030"
+            required
+            editable={false}
+            //@ts-ignore
+            readonly
+          />
+        </View>
+        <IconButton
+          icon="barcode-scan"
+          mode="contained"
+          containerColor={palette.primary}
+          iconColor="#fff"
+          size={24}
+          onPress={() => setScannerVisible(true)}
+          style={styles.scanButton}
+        />
+      </View>
+
+      <BarcodeScanner
+        visible={scannerVisible}
+        onClose={() => setScannerVisible(false)}
+        onScanned={(code) => {
+          formRef.current?.setFieldValue("code", code);
+        }}
+      />
+
+      <FormInput
+        name="purchase_price"
+        label="Precio de Compra"
+        placeholder="0.00"
+        keyboardType="numeric"
+      />
+
+      <FormInput
+        name="sale_price"
+        label="Precio de Venta"
+        placeholder="0.00"
+        keyboardType="numeric"
+      />
+
+      <FormProSelect
+        name="category_id"
+        label="Categoría"
+        model="categories"
+        placeholder="Seleccione una categoría"
+      />
+
+      <FormProSelect
+        model="home.unidades"
+        name="unit_id"
+        label="Unidad de Medida"
+        placeholder="Seleccione una unidad de medida"
+        required
+        fetchParams={{
+          only_base: true,
+        }}
+      />
+
+      <FormSelectSimple
+        name="product_type"
+        label="Tipo de Producto"
+        required
+        data={[
+          { label: "Materia Prima", value: "raw_material" },
+          { label: "Producto Procesado", value: "processed" },
+          { label: "Producto Comercial", value: "commercial" },
+        ]}
+      />
+
+      <AppDependency name="product_type">
+        {(value) => {
+          switch (value) {
+            case "processed":
+              return (
+                <IngredientsTable
+                  name="ingredients"
+                  label="Ingredientes (Materias Primas)"
+                  required
+                />
+              ); // No mostrar nada adicional para materias primas
+            case "raw_material":
+            case "commercial":
+              return (
+                <FormProSelect
+                  name="supplier_id"
+                  label="Proveedor"
+                  model="suppliers"
+                  placeholder="Seleccione un proveedor (opcional)"
+                />
+              );
+          }
+        }}
+      </AppDependency>
+
+      <FormCheckBox name="for_sale" text="Producto Disponible para Venta" />
+
+      <FormUpload
+        name="product_images"
+        label="Imágenes del producto"
+        placeholder="Subir fotos del producto"
+        multiple
+        maxFiles={5}
+        accept="images"
+        helperText="Hasta 5 imágenes del producto (JPG, PNG)"
+      />
+
+      <View style={{ display: "none" }}>
+        <FormInput name="current_location_id" />
+      </View>
+
+      {/* Sección de Información de Sucursal */}
+      <View style={{ marginTop: 24, marginBottom: 16 }}>
+        <Text
+          style={{
+            fontSize: 18,
+            fontWeight: "bold",
+            color: "#333",
+          }}
+        >
+          Información en {selectedLocation?.name || "esta sucursal"}
+        </Text>
+        <View
+          style={{
+            height: 2,
+            backgroundColor: "#e0e0e0",
+            marginTop: 8,
+          }}
+        />
+      </View>
+
+      <FormCheckBox
+        name="is_active"
+        text={`Producto Activo en ${selectedLocation?.name || "esta sucursal"}`}
+      />
+
+      <FormInput
+        name="current_stock"
+        label="Stock Actual"
+        placeholder="0.00"
+        keyboardType="numeric"
+        //@ts-ignore
+        readonly
+      />
+
+      <FormInput
+        name="minimum_stock"
+        label="Stock Mínimo"
+        placeholder="0.00"
+        keyboardType="numeric"
+      />
+
+      <FormInput
+        name="maximum_stock"
+        label="Stock Máximo"
+        placeholder="0.00"
+        keyboardType="numeric"
+      />
     </AppForm>
   );
 }
+
+function Test() {
+  const form = useFormikContext<ProductFormData>();
+  console.log("Form values:", form.values);
+  return null;
+}
+
+const styles = StyleSheet.create({
+  codeInputContainer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8,
+    marginBottom: 16,
+  },
+  codeInput: {
+    flex: 1,
+  },
+  scanButton: {
+    marginBottom: 8,
+  },
+});

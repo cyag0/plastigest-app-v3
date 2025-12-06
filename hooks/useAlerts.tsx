@@ -1,6 +1,16 @@
-import AlertSnackbar from "@/components/AppAlert/AlertSnackbar";
-import ConfirmDialog from "@/components/AppAlert/ConfirmDialog";
-import React, { createContext, ReactNode, useContext, useState } from "react";
+import AlertSnackbar, {
+  AlertSnackbarRef,
+} from "@/components/AppAlert/AlertSnackbar";
+import ConfirmDialog, {
+  ConfirmDialogRef,
+} from "@/components/AppAlert/ConfirmDialog";
+import React, {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useRef,
+} from "react";
 
 /**
  * Tipos de alerta disponibles
@@ -132,110 +142,53 @@ const AlertsContext = createContext<AlertsAPI | null>(null);
  * }
  */
 export function AlertsProvider({ children }: { children: ReactNode }) {
-  const [confirmState, setConfirmState] = useState<ConfirmState>({
-    visible: false,
-    message: "",
-  });
-
-  const [snackbarState, setSnackbarState] = useState<SnackbarState>({
-    visible: false,
-    message: "",
-    type: "info",
-    duration: 3000,
-  });
+  // Referencias a los componentes usando useImperativeHandle
+  const confirmDialogRef = useRef<ConfirmDialogRef>(null);
+  const snackbarRef = useRef<AlertSnackbarRef>(null);
 
   /**
    * Muestra un diálogo de confirmación y retorna una Promise
    * que se resuelve con true o false según la acción del usuario
    */
-  const confirm = (
-    message: string,
-    options?: ConfirmOptions
-  ): Promise<boolean> => {
-    return new Promise((resolve) => {
-      setConfirmState({
-        visible: true,
-        message,
-        title: options?.title,
-        okText: options?.okText,
-        cancelText: options?.cancelText,
-        resolve,
-      });
-    });
-  };
-
-  /**
-   * Maneja la confirmación del usuario
-   */
-  const handleConfirm = () => {
-    if (confirmState.resolve) {
-      confirmState.resolve(true);
-    }
-    setConfirmState({ ...confirmState, visible: false });
-  };
-
-  /**
-   * Maneja la cancelación del usuario
-   */
-  const handleCancel = () => {
-    if (confirmState.resolve) {
-      confirmState.resolve(false);
-    }
-    setConfirmState({ ...confirmState, visible: false });
-  };
+  const confirm = useCallback(
+    (message: string, options?: ConfirmOptions): Promise<boolean> => {
+      return (
+        confirmDialogRef.current?.show(message, options) ||
+        Promise.resolve(false)
+      );
+    },
+    []
+  );
 
   /**
    * Muestra un snackbar con el tipo especificado
    */
-  const alert = (message: string, options?: AlertOptions) => {
-    setSnackbarState({
-      visible: true,
-      message,
+  const alert = useCallback((message: string, options?: AlertOptions) => {
+    snackbarRef.current?.show(message, {
       type: options?.type || "info",
       duration: options?.duration || 3000,
     });
-  };
+  }, []);
 
-  /**
-   * Cierra el snackbar
-   */
-  const handleSnackbarDismiss = () => {
-    setSnackbarState({ ...snackbarState, visible: false });
-  };
-
-  // API pública
-  const api: AlertsAPI = {
+  // API pública - usar useRef para que no cambie en cada render
+  const api = useRef<AlertsAPI>({
     confirm,
     alert,
     success: (message: string) => alert(message, { type: "success" }),
     error: (message: string) => alert(message, { type: "error" }),
     warning: (message: string) => alert(message, { type: "warning" }),
     info: (message: string) => alert(message, { type: "info" }),
-  };
+  }).current;
 
   return (
     <AlertsContext.Provider value={api}>
       {children}
 
       {/* Diálogo de confirmación */}
-      <ConfirmDialog
-        visible={confirmState.visible}
-        message={confirmState.message}
-        title={confirmState.title}
-        okText={confirmState.okText}
-        cancelText={confirmState.cancelText}
-        onConfirm={handleConfirm}
-        onCancel={handleCancel}
-      />
+      <ConfirmDialog ref={confirmDialogRef} />
 
       {/* Snackbar para notificaciones */}
-      <AlertSnackbar
-        visible={snackbarState.visible}
-        message={snackbarState.message}
-        type={snackbarState.type}
-        duration={snackbarState.duration}
-        onDismiss={handleSnackbarDismiss}
-      />
+      <AlertSnackbar ref={snackbarRef} />
     </AlertsContext.Provider>
   );
 }

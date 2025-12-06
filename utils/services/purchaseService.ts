@@ -146,6 +146,18 @@ class PurchaseService {
   affectsStock(status: string): boolean {
     return status === "received";
   }
+
+  /**
+   * Obtener estadísticas de compras
+   */
+  async getStats(params?: {
+    location_id?: number;
+    start_date?: string;
+    end_date?: string;
+  }) {
+    const response = await axios.get("auth/admin/purchases/stats", { params });
+    return response.data;
+  }
 }
 
 export default new PurchaseService();

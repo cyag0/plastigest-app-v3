@@ -53,6 +53,8 @@ export default function AppUpload(props: AppUploadProps) {
     helperText,
   } = props;
 
+  console.log("AppUpload value:", value);
+
   const handleDocumentPick = async () => {
     try {
       setUploading(true);
@@ -167,6 +169,10 @@ export default function AppUpload(props: AppUploadProps) {
       return "file-excel-box";
     return "file-document";
   };
+
+  if (!Array.isArray(value)) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>

@@ -48,9 +48,10 @@ const movimientos: ResourceProps[] = [
     description:
       "Solicita productos desde sucursales que necesitan inventario.",
     color: "#fff",
-    background: "#FF9800",
+    backgroundColor: "#FF9800",
     link: "/(tabs)/home/petitions",
     icon: require("../../../assets/images/dashboard/transfer.png"),
+    iconName: "clipboard-list",
   },
   {
     key: "envios",
@@ -58,9 +59,10 @@ const movimientos: ResourceProps[] = [
     description:
       "Prepara y despacha productos aprobados hacia otras ubicaciones.",
     color: "#fff",
-    background: "#4CAF50",
+    backgroundColor: "#4CAF50",
     link: "/(tabs)/home/shipments",
     icon: require("../../../assets/images/dashboard/transfer.png"),
+    iconName: "truck-delivery",
   },
   {
     key: "recibos",
@@ -68,9 +70,10 @@ const movimientos: ResourceProps[] = [
     description:
       "Confirma la recepción de productos y registra las entregas recibidas.",
     color: "#fff",
-    background: "#2196F3",
+    backgroundColor: "#2196F3",
     link: "/(tabs)/home/receipts",
     icon: require("../../../assets/images/dashboard/transfer.png"),
+    iconName: "package-variant-closed",
   },
   {
     key: "ajustes",
@@ -78,9 +81,10 @@ const movimientos: ResourceProps[] = [
     description:
       "Registra los ajustes de inventario por mermas, extravíos u otras causas.",
     color: palette.textSecondary,
-    background: palette.background,
+    backgroundColor: palette.background,
     link: "/(tabs)/home/adjustment",
     icon: require("../../../assets/images/dashboard/use.png"),
+    iconName: "clipboard-edit",
   },
 ];
 

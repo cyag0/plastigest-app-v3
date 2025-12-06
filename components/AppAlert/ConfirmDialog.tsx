@@ -1,17 +1,26 @@
 import palette from "@/constants/palette";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React from "react";
+import React, { forwardRef, useImperativeHandle, useState } from "react";
 import { View } from "react-native";
 import { Button, Dialog, Portal, Text } from "react-native-paper";
 
-interface ConfirmDialogProps {
-  visible: boolean;
+interface ConfirmOptions {
   title?: string;
-  message: string;
   okText?: string;
   cancelText?: string;
-  onConfirm: () => void;
-  onCancel: () => void;
+}
+
+interface ConfirmState {
+  visible: boolean;
+  message: string;
+  title?: string;
+  okText?: string;
+  cancelText?: string;
+  resolve?: (value: boolean) => void;
+}
+
+export interface ConfirmDialogRef {
+  show: (message: string, options?: ConfirmOptions) => Promise<boolean>;
 }
 
 /**
@@ -21,21 +30,48 @@ interface ConfirmDialogProps {
  * con botones de Aceptar y Cancelar.
  *
  * Utiliza Portal de React Native Paper para mostrarse sobre cualquier vista.
+ * Expone métodos imperativos mediante useImperativeHandle.
  */
-export default function ConfirmDialog({
-  visible,
-  title = "Confirmar",
-  message,
-  okText = "Aceptar",
-  cancelText = "Cancelar",
-  onConfirm,
-  onCancel,
-}: ConfirmDialogProps) {
+const ConfirmDialog = forwardRef<ConfirmDialogRef>((props, ref) => {
+  const [state, setState] = useState<ConfirmState>({
+    visible: false,
+    message: "",
+  });
+
+  useImperativeHandle(ref, () => ({
+    show: (message: string, options?: ConfirmOptions): Promise<boolean> => {
+      return new Promise((resolve) => {
+        setState({
+          visible: true,
+          message,
+          title: options?.title,
+          okText: options?.okText,
+          cancelText: options?.cancelText,
+          resolve,
+        });
+      });
+    },
+  }));
+
+  const handleConfirm = () => {
+    if (state.resolve) {
+      state.resolve(true);
+    }
+    setState({ ...state, visible: false });
+  };
+
+  const handleCancel = () => {
+    if (state.resolve) {
+      state.resolve(false);
+    }
+    setState({ ...state, visible: false });
+  };
+
   return (
     <Portal>
       <Dialog
-        visible={visible}
-        onDismiss={onCancel}
+        visible={state.visible}
+        onDismiss={handleCancel}
         style={{ backgroundColor: palette.background }}
       >
         <Dialog.Title>
@@ -49,33 +85,37 @@ export default function ConfirmDialog({
             <Text
               style={{ fontSize: 18, fontWeight: "bold", color: palette.text }}
             >
-              {title}
+              {state.title || "Confirmar"}
             </Text>
           </View>
         </Dialog.Title>
         <Dialog.Content>
           <Text style={{ fontSize: 16, color: palette.textSecondary }}>
-            {message}
+            {state.message}
           </Text>
         </Dialog.Content>
         <Dialog.Actions>
           <Button
-            onPress={onCancel}
+            onPress={handleCancel}
             textColor={palette.textSecondary}
             style={{ marginRight: 8 }}
           >
-            {cancelText}
+            {state.cancelText || "Cancelar"}
           </Button>
           <Button
-            onPress={onConfirm}
+            onPress={handleConfirm}
             mode="contained"
             buttonColor={palette.primary}
             textColor={palette.background}
           >
-            {okText}
+            {state.okText || "Aceptar"}
           </Button>
         </Dialog.Actions>
       </Dialog>
     </Portal>
   );
-}
+});
+
+ConfirmDialog.displayName = "ConfirmDialog";
+
+export default ConfirmDialog;
