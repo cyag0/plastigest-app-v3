@@ -4,9 +4,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Href, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { Text, TouchableRipple } from "react-native-paper";
+import { Text } from "react-native-paper";
 
 interface Operation {
   key: string;
@@ -23,60 +23,190 @@ const operations: Operation[] = [
   {
     key: "produccion",
     label: "Producción",
-    description: "Órdenes de producción",
-    color: "#fff",
-    backgroundColor: palette.error,
-    icon: require("../../../assets/images/dashboard/categories.png"),
-    link: "/(tabs)/home/production",
-    iconName: "factory",
+    description:
+      "Registra y gestiona las órdenes de producción, incluyendo planificación y seguimiento.",
+    color: palette.error,
+    link: "/(tabs)/home/production" as any,
+    background: palette.surface,
+    icon: require("../../../assets/images/dashboard/purchase.png"),
   },
   {
     key: "compras",
     label: "Compras",
-    description: "Compras a proveedores",
-    color: "#fff",
-    backgroundColor: palette.primary,
-    icon: require("../../../assets/images/dashboard/categories.png"),
-    link: "/(tabs)/home/purchases",
-    iconName: "cart",
+    description:
+      "Registra y gestiona las compras de productos a proveedores, incluyendo recepción y costos.",
+    color: palette.primary,
+    link: "/(tabs)/home/purchases" as any,
+    background: palette.surface,
+    icon: require("../../../assets/images/dashboard/purchase.png"),
   },
   {
     key: "ventas",
     label: "Ventas",
-    description: "Ventas a clientes",
-    color: "#fff",
-    backgroundColor: palette.textSecondary,
-    icon: require("../../../assets/images/dashboard/categories.png"),
+    description:
+      "Administra las ventas a clientes, emisión de pedidos y seguimiento de entregas.",
+    color: palette.textSecondary,
     link: "/(tabs)/home/sales",
-    iconName: "cash-register",
+    background: palette.card,
+    icon: require("../../../assets/images/dashboard/sales.png"),
   },
   {
-    key: "transferencias",
-    label: "Transferencias",
-    description: "Entre sucursales",
+    key: "peticiones",
+    label: "Peticiones",
+    description:
+      "Solicita productos desde sucursales que necesitan inventario.",
     color: "#fff",
-    backgroundColor: palette.accent,
-    icon: require("../../../assets/images/dashboard/categories.png"),
-    link: "/(tabs)/home/transfers",
-    iconName: "swap-horizontal",
+    backgroundColor: "#FF9800",
+    link: "/(tabs)/home/petitions",
+    icon: require("../../../assets/images/dashboard/transfer.png"),
+    iconName: "clipboard-list",
+  },
+  {
+    key: "envios",
+    label: "Envíos",
+    description:
+      "Prepara y despacha productos aprobados hacia otras ubicaciones.",
+    color: "#fff",
+    backgroundColor: "#4CAF50",
+    link: "/(tabs)/home/shipments",
+    icon: require("../../../assets/images/dashboard/transfer.png"),
+    iconName: "truck-delivery",
+  },
+  {
+    key: "recibos",
+    label: "Recibos",
+    description:
+      "Confirma la recepción de productos y registra las entregas recibidas.",
+    color: "#fff",
+    backgroundColor: "#2196F3",
+    link: "/(tabs)/home/receipts",
+    icon: require("../../../assets/images/dashboard/transfer.png"),
+    iconName: "package-variant-closed",
   },
   {
     key: "ajustes",
-    label: "Ajustes",
-    description: "Mermas y correcciones",
-    color: "#fff",
-    backgroundColor: palette.secondary,
-    icon: require("../../../assets/images/dashboard/categories.png"),
+    label: "Ajuste",
+    description:
+      "Registra los ajustes de inventario por mermas, extravíos u otras causas.",
+    color: palette.textSecondary,
+    backgroundColor: palette.background,
     link: "/(tabs)/home/adjustment",
+    icon: require("../../../assets/images/dashboard/use.png"),
     iconName: "clipboard-edit",
   },
 ];
 
-type FilterType = "all" | "entry" | "exit" | "production" | "adjustment";
+const catalogos: ResourceProps[] = [
+  {
+    key: "productos",
+    label: "Productos",
+    description:
+      "Administra el catálogo de productos disponibles para venta y compra, con detalles, precios y stock.",
+    link: "/(tabs)/home/products" as any,
+    backgroundColor: palette.surface,
+    color: palette.textSecondary,
+    icon: require("../../../assets/images/dashboard/products.png"),
+  },
+  {
+    key: "categorias",
+    label: "Categorías",
+    description:
+      "Organiza los productos en grupos lógicos para facilitar búsquedas y reportes.",
+    link: "/(tabs)/home/categories",
+    backgroundColor: palette.card,
+    color: palette.textSecondary,
+    icon: require("../../../assets/images/dashboard/categories.png"),
+  },
+  {
+    key: "unidades",
+    label: "Unidades",
+    description:
+      "Define las unidades de medida (kg, pieza, caja, etc.) para controlar inventarios y ventas.",
+    link: "/(tabs)/home/unidades",
+    backgroundColor: palette.info,
+    color: palette.textSecondary,
+    icon: require("../../../assets/images/dashboard/units.png"),
+  },
+  {
+    key: "clientes",
+    label: "Clientes",
+    description:
+      "Gestiona la información de tus clientes, historial de compras y datos de contacto.",
+    link: "/(tabs)/home/clientes",
+    backgroundColor: palette.background,
+    color: palette.textSecondary,
+    icon: require("../../../assets/images/dashboard/clients.png"),
+  },
+  {
+    key: "proveedores",
+    label: "Proveedores",
+    description:
+      "Registra y consulta proveedores para compras y abastecimiento de productos.",
+    link: "/(tabs)/home/suppliers",
+    backgroundColor: palette.secondary,
+    color: "#fff",
+  },
+  {
+    key: "sucursales",
+    label: "Sucursales",
+    description:
+      "Administra las distintas ubicaciones físicas o almacenes de tu empresa.",
+    link: "/(tabs)/home/locations",
+    backgroundColor: palette.primary,
+    color: "#fff",
+  },
+  {
+    key: "companias",
+    label: "Compañías",
+    description:
+      "Configura los datos fiscales y generales de tu empresa o grupo empresarial.",
+    link: "/(tabs)/home/companies",
+    backgroundColor: palette.accent,
+    color: palette.textSecondary,
+  },
+  {
+    key: "usuarios",
+    label: "Usuarios",
+    description:
+      "Controla el acceso de los usuarios, sus datos y permisos dentro del sistema.",
+    link: "/(tabs)/home/users",
+    backgroundColor: palette.warning,
+    color: palette.textSecondary,
+  },
+  {
+    key: "trabajadores",
+    label: "Trabajadores",
+    description:
+      "Administra la información de empleados, asignaciones de roles y ubicaciones de trabajo.",
+    link: "/(tabs)/home/workers",
+    backgroundColor: palette.info,
+    color: "#fff",
+    icon: require("../../../assets/images/dashboard/use.png"),
+  },
+  {
+    key: "roles",
+    label: "Roles y Permisos",
+    description:
+      "Define los roles y permisos para gestionar la seguridad y accesos de la plataforma.",
+    link: "/(tabs)/home/roles",
+    backgroundColor: palette.error,
+    color: "#fff",
+  },
+];
 
-export default function OperationsScreen() {
-  const router = useRouter();
-  const [filter, setFilter] = useState<FilterType>("all");
+interface ResourceProps {
+  key: string;
+  label: string;
+  description: string;
+  link: Href;
+  backgroundColor?: string;
+  background?: string;
+  color: string;
+  icon?: ImageSourcePropType;
+}
+
+export default function HomeScreen() {
+  const [selected, setSelected] = React.useState("compras");
 
   const auth = useAuth();
   const { selectedLocation } = useSelectedLocation();
@@ -126,69 +256,37 @@ export default function OperationsScreen() {
             </View>
           )}
         </View>
-      </View>
-
-      {/* Quick Actions - Horizontal Scroll */}
-      <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
-        <Text
-          variant="titleMedium"
-          style={{ fontWeight: "bold", marginBottom: 12 }}
-        >
-          Accesos Rápidos
+        {/* Movimientos horizontal */}
+        <Text variant="titleMedium" style={styles.title}>
+          Movimientos
         </Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={{ gap: 12 }}
         >
-          {operations.map((operation) => (
-            <TouchableRipple
-              key={operation.key}
-              onPress={() => router.push(operation.link as any)}
-              style={[
-                styles.operationCard,
-                { backgroundColor: operation.backgroundColor },
-              ]}
-            >
-              <View style={{ alignItems: "center", gap: 8 }}>
-                <View
-                  style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 28,
-                    backgroundColor: "rgba(255,255,255,0.2)",
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name={operation.iconName as any}
-                    size={28}
-                    color={operation.color}
-                  />
-                </View>
-                <Text
-                  variant="labelLarge"
-                  style={{
-                    color: operation.color,
-                    fontWeight: "bold",
-                    textAlign: "center",
-                  }}
-                >
-                  {operation.label}
-                </Text>
-                <Text
-                  variant="bodySmall"
-                  style={{
-                    color: operation.color,
-                    opacity: 0.8,
-                    textAlign: "center",
-                  }}
-                >
-                  {operation.description}
-                </Text>
-              </View>
-            </TouchableRipple>
+          {movimientos.map((mov) => (
+            <DashboardButton
+              key={mov.key}
+              title={mov.label}
+              description={mov.description}
+              link={mov.link}
+              backgroundColor={
+                selected === mov.key
+                  ? mov.color
+                  : mov.background || mov.backgroundColor || palette.surface
+              }
+              icon={mov.icon || undefined}
+              color={selected === mov.key ? "#fff" : mov.color}
+              style={{
+                minWidth: 175,
+                flexBasis: 175,
+                minHeight: 120,
+                maxWidth: 250,
+                aspectRatio: undefined,
+              }}
+              // onPress={() => setSelected(mov.key)}
+            />
           ))}
         </ScrollView>
       </View>
@@ -196,6 +294,68 @@ export default function OperationsScreen() {
       {/* Tasks Section */}
       <TaskList limit={10} />
     </View>
+  );
+}
+
+interface DashboardButtonProps {
+  title: string;
+  description?: string;
+  link: Href;
+  backgroundColor: string;
+  color: string;
+  icon?: ImageSourcePropType;
+  iconName?: string;
+  style?: React.ComponentProps<typeof Card>["style"];
+}
+
+function DashboardButton(props: DashboardButtonProps) {
+  const router = useRouter();
+
+  return (
+    <Card
+      onPress={() => {
+        console.log("Navigating to:", props.link);
+
+        router.push(props.link);
+      }}
+      style={{
+        flex: 1,
+        flexBasis: "48%",
+        minHeight: 100,
+        justifyContent: "center",
+        backgroundColor: props.backgroundColor,
+        ...(props.style && typeof props.style === "object" ? props.style : {}),
+      }}
+    >
+      <Card.Title
+        titleStyle={{ color: props.color, fontWeight: "bold", marginBottom: 0 }}
+        title={props.title}
+        subtitle={props.description}
+        subtitleNumberOfLines={3}
+        subtitleStyle={{
+          color: props.color,
+          opacity: 0.7,
+          fontSize: 11,
+          marginTop: -4,
+          lineHeight: 14,
+        }}
+        right={() => {
+          return (
+            props.icon && (
+              <Image
+                source={props.icon}
+                style={{
+                  height: 60,
+                  width: 60,
+                  aspectRatio: 1,
+                  backgroundColor: "transparent",
+                }}
+              />
+            )
+          );
+        }}
+      />
+    </Card>
   );
 }
 

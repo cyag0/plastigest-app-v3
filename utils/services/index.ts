@@ -2,6 +2,7 @@ import { default as api, default as axiosClient } from "../axios";
 import admin from "./admin/admin";
 import { createCrudService } from "./crudService";
 import saleService from "./saleService";
+import transferService from "./transferService";
 
 const movements = {
   adjustments: createCrudService<App.Entities.Adjustment.Adjustment>(
@@ -256,6 +257,7 @@ const Services = {
     },
     customerNotes: createCrudService<any>("/auth/admin/customer-notes"),
   },
+  transfers: transferService,
 };
 
 export { Services };
