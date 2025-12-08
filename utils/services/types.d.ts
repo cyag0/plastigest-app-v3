@@ -41,6 +41,23 @@ namespace App {
       updated_at: string;
     }
 
+    interface Customer {
+      id: number;
+      name: string;
+      business_name?: string;
+      social_reason?: string;
+      rfc?: string;
+      email?: string;
+      phone?: string;
+      address?: string;
+      company_id: number;
+      company_name?: string;
+      company?: Company;
+      is_active: boolean;
+      created_at: string;
+      updated_at: string;
+    }
+
     interface Location {
       id: number;
       name: string;
@@ -84,6 +101,16 @@ namespace App {
         quantity: number;
         notes?: string | null;
       }>;
+    }
+
+    interface Category {
+      id: number;
+      name: string;
+      description?: string | null;
+      company_id?: number | null;
+      is_active: boolean;
+      created_at: string;
+      updated_at: string;
     }
 
     namespace InventoryCount {
@@ -188,6 +215,137 @@ namespace App {
           unit_price: number;
         }>;
       }
+    }
+
+    interface Notification {
+      id: number;
+      user_id: number;
+      company_id: number;
+      title: string;
+      message: string;
+      type: "info" | "success" | "warning" | "error" | "alert";
+      is_read: boolean;
+      read_at?: string | null;
+      data?: any;
+      created_at: string;
+      updated_at: string;
+      user?: User;
+      company?: Company;
+    }
+
+    type TaskType = 'inventory_count' | 'receive_purchase' | 'approve_transfer' | 
+      'send_transfer' | 'receive_transfer' | 'sales_report' | 'stock_check' | 
+      'adjustment_review' | 'custom';
+    
+    type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'overdue';
+    
+    type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+    interface Task {
+      id: number;
+      company_id: number;
+      location_id?: number;
+      title: string;
+      description?: string;
+      type: TaskType;
+      status: TaskStatus;
+      priority: TaskPriority;
+      assigned_to?: number;
+      assigned_users?: number[];
+      assigned_by?: number;
+      completed_by?: number;
+      due_date?: string;
+      started_at?: string;
+      completed_at?: string;
+      related_type?: string;
+      related_id?: number;
+      is_recurring: boolean;
+      recurrence_frequency?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+      recurrence_day?: number;
+      recurrence_time?: string;
+      last_generated_at?: string;
+      next_occurrence?: string;
+      metadata?: any;
+      created_at: string;
+      updated_at: string;
+      is_overdue: boolean;
+      assignedTo?: User;
+      assignedBy?: User;
+      completedBy?: User;
+      location?: Location;
+      related?: any;
+    }
+
+    interface TaskComment {
+      id: number;
+      task_id: number;
+      user_id: number;
+      comment: string;
+      attachments?: any[];
+      created_at: string;
+      updated_at: string;
+      user?: User;
+    }
+
+    interface TaskStatistics {
+      total: number;
+      pending: number;
+      in_progress: number;
+      completed: number;
+      overdue: number;
+      due_today: number;
+      by_priority: {
+        urgent: number;
+        high: number;
+        medium: number;
+        low: number;
+      };
+      by_type: Record<string, number>;
+    }
+
+    interface NotificationConfig {
+      enabled: boolean;
+      users: number[];
+    }
+
+    interface LocationSettings {
+      notifications?: {
+        low_stock?: NotificationConfig;
+        purchase_confirmed?: NotificationConfig;
+        transfer_received?: NotificationConfig;
+        inventory_discrepancies?: NotificationConfig;
+        adjustment_created?: NotificationConfig;
+        // Legacy boolean support for backward compatibility
+        low_stock_enabled?: boolean;
+        purchase_confirmed_enabled?: boolean;
+        transfer_received_enabled?: boolean;
+      };
+      working_hours?: {
+        monday?: { start: string; end: string; enabled: boolean };
+        tuesday?: { start: string; end: string; enabled: boolean };
+        wednesday?: { start: string; end: string; enabled: boolean };
+        thursday?: { start: string; end: string; enabled: boolean };
+        friday?: { start: string; end: string; enabled: boolean };
+        saturday?: { start: string; end: string; enabled: boolean };
+        sunday?: { start: string; end: string; enabled: boolean };
+      };
+      auto_tasks?: {
+        inventory_count_enabled?: boolean;
+        inventory_count_frequency?: 'daily' | 'weekly' | 'monthly';
+        inventory_count_day?: number;
+        sales_report_enabled?: boolean;
+        sales_report_frequency?: 'daily' | 'weekly';
+      };
+      limits?: {
+        max_discount_percentage?: number;
+        require_approval_above?: number;
+        low_stock_threshold?: number;
+      };
+      features?: {
+        enable_barcode_scanner?: boolean;
+        enable_whatsapp_orders?: boolean;
+        enable_pos_mode?: boolean;
+      };
     }
   }
 }

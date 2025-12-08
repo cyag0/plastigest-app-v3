@@ -19,6 +19,16 @@ const Services = {
   },
   products: {
     ...createCrudService<App.Entities.Product>("/auth/admin/products"),
+    async printLabels(productId: number, quantity: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/products/${productId}/print-labels`,
+        { quantity },
+        {
+          responseType: "blob",
+        }
+      );
+      return response.data;
+    },
   },
   productPackages: {
     ...createCrudService<any>("/auth/admin/product-packages"),
@@ -52,16 +62,112 @@ const Services = {
       });
       return response.data;
     },
+    async updateDetails(purchaseId: number, data: any) {
+      const response = await axiosClient.post(
+        `/auth/admin/purchases/${purchaseId}/details`,
+        data
+      );
+      return response.data;
+    },
+    async startOrder(purchaseId: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/purchases/${purchaseId}/start-order`
+      );
+      return response.data;
+    },
+    async receivePurchase(purchaseId: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/purchases/${purchaseId}/receive`
+      );
+      return response.data;
+    },
   },
   sales: {
     ...createCrudService<App.Entities.Sale>("/auth/admin/sales"),
     ...saleService,
+    async stats(params?: {
+      location_id?: number;
+      start_date?: string;
+      end_date?: string;
+    }) {
+      const response = await axiosClient.get("/auth/admin/sales/stats", {
+        params,
+      });
+      return response.data;
+    },
+    async cashRegister(params: { date: string; location_id?: number }) {
+      const response = await axiosClient.get(
+        "/auth/admin/sales/cash-register",
+        {
+          params,
+        }
+      );
+      return response.data;
+    },
   },
   productions: {
     ...createCrudService<any>("/auth/admin/productions"),
   },
   suppliers: {
     ...createCrudService<App.Entities.Supplier>("/auth/admin/suppliers"),
+  },
+  customers: {
+    ...createCrudService<App.Entities.Customer>("/auth/admin/customers"),
+  },
+  notifications: {
+    ...createCrudService<App.Entities.Notification>(
+      "/auth/admin/notifications"
+    ),
+    async markAsRead(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/notifications/${id}/mark-as-read`
+      );
+      return response.data;
+    },
+    async markAsUnread(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/notifications/${id}/mark-as-unread`
+      );
+      return response.data;
+    },
+    async markAllAsRead() {
+      const response = await axiosClient.post(
+        "/auth/admin/notifications/mark-all-as-read"
+      );
+      return response.data;
+    },
+    async getUnreadCount() {
+      const response = await axiosClient.get(
+        "/auth/admin/notifications/unread-count"
+      );
+      return response.data;
+    },
+  },
+  tasks: {
+    ...createCrudService<App.Entities.Task>("/auth/admin/tasks"),
+    async getStatistics(params?: { location_id?: number }) {
+      const response = await axiosClient.get("/auth/admin/tasks/statistics", {
+        params,
+      });
+      return response.data;
+    },
+    async changeStatus(
+      taskId: number,
+      action: "start" | "complete" | "cancel"
+    ) {
+      const response = await axiosClient.post(
+        `/auth/admin/tasks/${taskId}/change-status`,
+        { action }
+      );
+      return response.data;
+    },
+    async addComment(taskId: number, comment: string, attachments?: any[]) {
+      const response = await axiosClient.post(
+        `/auth/admin/tasks/${taskId}/comments`,
+        { comment, attachments }
+      );
+      return response.data;
+    },
   },
   inventory: {
     ...createCrudService<any>("/auth/admin/inventory"),
@@ -136,9 +242,21 @@ const Services = {
   home: {
     clientes: createCrudService<any>("/auth/admin/customers"),
     proveedores: createCrudService<any>("/api/proveedores"),
-    unidades: createCrudService<any>("/auth/admin/units"),
+    unidades: {
+      ...createCrudService<any>("/auth/admin/units"),
+      async getGroupedByBase(params?: { company_id?: number }) {
+        const response = await axiosClient.get(
+          "/auth/admin/units/grouped-by-base",
+          {
+            params,
+          }
+        );
+        return response.data;
+      },
+    },
     customerNotes: createCrudService<any>("/auth/admin/customer-notes"),
   },
 };
 
+export { Services };
 export default Services;

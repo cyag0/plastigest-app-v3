@@ -54,11 +54,14 @@ export const objectToFormDataWithNestedInputsAsync = async (
                   } as any);
                 }
               } else {
-                await objectToFormDataWithNestedInputsAsync(
-                  item,
-                  formData,
-                  arrayKey
-                );
+                // Para file:// URIs (React Native nativo), agregar objeto completo
+                console.log("Appending native file object:", item);
+                formData.append(arrayKey, {
+                  uri: item.uri,
+                  name: item.name || `file_${index}`,
+                  type: item.type || "application/octet-stream",
+                  ...(item.size && { size: item.size }),
+                } as any);
               }
             } else {
               await objectToFormDataWithNestedInputsAsync(

@@ -1,8 +1,9 @@
 import palette from "@/constants/palette";
+import { useAlerts } from "@/hooks/useAlerts";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
-import { Alert, Image, StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import {
   Button,
   Card,
@@ -34,13 +35,24 @@ interface AppUploadProps {
   itemStyle?: (file: UploadedFile, index: number) => any;
   onItemPress?: (file: UploadedFile, index: number) => void;
   readonly?: boolean;
+  showCameraOption?: boolean;
+  showGalleryOption?: boolean;
+  showPreview?: boolean;
+  renderButtons?: (handlers: {
+    handleCameraPick: () => void;
+    handleImagePick: () => void;
+    handleDocumentPick: () => void;
+    uploading: boolean;
+    disabled: boolean;
+  }) => React.ReactNode;
 }
 
 export default function AppUpload(props: AppUploadProps) {
   const [uploading, setUploading] = useState(false);
+  const alerts = useAlerts();
 
   const {
-    value = [],
+    value: rawValue,
     onChange,
     onBlur,
     multiple = false,
@@ -53,7 +65,10 @@ export default function AppUpload(props: AppUploadProps) {
     helperText,
   } = props;
 
-  console.log("AppUpload value:", value);
+  // Normalizar el valor a un array siempre
+  const value = Array.isArray(rawValue) ? rawValue : [];
+
+  console.log("AppUpload value:", props);
 
   const handleDocumentPick = async () => {
     try {
@@ -84,15 +99,12 @@ export default function AppUpload(props: AppUploadProps) {
         if (updatedFiles.length <= maxFiles) {
           onChange?.(updatedFiles);
         } else {
-          Alert.alert(
-            "Límite excedido",
-            `Solo puedes subir máximo ${maxFiles} archivos`
-          );
+          alerts.warning(`Solo puedes subir máximo ${maxFiles} archivos`);
         }
       }
     } catch (error) {
       console.error("Error picking document:", error);
-      Alert.alert("Error", "No se pudo seleccionar el archivo");
+      alerts.error("No se pudo seleccionar el archivo");
     } finally {
       setUploading(false);
       onBlur?.();
@@ -107,10 +119,7 @@ export default function AppUpload(props: AppUploadProps) {
         await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (permissionResult.granted === false) {
-        Alert.alert(
-          "Permisos necesarios",
-          "Se necesita permiso para acceder a la galería"
-        );
+        alerts.warning("Se necesita permiso para acceder a la galería");
         return;
       }
 
@@ -133,15 +142,57 @@ export default function AppUpload(props: AppUploadProps) {
         if (updatedFiles.length <= maxFiles) {
           onChange?.(updatedFiles);
         } else {
-          Alert.alert(
-            "Límite excedido",
-            `Solo puedes subir máximo ${maxFiles} archivos`
-          );
+          alerts.warning(`Solo puedes subir máximo ${maxFiles} archivos`);
         }
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      Alert.alert("Error", "No se pudo seleccionar la imagen");
+      alerts.error("No se pudo seleccionar la imagen");
+    } finally {
+      setUploading(false);
+      onBlur?.();
+    }
+  };
+
+  const handleCameraPick = async () => {
+    try {
+      setUploading(true);
+
+      const permissionResult =
+        await ImagePicker.requestCameraPermissionsAsync();
+
+      if (permissionResult.granted === false) {
+        alerts.warning("Se necesita permiso para acceder a la cámara");
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+        allowsEditing: true,
+        aspect: [4, 3],
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const asset = result.assets[0];
+        const newFile: UploadedFile = {
+          uri: asset.uri,
+          name: `camera_${Date.now()}.jpg`,
+          type: "image/jpeg",
+          size: asset.fileSize,
+        };
+
+        const updatedFiles = multiple ? [...value, newFile] : [newFile];
+
+        if (updatedFiles.length <= maxFiles) {
+          onChange?.(updatedFiles);
+        } else {
+          alerts.warning(`Solo puedes subir máximo ${maxFiles} archivos`);
+        }
+      }
+    } catch (error) {
+      console.error("Error taking photo:", error);
+      alerts.error("No se pudo tomar la foto");
     } finally {
       setUploading(false);
       onBlur?.();
@@ -170,84 +221,118 @@ export default function AppUpload(props: AppUploadProps) {
     return "file-document";
   };
 
-  if (!Array.isArray(value)) {
-    return null;
-  }
+  const showCamera = props.showCameraOption !== false;
+  const showGallery = props.showGalleryOption !== false;
+  const showPreview = props.showPreview !== false;
+
+  const buttonHandlers = {
+    handleCameraPick,
+    handleImagePick,
+    handleDocumentPick,
+    uploading,
+    disabled,
+  };
 
   return (
     <View style={styles.container}>
-      {/*  {label && (
-        <Text
-          variant="bodyMedium"
-          style={[
-            styles.label,
-            { color: error ? palette.error : palette.textSecondary },
-          ]}
-        >
-          {label}
-        </Text>
-      )}
- */}
       {/* Upload Area */}
       {!props.readonly && (
-        <Card
-          style={[
-            styles.uploadArea,
-            {
-              borderColor: error ? palette.error : palette.border,
-              backgroundColor: disabled ? palette.surface : palette.background,
-            },
-            error && styles.errorBorder,
-          ]}
-        >
-          <Card.Content style={styles.uploadContent}>
-            <Text
-              variant="bodyMedium"
+        <>
+          {props.renderButtons ? (
+            props.renderButtons(buttonHandlers)
+          ) : (
+            <Card
               style={[
-                styles.placeholder,
-                { color: disabled ? palette.textSecondary : palette.text },
+                styles.uploadArea,
+                {
+                  borderColor: error ? palette.error : palette.border,
+                  backgroundColor: disabled
+                    ? palette.surface
+                    : palette.background,
+                },
+                error && styles.errorBorder,
               ]}
             >
-              {value.length > 0
-                ? `${value.length} archivo(s) seleccionado(s)`
-                : placeholder}
-            </Text>
-
-            <View style={styles.buttonContainer}>
-              {(accept === "images" || accept === "all") && (
-                <Button
-                  mode="outlined"
-                  onPress={handleImagePick}
-                  disabled={disabled || uploading}
-                  loading={uploading}
-                  icon="image"
-                  style={[styles.button, { borderColor: palette.primary }]}
-                  textColor={palette.primary}
+              <Card.Content style={styles.uploadContent}>
+                <Text
+                  variant="bodyMedium"
+                  style={[
+                    styles.placeholder,
+                    {
+                      color: disabled
+                        ? palette.textSecondary
+                        : palette.text,
+                    },
+                  ]}
                 >
-                  Galería
-                </Button>
-              )}
+                  {value.length > 0
+                    ? `${value.length} archivo(s) seleccionado(s)`
+                    : placeholder}
+                </Text>
 
-              {(accept === "documents" || accept === "all") && (
-                <Button
-                  mode="outlined"
-                  onPress={handleDocumentPick}
-                  disabled={disabled || uploading}
-                  loading={uploading}
-                  icon="file-document"
-                  style={[styles.button, { borderColor: palette.secondary }]}
-                  textColor={palette.secondary}
-                >
-                  Documentos
-                </Button>
-              )}
-            </View>
-          </Card.Content>
-        </Card>
+                <View style={styles.buttonContainer}>
+                  {(accept === "images" || accept === "all") && (
+                    <>
+                      {showCamera && (
+                        <Button
+                          mode="outlined"
+                          onPress={handleCameraPick}
+                          disabled={disabled || uploading}
+                          loading={uploading}
+                          icon="camera"
+                          style={[
+                            styles.button,
+                            { borderColor: palette.success },
+                          ]}
+                          textColor={palette.success}
+                        >
+                          Cámara
+                        </Button>
+                      )}
+                      {showGallery && (
+                        <Button
+                          mode="outlined"
+                          onPress={handleImagePick}
+                          disabled={disabled || uploading}
+                          loading={uploading}
+                          icon="image"
+                          style={[
+                            styles.button,
+                            { borderColor: palette.primary },
+                          ]}
+                          textColor={palette.primary}
+                        >
+                          Galería
+                        </Button>
+                      )}
+                    </>
+                  )}
+
+                  {(accept === "documents" || accept === "all") && (
+                    <Button
+                      mode="outlined"
+                      onPress={handleDocumentPick}
+                      disabled={disabled || uploading}
+                      loading={uploading}
+                      icon="file-document"
+                      style={[
+                        styles.button,
+                        { borderColor: palette.secondary },
+                      ]}
+                      textColor={palette.secondary}
+                    >
+                      Documentos
+                    </Button>
+                  )}
+                </View>
+              </Card.Content>
+            </Card>
+          )}
+        </>
       )}
 
       {/* Selected Files */}
-      {value.length > 0 && (
+      {value.length > 0 && showPreview && (
         <View style={styles.filesContainer}>
           {value.map((file, index) => {
             const itemStyle = props.itemStyle
@@ -380,7 +465,9 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
+    justifyContent: "center",
   },
   button: {
     minWidth: 100,

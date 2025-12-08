@@ -9,6 +9,20 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
 // Tipos
+interface Role {
+  id: number;
+  name: string;
+  description?: string;
+  is_system?: boolean;
+}
+
+interface Permission {
+  id: number;
+  name: string;
+  description?: string;
+  resource?: string;
+}
+
 interface User {
   id: number;
   name: string;
@@ -16,6 +30,8 @@ interface User {
   email_verified_at?: string;
   created_at: string;
   updated_at: string;
+  roles?: Role[];
+  permissions?: Permission[];
 }
 
 interface Company {
@@ -37,6 +53,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   hasCompanySelected: boolean;
   isLoadingCompanies: boolean;
+  unreadNotificationsCount: number;
+  loadUnreadNotificationsCount: () => Promise<void>;
   login: (
     email: string,
     password: string
@@ -46,13 +64,8 @@ interface AuthContextType {
   loadCompanies: () => Promise<void>;
   selectCompany: (company: Company) => Promise<void>;
   clearCompanySelection: () => Promise<void>;
-
-  selectLocation: (location: any) => Promise<void>;
-  location: {
-    id: number;
-    name: string;
-    description?: string;
-  };
+  selectLocation: (location: any | null) => Promise<void>;
+  location: App.Entities.Location | null;
 }
 
 // Context
@@ -64,10 +77,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const [user, setUser] = useState<User | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [selectedLocation, setSelectedLocation] = useState<any>(null);
+  const [location, setLocation] = useState<App.Entities.Location | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   // Variables de entorno
   const USER_DATA_KEY = process.env.EXPO_PUBLIC_USER_DATA_KEY || "user_data";
@@ -75,6 +89,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const LOCATION_DATA_KEY = "selected_location";
   const COMPANIES_DATA_KEY =
     process.env.EXPO_PUBLIC_COMPANIES_DATA_KEY || "companies_list";
+
+  // Cargar contador de notificaciones no leídas
+  const loadUnreadNotificationsCount = async () => {
+    try {
+      const response = await Services.notifications.getUnreadCount();
+      console.log("Unread notifications count response:", response);
+
+      setUnreadNotificationsCount(response.data.count || 0);
+    } catch (error) {
+      console.error("Error loading unread notifications count:", error);
+    }
+  };
 
   // Cargar compañías disponibles
   const loadCompanies = async () => {
@@ -127,10 +153,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   // Seleccionar ubicación
-  const selectLocation = async (location: any) => {
+  const selectLocation = async (location: App.Entities.Location | null) => {
     try {
-      setSelectedLocation(location);
-      await AsyncStorage.setItem(LOCATION_DATA_KEY, JSON.stringify(location));
+      setLocation(location);
+      if (location) {
+        return await AsyncStorage.setItem(
+          LOCATION_DATA_KEY,
+          JSON.stringify(location)
+        );
+      }
+
+      return await AsyncStorage.removeItem(LOCATION_DATA_KEY);
     } catch (error) {
       console.error("Error selecting location:", error);
     }
@@ -154,37 +187,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // Verificar si hay token guardado
       const token = await getAuthToken();
 
-      if (token) {
-        // Verificar si el token es válido consultando al servidor
-        const response = await authAPI.me();
-        const userData = response.data.user;
-
-        // Guardar datos del usuario
-        setUser(userData);
-        await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
-
-        // Cargar compañía seleccionada desde caché
-        try {
-          const cachedCompany = await AsyncStorage.getItem(COMPANY_DATA_KEY);
-          const cachedLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
-
-          if (cachedCompany) {
-            setSelectedCompany(JSON.parse(cachedCompany));
-          }
-
-          if (cachedLocation) {
-            setSelectedLocation(JSON.parse(cachedLocation));
-          }
-        } catch (error) {
-          console.error("Error loading cached company:", error);
-        }
-
-        // Cargar lista de compañías
-        await loadCompanies();
-      } else {
+      if (!token) {
         // No hay token, usuario no autenticado
         setUser(null);
         setSelectedCompany(null);
+        setLocation(null);
         setCompanies([]);
         setIsLoading(false);
         return;
@@ -198,18 +205,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setUser(userData);
       await AsyncStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
 
-      // Cargar compañía seleccionada desde caché
+      // Cargar compañía y location desde caché
       try {
         const cachedCompany = await AsyncStorage.getItem(COMPANY_DATA_KEY);
+        const cachedLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
+
         if (cachedCompany) {
           setSelectedCompany(JSON.parse(cachedCompany));
+        } else {
+          setSelectedCompany(null);
+        }
+
+        if (cachedLocation) {
+          setLocation(JSON.parse(cachedLocation));
+        } else {
+          setLocation(null);
         }
       } catch (error) {
-        console.error("Error loading cached company:", error);
+        console.error("Error loading cached data:", error);
       }
 
       // Cargar lista de compañías
       await loadCompanies();
+
+      // Cargar contador de notificaciones
+      await loadUnreadNotificationsCount();
     } catch (error: any) {
       // Si es un error 401, significa que el token expiró o es inválido
       // No mostramos error porque es un caso esperado
@@ -225,7 +245,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setUser(null);
       setSelectedCompany(null);
       setCompanies([]);
-      setSelectedLocation(null);
+      setLocation(null);
     } finally {
       setIsLoading(false);
     }
@@ -248,8 +268,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       setUser(userData);
 
+      // Cargar compañía y location desde caché si existen
+      try {
+        const cachedCompany = await AsyncStorage.getItem(COMPANY_DATA_KEY);
+        const cachedLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
+
+        if (cachedCompany) {
+          setSelectedCompany(JSON.parse(cachedCompany));
+        }
+
+        if (cachedLocation) {
+          setLocation(JSON.parse(cachedLocation));
+        }
+      } catch (error) {
+        console.error("Error loading cached data:", error);
+      }
+
       // Cargar compañías después del login exitoso
       await loadCompanies();
+
+      // Cargar contador de notificaciones
+      await loadUnreadNotificationsCount();
 
       return { success: true };
     } catch (error: any) {
@@ -292,10 +331,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       await removeAuthToken();
       await AsyncStorage.removeItem(USER_DATA_KEY);
       await AsyncStorage.removeItem(COMPANY_DATA_KEY);
+      await AsyncStorage.removeItem(LOCATION_DATA_KEY);
       await AsyncStorage.removeItem(COMPANIES_DATA_KEY);
 
       setUser(null);
       setSelectedCompany(null);
+      setLocation(null);
       setCompanies([]);
     } catch (error) {
       console.error("Logout error:", error);
@@ -317,6 +358,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     isAuthenticated: !!user,
     hasCompanySelected: !!selectedCompany,
     isLoadingCompanies,
+    unreadNotificationsCount,
+    loadUnreadNotificationsCount,
     login,
     logout,
     checkAuthStatus,
@@ -324,7 +367,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     selectCompany,
     clearCompanySelection,
     selectLocation,
-    location: selectedLocation,
+    location,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

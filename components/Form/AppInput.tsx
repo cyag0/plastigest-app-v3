@@ -21,19 +21,21 @@ export default function AppInput(props: AppInputProps) {
 
   const readonly = props.readonly || false;
 
+  const formattedValue = String(value);
+
   return (
     <View>
       {!readonly ? (
         <TextInput
           mode="outlined"
-          value={value}
+          value={formattedValue}
           onChangeText={onChange}
           onBlur={onBlur}
           error={hasError}
           {...restProps}
         />
       ) : (
-        <ReadonlyText text={value} />
+        <ReadonlyText text={formattedValue} />
       )}
     </View>
   );

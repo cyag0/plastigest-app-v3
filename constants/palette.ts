@@ -6,6 +6,7 @@ const palette = {
   secondary: "#B3B792", // Pistache
   accent: "#D2AB80", // Chai
   background: "#F4F1EA", // Porcelain Mist
+  skeleton: "#E1DBD1", // Soft Linen
   surface: "#E5E0D8", // Almond
   card: "#E6DAC8", // Creamed Oat
   warning: "#D2AB80", // Chai

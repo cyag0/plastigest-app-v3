@@ -289,7 +289,9 @@ function Statistic(props: {
           style={{
             flexDirection: "row",
             alignItems: "center",
+            justifyContent: "center",
             gap: 8,
+            overflow: "hidden",
           }}
         >
           <Icon source={props.icon} color={props.color} size={32} />
@@ -297,7 +299,10 @@ function Statistic(props: {
             variant="headlineMedium"
             style={{
               color: palette.text,
+              fontSize: 20,
               fontWeight: "bold",
+              textOverflow: "ellipsis",
+              overflow: "hidden",
             }}
           >
             {props.value}

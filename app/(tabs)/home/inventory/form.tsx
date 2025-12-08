@@ -88,6 +88,8 @@ export default function InventoryForm(props: InventoryFormProps) {
         Services.inventoryCounts.show(props.id),
       ]);
 
+      console.log("Fetched products:", productsRes.data.data);
+
       setProducts(productsRes.data.data as App.Entities.Product[]);
 
       const responses = {} as {
@@ -139,23 +141,25 @@ export default function InventoryForm(props: InventoryFormProps) {
         name: Yup.string().required("El nombre del inventario es requerido"),
         count_date: Yup.date().required("La fecha es requerida"),
         notes: Yup.string(),
-        details: Yup.object().test(
-          "has-ids",
-          "Todos los detalles deben tener un ID",
-          (value) => {
-            if (!value) return true;
-            console.log("Validating details:", value);
-
-            return Object.values(value).every(
-              (detail: any) => detail?.id !== undefined
-            );
-          }
-        ),
       })}
       submitButtonText="Completar conteo"
       showButtons={props.readonly ? false : true}
       showResetButton={false}
       onSubmit={async (values) => {
+        // Validar que todos los productos tengan detalles
+        const missingProducts = products.filter((product) => {
+          const detail = values.details[`product_${product.id}`];
+          return !detail || detail.id === undefined;
+        });
+
+        if (missingProducts.length > 0) {
+          const productNames = missingProducts.map((p) => p.name).join(", ");
+          alerts.warning(
+            `Debe completar el conteo de los siguientes productos: ${productNames}`
+          );
+          return values; // No continuar con el envío
+        }
+
         const res = await alerts.confirm(
           "¿Estás seguro de completar el conteo?",
           {
@@ -367,6 +371,8 @@ function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
         setDetail(updatedDetail);
         form.setFieldValue(`details.${product.id}`, updatedDetail);
 
+        alerts.success("Detalle actualizado correctamente.");
+
         if (!value) {
           setCountedQuantity(0);
         }
@@ -434,7 +440,7 @@ function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
           {/* Imagen del producto */}
           {product?.main_image && (
             <Image
-              source={{ uri: product.main_image }}
+              source={{ uri: product.main_image.uri || "" }}
               style={{
                 width: 60,
                 height: 60,

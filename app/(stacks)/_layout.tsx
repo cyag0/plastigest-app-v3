@@ -3,8 +3,6 @@ import { Stack } from "expo-router";
 import React from "react";
 
 export default function _layout() {
-  console.log("Rendering Select Company Layout");
-
   return (
     <Stack
       screenOptions={{
@@ -29,6 +27,30 @@ export default function _layout() {
         name="selectLocation"
         options={{
           title: "Seleccionar Ubicación",
+        }}
+      />
+      <Stack.Screen
+        name="notifications/index"
+        options={{
+          title: "Notificaciones",
+        }}
+      />
+      <Stack.Screen
+        name="notifications/[id]"
+        options={{
+          title: "Detalle de Notificación",
+        }}
+      />
+      <Stack.Screen
+        name="tasks/index"
+        options={{
+          title: "Tareas",
+        }}
+      />
+      <Stack.Screen
+        name="tasks/[id]"
+        options={{
+          title: "Detalle de Tarea",
         }}
       />
     </Stack>

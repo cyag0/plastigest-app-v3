@@ -67,7 +67,7 @@ export default function InventoryScreen() {
       description: "Verificación física del inventario",
       icon: "clipboard-check",
       route: "/(tabs)/inventory/weekly-inventory",
-      color: palette.info,
+      color: palette.blue,
     },
     {
       id: "adjustments",
@@ -238,10 +238,16 @@ export default function InventoryScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <View style={{ height: 240, marginBottom: 16 }}>
+        <View
+          style={{
+            height: 240,
+            marginBottom: 16,
+            width: "100%",
+          }}
+        >
           <Carousel
             loop
-            width={Dimensions.get("window").width - 40}
+            width={Dimensions.get("window").width}
             height={280}
             autoPlay={true}
             autoPlayInterval={2000}
@@ -570,7 +576,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   chartCard: {
-    width: Dimensions.get("window").width - 40,
+    width: Dimensions.get("window").width,
     backgroundColor: palette.card,
     borderRadius: 12,
     elevation: 2,
@@ -632,6 +638,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderLeftWidth: 4,
     borderLeftColor: palette.error,
+    shadowColor: "transparent",
   },
   alertContent: {
     flexDirection: "row",

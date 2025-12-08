@@ -214,14 +214,25 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         _values
       )) as any;
 
-      console.log("formdata ", values);
-
       // Si se pasa handleSubmit personalizado, usarlo
       if (props.onSubmit) {
         await props.onSubmit(values as T, formInstance);
       }
       // Si no hay handleSubmit pero hay API, usar store automático
       else if (props.api) {
+        const res = await alerts.confirm(
+          "¿Estás seguro de guardar los cambios?",
+          {
+            okText: "Sí, guardar",
+            cancelText: "Cancelar",
+            title: "Confirmar guardado",
+          }
+        );
+
+        if (!res) {
+          return;
+        }
+
         let response;
 
         // Si hay ID, es actualización

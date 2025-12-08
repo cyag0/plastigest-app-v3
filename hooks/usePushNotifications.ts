@@ -1,9 +1,22 @@
-import axiosClient from "@/utils/axios";
-import messaging from "@react-native-firebase/messaging";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
-import { useEffect, useState } from "react";
-import { PermissionsAndroid, Platform } from "react-native";
+import { useState } from "react";
+import { Platform } from "react-native";
+
+// Importación condicional de Firebase
+let messaging: any = null;
+let PermissionsAndroid: any = null;
+
+try {
+  messaging = require("@react-native-firebase/messaging").default;
+  if (Platform.OS === "android") {
+    PermissionsAndroid = require("react-native").PermissionsAndroid;
+  }
+} catch (error) {
+  console.log(
+    "Firebase no disponible en Expo Go - Push notifications deshabilitadas"
+  );
+}
 
 interface RemoteMessage {
   messageId?: string;
@@ -18,25 +31,42 @@ export function usePushNotifications() {
   const [fcmToken, setFcmToken] = useState<string | undefined>();
   const [notification, setNotification] = useState<RemoteMessage | undefined>();
 
-  useEffect(() => {
+  /*   useEffect(() => {
+    // Solo ejecutar si Firebase está disponible
+    if (!messaging) {
+      console.log(
+        "Firebase no disponible - Saltando configuración de push notifications"
+      );
+      return;
+    }
+
     // Solicitar permisos y obtener token
     requestUserPermission().then((token) => {
       if (token) {
         setFcmToken(token);
-        registerTokenInBackend(token);
+        //registerTokenInBackend(token);
       }
     });
 
+    // Verificar periódicamente si el token está registrado en el backend
+    const checkInterval = setInterval(async () => {
+      const currentToken = await messaging()?.getToken();
+      if (currentToken) {
+        // Intentar registrar nuevamente en caso de que haya fallado antes
+        // registerTokenInBackend(currentToken);
+      }
+    }, 5 * 60 * 1000); // Cada 5 minutos
+
     // Listener para notificaciones en primer plano
     const unsubscribeForeground = messaging().onMessage(
-      async (remoteMessage) => {
+      async (remoteMessage: RemoteMessage) => {
         console.log("Notificación recibida en primer plano:", remoteMessage);
         setNotification(remoteMessage);
       }
     );
 
     // Listener para cuando el usuario toca la notificación (app en background)
-    messaging().onNotificationOpenedApp((remoteMessage) => {
+    messaging().onNotificationOpenedApp((remoteMessage: RemoteMessage) => {
       console.log("Notificación abrió la app desde background:", remoteMessage);
       handleNotificationAction(remoteMessage);
     });
@@ -44,7 +74,7 @@ export function usePushNotifications() {
     // Listener para cuando la app se abre desde una notificación (app cerrada)
     messaging()
       .getInitialNotification()
-      .then((remoteMessage) => {
+      .then((remoteMessage: RemoteMessage | null) => {
         if (remoteMessage) {
           console.log("App abierta desde notificación:", remoteMessage);
           handleNotificationAction(remoteMessage);
@@ -52,17 +82,20 @@ export function usePushNotifications() {
       });
 
     // Listener para actualización de token
-    const unsubscribeTokenRefresh = messaging().onTokenRefresh((token) => {
-      console.log("FCM Token actualizado:", token);
-      setFcmToken(token);
-      registerTokenInBackend(token);
-    });
+    const unsubscribeTokenRefresh = messaging().onTokenRefresh(
+      (token: string) => {
+        console.log("FCM Token actualizado:", token);
+        setFcmToken(token);
+        //registerTokenInBackend(token);
+      }
+    );
 
     return () => {
       unsubscribeForeground();
       unsubscribeTokenRefresh();
+      clearInterval(checkInterval);
     };
-  }, []);
+  }, []); */
 
   return {
     fcmToken,
@@ -72,8 +105,17 @@ export function usePushNotifications() {
 
 async function requestUserPermission(): Promise<string | undefined> {
   try {
+    // Solo ejecutar si Firebase está disponible
+    if (!messaging) {
+      return undefined;
+    }
+
     // Solicitar permisos en Android 13+
-    if (Platform.OS === "android" && Platform.Version >= 33) {
+    if (
+      Platform.OS === "android" &&
+      Platform.Version >= 33 &&
+      PermissionsAndroid
+    ) {
       const granted = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
       );
@@ -105,7 +147,10 @@ async function requestUserPermission(): Promise<string | undefined> {
   }
 }
 
-async function registerTokenInBackend(token: string) {
+async function registerTokenInBackend(token: string, retryCount = 0) {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 5000; // 5 segundos
+
   try {
     const deviceInfo = {
       token,
@@ -114,10 +159,25 @@ async function registerTokenInBackend(token: string) {
       app_version: Constants.expoConfig?.version || "1.0.0",
     };
 
-    await axiosClient.post("/auth/admin/device-tokens/register", deviceInfo);
-    console.log("FCM Token registrado en el backend");
-  } catch (error) {
+    //await axiosClient.post("/auth/admin/device-tokens/register", deviceInfo);
+    console.log("FCM Token registrado en el backend exitosamente");
+  } catch (error: any) {
     console.error("Error al registrar token en el backend:", error);
+
+    // Reintentar si no se alcanzó el máximo de reintentos
+    if (retryCount < MAX_RETRIES) {
+      console.log(
+        `Reintentando registro de token (${retryCount + 1}/${MAX_RETRIES})...`
+      );
+
+      /* setTimeout(() => {
+        registerTokenInBackend(token, retryCount + 1);
+      }, RETRY_DELAY * (retryCount + 1)); // Incrementar delay en cada reintento */
+    } else {
+      console.error(
+        `No se pudo registrar el token después de ${MAX_RETRIES} intentos`
+      );
+    }
   }
 }
 

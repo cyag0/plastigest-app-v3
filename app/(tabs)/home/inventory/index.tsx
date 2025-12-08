@@ -64,9 +64,13 @@ export default function InventoryIndex() {
       modalRef.current?.hide();
       formRef.current?.resetForm();
 
+      console.log("Inventario creado exitosamente:", response.data);
+
       // Navegar al detalle del inventario creado
-      if (response.data?.id) {
-        router.push(`/home/inventory/${response.data.id}` as any);
+      if (response.data?.data.id) {
+        router.push(
+          `/inventory/weekly-inventory/${response.data.data.id}/edit` as any
+        );
       }
 
       return response;
@@ -186,7 +190,8 @@ export default function InventoryIndex() {
           showView: true,
           showEdit: (item: App.Entities.InventoryCount.InventoryCount) =>
             item.status !== "completed" && item.status !== "cancelled",
-          showDelete: false,
+          showDelete: (item: App.Entities.InventoryCount.InventoryCount) =>
+            item.status !== "completed" && item.status !== "cancelled",
           onEdit(item) {
             router.push(`/home/inventory/${item.id}/edit` as any);
           },
@@ -329,9 +334,9 @@ function ProgressPieChart({
         strokeWidth={8}
         radius={size / 2.5}
         chartConfig={{
-          backgroundGradientFrom: "transparent",
+          backgroundGradientFrom: palette.background,
           backgroundGradientFromOpacity: 0,
-          backgroundGradientTo: "transparent",
+          backgroundGradientTo: palette.background,
           backgroundGradientToOpacity: 0.5,
           color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`, // Verde para la parte contada
           strokeWidth: 2, // optional, default 3

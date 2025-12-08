@@ -96,6 +96,7 @@ export function useResponsive(config: Partial<ResponsiveConfig> = {}) {
     padding: finalConfig.padding,
     getItemWidth,
     getGridStyles,
+    isMobile: currentBreakpoint === "xs" || currentBreakpoint === "sm",
     isXs: currentBreakpoint === "xs",
     isSm: currentBreakpoint === "sm",
     isMd: currentBreakpoint === "md",

@@ -6,6 +6,7 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 
 import CompanyRequiredWrapper from "@/components/CompanyRequiredWrapper";
 import { SelectDataProvider } from "@/components/Form/AppProSelect";
+import LocationRequiredWrapper from "@/components/LocationRequiredWrapper";
 import NavigationHandler from "@/components/NavigationHandler";
 import palette from "@/constants/palette";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -52,11 +53,13 @@ export default function RootLayout() {
       <AuthProvider>
         <SelectDataProvider>
           <NavigationHandler>
-            <CompanyRequiredWrapper>
-              <AlertsProvider>
-                <App />
-              </AlertsProvider>
-            </CompanyRequiredWrapper>
+            <AlertsProvider>
+              <CompanyRequiredWrapper>
+                <LocationRequiredWrapper>
+                  <App />
+                </LocationRequiredWrapper>
+              </CompanyRequiredWrapper>
+            </AlertsProvider>
           </NavigationHandler>
         </SelectDataProvider>
       </AuthProvider>
@@ -65,8 +68,6 @@ export default function RootLayout() {
 }
 
 function App() {
-  console.log("Rendering Root Stack Layout");
-
   return (
     <Stack screenOptions={{ headerShown: false }} initialRouteName="login">
       <Stack.Screen name="login" options={{ headerShown: false }} />

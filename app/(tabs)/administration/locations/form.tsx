@@ -3,7 +3,7 @@ import { FormInput } from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
@@ -55,6 +55,9 @@ export default function LocationFormScreen(props: LocationFormProps) {
       id={locationId}
       submitButtonText={isEditing ? "Actualizar Sucursal" : "Crear Sucursal"}
       api={Services.admin.locations}
+      onSuccess={() => {
+        router.back();
+      }}
       initialValues={{
         name: "",
         description: "",

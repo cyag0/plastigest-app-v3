@@ -47,6 +47,7 @@ export interface CrudService<T> {
   index: (params?: IndexParams) => Promise<
     AxiosResponse<
       | LaravelPaginatedResponse<T>
+      | T[]
       | {
           data: T[];
         }
@@ -70,15 +71,62 @@ export function createCrudService<T = any>(endpoint: string): CrudService<T> {
   // Asegurar que el endpoint empiece con /
   const baseUrl = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
 
+  const debug = process.env.EXPO_PUBLIC_DEBUG_MODE === "true";
+
+  const logRequest = (method: string, url: string, data?: any) => {
+    if (debug) {
+      if (data && !(data instanceof FormData)) {
+      }
+    }
+  };
+
+  const logResponse = (method: string, response: any) => {
+    if (debug) {
+    }
+  };
+
+  const logError = (method: string, error: any) => {
+    const errorInfo = {
+      method: method.toUpperCase(),
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      message: error.response?.data?.message || error.message,
+      url: error.config?.url,
+      data: error.response?.data,
+      validation_errors: error.response?.data?.errors,
+    };
+
+    console.error(`❌ CRUD ${method.toUpperCase()} Error:`, errorInfo);
+
+    // Logging específico para errores comunes de Laravel
+    if (error.response?.status === 422) {
+      console.error("📝 Validation Errors:", error.response.data.errors);
+    } else if (error.response?.status === 404) {
+      console.error("🔍 Resource not found:", error.config?.url);
+    } else if (error.response?.status === 500) {
+      console.error("💥 Server Error:", error.response.data);
+    }
+  };
+
   return {
     /**
      * Obtener lista de recursos con filtros opcionales
      * @param params - Parámetros de filtro y paginación
      */
     index: (params?: IndexParams) => {
-      return axiosClient.get<LaravelPaginatedResponse<T> | T[]>(baseUrl, {
-        params,
-      });
+      logRequest("index", baseUrl, params);
+      return axiosClient
+        .get<LaravelPaginatedResponse<T> | T[]>(baseUrl, {
+          params,
+        })
+        .then((response) => {
+          logResponse("index", response);
+          return response;
+        })
+        .catch((error) => {
+          logError("index", error);
+          throw error;
+        });
     },
 
     /**
@@ -86,7 +134,18 @@ export function createCrudService<T = any>(endpoint: string): CrudService<T> {
      * @param id - ID del recurso
      */
     show: (id: number | string) => {
-      return axiosClient.get<LaravelResponse<T>>(`${baseUrl}/${id}`);
+      const url = `${baseUrl}/${id}`;
+      logRequest("show", url);
+      return axiosClient
+        .get<LaravelResponse<T>>(url)
+        .then((response) => {
+          logResponse("show", response);
+          return response;
+        })
+        .catch((error) => {
+          logError("show", error);
+          throw error;
+        });
     },
 
     /**
@@ -117,7 +176,18 @@ export function createCrudService<T = any>(endpoint: string): CrudService<T> {
      * @param id - ID del recurso a eliminar
      */
     destroy: (id: number | string) => {
-      return axiosClient.delete<{ message: string }>(`${baseUrl}/${id}`);
+      const url = `${baseUrl}/${id}`;
+      logRequest("destroy", url);
+      return axiosClient
+        .delete<{ message: string }>(url)
+        .then((response) => {
+          logResponse("destroy", response);
+          return response;
+        })
+        .catch((error) => {
+          logError("destroy", error);
+          throw error;
+        });
     },
   };
 }

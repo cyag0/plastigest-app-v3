@@ -1,10 +1,9 @@
+import { useLocalSearchParams } from "expo-router";
 import React from "react";
-import { Text, View } from "react-native";
+import InventoryForm from "../form";
 
-export default function edit() {
-  return (
-    <View>
-      <Text>edit</Text>
-    </View>
-  );
+export default function InventoryEdit() {
+  const { id } = useLocalSearchParams();
+
+  return <InventoryForm id={Number(id)} readonly={false} />;
 }

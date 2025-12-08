@@ -1,6 +1,8 @@
 import AppBar from "@/components/App/AppBar";
+import { SkeletonListLoader } from "@/components/SkeletonLoader";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
+import useDebounce from "@/hooks/useDebounce";
 import {
   CrudService,
   IndexParams,
@@ -13,13 +15,7 @@ import { router } from "expo-router";
 import * as React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import {
-  ActivityIndicator,
-  Divider,
-  Menu,
-  Searchbar,
-  Text,
-} from "react-native-paper";
+import { Divider, Menu, Searchbar, Text } from "react-native-paper";
 import AppListFilterBar, { FilterConfig } from "./AppListFilter";
 
 // Tipos para las props del componente
@@ -98,7 +94,7 @@ function ItemMenu<T>({
 
         return (
           <Menu.Item
-            key={index}
+            key={"action-" + index}
             onPress={() => {
               setVisible(false);
               action.onPress(item);
@@ -309,9 +305,20 @@ function AppList<T extends { id: number | string }>({
   // Ya no configuramos el header nativo, usamos Appbar
   useFocusEffect(
     useCallback(() => {
-      // Opcional: configurar solo el título si necesitas
       navigation.setOptions({
-        headerShown: false, // Ocultar header nativo para usar nuestro Appbar
+        headerRight: () => {
+          if (onPressCreate || menu?.onCreate) {
+            return (
+              <AppBar.Action
+                icon="plus"
+                iconColor={palette.error}
+                onPress={handleCreate}
+              />
+            );
+          }
+
+          return null;
+        },
       });
     }, [])
   );
@@ -436,58 +443,13 @@ function AppList<T extends { id: number | string }>({
     }
   };
 
-  if (loading && !refreshing) {
-    return (
-      <View style={styles.container}>
-        {/* AppBar para estado de loading */}
-        {showAppBar && (
-          <AppBar
-            title={title}
-            showBackButton={true}
-            showSearchButton={false}
-            showNotificationButton={false}
-            showProfileButton={false}
-          />
-        )}
-
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={palette.primary} />
-          <Text style={styles.loadingText}>Cargando...</Text>
-        </View>
-      </View>
-    );
+  if (loading) {
+    return <SkeletonListLoader />;
   }
 
   return (
     <View style={styles.container}>
-      {/* AppBar personalizado */}
-      {showAppBar && (
-        <AppBar
-          title={title}
-          showBackButton={true}
-          showNotificationButton={false}
-          showProfileButton={false}
-          onSearchPress={() => setShowSearch(!showSearch)}
-          rightActions={
-            showFab && (onPressCreate || menu?.onCreate) ? (
-              <AppBar.Action
-                icon="plus"
-                iconColor={palette.error}
-                onPress={handleCreate}
-              />
-            ) : undefined
-          }
-        />
-      )}
-
-      <Searchbar
-        placeholder={searchPlaceholder}
-        onChangeText={setSearchQuery}
-        value={searchQuery}
-        style={styles.searchbar}
-        mode="bar"
-        onClearIconPress={() => setSearchQuery("")}
-      />
+      <SearchBarComponent onChangeText={setSearchQuery} />
 
       {/* Barra de filtros */}
       <AppListFilterBar
@@ -496,173 +458,209 @@ function AppList<T extends { id: number | string }>({
         onChange={handleFilterChange}
       />
 
-      <ScrollView
-        contentContainerStyle={styles.scrollContainer}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={[palette.primary]}
-          />
-        }
-      >
-        {(data || []).map((item, index) => {
-          const cardProps = renderCard({ item, index });
+      {data.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyText}>{emptyMessage}</Text>
+        </View>
+      ) : (
+        <>
+          <ScrollView
+            contentContainerStyle={styles.scrollContainer}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                colors={[palette.primary]}
+              />
+            }
+          >
+            {(data || []).map((item, index) => {
+              const cardProps = renderCard({ item, index });
 
-          const showView =
-            typeof menu?.showView === "boolean"
-              ? menu?.showView
-              : typeof menu?.showView === "function"
-              ? menu.showView(item)
-              : true;
+              const showView =
+                typeof menu?.showView === "boolean"
+                  ? menu?.showView
+                  : typeof menu?.showView === "function"
+                  ? menu.showView(item)
+                  : true;
 
-          const showEdit =
-            typeof menu?.showEdit === "boolean"
-              ? menu?.showEdit
-              : typeof menu?.showEdit === "function"
-              ? menu.showEdit(item)
-              : true;
+              const showEdit =
+                typeof menu?.showEdit === "boolean"
+                  ? menu?.showEdit
+                  : typeof menu?.showEdit === "function"
+                  ? menu.showEdit(item)
+                  : true;
 
-          const showDelete =
-            typeof menu?.showDelete === "boolean"
-              ? menu?.showDelete
-              : typeof menu?.showDelete === "function"
-              ? menu.showDelete(item)
-              : true;
+              const showDelete =
+                typeof menu?.showDelete === "boolean"
+                  ? menu?.showDelete
+                  : typeof menu?.showDelete === "function"
+                  ? menu.showDelete(item)
+                  : true;
 
-          return (
-            <>
-              <AppListCard
-                key={item.id} /* onPress={() => handleItemPress(item)} */
-              >
-                <View
-                  style={[
-                    styles.cardMain,
-                    {
-                      alignItems: "center",
-                      gap: 8,
-                    },
-                  ]}
-                >
-                  {cardProps.left && (
-                    <View style={[styles.cardLeft]}>{cardProps.left}</View>
-                  )}
+              return (
+                <React.Fragment key={item.id}>
+                  <AppListCard /* onPress={() => handleItemPress(item)} */>
+                    <View
+                      style={[
+                        styles.cardMain,
+                        {
+                          alignItems: "center",
+                          gap: 8,
+                        },
+                      ]}
+                    >
+                      {cardProps.left && (
+                        <View style={[styles.cardLeft]}>{cardProps.left}</View>
+                      )}
 
-                  <View style={[styles.cardCenter]}>
-                    {cardProps.title && (
-                      <AppListTitle>{cardProps.title}</AppListTitle>
-                    )}
+                      <View style={[styles.cardCenter]}>
+                        {cardProps.title && (
+                          <AppListTitle>{cardProps.title}</AppListTitle>
+                        )}
 
-                    {cardProps.description && (
-                      <AppListDescription>
-                        {cardProps.description}
-                      </AppListDescription>
-                    )}
-                  </View>
+                        {cardProps.description && (
+                          <AppListDescription>
+                            {cardProps.description}
+                          </AppListDescription>
+                        )}
+                      </View>
 
-                  {cardProps.right && (
-                    <View style={styles.cardRight}>{cardProps.right}</View>
-                  )}
+                      {cardProps.right && (
+                        <View style={styles.cardRight}>{cardProps.right}</View>
+                      )}
 
-                  <ItemMenu
-                    item={item}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    onViewDetails={handleItemPress}
-                    showView={showView}
-                    showEdit={showEdit}
-                    showDelete={showDelete}
-                    customActions={menu?.customActions}
-                  />
-                </View>
-              </AppListCard>
-              {showDivider && (
-                <Divider
-                  style={{
-                    height: 2,
-                    backgroundColor: palette.border,
-                  }}
-                />
-              )}
-
-              {cardProps.bottom ? (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    padding: 4,
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 8,
-                    //flexWrap: "wrap",
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      padding: 4,
-                      alignItems: "center",
-                    }}
-                  >
-                    <AppList.Description>ID: </AppList.Description>
-                    <AppList.Description
+                      <ItemMenu
+                        item={item}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                        onViewDetails={handleItemPress}
+                        showView={showView}
+                        showEdit={showEdit}
+                        showDelete={showDelete}
+                        customActions={menu?.customActions}
+                      />
+                    </View>
+                  </AppListCard>
+                  {showDivider && (
+                    <Divider
                       style={{
-                        color: palette.textSecondary,
-                        fontWeight: "bold",
+                        height: 2,
+                        backgroundColor: palette.border,
+                      }}
+                    />
+                  )}
+
+                  {cardProps.bottom ? (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        padding: 4,
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        //flexWrap: "wrap",
                       }}
                     >
-                      {(item.id || "").toString()}
-                    </AppList.Description>
-                  </View>
-                  {cardProps.bottom.map((item, idx) => (
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          padding: 4,
+                          alignItems: "center",
+                        }}
+                      >
+                        <AppList.Description>ID: </AppList.Description>
+                        <AppList.Description
+                          style={{
+                            color: palette.textSecondary,
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {(item.id || "").toString()}
+                        </AppList.Description>
+                      </View>
+                      {cardProps.bottom.map((item, idx) => (
+                        <View
+                          key={item.value.toString() + idx}
+                          style={{ flexDirection: "row", alignItems: "center" }}
+                        >
+                          <AppList.Description>
+                            {item.label + ": "}
+                          </AppList.Description>
+                          <AppList.Description
+                            style={{
+                              color: palette.textSecondary,
+                              fontWeight: "bold",
+                            }}
+                          >
+                            {item.value.toString()}
+                          </AppList.Description>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
                     <View
-                      key={idx}
-                      style={{ flexDirection: "row", alignItems: "center" }}
+                      style={{
+                        flexDirection: "row",
+                        padding: 4,
+                        alignItems: "center",
+                      }}
                     >
-                      <AppList.Description>
-                        {item.label + ": "}
-                      </AppList.Description>
+                      <AppList.Description>ID: </AppList.Description>
                       <AppList.Description
                         style={{
                           color: palette.textSecondary,
                           fontWeight: "bold",
                         }}
                       >
-                        {item.value.toString()}
+                        {(item.id || "").toString()}
                       </AppList.Description>
                     </View>
-                  ))}
-                </View>
-              ) : (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    padding: 4,
-                    alignItems: "center",
-                  }}
-                >
-                  <AppList.Description>ID: </AppList.Description>
-                  <AppList.Description
-                    style={{ color: palette.textSecondary, fontWeight: "bold" }}
-                  >
-                    {(item.id || "").toString()}
-                  </AppList.Description>
-                </View>
-              )}
-            </>
-          );
-        })}
-      </ScrollView>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </ScrollView>
 
-      {/* Información de paginación */}
-      {pagination && (
-        <View style={[styles.paginationInfo, { marginBottom: 16 }]}>
-          <Text variant="bodySmall" style={styles.paginationText}>
-            Mostrando {pagination.from} - {pagination.to} de {pagination.total}{" "}
-            elementos
-          </Text>
-        </View>
+          {/* Información de paginación */}
+          {pagination && (
+            <View style={[styles.paginationInfo, { marginBottom: 16 }]}>
+              <Text variant="bodySmall" style={styles.paginationText}>
+                Mostrando {pagination.from} - {pagination.to} de{" "}
+                {pagination.total} elementos
+              </Text>
+            </View>
+          )}
+        </>
       )}
     </View>
+  );
+}
+
+interface SearchBarComponentProps {
+  onChangeText: (text: string) => void;
+}
+
+function SearchBarComponent(props: SearchBarComponentProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const { run } = useDebounce((text: string) => {
+    props.onChangeText(text);
+  });
+
+  const handleChangeText = (text: string) => {
+    setSearchQuery(text);
+    run(text);
+  };
+
+  return (
+    <Searchbar
+      placeholder="Buscar..."
+      onChangeText={handleChangeText}
+      value={searchQuery}
+      style={styles.searchbar}
+      mode="bar"
+      onClearIconPress={() => setSearchQuery("")}
+    />
   );
 }
 

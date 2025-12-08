@@ -1,11 +1,12 @@
-import RecentMovements from "@/components/Dashboard/RecentMovements";
+import TaskList from "@/components/Dashboard/TaskList";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { Href, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { Chip, Text, TouchableRipple } from "react-native-paper";
+import { Text, TouchableRipple } from "react-native-paper";
 
 interface Operation {
   key: string;
@@ -14,7 +15,7 @@ interface Operation {
   color: string;
   backgroundColor: string;
   icon: any;
-  link: string;
+  link: Href;
   iconName: string;
 }
 
@@ -78,21 +79,52 @@ export default function OperationsScreen() {
   const [filter, setFilter] = useState<FilterType>("all");
 
   const auth = useAuth();
+  const { selectedLocation } = useSelectedLocation();
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text variant="headlineSmall" style={{ fontWeight: "bold" }}>
-            Bienvenido {auth.user?.name || ""}!
+          <Text variant="titleLarge" style={{ fontWeight: "bold" }}>
+            Hola, {auth.user?.name?.split(" ")[0] || ""}
           </Text>
-          <Text
-            variant="bodySmall"
-            style={{ color: palette.textSecondary, marginTop: 4 }}
-          >
-            Gestiona los movimientos diarios de tu negocio
-          </Text>
+          {/* Company and Location Info */}
+          {(auth.selectedCompany || selectedLocation) && (
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 8,
+                marginTop: 8,
+                width: "100%",
+              }}
+            >
+              {auth.selectedCompany && (
+                <View style={styles.compactInfo}>
+                  <MaterialCommunityIcons
+                    name="office-building"
+                    size={14}
+                    color={palette.primary}
+                  />
+                  <Text variant="bodySmall" numberOfLines={1}>
+                    {auth.selectedCompany.name}
+                  </Text>
+                </View>
+              )}
+              {selectedLocation && (
+                <View style={styles.compactInfo}>
+                  <MaterialCommunityIcons
+                    name="map-marker"
+                    size={14}
+                    color={palette.blue}
+                  />
+                  <Text variant="bodySmall" numberOfLines={1}>
+                    {selectedLocation.name}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
       </View>
 
@@ -161,71 +193,8 @@ export default function OperationsScreen() {
         </ScrollView>
       </View>
 
-      {/* Filters */}
-      <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
-        <Text
-          variant="titleMedium"
-          style={{ fontWeight: "bold", marginBottom: 12 }}
-        >
-          Movimientos Recientes
-        </Text>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 8 }}
-        >
-          <Chip
-            selected={filter === "all"}
-            onPress={() => setFilter("all")}
-            mode={filter === "all" ? "flat" : "outlined"}
-            selectedColor={palette.primary}
-          >
-            Todos
-          </Chip>
-          <Chip
-            selected={filter === "entry"}
-            onPress={() => setFilter("entry")}
-            mode={filter === "entry" ? "flat" : "outlined"}
-            selectedColor={palette.success}
-            icon="arrow-down-circle"
-          >
-            Entradas
-          </Chip>
-          <Chip
-            selected={filter === "exit"}
-            onPress={() => setFilter("exit")}
-            mode={filter === "exit" ? "flat" : "outlined"}
-            selectedColor={palette.error}
-            icon="arrow-up-circle"
-          >
-            Salidas
-          </Chip>
-          <Chip
-            selected={filter === "production"}
-            onPress={() => setFilter("production")}
-            mode={filter === "production" ? "flat" : "outlined"}
-            selectedColor={palette.accent}
-            icon="factory"
-          >
-            Producción
-          </Chip>
-          <Chip
-            selected={filter === "adjustment"}
-            onPress={() => setFilter("adjustment")}
-            mode={filter === "adjustment" ? "flat" : "outlined"}
-            selectedColor={palette.secondary}
-            icon="clipboard-edit"
-          >
-            Ajustes
-          </Chip>
-        </ScrollView>
-      </View>
-
-      <ScrollView style={{ marginBottom: 8 }}>
-        <View style={{ paddingHorizontal: 16, paddingBottom: 16 }}>
-          <RecentMovements filter={filter} />
-        </View>
-      </ScrollView>
+      {/* Tasks Section */}
+      <TaskList limit={10} />
     </View>
   );
 }
@@ -240,6 +209,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 16,
     paddingTop: 8,
+    paddingBottom: 12,
+  },
+  compactInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: palette.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  compactInfoText: {
+    color: palette.textSecondary,
+    fontWeight: "500",
+    fontSize: 12,
+    flex: 1,
   },
   operationCard: {
     width: 140,

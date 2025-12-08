@@ -61,7 +61,7 @@ export default function CompaniesForm(props: CompaniesProps) {
       <AppForm
         ref={formRef}
         api={Services.admin.companies}
-        defaultValues={{
+        initialValues={{
           name: "",
           business_name: "",
           rfc: "",
@@ -86,14 +86,12 @@ export default function CompaniesForm(props: CompaniesProps) {
             name="name"
             label="Nombre de la Compañía"
             placeholder="Ingrese el nombre comercial"
-            rules={{ required: "El nombre es requerido" }}
           />
 
           <FormInput
             name="business_name"
             label="Razón Social"
             placeholder="Ingrese la razón social completa"
-            rules={{ required: "La razón social es requerida" }}
           />
 
           <FormInput
@@ -101,13 +99,6 @@ export default function CompaniesForm(props: CompaniesProps) {
             label="RFC"
             placeholder="ABCD123456ABC"
             autoCapitalize="characters"
-            rules={{
-              required: "El RFC es requerido",
-              pattern: {
-                value: /^[A-Z]{3,4}[0-9]{6}[A-Z0-9]{3}$/,
-                message: "El RFC no tiene un formato válido",
-              },
-            }}
           />
         </View>
 
@@ -119,13 +110,6 @@ export default function CompaniesForm(props: CompaniesProps) {
             placeholder="correo@empresa.com"
             keyboardType="email-address"
             autoCapitalize="none"
-            rules={{
-              required: "El email es requerido",
-              pattern: {
-                value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                message: "Debe ser un email válido",
-              },
-            }}
           />
 
           <FormInput

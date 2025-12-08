@@ -237,11 +237,9 @@ export default function WorkersForm(props: WorkersFormProps) {
 
 function LocationCheckBox({
   location,
-  key,
   formRef,
 }: {
   location: App.Entities.Location;
-  key: number;
   formRef: React.RefObject<AppFormRef<any>>;
 }) {
   const form = useFormikContext<WorkerFormData>();

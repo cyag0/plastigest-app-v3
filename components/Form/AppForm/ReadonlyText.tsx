@@ -4,6 +4,7 @@ import { Text } from "react-native";
 
 interface ReadonlyTextProps {
   text: string;
+  textStyle?: object;
 }
 
 export default function ReadonlyText(props: ReadonlyTextProps) {
@@ -11,6 +12,7 @@ export default function ReadonlyText(props: ReadonlyTextProps) {
     <Text
       style={{
         color: palette.accent,
+        ...props.textStyle,
       }}
     >
       {props.text || "-"}

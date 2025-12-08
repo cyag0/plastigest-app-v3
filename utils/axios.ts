@@ -15,7 +15,7 @@ const axiosClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: API_TIMEOUT,
   headers: {
-    Accept: "application/json",
+    "Content-Type": "multipart/form-data",
   },
 });
 

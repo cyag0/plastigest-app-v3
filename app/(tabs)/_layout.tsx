@@ -10,8 +10,6 @@ import { useColorScheme } from "@/hooks/useColorScheme";
 export default function TabLayout() {
   const colorScheme = useColorScheme();
 
-  console.log("Rendering Tab Layout with color scheme:", colorScheme);
-
   return (
     <Tabs
       screenOptions={{
@@ -69,15 +67,6 @@ export default function TabLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="purchases"
-        options={{
-          title: "Compras",
-          tabBarIcon: ({ color, focused }) => (
-            <Appbar.Action icon="cart" iconColor={color} size={24} />
-          ),
-        }}
-      />
 
       <Tabs.Screen
         name="administration"
@@ -91,7 +80,6 @@ export default function TabLayout() {
             <AppBar
               title={options.title || route.name}
               onSearchPress={() => console.log("Search pressed")}
-              onNotificationPress={() => console.log("Notifications pressed")}
               onProfilePress={() => console.log("Profile pressed")}
             />
           ),

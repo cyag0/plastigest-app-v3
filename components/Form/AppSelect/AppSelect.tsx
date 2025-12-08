@@ -1,25 +1,12 @@
+import palette from "@/constants/palette";
 import React from "react";
-import { PaperSelect } from "react-native-paper-select";
-import {
-  ListItem,
-  PaperSelectProps,
-} from "react-native-paper-select/lib/typescript/interface/paperSelect.interface";
+import { StyleSheet, View } from "react-native";
+import { TouchableRipple } from "react-native-paper";
+import SelectDropdown from "react-native-select-dropdown";
 import MakeForm from "../AppForm/hoc";
 import ReadonlyText from "../AppForm/ReadonlyText";
 
-interface AppSelectProps
-  extends Omit<
-    PaperSelectProps,
-    | "value"
-    | "onChangeText"
-    | "onBlur"
-    | "onChange"
-    | "arrayList"
-    | "label"
-    | "multiEnable"
-    | "onSelection"
-    | "selectedArrayList"
-  > {
+interface AppSelectProps {
   value?: number[] | string[] | number | string;
   onChange?: (value: string[] | number[] | string | number) => void;
   onBlur?: () => void;
@@ -27,17 +14,16 @@ interface AppSelectProps
   multiple?: boolean;
   hideSearchBox?: boolean;
   readonly?: boolean;
+  placeholder?: string;
+  disabled?: boolean;
 }
 
 export default function AppSelect(props: AppSelectProps) {
-  const selectRef = React.useRef(null);
+  const dropdownRef = React.useRef<SelectDropdown>(null);
 
-  const arrayList =
-    props.data && props.data.length > 0
-      ? props.data.map((item) => ({ _id: item.value, value: item.label }))
-      : [];
+  console.log("AppSelect props.value", props);
 
-  // Normalizar el valor a array para el procesamiento interno y convertir a strings
+  // Normalizar el valor para el procesamiento interno
   const normalizedValue = props.multiple
     ? Array.isArray(props.value)
       ? props.value.map((v) => String(v))
@@ -45,29 +31,26 @@ export default function AppSelect(props: AppSelectProps) {
       ? [String(props.value)]
       : []
     : Array.isArray(props.value)
-    ? props.value.map((v) => String(v))
+    ? props.value.map((v) => String(v))[0]
     : props.value
-    ? [String(props.value)]
-    : [];
+    ? String(props.value)
+    : undefined;
 
-  const internalValue: ListItem[] =
-    normalizedValue
-      .map((item) => {
-        const found = props.data?.find((d) => d.value === item);
-        return found
-          ? ({ _id: found.value, value: found.label } as ListItem)
-          : ({} as ListItem);
-      })
-      .filter((item) => item._id) || [];
+  // Para múltiple, obtener los elementos seleccionados
+  const selectedItems =
+    props.multiple && Array.isArray(normalizedValue)
+      ? props.data?.filter((item) => normalizedValue.includes(item.value)) || []
+      : [];
 
-  const internalValueString = internalValue
-    .map((item) => item.value)
-    .join(", ");
+  const selectedValue = props.multiple
+    ? selectedItems.map((item) => item.label).join(", ")
+    : props.data?.find((item) => item.value === normalizedValue)?.label || "";
 
-  function handleOnChange(value: string, listItems: ListItem[]) {
+  function handleOnChange(
+    selectedItem: { value: string; label: string },
+    index: number
+  ) {
     if (props.onChange) {
-      const stringValues = listItems.map((item) => item._id);
-
       // Detectar si el valor original era numérico para mantener el tipo
       const shouldReturnNumbers = (() => {
         if (props.value === undefined || props.value === null) return false;
@@ -79,52 +62,180 @@ export default function AppSelect(props: AppSelectProps) {
       })();
 
       // Convertir a números si es necesario
-      const newValues = shouldReturnNumbers
-        ? stringValues.map((v) => {
-            const num = Number(v);
-            return isNaN(num) ? v : num;
-          })
-        : stringValues;
+      const newValue = shouldReturnNumbers
+        ? isNaN(Number(selectedItem.value))
+          ? selectedItem.value
+          : Number(selectedItem.value)
+        : selectedItem.value;
 
       if (props.multiple) {
-        // Para múltiple, devolver array
-        props.onChange(newValues);
+        // Para múltiple, manejar array (nota: react-native-select-dropdown no soporta múltiple nativamente)
+        // Esta es una implementación simplificada
+        const currentValues = Array.isArray(props.value) ? props.value : [];
+        const valueExists = currentValues.some(
+          (v) => String(v) === selectedItem.value
+        );
+
+        if (valueExists) {
+          // Remover si ya existe
+          const filtered = currentValues.filter(
+            (v) => String(v) !== selectedItem.value
+          );
+          props.onChange(filtered as string[] | number[]);
+        } else {
+          // Agregar si no existe
+          props.onChange([...currentValues, newValue] as string[] | number[]);
+        }
       } else {
-        // Para individual, devolver el primer valor o undefined
-        props.onChange(newValues.length > 0 ? newValues[0] : undefined);
+        // Para individual, devolver el valor
+        props.onChange(newValue);
       }
     }
   }
 
   if (props.readonly) {
-    return <ReadonlyText text={internalValueString} />;
+    return <ReadonlyText text={selectedValue} />;
+  }
+
+  if (props.multiple) {
+    // Para múltiple, mostrar una vista simplificada por ahora
+    return (
+      <View style={styles.container}>
+        <SelectDropdown
+          ref={dropdownRef}
+          data={props.data || []}
+          onSelect={handleOnChange}
+          renderButton={(selectedItem, isOpened) => (
+            <View
+              style={[styles.dropdownButton, props.disabled && styles.disabled]}
+            >
+              <ReadonlyText
+                text={
+                  selectedValue ||
+                  props.placeholder ||
+                  "Seleccionar opciones..."
+                }
+              />
+            </View>
+          )}
+          renderItem={(item, index, isSelected) => {
+            const selectedItem = normalizedValue === item.value;
+
+            console.log(
+              "item",
+              item,
+              "isSelected",
+              isSelected,
+              "selectedItem",
+              selectedItem
+            );
+            return (
+              <View
+                style={[
+                  styles.dropdownItem,
+                  selectedItem && styles.selectedItem,
+                ]}
+              >
+                <ReadonlyText text={item.label} />
+              </View>
+            );
+          }}
+          showsVerticalScrollIndicator={false}
+          dropdownStyle={styles.dropdown}
+          disabled={props.disabled}
+        />
+      </View>
+    );
   }
 
   return (
-    <PaperSelect
-      // @ts-ignore
-      label={undefined}
-      inputRef={selectRef}
-      arrayList={arrayList}
-      textInputStyle={{
-        height: 48,
-        outlineWidth: 0,
-      }}
-      onSelection={(value) => {
-        handleOnChange(value.text, value.selectedList);
-      }}
-      selectedArrayList={internalValue}
-      value={internalValueString}
-      multiEnable={props.multiple || false}
-      hideSearchBox={props.hideSearchBox}
-      textInputMode="outlined"
-      textInputOutlineStyle={{
-        borderWidth: 0,
-        borderColor: "transparent",
-        padding: 4,
-      }}
-    />
+    <View style={styles.container}>
+      <SelectDropdown
+        ref={dropdownRef}
+        data={props.data || []}
+        onSelect={handleOnChange}
+        renderButton={(selectedItem, isOpened) => (
+          <TouchableRipple
+            onPress={() => {
+              console.log("Dropdown pressed");
+            }}
+          >
+            <View
+              style={[styles.dropdownButton, props.disabled && styles.disabled]}
+            >
+              <ReadonlyText
+                text={selectedValue || props.placeholder || "Seleccionar..."}
+              />
+            </View>
+          </TouchableRipple>
+        )}
+        renderItem={(item, index, isSelected) => {
+          const selectedItem = normalizedValue === item.value;
+
+          return (
+            <View
+              style={[styles.dropdownItem, selectedItem && styles.selectedItem]}
+            >
+              <ReadonlyText
+                text={item.label}
+                textStyle={{
+                  color: selectedItem ? "#fff" : undefined,
+                }}
+              />
+            </View>
+          );
+        }}
+        showsVerticalScrollIndicator={false}
+        dropdownStyle={styles.dropdown}
+        disabled={props.readonly || false}
+        search={!props.hideSearchBox}
+        searchInputStyle={styles.searchInput}
+        searchPlaceHolder="Buscar..."
+      />
+    </View>
   );
 }
 
 export const FormSelectSimple = MakeForm(AppSelect);
+
+const styles = StyleSheet.create({
+  container: {
+    minHeight: 48,
+  },
+  dropdownButton: {
+    width: "100%",
+    height: 48,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    paddingHorizontal: 12,
+    justifyContent: "center",
+  },
+  disabled: {
+    backgroundColor: "#e9ecef",
+    opacity: 0.6,
+  },
+  dropdown: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  dropdownItem: {
+    width: "100%",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  selectedItem: {
+    backgroundColor: palette.error,
+  },
+  searchInput: {
+    backgroundColor: "#f8f9fa",
+    borderBottomWidth: 1,
+    borderBottomColor: "#ddd",
+    paddingHorizontal: 12,
+  },
+});

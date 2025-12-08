@@ -17,9 +17,13 @@ export default function UsersIndexScreen() {
         title: item.name,
         description: item.email,
         left: (
-          <Avatar.Text
+          <Avatar.Image
             size={50}
-            label={item.name?.charAt(0)?.toUpperCase() || "U"}
+            source={
+              item.avatar && item.avatar.length > 0
+                ? { uri: item.avatar[0].uri }
+                : require("@/assets/images/icon.png")
+            }
             style={styles.avatar}
           />
         ),
@@ -34,6 +38,12 @@ export default function UsersIndexScreen() {
             {item.is_active ? "Activo" : "Inactivo"}
           </Chip>
         ),
+        bottom: [
+          {
+            label: "Compañías:",
+            value: (item.companies && item.companies.length) || 0,
+          },
+        ],
       })}
       menu={generateCrudMenu(route)}
       searchPlaceholder="Buscar usuarios..."

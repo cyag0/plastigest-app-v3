@@ -3,6 +3,7 @@ import AppInput, { FormInput } from "@/components/Form/AppInput";
 import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { SalesProvider, useSales } from "@/contexts/SalesContext";
 import { AlertsProvider, useAlerts } from "@/hooks/useAlerts";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
@@ -30,7 +31,6 @@ import {
   TextInput,
   TouchableRipple,
 } from "react-native-paper";
-import { SalesProvider, useSales } from "./salesContext";
 
 interface POSFormProps {
   type?: "sales" | "purchases";
@@ -91,9 +91,7 @@ interface AppProps {
 }
 
 function App({ type, onBack, readonly, onClose }: AppProps) {
-  const title = type === "sales" ? "Punto de Venta" : "Gestión de Compras";
-  const params = useLocalSearchParams();
-  const { cart, cartTotal, cartItemsCount } = useSales();
+  const { cartItemsCount } = useSales();
 
   const theme = {
     ...MD3LightTheme,
@@ -118,15 +116,6 @@ function App({ type, onBack, readonly, onClose }: AppProps) {
 
   // Estado para modal del carrito en móviles
   const [showCartModal, setShowCartModal] = React.useState(false);
-
-  // Función mejorada de regreso que incluye el carrito
-  const handleBackWithCart = () => {
-    if (onClose) {
-      onClose();
-    } else if (onBack) {
-      onBack();
-    }
-  };
 
   return (
     <AppForm

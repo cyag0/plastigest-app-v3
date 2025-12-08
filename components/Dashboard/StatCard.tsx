@@ -20,12 +20,11 @@ export default function StatCard({
   return (
     <Card style={styles.statCard}>
       <Card.Content style={styles.statContent}>
-        <View style={[styles.statIcon, { backgroundColor: color + "20" }]}>
-          <MaterialCommunityIcons name={icon as any} size={24} color={color} />
-        </View>
+        <Text style={styles.statLabel}>{label}</Text>
+
         <View style={styles.statInfo}>
+          <MaterialCommunityIcons name={icon as any} size={32} color={color} />
           <Text style={styles.statValue}>{value}</Text>
-          <Text style={styles.statLabel}>{label}</Text>
         </View>
       </Card.Content>
     </Card>
@@ -39,8 +38,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   statContent: {
-    flexDirection: "row",
-    alignItems: "center",
+    justifyContent: "center",
     padding: 8,
   },
   statIcon: {
@@ -53,6 +51,9 @@ const styles = StyleSheet.create({
   },
   statInfo: {
     flex: 1,
+    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
   },
   statValue: {
     fontSize: 20,
@@ -60,8 +61,9 @@ const styles = StyleSheet.create({
     color: palette.text,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: palette.textSecondary,
     marginTop: 2,
+    textAlign: "center",
   },
 });

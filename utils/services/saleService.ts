@@ -118,6 +118,18 @@ class SaleService {
   }
 
   /**
+   * Obtener estadísticas de ventas
+   */
+  async stats(params?: {
+    location_id?: number;
+    start_date?: string;
+    end_date?: string;
+  }) {
+    const response = await axios.get("/sales/stats", { params });
+    return response.data;
+  }
+
+  /**
    * Verificar si una venta puede editarse
    */
   canEdit(sale: Sale): boolean {

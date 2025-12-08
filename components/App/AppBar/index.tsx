@@ -1,7 +1,9 @@
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Appbar } from "react-native-paper";
+import { View } from "react-native";
+import { Appbar, Badge } from "react-native-paper";
 
 export interface AppBarProps {
   title?: string;
@@ -37,6 +39,7 @@ export default function AppBar({
   iconColor = palette.textSecondary,
 }: AppBarProps) {
   const router = useRouter();
+  const { unreadNotificationsCount } = useAuth();
   const showBackButton = _showBackButton && router.canGoBack();
 
   const handleBack = () => {
@@ -50,12 +53,14 @@ export default function AppBar({
   };
 
   const handleNotifications = () => {
-    onNotificationPress?.();
+    router.push("/(stacks)/notifications");
   };
 
   const handleProfile = () => {
     onProfilePress?.();
   };
+
+  console.log(unreadNotificationsCount);
 
   return (
     <Appbar.Header
@@ -104,12 +109,27 @@ export default function AppBar({
 
       {/* Botón de notificaciones */}
       {showNotificationButton && (
-        <Appbar.Action
-          icon="bell-outline"
-          onPress={handleNotifications}
-          iconColor={iconColor}
-          rippleColor={palette.primary}
-        />
+        <View style={{ position: "relative" }}>
+          <Appbar.Action
+            icon="bell-outline"
+            onPress={handleNotifications}
+            iconColor={iconColor}
+            rippleColor={palette.primary}
+          />
+          {unreadNotificationsCount > 0 && (
+            <Badge
+              style={{
+                position: "absolute",
+                top: 4,
+                right: 4,
+                backgroundColor: palette.error,
+              }}
+              size={18}
+            >
+              {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
+            </Badge>
+          )}
+        </View>
       )}
 
       {/* Botón de perfil */}

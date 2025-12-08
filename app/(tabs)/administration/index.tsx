@@ -1,15 +1,10 @@
+import AdminSection from "@/components/Administration/AdminSection";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import React from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import {
-  Card,
-  Divider,
-  IconButton,
-  Text,
-  TouchableRipple,
-} from "react-native-paper";
+import { Card, IconButton, Text } from "react-native-paper";
 
 interface AdminOption {
   id: string;
@@ -18,74 +13,84 @@ interface AdminOption {
   icon: string;
   route: string;
   color: string;
-  category: "company" | "catalog" | "users" | "settings" | "general";
+  category: "system" | "company" | "location" | "catalog";
+  requiredPermission?: string;
 }
 
 export default function AdministrationScreen() {
   const router = useRouter();
+  const { selectedCompany, user, location } = useAuth();
 
-  const { selectedCompany } = useAuth();
+  // Helper para verificar si el usuario tiene un permiso
+  const hasPermission = (permission: string) => {
+    return user?.permissions?.includes(permission) ?? false;
+  };
 
   const adminOptions: AdminOption[] = [
-    // Configuración de la Empresa
+    // === CONFIGURACIÓN DEL SISTEMA (Solo Super Admins) ===
     {
-      id: "general-company",
-      title: "Compañías",
-      description: "Gestiona los datos fiscales y generales de la empresa",
-      icon: "office-building",
+      id: "system-companies",
+      title: "Gestión de Compañías",
+      description: "Administra todas las empresas del sistema",
+      icon: "office-building-cog",
       route: "/(tabs)/administration/companies",
       color: palette.primary,
-      category: "general",
+      category: "system",
+      requiredPermission: "companies_manage",
     },
     {
-      id: "general-users",
+      id: "system-users",
       title: "Usuarios del Sistema",
-      description: "Controla accesos y permisos de usuarios",
-      icon: "account-key",
+      description: "Gestiona usuarios y accesos globales",
+      icon: "account-cog",
       route: "/(tabs)/administration/users",
       color: palette.secondary,
-      category: "general",
+      category: "system",
+      requiredPermission: "users_manage",
     },
 
+    // === CONFIGURACIÓN DE LA EMPRESA ===
     {
-      id: "company",
-      title: "Compañía",
-      description: "Gestiona los datos fiscales y generales de la empresa",
+      id: "company-settings",
+      title: "Mi Compañía",
+      description: "Edita datos fiscales y configuración de tu empresa",
       icon: "office-building",
-      route:
-        "/(tabs)/administration/companies/" +
-        (selectedCompany ? selectedCompany.id : ""),
+      route: selectedCompany
+        ? `/(tabs)/administration/companies/${selectedCompany.id}/edit`
+        : "/(tabs)/administration/companies",
       color: palette.primary,
       category: "company",
+      requiredPermission: "companies_update",
     },
     {
-      id: "locations",
+      id: "company-users",
+      title: "Usuarios de la Empresa",
+      description: "Gestiona usuarios con acceso a esta empresa",
+      icon: "account-group",
+      route: "/(tabs)/administration/company-users",
+      color: palette.secondary,
+      category: "company",
+      requiredPermission: "users_list",
+    },
+    {
+      id: "company-locations",
       title: "Sucursales",
-      description: "Administra ubicaciones físicas y almacenes",
+      description: "Administra ubicaciones y almacenes de tu empresa",
       icon: "map-marker-multiple",
       route: "/(tabs)/administration/locations",
       color: palette.info,
       category: "company",
+      requiredPermission: "locations_list",
     },
-    /*     {
-      id: "users",
-      title: "Usuarios del Sistema",
-      description: "Controla accesos y permisos de usuarios",
-      icon: "account-key",
-      route: "/(tabs)/home/users",
-      color: palette.secondary,
-      category: "users",
-    }, */
-
-    // Gestión de Personal
     {
       id: "workers",
       title: "Trabajadores",
-      description: "Administra empleados, roles y asignaciones",
-      icon: "account-group",
+      description: "Administra empleados, roles y asignaciones de sucursales",
+      icon: "account-hard-hat",
       route: "/(tabs)/administration/workers",
-      color: palette.accent,
-      category: "users",
+      color: palette.blue,
+      category: "company",
+      requiredPermission: "workers_list",
     },
     {
       id: "roles",
@@ -94,27 +99,72 @@ export default function AdministrationScreen() {
       icon: "shield-account",
       route: "/(tabs)/home/roles",
       color: palette.error,
-      category: "users",
+      category: "company",
+      requiredPermission: "roles_list",
     },
 
-    // Catálogos
+    // === MI SUCURSAL ===
+    {
+      id: "current-location",
+      title: "Mi Sucursal",
+      description: "Edita configuración de tu sucursal actual",
+      icon: "store-edit",
+      route: `/(tabs)/administration/locations/${location?.id}/edit`,
+      color: palette.accent,
+      category: "location",
+      requiredPermission: "locations_update",
+    },
+    {
+      id: "location-settings",
+      title: "Configuración",
+      description: "Ajustes y preferencias de tu sucursal",
+      icon: "cog",
+      route: `/(tabs)/administration/settings`,
+      color: palette.primary,
+      category: "location",
+      requiredPermission: "locations_update",
+    },
+    {
+      id: "current-workers",
+      title: "Personal de mi Sucursal",
+      description: "Gestiona solo trabajadores de tu sucursal actual",
+      icon: "account-group",
+      route: "/(tabs)/administration/current-workers",
+      color: palette.secondary,
+      category: "location",
+      requiredPermission: "workers_list",
+    },
+    {
+      id: "recurring-tasks",
+      title: "Tareas Recurrentes",
+      description: "Programa tareas automáticas (conteos, reportes)",
+      icon: "calendar-clock",
+      route: "/(tabs)/administration/recurring-tasks",
+      color: palette.accent,
+      category: "location",
+      requiredPermission: "tasks_manage",
+    },
+
+    // === CATÁLOGOS ===
     {
       id: "categories",
       title: "Categorías",
       description: "Organiza productos en grupos lógicos",
       icon: "shape",
-      route: "/(tabs)/home/categories",
+      route: "/(tabs)/administration/categories",
       color: palette.primary,
       category: "catalog",
+      requiredPermission: "categories_list",
     },
     {
       id: "units",
       title: "Unidades de Medida",
       description: "Define unidades para inventarios (kg, pza, caja, etc.)",
       icon: "weight-kilogram",
-      route: "/(tabs)/home/unidades",
+      route: "/(tabs)/administration/unidades",
       color: palette.warning,
       category: "catalog",
+      requiredPermission: "units_list",
     },
     {
       id: "suppliers",
@@ -122,30 +172,38 @@ export default function AdministrationScreen() {
       description: "Registra y gestiona proveedores de productos",
       icon: "truck-delivery",
       route: "/(tabs)/home/suppliers",
-      color: palette.info,
+      color: palette.blue,
       category: "catalog",
+      requiredPermission: "suppliers_list",
     },
     {
       id: "clients",
       title: "Clientes",
       description: "Gestiona información y historial de clientes",
       icon: "account-multiple",
-      route: "/(tabs)/home/clientes",
+      route: "/(tabs)/administration/clientes",
       color: palette.accent,
       category: "catalog",
+      requiredPermission: "customers_list",
     },
   ];
 
+  // Filtrar opciones según permisos
+  const visibleOptions = adminOptions.filter((option) => {
+    if (!option.requiredPermission) return true;
+    return true || hasPermission(option.requiredPermission);
+  });
+
   const getCategoryTitle = (category: string) => {
     switch (category) {
-      case "general":
-        return "Configuración General";
+      case "system":
+        return "Configuración del Sistema";
       case "company":
-        return "Configuración de la Empresa";
-      case "users":
-        return "Gestión de Personal";
+        return "Mi Empresa";
+      case "location":
+        return "Mi Sucursal";
       case "catalog":
-        return "Catálogos y Maestros";
+        return "Catálogos";
       default:
         return "Otros";
     }
@@ -153,10 +211,12 @@ export default function AdministrationScreen() {
 
   const getCategoryIcon = (category: string) => {
     switch (category) {
+      case "system":
+        return "server-security";
       case "company":
         return "office-building-cog";
-      case "users":
-        return "account-cog";
+      case "location":
+        return "store-cog";
       case "catalog":
         return "database-cog";
       default:
@@ -164,111 +224,73 @@ export default function AdministrationScreen() {
     }
   };
 
-  const categories = ["general", "company", "users", "catalog"] as const;
+  const categories = ["system", "company", "location", "catalog"] as const;
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Categories */}
-        {categories.map((category) => {
-          const categoryOptions = adminOptions.filter(
-            (opt) => opt.category === category
-          );
-
-          if (categoryOptions.length === 0) return null;
-
-          return (
-            <View key={category} style={styles.categorySection}>
-              <View style={styles.categoryHeader}>
+        {/* Info Header */}
+        {visibleOptions.length > 0 && (
+          <Card style={styles.headerCard}>
+            <Card.Content style={styles.headerContent}>
+              <View style={styles.headerIconContainer}>
                 <IconButton
-                  icon={getCategoryIcon(category)}
+                  icon="information-outline"
                   size={24}
-                  iconColor={palette.primary}
+                  iconColor={palette.blue}
                   style={{ margin: 0 }}
                 />
-                <Text variant="titleLarge" style={styles.categoryTitle}>
-                  {getCategoryTitle(category)}
-                </Text>
               </View>
-
-              <Card style={styles.categoryCard}>
-                <Card.Content style={{ padding: 0 }}>
-                  {categoryOptions.map((option, index) => (
-                    <React.Fragment key={option.id}>
-                      <TouchableRipple
-                        onPress={() => router.push(option.route as any)}
-                        style={styles.optionItem}
-                      >
-                        <View style={styles.optionContent}>
-                          <View
-                            style={[
-                              styles.optionIcon,
-                              { backgroundColor: option.color + "20" },
-                            ]}
-                          >
-                            <IconButton
-                              icon={option.icon}
-                              size={28}
-                              iconColor={option.color}
-                              style={{ margin: 0 }}
-                            />
-                          </View>
-
-                          <View style={styles.optionText}>
-                            <Text
-                              variant="titleMedium"
-                              style={styles.optionTitle}
-                            >
-                              {option.title}
-                            </Text>
-                            <Text
-                              variant="bodySmall"
-                              style={styles.optionDescription}
-                              numberOfLines={2}
-                            >
-                              {option.description}
-                            </Text>
-                          </View>
-
-                          <IconButton
-                            icon="chevron-right"
-                            size={24}
-                            iconColor={palette.textSecondary}
-                            style={{ margin: 0 }}
-                          />
-                        </View>
-                      </TouchableRipple>
-
-                      {index < categoryOptions.length - 1 && (
-                        <Divider style={{ marginLeft: 80 }} />
-                      )}
-                    </React.Fragment>
-                  ))}
-                </Card.Content>
-              </Card>
-            </View>
-          );
-        })}
-
-        {/* Info Footer */}
-        <View style={styles.footer}>
-          <Card style={styles.infoCard}>
-            <Card.Content>
-              <View style={styles.infoContent}>
-                <IconButton
-                  icon="information"
-                  size={24}
-                  iconColor={palette.info}
-                  style={{ margin: 0 }}
-                />
-                <Text variant="bodySmall" style={styles.infoText}>
-                  Estas opciones requieren permisos de administrador. Contacta
-                  al administrador del sistema si necesitas acceso.
+              <View style={{ flex: 1 }}>
+                <Text variant="titleSmall" style={styles.headerTitle}>
+                  {selectedCompany
+                    ? `Configurando: ${selectedCompany.name}`
+                    : "Selecciona una empresa para comenzar"}
+                </Text>
+                <Text variant="bodySmall" style={styles.headerSubtitle}>
+                  Solo verás las opciones para las que tienes permisos
                 </Text>
               </View>
             </Card.Content>
           </Card>
-        </View>
+        )}
+
+        {/* Categories as Accordion Sections */}
+        {categories.map((category) => {
+          const categoryOptions = visibleOptions.filter(
+            (opt) => opt.category === category
+          );
+
+          return (
+            <AdminSection
+              key={category}
+              title={getCategoryTitle(category)}
+              icon={getCategoryIcon(category)}
+              options={categoryOptions}
+            />
+          );
+        })}
+
+        {/* Empty state si no tiene permisos */}
+        {visibleOptions.length === 0 && (
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconContainer}>
+              <IconButton
+                icon="shield-off"
+                size={64}
+                iconColor={palette.textSecondary}
+                style={{ margin: 0 }}
+              />
+            </View>
+            <Text variant="titleLarge" style={styles.emptyTitle}>
+              Sin Acceso
+            </Text>
+            <Text variant="bodyMedium" style={styles.emptyText}>
+              No tienes permisos para acceder a opciones de administración.
+              Contacta a tu administrador.
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -280,95 +302,66 @@ const styles = StyleSheet.create({
     backgroundColor: palette.background,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
+    paddingTop: 16,
+    paddingBottom: 32,
   },
-  header: {
-    marginBottom: 24,
+  headerCard: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    backgroundColor: palette.blue + "15",
+    borderRadius: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: palette.blue,
+    elevation: 0,
+    shadowColor: "transparent",
+  },
+  headerContent: {
+    flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 8,
   },
-  headerIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: palette.primary + "15",
+  headerIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: palette.blue + "25",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
+    marginRight: 12,
   },
   headerTitle: {
-    fontWeight: "bold",
-    color: palette.text,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    color: palette.textSecondary,
-    textAlign: "center",
-  },
-  categorySection: {
-    marginBottom: 24,
-  },
-  categoryHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-    gap: 8,
-  },
-  categoryTitle: {
-    fontWeight: "bold",
-    color: palette.text,
-  },
-  categoryCard: {
-    backgroundColor: palette.card,
-    borderRadius: 12,
-    elevation: 2,
-    overflow: "hidden",
-  },
-  optionItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  optionContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  optionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  optionText: {
-    flex: 1,
-  },
-  optionTitle: {
     fontWeight: "600",
     color: palette.text,
     marginBottom: 2,
   },
-  optionDescription: {
+  headerSubtitle: {
     color: palette.textSecondary,
-    lineHeight: 18,
+    lineHeight: 16,
   },
-  footer: {
-    marginTop: 8,
-  },
-  infoCard: {
-    backgroundColor: palette.info + "10",
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: palette.info,
-  },
-  infoContent: {
-    flexDirection: "row",
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
+    paddingVertical: 80,
     gap: 12,
   },
-  infoText: {
-    flex: 1,
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: palette.textSecondary + "15",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    color: palette.text,
+    fontWeight: "700",
+  },
+  emptyText: {
     color: palette.textSecondary,
-    lineHeight: 20,
+    textAlign: "center",
+    paddingHorizontal: 32,
   },
 });

@@ -1,11 +1,12 @@
-import AppBar from "@/components/App/AppBar";
 import AppList from "@/components/App/AppList/AppList";
 import PurchaseStats from "@/components/Dashboard/PurchaseStats";
+import CreatePurchaseModal, {
+  CreatePurchaseModalRef,
+} from "@/components/Views/POSV2/Components/CreatePurchaseModal";
 import palette from "@/constants/palette";
-import { useAsync } from "@/hooks/AHooks";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Text } from "react-native-paper";
 import { SceneMap, TabView } from "react-native-tab-view";
@@ -60,10 +61,7 @@ export default function PurchasesIndex() {
     { key: "stats", title: "Estadísticas" },
   ]);
 
-  useAsync(async () => {
-    const response = await Services.purchases.index({ all: true });
-    console.log("Purchases loaded:", response.data);
-  });
+  const modalRef = useRef<CreatePurchaseModalRef>(null);
 
   const renderListRoute = useMemo(
     () => () =>
@@ -118,11 +116,27 @@ export default function PurchasesIndex() {
               ],
             };
           }}
-          onItemPress={(entity: any) => {
-            router.push(`/(tabs)/home/purchases/${entity.id}` as any);
+          menu={{
+            onEdit(item) {
+              // Solo permitir editar si está en borrador
+              if (item.status === "draft") {
+                router.push(
+                  `/(tabs)/home/purchases/formv2?id=${item.id}` as any
+                );
+              }
+            },
+            showEdit(item) {
+              return item.status === "draft";
+            },
+            onShow(item) {
+              router.push(`/(tabs)/home/purchases/${item.id}` as any);
+            },
+            showDelete(item) {
+              return item.status === "draft";
+            },
           }}
           onPressCreate={() => {
-            router.push("/(tabs)/home/purchases/form" as any);
+            modalRef.current?.show();
           }}
           fabLabel="Nueva Compra"
         />
@@ -143,14 +157,6 @@ export default function PurchasesIndex() {
 
   return (
     <View style={styles.container}>
-      <AppBar
-        title={"Compras"}
-        showBackButton={true}
-        showNotificationButton={false}
-        showProfileButton={false}
-        showSearchButton={false}
-      />
-
       {/* Tabs Header */}
       <View style={styles.tabsContainer}>
         <Pressable
@@ -178,6 +184,13 @@ export default function PurchasesIndex() {
         onIndexChange={setIndex}
         initialLayout={{ width: layout.width }}
         renderTabBar={() => null}
+      />
+
+      <CreatePurchaseModal
+        ref={modalRef}
+        onSuccess={(purchaseId) => {
+          console.log("Purchase created with ID:", purchaseId);
+        }}
       />
     </View>
   );

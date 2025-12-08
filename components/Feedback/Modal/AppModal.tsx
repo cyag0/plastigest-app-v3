@@ -132,7 +132,7 @@ const AppModal = forwardRef<AppModalRef, ModalProps>((props, ref) => {
           config?.height ? { height: config.height } : {},
         ]}
       >
-        <View style={styles.modal}>
+        <View style={[styles.modal, { height: "100%" }]}>
           {/* Header */}
           {(config.title || config.showCloseButton) && (
             <>
@@ -201,6 +201,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     alignSelf: "center",
     maxHeight: "80%",
+    height: "100%",
     width: "90%", // default width
   },
   modal: {
@@ -231,6 +232,7 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     minHeight: 60,
+    flex: 1,
   },
   contentText: {
     color: palette.textSecondary,
