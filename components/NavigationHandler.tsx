@@ -45,12 +45,23 @@ export default function NavigationHandler({
     // 2. Verificar compañía (solo si está autenticado y no está cargando)
     if (user && !isLoadingCompanies) {
       // Si no hay compañía seleccionada pero hay compañías disponibles
-      if (!hasCompanySelected && companies.length > 0 && segments[1] !== "selectCompany") {
+      if (
+        !hasCompanySelected &&
+        companies.length > 0 &&
+        segments[1] !== "selectCompany"
+      ) {
         router.push("/(stacks)/selectCompany");
         return;
       }
     }
-  }, [user, isLoading, isLoadingCompanies, hasCompanySelected, companies.length, segments]);
+  }, [
+    user,
+    isLoading,
+    isLoadingCompanies,
+    hasCompanySelected,
+    companies.length,
+    segments,
+  ]);
 
   // Mostrar loading mientras se verifica autenticación
   if (isLoading) {
