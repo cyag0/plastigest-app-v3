@@ -64,7 +64,7 @@ export default function TaskList({ limit, status }: TaskListProps) {
   const getPriorityColor = (priority: App.Entities.TaskPriority) => {
     switch (priority) {
       case "urgent":
-        return palette.error;
+        return palette.red;
       case "high":
         return palette.warning;
       case "medium":
@@ -102,7 +102,7 @@ export default function TaskList({ limit, status }: TaskListProps) {
       case "cancelled":
         return palette.textSecondary;
       case "overdue":
-        return palette.error;
+        return palette.red;
       default:
         return palette.textSecondary;
     }
@@ -160,7 +160,7 @@ export default function TaskList({ limit, status }: TaskListProps) {
     if (diffDays < 0) {
       return {
         text: `Vencida hace ${Math.abs(diffDays)} día(s)`,
-        color: palette.error,
+        color: palette.red,
       };
     } else if (diffDays === 0) {
       return { text: "Vence hoy", color: palette.warning };
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
   },
   overdueCard: {
     borderLeftWidth: 4,
-    borderLeftColor: palette.error,
+    borderLeftColor: palette.red,
   },
   cardContent: {
     padding: 12,

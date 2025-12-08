@@ -4,9 +4,7 @@ import "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/useColorScheme";
 
-import CompanyRequiredWrapper from "@/components/CompanyRequiredWrapper";
 import { SelectDataProvider } from "@/components/Form/AppProSelect";
-import LocationRequiredWrapper from "@/components/LocationRequiredWrapper";
 import NavigationHandler from "@/components/NavigationHandler";
 import palette from "@/constants/palette";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -52,15 +50,11 @@ export default function RootLayout() {
     <PaperProvider theme={theme}>
       <AuthProvider>
         <SelectDataProvider>
-          <NavigationHandler>
-            <AlertsProvider>
-              <CompanyRequiredWrapper>
-                <LocationRequiredWrapper>
-                  <App />
-                </LocationRequiredWrapper>
-              </CompanyRequiredWrapper>
-            </AlertsProvider>
-          </NavigationHandler>
+          <AlertsProvider>
+            <NavigationHandler>
+              <App />
+            </NavigationHandler>
+          </AlertsProvider>
         </SelectDataProvider>
       </AuthProvider>
     </PaperProvider>

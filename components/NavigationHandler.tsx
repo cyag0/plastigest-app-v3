@@ -1,3 +1,5 @@
+import LocationSelector from "@/components/LocationSelector";
+import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSegments } from "expo-router";
 import React, { useEffect } from "react";
@@ -9,34 +11,77 @@ export default function NavigationHandler({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const {
+    user,
+    isLoading,
+    hasCompanySelected,
+    companies,
+    isLoadingCompanies,
+    selectedCompany,
+    location,
+  } = useAuth();
   const router = useRouter();
   const segments = useSegments();
 
   useEffect(() => {
-    if (isLoading) return; // No hacer nada mientras carga
+    if (isLoading) return; // No hacer nada mientras carga autenticación
 
     const inAuthGroup = segments[0] === "(tabs)" || segments[0] === "(stacks)";
+    const inLogin = segments[0] === "login" || !segments[0];
 
-    if (isAuthenticated && !inAuthGroup) {
-      // Usuario autenticado pero no en tabs, redirigir a home
-      router.replace("/(tabs)/home");
-    } else if (!isAuthenticated && inAuthGroup) {
-      // Usuario no autenticado pero en tabs, redirigir a login
+    // 1. Verificar autenticación
+    if (!user && inAuthGroup) {
+      // Usuario no autenticado intentando acceder a rutas protegidas
       router.replace("/login");
+      return;
     }
-  }, [isAuthenticated, isLoading, segments]);
+
+    if (user && inLogin) {
+      // Usuario autenticado en login, redirigir a home
+      router.replace("/(tabs)/home");
+      return;
+    }
+
+    // 2. Verificar compañía (solo si está autenticado y no está cargando)
+    if (user && !isLoadingCompanies) {
+      // Si no hay compañía seleccionada pero hay compañías disponibles
+      if (!hasCompanySelected && companies.length > 0 && segments[1] !== "selectCompany") {
+        router.push("/(stacks)/selectCompany");
+        return;
+      }
+    }
+  }, [user, isLoading, isLoadingCompanies, hasCompanySelected, companies.length, segments]);
 
   // Mostrar loading mientras se verifica autenticación
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={palette.primary} />
         <Text style={styles.loadingText}>Verificando autenticación...</Text>
       </View>
     );
   }
 
+  // Si no hay usuario, mostrar children (login)
+  if (!user) {
+    return <>{children}</>;
+  }
+
+  // Si no hay compañía seleccionada, mostrar children (se redirigirá a selectCompany en el useEffect)
+  if (!selectedCompany) {
+    return <>{children}</>;
+  }
+
+  // Si no hay ubicación seleccionada, mostrar selector
+  if (!location) {
+    return (
+      <View style={styles.container}>
+        <LocationSelector onLocationSelected={() => {}} />
+      </View>
+    );
+  }
+
+  // Todo OK, mostrar la app
   return <>{children}</>;
 }
 
@@ -45,10 +90,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f5f5f5",
+    backgroundColor: palette.background,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
+    color: palette.text,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: palette.background,
   },
 });
