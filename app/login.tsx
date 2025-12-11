@@ -1,5 +1,8 @@
+import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -14,12 +17,10 @@ import {
   Surface,
   Text,
   TextInput,
-  useTheme,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function LoginScreen() {
-  const theme = useTheme();
   const { login, isLoading } = useAuth();
   const alerts = useAlerts();
 
@@ -113,141 +114,170 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.keyboardView}
+    <SafeAreaView style={styles.container}>
+      <LinearGradient
+        colors={[palette.primary, palette.primaryDark]}
+        style={styles.gradient}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          keyboardShouldPersistTaps="handled"
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardView}
         >
-          <View style={styles.content}>
-            {/* Logo/Header */}
-            <View style={styles.header}>
-              <Text
-                variant="headlineLarge"
-                style={[styles.title, { color: theme.colors.primary }]}
-              >
-                PlastiGest
-              </Text>
-              <Text
-                variant="bodyLarge"
-                style={[
-                  styles.subtitle,
-                  { color: theme.colors.onSurfaceVariant },
-                ]}
-              >
-                Gestión integral de plásticos
-              </Text>
-            </View>
-
-            {/* Formulario de login */}
-            <Surface
-              style={[styles.form, { backgroundColor: theme.colors.surface }]}
-              elevation={2}
-            >
-              <Text
-                variant="headlineSmall"
-                style={[styles.formTitle, { color: theme.colors.onSurface }]}
-              >
-                Iniciar Sesión
-              </Text>
-
-              {/* Campo Email */}
-              <View style={styles.inputContainer}>
-                <TextInput
-                  label="Email"
-                  value={email}
-                  onChangeText={(text) => {
-                    setEmail(text);
-                    if (emailError) validateEmail(text);
-                  }}
-                  onBlur={() => validateEmail(email)}
-                  mode="outlined"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  error={!!emailError}
-                  disabled={isLoading}
-                  left={<TextInput.Icon icon="email" />}
-                />
-                <HelperText type="error" visible={!!emailError}>
-                  {emailError}
-                </HelperText>
+          <ScrollView
+            contentContainerStyle={styles.scrollContainer}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.content}>
+              {/* Logo/Header */}
+              <View style={styles.header}>
+                <View style={styles.logoContainer}>
+                  <MaterialCommunityIcons
+                    name="package-variant"
+                    size={80}
+                    color={palette.error}
+                  />
+                </View>
+                <Text variant="displaySmall" style={styles.title}>
+                  PlastiGest
+                </Text>
+                <Text variant="titleMedium" style={styles.subtitle}>
+                  Gestión integral de plásticos
+                </Text>
               </View>
 
-              {/* Campo Contraseña */}
-              <View style={styles.inputContainer}>
-                <TextInput
-                  label="Contraseña"
-                  value={password}
-                  onChangeText={(text) => {
-                    setPassword(text);
-                    if (passwordError) validatePassword(text);
-                  }}
-                  onBlur={() => validatePassword(password)}
-                  mode="outlined"
-                  secureTextEntry={!showPassword}
-                  autoComplete="password"
-                  error={!!passwordError}
-                  disabled={isLoading}
-                  left={<TextInput.Icon icon="lock" />}
-                  right={
-                    <TextInput.Icon
-                      icon={showPassword ? "eye-off" : "eye"}
-                      onPress={() => setShowPassword(!showPassword)}
+              {/* Formulario de login */}
+              <Surface style={styles.form} elevation={0}>
+                <View style={styles.formHeader}>
+                  <MaterialCommunityIcons
+                    name="login"
+                    size={32}
+                    color={palette.primary}
+                  />
+                  <Text variant="headlineSmall" style={styles.formTitle}>
+                    Iniciar Sesión
+                  </Text>
+                </View>
+
+                {/* Campo Email */}
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    label="Email"
+                    value={email}
+                    onChangeText={(text) => {
+                      setEmail(text);
+                      if (emailError) validateEmail(text);
+                    }}
+                    onBlur={() => validateEmail(email)}
+                    mode="outlined"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    error={!!emailError}
+                    disabled={isLoading}
+                    outlineColor={palette.border}
+                    activeOutlineColor={palette.primary}
+                    left={
+                      <TextInput.Icon
+                        icon="email-outline"
+                        color={emailError ? palette.error : palette.primary}
+                      />
+                    }
+                    style={styles.input}
+                  />
+                  <HelperText type="error" visible={!!emailError}>
+                    {emailError}
+                  </HelperText>
+                </View>
+
+                {/* Campo Contraseña */}
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    label="Contraseña"
+                    value={password}
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      if (passwordError) validatePassword(text);
+                    }}
+                    onBlur={() => validatePassword(password)}
+                    mode="outlined"
+                    secureTextEntry={!showPassword}
+                    autoComplete="password"
+                    error={!!passwordError}
+                    disabled={isLoading}
+                    outlineColor={palette.border}
+                    activeOutlineColor={palette.primary}
+                    left={
+                      <TextInput.Icon
+                        icon="lock-outline"
+                        color={passwordError ? palette.error : palette.primary}
+                      />
+                    }
+                    right={
+                      <TextInput.Icon
+                        icon={showPassword ? "eye-off-outline" : "eye-outline"}
+                        onPress={() => setShowPassword(!showPassword)}
+                        color={palette.textSecondary}
+                      />
+                    }
+                    style={styles.input}
+                  />
+                  <HelperText type="error" visible={!!passwordError}>
+                    {passwordError}
+                  </HelperText>
+                </View>
+
+                {/* Error general */}
+                {error ? (
+                  <Surface style={styles.errorContainer} elevation={0}>
+                    <MaterialCommunityIcons
+                      name="alert-circle"
+                      size={20}
+                      color={palette.error}
                     />
-                  }
-                />
-                <HelperText type="error" visible={!!passwordError}>
-                  {passwordError}
-                </HelperText>
-              </View>
+                    <Text style={styles.errorText}>{error}</Text>
+                  </Surface>
+                ) : null}
 
-              {/* Error general */}
-              {error ? (
-                <HelperText
-                  type="error"
-                  visible={true}
-                  style={styles.errorText}
+                {/* Botón de login */}
+                <Button
+                  mode="contained"
+                  onPress={handleLogin}
+                  style={styles.loginButton}
+                  disabled={isLoading}
+                  loading={isLoading}
+                  buttonColor={palette.primary}
+                  icon={isLoading ? undefined : "login"}
+                  contentStyle={styles.loginButtonContent}
                 >
-                  {error}
-                </HelperText>
-              ) : null}
+                  {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
+                </Button>
+              </Surface>
 
-              {/* Botón de login */}
-              <Button
-                mode="contained"
-                onPress={handleLogin}
-                style={styles.loginButton}
-                disabled={isLoading}
-                loading={isLoading}
-              >
-                {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
-              </Button>
-            </Surface>
-
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text
-                variant="bodySmall"
-                style={{ color: theme.colors.onSurfaceVariant }}
-              >
-                PlastiGest v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
-              </Text>
+              {/* Footer */}
+              <View style={styles.footer}>
+                <MaterialCommunityIcons
+                  name="shield-check"
+                  size={16}
+                  color="#FFFFFF80"
+                />
+                <Text variant="bodySmall" style={styles.footerText}>
+                  PlastiGest v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
+                </Text>
+              </View>
             </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: palette.background,
+  },
+  gradient: {
     flex: 1,
   },
   keyboardView: {
@@ -261,41 +291,95 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: "center",
+    maxWidth: 480,
+    width: "100%",
+    alignSelf: "center",
   },
   header: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 48,
+  },
+  logoContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: palette.error + "15",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "transparent",
+    borderWidth: 2,
+    borderColor: palette.error + "20",
   },
   title: {
     fontWeight: "bold",
-    marginBottom: 8,
+    color: palette.error,
+    textShadowColor: "rgba(0, 0, 0, 0.2)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   subtitle: {
     textAlign: "center",
+    color: palette.error,
+    opacity: 0.95,
   },
   form: {
-    padding: 24,
-    borderRadius: 12,
+    padding: 32,
+    borderRadius: 24,
     marginBottom: 20,
+    backgroundColor: "#FFFFFF",
+    shadowColor: "transparent",
+  },
+  formHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 32,
+    gap: 12,
   },
   formTitle: {
-    textAlign: "center",
-    marginBottom: 24,
-    fontWeight: "600",
+    color: palette.text,
+    fontWeight: "700",
   },
   inputContainer: {
     marginBottom: 16,
   },
-  errorText: {
-    textAlign: "center",
+  input: {
+    backgroundColor: "#FFFFFF",
+  },
+  errorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: palette.error + "10",
+    padding: 12,
+    borderRadius: 8,
     marginVertical: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: palette.error,
+  },
+  errorText: {
+    flex: 1,
+    color: palette.error,
+    fontSize: 13,
   },
   loginButton: {
-    marginTop: 16,
+    marginTop: 24,
     paddingVertical: 8,
+    borderRadius: 12,
+    shadowColor: "transparent",
+  },
+  loginButtonContent: {
+    height: 48,
   },
   footer: {
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 20,
+    justifyContent: "center",
+    marginTop: 32,
+    gap: 8,
+  },
+  footerText: {
+    color: "#FFFFFF",
+    opacity: 0.8,
   },
 });

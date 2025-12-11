@@ -1,28 +1,42 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { Text, Card, Button, Chip, Divider, TextInput, Modal, Portal } from 'react-native-paper';
-import { router, useLocalSearchParams } from 'expo-router';
-import AppBar from '@/components/App/AppBar';
-import transferService from '@/utils/services/transferService';
-import type { InventoryTransfer } from '@/utils/services/transferService';
+import AppBar from "@/components/App/AppBar";
+import palette from "@/constants/palette";
+import { useAlerts } from "@/hooks/useAlerts";
+import type { InventoryTransfer } from "@/utils/services/transferService";
+import transferService from "@/utils/services/transferService";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { router, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+import {
+  Button,
+  Card,
+  Chip,
+  Divider,
+  Modal,
+  Portal,
+  Text,
+} from "react-native-paper";
 
 export default function PetitionDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const alerts = useAlerts();
   const [petition, setPetition] = useState<InventoryTransfer | null>(null);
   const [loading, setLoading] = useState(true);
-  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionReason, setRejectionReason] = useState("");
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [approving, setApproving] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [receiving, setReceiving] = useState(false);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleString('es-ES', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return date.toLocaleString("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -38,8 +52,8 @@ export default function PetitionDetail() {
       const data = await transferService.getTransfer(Number(id));
       setPetition(data);
     } catch (error) {
-      console.error('Error loading petition:', error);
-      Alert.alert('Error', 'No se pudo cargar la petición');
+      console.error("Error loading petition:", error);
+      alerts.error("No se pudo cargar la petición");
     } finally {
       setLoading(false);
     }
@@ -56,18 +70,17 @@ export default function PetitionDetail() {
     try {
       setApproving(true);
       setShowApprovalModal(false);
-      
+
       await transferService.approve(petition.id);
-      
+
       // Recargar los datos para ver el cambio
       await loadPetition();
-      
+
       // Mostrar modal de éxito
       setShowSuccessModal(true);
-      
     } catch (error: any) {
-      console.error('Error approving petition:', error);
-      Alert.alert('Error', 'No se pudo aprobar la petición');
+      console.error("Error approving petition:", error);
+      alerts.error("No se pudo aprobar la petición");
     } finally {
       setApproving(false);
     }
@@ -75,65 +88,71 @@ export default function PetitionDetail() {
 
   const goToShipments = () => {
     setShowSuccessModal(false);
+    if (!petition) return;
     // Ir directamente a la preparación del envío
     router.replace(`/(tabs)/home/shipments/${petition.id}`);
   };
 
-  const handleReject = () => {
+  const handleReceive = () => {
+    if (!petition) return;
+    setShowReceiveModal(true);
+  };
+
+  const confirmReceive = async () => {
     if (!petition) return;
 
-    Alert.prompt(
-      'Rechazar Petición',
-      'Ingresa el motivo del rechazo:',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel'
-        },
-        {
-          text: 'Rechazar',
-          onPress: async (reason?: string) => {
-            if (!reason?.trim()) {
-              Alert.alert('Error', 'Debes proporcionar un motivo para el rechazo');
-              return;
-            }
+    try {
+      setReceiving(true);
+      setShowReceiveModal(false);
 
-            try {
-              await transferService.reject(petition.id, reason);
-              Alert.alert('Éxito', 'Petición rechazada exitosamente');
-              router.back();
-            } catch (error) {
-              console.error('Error rejecting petition:', error);
-              Alert.alert('Error', 'No se pudo rechazar la petición');
-            }
-          }
-        }
-      ],
-      'plain-text'
-    );
+      console.log("Receiving transfer with id:", id);
+
+      // Llamar al servicio sin enviar datos - el backend procesa automáticamente
+      await transferService.receive(parseInt(id as string));
+
+      // Recargar los datos para ver el cambio
+      await loadPetition();
+
+      alerts.success("Productos recibidos exitosamente");
+    } catch (error: any) {
+      console.error("Error receiving products:", error);
+      alerts.error("No se pudo confirmar la recepción");
+    } finally {
+      setReceiving(false);
+    }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending':
-        return '#FF9800';
-      case 'approved':
-        return '#4CAF50';
-      case 'rejected':
-        return '#F44336';
+      case "pending":
+        return palette.warning;
+      case "approved":
+        return palette.success;
+      case "rejected":
+        return palette.red;
+      case "in_transit":
+        return palette.blue;
+      case "closed":
+        return palette.success;
       default:
-        return '#9E9E9E';
+        return palette.textSecondary;
     }
   };
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'pending':
-        return 'Pendiente';
-      case 'approved':
-        return 'Aprobada';
-      case 'rejected':
-        return 'Rechazada';
+      case "pending":
+        return "Pendiente";
+      case "approved":
+        return "Aprobada";
+      case "ordered":
+        return "Ordenada";
+      case "rejected":
+        return "Rechazada";
+      case "in_transit":
+        return "En Tránsito";
+      case "closed":
+        return "Completada";
       default:
         return status;
     }
@@ -142,7 +161,6 @@ export default function PetitionDetail() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <AppBar title="Detalle de Petición" showBackButton />
         <View style={styles.loadingContainer}>
           <Text>Cargando...</Text>
         </View>
@@ -163,17 +181,15 @@ export default function PetitionDetail() {
 
   return (
     <View style={styles.container}>
-      <AppBar title="Detalle de Petición" showBackButton />
-      
       <ScrollView style={styles.content}>
         <Card style={styles.card}>
           <Card.Content>
             <View style={styles.header}>
               <Text variant="headlineSmall">Petición #{petition.id}</Text>
-              <Chip 
-                mode="flat" 
+              <Chip
+                mode="flat"
                 style={{ backgroundColor: getStatusColor(petition.status) }}
-                textStyle={{ color: 'white' }}
+                textStyle={{ color: "white" }}
               >
                 {getStatusLabel(petition.status)}
               </Chip>
@@ -181,40 +197,104 @@ export default function PetitionDetail() {
 
             <Divider style={styles.divider} />
 
-            <View style={styles.infoRow}>
-              <Text variant="bodyMedium" style={styles.label}>📍 Sucursal que solicita:</Text>
-              <Text variant="bodyMedium" style={styles.infoText}>{petition.to_location?.name || petition.toLocation?.name}</Text>
+            <View style={styles.infoColumn}>
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons
+                  name="map-marker"
+                  size={20}
+                  color={palette.primary}
+                  style={styles.infoIcon}
+                />
+                <Text variant="bodyMedium" style={styles.label}>
+                  Sucursal que solicita:
+                </Text>
+              </View>
+              <Text variant="bodyMedium" style={styles.infoText}>
+                {petition.to_location?.name}
+              </Text>
+            </View>
+            <View style={styles.infoColumn}>
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons
+                  name="store"
+                  size={20}
+                  color={palette.primary}
+                  style={styles.infoIcon}
+                />
+                <Text variant="bodyMedium" style={styles.label}>
+                  Sucursal que enviará:
+                </Text>
+              </View>
+              <Text variant="bodyMedium" style={styles.infoText}>
+                {petition.from_location?.name}
+              </Text>
+            </View>
+            <View style={styles.infoColumn}>
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons
+                  name="account"
+                  size={20}
+                  color={palette.primary}
+                  style={styles.infoIcon}
+                />
+                <Text variant="bodyMedium" style={styles.label}>
+                  Solicitado por:
+                </Text>
+              </View>
+              <Text variant="bodyMedium" style={styles.infoText}>
+                {petition.requested_by_user?.name}
+              </Text>
             </View>
 
-            <View style={styles.infoRow}>
-              <Text variant="bodyMedium" style={styles.label}>📦 Sucursal que enviará:</Text>
-              <Text variant="bodyMedium" style={styles.infoText}>{petition.from_location?.name || petition.fromLocation?.name}</Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text variant="bodyMedium" style={styles.label}>👤 Solicitado por:</Text>
-              <Text variant="bodyMedium" style={styles.infoText}>{petition.requested_by_user?.name || petition.requestedByUser?.name}</Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text variant="bodyMedium" style={styles.label}>📅 Fecha de solicitud:</Text>
+            <View style={styles.infoColumn}>
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons
+                  name="calendar"
+                  size={20}
+                  color={palette.primary}
+                  style={styles.infoIcon}
+                />
+                <Text variant="bodyMedium" style={styles.label}>
+                  Fecha de solicitud:
+                </Text>
+              </View>
               <Text variant="bodyMedium" style={styles.infoText}>
                 {formatDate(petition.created_at)}
               </Text>
             </View>
 
-            {(petition.approved_by_user || petition.approvedByUser) && (
-              <View style={styles.infoRow}>
-                <Text variant="bodyMedium" style={styles.label}>✅ Aprobado por:</Text>
+            {petition.approved_by_user && (
+              <View style={styles.infoColumn}>
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons
+                    name="check-circle"
+                    size={20}
+                    color={palette.success}
+                    style={styles.infoIcon}
+                  />
+                  <Text variant="bodyMedium" style={styles.label}>
+                    Aprobado por:
+                  </Text>
+                </View>
                 <Text variant="bodyMedium" style={styles.infoText}>
-                  {petition.approved_by_user?.name || petition.approvedByUser?.name}
+                  {petition.approved_by_user?.name}
                 </Text>
               </View>
             )}
 
             {petition.approved_at && (
-              <View style={styles.infoRow}>
-                <Text variant="bodyMedium" style={styles.label}>✅ Fecha de aprobación:</Text>
+              <View style={styles.infoColumn}>
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons
+                    name="clock-check-outline"
+                    size={20}
+                    color={palette.success}
+                    style={styles.infoIcon}
+                  />
+                  <Text variant="bodyMedium" style={styles.label}>
+                    Fecha de aprobación:
+                  </Text>
+                </View>
                 <Text variant="bodyMedium" style={styles.infoText}>
                   {formatDate(petition.approved_at)}
                 </Text>
@@ -223,19 +303,37 @@ export default function PetitionDetail() {
 
             {petition.rejection_reason && (
               <>
-                <View style={styles.infoRow}>
-                  <Text variant="bodyMedium" style={styles.label}>❌ Motivo del rechazo:</Text>
+                <View style={styles.infoColumn}>
+                  <View style={styles.infoRow}>
+                    <MaterialCommunityIcons
+                      name="close-circle"
+                      size={20}
+                      color={palette.error}
+                      style={styles.infoIcon}
+                    />
+                    <Text variant="bodyMedium" style={styles.label}>
+                      Motivo del rechazo:
+                    </Text>
+                  </View>
+                  <Text variant="bodyMedium" style={styles.rejectionReason}>
+                    {petition.rejection_reason}
+                  </Text>
                 </View>
-                <Text variant="bodyMedium" style={styles.rejectionReason}>
-                  {petition.rejection_reason}
-                </Text>
               </>
             )}
 
             {petition.notes && (
               <>
                 <View style={styles.infoRow}>
-                  <Text variant="bodyMedium" style={styles.label}>📝 Notas:</Text>
+                  <MaterialCommunityIcons
+                    name="note-text"
+                    size={20}
+                    color={palette.primary}
+                    style={styles.infoIcon}
+                  />
+                  <Text variant="bodyMedium" style={styles.label}>
+                    Notas:
+                  </Text>
                 </View>
                 <Text variant="bodyMedium" style={styles.notes}>
                   {petition.notes}
@@ -247,10 +345,17 @@ export default function PetitionDetail() {
 
         <Card style={styles.card}>
           <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              📦 Productos Solicitados
-            </Text>
-            
+            <View style={styles.sectionTitleRow}>
+              <MaterialCommunityIcons
+                name="package-variant"
+                size={24}
+                color={palette.primary}
+              />
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Productos Solicitados
+              </Text>
+            </View>
+
             {petition.details && petition.details.length > 0 ? (
               petition.details.map((detail, index) => (
                 <View key={index} style={styles.productItem}>
@@ -260,22 +365,20 @@ export default function PetitionDetail() {
                   </Text>
                   <View style={styles.productInfo}>
                     <Text variant="bodyMedium" style={styles.quantity}>
-                      Cantidad: {detail.quantity_requested} {detail.product?.unit}
+                      Cantidad: {detail.quantity_requested}{" "}
+                      {detail.product?.unit?.abbreviation ||
+                        detail.unit?.abbreviation ||
+                        "ud"}
                     </Text>
-                    {detail.unit_cost && detail.unit_cost > 0 && (
-                      <Text variant="bodyMedium" style={styles.cost}>
-                        Costo unitario: ${detail.unit_cost.toFixed(2)}
-                      </Text>
-                    )}
                   </View>
-                  
+
                   {detail.notes && (
                     <Text variant="bodySmall" style={styles.productNotes}>
-                      Notas: {detail.notes}
+                      Notas: {detail.notes || ""}
                     </Text>
                   )}
-                  
-                  {index < petition.details.length - 1 && (
+
+                  {index < (petition.details?.length || 0) - 1 && (
                     <Divider style={styles.productDivider} />
                   )}
                 </View>
@@ -285,42 +388,53 @@ export default function PetitionDetail() {
                 No hay productos en esta petición
               </Text>
             )}
-
-            {petition.total_cost && petition.total_cost > 0 && (
-              <>
-                <Divider style={styles.divider} />
-                <View style={styles.totalContainer}>
-                  <Text variant="titleMedium" style={styles.totalLabel}>
-                    Total estimado: ${petition.total_cost.toFixed(2)}
-                  </Text>
-                </View>
-              </>
-            )}
           </Card.Content>
         </Card>
 
-        {petition.status === 'pending' && (
+        {petition.status === "pending" && (
           <View style={styles.actionButtons}>
             <Button
               mode="contained"
               onPress={handleApprove}
               style={[styles.button, styles.approveButton]}
-              labelStyle={{ color: 'white' }}
+              labelStyle={{ color: "white" }}
             >
               Aprobar Petición
             </Button>
-            
+
             <Button
               mode="outlined"
               onPress={handleReject}
               style={[styles.button, styles.rejectButton]}
-              labelStyle={{ color: '#F44336' }}
+              labelStyle={{ color: "#F44336" }}
             >
               Rechazar Petición
             </Button>
           </View>
         )}
       </ScrollView>
+      {petition.status === "in_transit" && (
+        <View
+          style={[
+            styles.actionButtons,
+            {
+              paddingHorizontal: 16,
+            },
+          ]}
+        >
+          <Button
+            mode="contained"
+            onPress={handleReceive}
+            loading={receiving}
+            disabled={receiving}
+            style={[styles.button, styles.receiveButton]}
+            labelStyle={{ color: "white" }}
+            icon="check-circle"
+          >
+            Confirmar Recepción de Productos
+          </Button>
+        </View>
+      )}
 
       {/* Modal de Confirmación de Aprobación */}
       <Portal>
@@ -335,10 +449,10 @@ export default function PetitionDetail() {
                 Confirmar Aprobación
               </Text>
               <Text variant="bodyMedium" style={styles.modalText}>
-                ¿Estás seguro de que quieres aprobar esta petición? 
-                Serás redirigido a Envíos para preparar el pedido.
+                ¿Estás seguro de que quieres aprobar esta petición? Serás
+                redirigido a Envíos para preparar el pedido.
               </Text>
-              
+
               <View style={styles.modalButtons}>
                 <Button
                   mode="outlined"
@@ -371,13 +485,21 @@ export default function PetitionDetail() {
         >
           <Card>
             <Card.Content>
-              <Text variant="headlineSmall" style={styles.modalTitle}>
-                ✅ ¡Éxito!
-              </Text>
+              <View style={styles.modalTitleRow}>
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={32}
+                  color={palette.success}
+                />
+                <Text variant="headlineSmall" style={styles.modalTitle}>
+                  ¡Éxito!
+                </Text>
+              </View>
               <Text variant="bodyMedium" style={styles.modalText}>
-                Petición aprobada exitosamente. ¿Deseas ir a preparar el envío ahora?
+                Petición aprobada exitosamente. ¿Deseas ir a preparar el envío
+                ahora?
               </Text>
-              
+
               <View style={styles.modalButtons}>
                 <Button
                   mode="outlined"
@@ -398,6 +520,53 @@ export default function PetitionDetail() {
           </Card>
         </Modal>
       </Portal>
+
+      {/* Modal de Confirmación de Recepción */}
+      <Portal>
+        <Modal
+          visible={showReceiveModal}
+          onDismiss={() => setShowReceiveModal(false)}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <Card>
+            <Card.Content>
+              <View style={styles.modalTitleRow}>
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={32}
+                  color={palette.primary}
+                />
+                <Text variant="headlineSmall" style={styles.modalTitle}>
+                  Confirmar Recepción
+                </Text>
+              </View>
+              <Text variant="bodyMedium" style={styles.modalText}>
+                ¿Confirmas que has recibido todos los productos de esta
+                transferencia? Se incrementará el stock en tu ubicación.
+              </Text>
+
+              <View style={styles.modalButtons}>
+                <Button
+                  mode="outlined"
+                  onPress={() => setShowReceiveModal(false)}
+                  style={[styles.button, styles.cancelButton]}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={confirmReceive}
+                  loading={receiving}
+                  disabled={receiving}
+                  style={[styles.button, styles.confirmButton]}
+                >
+                  Confirmar Recepción
+                </Button>
+              </View>
+            </Card.Content>
+          </Card>
+        </Modal>
+      </Portal>
     </View>
   );
 }
@@ -405,7 +574,7 @@ export default function PetitionDetail() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: palette.background,
   },
   content: {
     flex: 1,
@@ -413,91 +582,108 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   card: {
     marginBottom: 16,
+    elevation: 0,
+    shadowColor: "transparent",
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
   divider: {
     marginBottom: 16,
   },
   infoRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
+    flexDirection: "row",
+    marginBottom: 4,
+  },
+  infoColumn: {
+    flexDirection: "column",
+    marginBottom: 4,
+  },
+  infoIcon: {
+    marginRight: 8,
   },
   label: {
-    fontWeight: 'bold',
-    minWidth: 160,
+    fontWeight: "bold",
+    minWidth: 140,
   },
   infoText: {
     flex: 1,
-    color: '#333',
+    color: palette.text,
+    marginLeft: 28,
   },
   rejectionReason: {
-    color: '#F44336',
+    color: palette.error,
     marginTop: 4,
-    fontStyle: 'italic',
+    fontStyle: "italic",
+    marginLeft: 28,
   },
   notes: {
-    color: '#666',
+    color: palette.textSecondary,
     marginTop: 4,
-    fontStyle: 'italic',
+    fontStyle: "italic",
+    marginLeft: 28,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontWeight: 'bold',
-    marginBottom: 16,
-    color: '#FF9800',
+    fontWeight: "bold",
+    color: palette.primary,
   },
   noData: {
-    textAlign: 'center',
-    color: '#666',
-    fontStyle: 'italic',
+    textAlign: "center",
+    color: palette.textSecondary,
+    fontStyle: "italic",
     paddingVertical: 20,
   },
   productItem: {
     paddingVertical: 8,
   },
   productCode: {
-    color: '#666',
+    color: palette.textSecondary,
     marginTop: 2,
   },
   productInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginTop: 4,
   },
   quantity: {
-    color: '#333',
-    fontWeight: '500',
+    color: palette.text,
+    fontWeight: "500",
   },
   cost: {
-    color: '#4CAF50',
-    fontWeight: '500',
+    color: palette.success,
+    fontWeight: "500",
   },
   productNotes: {
-    color: '#888',
+    color: palette.textSecondary,
     marginTop: 4,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   productDivider: {
     marginTop: 8,
   },
   totalContainer: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   totalLabel: {
-    fontWeight: 'bold',
-    color: '#4CAF50',
+    fontWeight: "bold",
+    color: palette.success,
   },
   actionButtons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 16,
     marginTop: 16,
     marginBottom: 32,
@@ -506,36 +692,45 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   approveButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: palette.success,
   },
   rejectButton: {
-    borderColor: '#F44336',
+    borderColor: palette.error,
+  },
+  receiveButton: {
+    backgroundColor: palette.primary,
   },
   modalContainer: {
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: "rgba(0,0,0,0.5)",
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
-  modalTitle: {
-    textAlign: 'center',
+  modalTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
     marginBottom: 16,
-    fontWeight: 'bold',
+  },
+  modalTitle: {
+    textAlign: "center",
+    fontWeight: "bold",
   },
   modalText: {
-    textAlign: 'center',
+    textAlign: "center",
     marginBottom: 24,
     lineHeight: 22,
   },
   modalButtons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   cancelButton: {
-    borderColor: '#666',
+    borderColor: palette.textSecondary,
   },
   confirmButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: palette.success,
   },
 });

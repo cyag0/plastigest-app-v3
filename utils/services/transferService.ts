@@ -1,5 +1,5 @@
+import { default as apiClient, default as axiosClient } from "@/utils/axios";
 import { createCrudService, LaravelResponse } from "./crudService";
-import apiClient from "@/utils/axios";
 
 // Interfaces para Transferencias
 export interface Location {
@@ -60,7 +60,7 @@ export interface TransferShipment {
 }
 
 export interface ShippingEvidence {
-  type: 'photo' | 'document' | 'signature';
+  type: "photo" | "document" | "signature";
   url: string;
   description?: string;
 }
@@ -73,7 +73,13 @@ export interface InventoryTransfer {
   to_location_id: number;
   from_location: Location;
   to_location: Location;
-  status: "pending" | "approved" | "rejected" | "in_transit" | "completed" | "cancelled";
+  status:
+    | "pending"
+    | "approved"
+    | "rejected"
+    | "in_transit"
+    | "completed"
+    | "cancelled";
   status_label: string;
   status_color: string;
   requested_by_user_id: number;
@@ -141,42 +147,106 @@ export interface ReceiptData {
 export interface Transfer extends InventoryTransfer {}
 
 // Crear el servicio base
-const baseService = createCrudService<InventoryTransfer>("/auth/admin/inventory-transfers");
+const baseService = createCrudService<InventoryTransfer>(
+  "/auth/admin/movements"
+);
 
 // Extender con métodos personalizados
 const transferService = {
   ...baseService,
-  
+
+  // === ENDPOINTS DE LOS 4 MÓDULOS ===
+
+  /**
+   * Obtener peticiones (transferencias solicitadas desde mi ubicación)
+   * Estados: ordered, in_transit
+   */
+  async getPetitions(params?: any): Promise<InventoryTransfer[]> {
+    const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
+      "/auth/admin/movements/petitions",
+      { params }
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Obtener envíos (transferencias solicitadas completadas o rechazadas)
+   * Estados: closed, rejected
+   */
+  async getShipments(params?: any): Promise<InventoryTransfer[]> {
+    const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
+      "/auth/admin/movements/shipments",
+      { params }
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Obtener recepciones (transferencias que recibiré)
+   * Estados: ordered, in_transit
+   */
+  async getReceipts(params?: any): Promise<InventoryTransfer[]> {
+    const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
+      "/auth/admin/movements/receipts",
+      { params }
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Obtener transferencias (historial de transferencias recibidas)
+   * Estados: closed, rejected
+   */
+  async getTransfers(params?: any): Promise<InventoryTransfer[]> {
+    const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
+      "/auth/admin/movements/transfers",
+      { params }
+    );
+    return response.data.data;
+  },
+
   // Sobrescribir el método index para manejar casos especiales
-  async index(params?: any): Promise<LaravelResponse<InventoryTransfer[]>> {
-    console.log('🔍 transferService.index called with params:', params);
-    
+  async index(params?: any) {
+    console.log("🔍 transferService.index called with params:", params);
+
     // Si hay filtros específicos de recibos, usar getReceipts
-    if (params?.to_location_id || params?.mode === 'receipts') {
-      console.log('📦 Using getReceipts method');
+    if (params?.to_location_id || params?.mode === "receipts") {
+      console.log("📦 Using getReceipts method");
       const receipts = await this.getReceipts(params);
-      console.log('📦 getReceipts returned:', receipts.length, 'items');
+      console.log("📦 getReceipts returned:", receipts.length, "items");
       return {
-        data: receipts,
-        meta: { total: receipts.length }
-      } as LaravelResponse<InventoryTransfer[]>;
+        data: {
+          data: receipts,
+          meta: { total: receipts.length },
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config: {} as any,
+      };
     }
-    
+
     // Si hay filtros específicos de envíos, usar getShipments
-    if (params?.from_location_id || params?.mode === 'shipments') {
-      console.log('🚛 Using getShipments method');
+    if (params?.from_location_id || params?.mode === "shipments") {
+      console.log("🚛 Using getShipments method");
       const shipments = await this.getShipments(params);
       return {
-        data: shipments,
-        meta: { total: shipments.length }
-      } as LaravelResponse<InventoryTransfer[]>;
+        data: {
+          data: shipments,
+          meta: { total: shipments.length },
+        },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config: {} as any,
+      };
     }
-    
+
     // Usar el método base para otros casos
-    console.log('🔧 Using base service index method');
+    console.log("🔧 Using base service index method");
     return await baseService.index(params);
   },
-  
+
   // Obtener por ID (adaptado para devolver solo data)
   async getTransfer(id: number): Promise<InventoryTransfer> {
     const response = await baseService.show(id);
@@ -188,37 +258,12 @@ const transferService = {
     return this.getTransfer(id);
   },
 
-  // Obtener peticiones
-  async getPetitions(params?: any): Promise<InventoryTransfer[]> {
-    const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
-      '/auth/admin/inventory-transfers/petitions',
-      { params }
-    );
-    return response.data.data;
-  },
-
-  // Obtener envíos
-  async getShipments(params?: any): Promise<InventoryTransfer[]> {
-    const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
-      '/auth/admin/inventory-transfers/shipments',
-      { params }
-    );
-    return response.data.data;
-  },
-
-  // Obtener recibos
-  async getReceipts(params?: any): Promise<InventoryTransfer[]> {
-    const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
-      '/auth/admin/inventory-transfers/receipts',
-      { params }
-    );
-    return response.data.data;
-  },
+  // === ACCIONES DE WORKFLOW ===
 
   // Aprobar transferencia
   async approve(id: number, data?: any): Promise<InventoryTransfer> {
     const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
-      `/auth/admin/inventory-transfers/${id}/approve`,
+      `/auth/admin/movements/${id}/approve`,
       data || {}
     );
     return response.data.data;
@@ -227,26 +272,24 @@ const transferService = {
   // Rechazar transferencia
   async reject(id: number, reason: string): Promise<InventoryTransfer> {
     const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
-      `/auth/admin/inventory-transfers/${id}/reject`,
+      `/auth/admin/movements/${id}/reject`,
       { rejection_reason: reason }
     );
     return response.data.data;
   },
 
   // Enviar transferencia
-  async ship(id: number, data: ShipmentData): Promise<InventoryTransfer> {
+  async ship(id: number): Promise<InventoryTransfer> {
     const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
-      `/auth/admin/inventory-transfers/${id}/ship`,
-      data
+      `/auth/admin/movements/${id}/ship`
     );
     return response.data.data;
   },
 
   // Recibir transferencia
-  async receive(id: number, data: ReceiptData): Promise<InventoryTransfer> {
-    const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
-      `/auth/admin/inventory-transfers/${id}/receive`,
-      data
+  async receive(id: number): Promise<InventoryTransfer> {
+    const response = await axiosClient.post<LaravelResponse<InventoryTransfer>>(
+      `/auth/admin/movements/${id}/receive`
     );
     return response.data.data;
   },

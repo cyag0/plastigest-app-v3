@@ -2,7 +2,6 @@ import { default as api, default as axiosClient } from "../axios";
 import admin from "./admin/admin";
 import { createCrudService } from "./crudService";
 import saleService from "./saleService";
-import transferService from "./transferService";
 
 const movements = {
   adjustments: createCrudService<App.Entities.Adjustment.Adjustment>(
@@ -30,6 +29,9 @@ const Services = {
       );
       return response.data;
     },
+  },
+  transfers: {
+    ...createCrudService<App.Entities.Company>("/auth/admin/movements"),
   },
   productPackages: {
     ...createCrudService<any>("/auth/admin/product-packages"),
@@ -105,6 +107,9 @@ const Services = {
       );
       return response.data;
     },
+  },
+  salesReports: {
+    ...createCrudService<any>("/auth/admin/sales-reports"),
   },
   productions: {
     ...createCrudService<any>("/auth/admin/productions"),
@@ -257,7 +262,6 @@ const Services = {
     },
     customerNotes: createCrudService<any>("/auth/admin/customer-notes"),
   },
-  transfers: transferService,
 };
 
 export { Services };

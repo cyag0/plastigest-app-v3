@@ -133,11 +133,11 @@ export function createCrudService<T = any>(endpoint: string): CrudService<T> {
      * Obtener un recurso específico por ID
      * @param id - ID del recurso
      */
-    show: (id: number | string) => {
+    show: (id: number | string, data: any) => {
       const url = `${baseUrl}/${id}`;
       logRequest("show", url);
       return axiosClient
-        .get<LaravelResponse<T>>(url)
+        .get<LaravelResponse<T>>(url, { params: data })
         .then((response) => {
           logResponse("show", response);
           return response;

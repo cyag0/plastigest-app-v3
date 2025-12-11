@@ -115,6 +115,9 @@ export default function AppSelect(props: AppSelectProps) {
                   props.placeholder ||
                   "Seleccionar opciones..."
                 }
+                textStyle={{
+                  color: "#333",
+                }}
               />
             </View>
           )}
@@ -136,7 +139,12 @@ export default function AppSelect(props: AppSelectProps) {
                   selectedItem && styles.selectedItem,
                 ]}
               >
-                <ReadonlyText text={item.label} />
+                <ReadonlyText
+                  text={item.label}
+                  textStyle={{
+                    color: "#333",
+                  }}
+                />
               </View>
             );
           }}
@@ -164,6 +172,9 @@ export default function AppSelect(props: AppSelectProps) {
               style={[styles.dropdownButton, props.disabled && styles.disabled]}
             >
               <ReadonlyText
+                textStyle={{
+                  color: "#333",
+                }}
                 text={selectedValue || props.placeholder || "Seleccionar..."}
               />
             </View>

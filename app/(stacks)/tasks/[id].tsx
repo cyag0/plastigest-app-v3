@@ -319,32 +319,36 @@ export default function TaskDetailScreen() {
             </View>
           </Card.Content>
         </Card>
-
-        {/* Actions */}
-        {canComplete && (
-          <View style={styles.actions}>
-            {canStart && (
-              <Button
-                mode="outlined"
-                icon="play-circle"
-                onPress={() => handleUpdateStatus("in_progress")}
-                style={styles.actionButton}
-              >
-                Iniciar Tarea
-              </Button>
-            )}
-            <Button
-              mode="contained"
-              icon="check-circle"
-              onPress={() => handleUpdateStatus("completed")}
-              style={styles.actionButton}
-              buttonColor={palette.success}
-            >
-              Marcar como Completada
-            </Button>
-          </View>
-        )}
       </ScrollView>
+
+      {canComplete && (
+        <View style={styles.actions}>
+          {canStart && (
+            <Button
+              mode="outlined"
+              icon="play-circle"
+              onPress={() => handleUpdateStatus("in_progress")}
+              style={[
+                styles.actionButton,
+                {
+                  backgroundColor: "#fff",
+                },
+              ]}
+            >
+              Iniciar Tarea
+            </Button>
+          )}
+          <Button
+            mode="contained"
+            icon="check-circle"
+            onPress={() => handleUpdateStatus("completed")}
+            style={styles.actionButton}
+            buttonColor={palette.success}
+          >
+            Marcar como Completada
+          </Button>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -382,7 +386,8 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: palette.surface,
-    elevation: 1,
+    elevation: 0,
+    shadowColor: "transparent",
   },
   taskHeader: {
     alignItems: "center",
@@ -450,6 +455,8 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: 12,
+    padding: 16,
+    backgroundColor: palette.surface,
   },
   actionButton: {
     borderRadius: 8,

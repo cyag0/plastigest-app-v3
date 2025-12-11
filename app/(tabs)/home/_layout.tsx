@@ -160,6 +160,88 @@ export default function _layout() {
           title: "Ver Ajuste",
         }}
       />
+      <Stack.Screen
+        name="transfers-menu/index"
+        options={{
+          title: "Transferencias",
+        }}
+      />
+      <Stack.Screen
+        name="petitions/index"
+        options={{
+          title: "Solicitudes de Transferencia",
+        }}
+      />
+      <Stack.Screen
+        name="petitions/[id]"
+        options={{
+          title: "Detalle de Solicitud de Transferencia",
+        }}
+      />
+
+      <Stack.Screen
+        name="petitions/form"
+        options={{
+          title: "Nueva Solicitud de Transferencia",
+        }}
+      />
+
+      <Stack.Screen
+        name="receipts/index"
+        options={{
+          title: "Solicitudes Recibidas",
+        }}
+      />
+      <Stack.Screen
+        name="receipts/[id]"
+        options={{
+          title: "Detalle de Solicitud Recibida",
+        }}
+      />
+
+      <Stack.Screen
+        name="shipments/index"
+        options={{
+          title: "Envíos Realizados",
+        }}
+      />
+      <Stack.Screen
+        name="shipments/[id]"
+        options={{
+          title: "Detalle de Envío Realizado",
+        }}
+      />
+      <Stack.Screen
+        name="transfers/index"
+        options={{
+          title: "Envíos Recibidos",
+        }}
+      />
+      <Stack.Screen
+        name="transfers/[id]"
+        options={{
+          title: "Detalle de Envío Recibido",
+        }}
+      />
+
+      <Stack.Screen
+        name="sales-reports/index"
+        options={{
+          title: "Reportes de Ventas",
+        }}
+      />
+      <Stack.Screen
+        name="sales-reports/form"
+        options={{
+          title: "Nuevo Reporte de Ventas",
+        }}
+      />
+      <Stack.Screen
+        name="sales-reports/[id]"
+        options={{
+          title: "Detalle de Reporte de Ventas",
+        }}
+      />
     </Stack>
   );
 }

@@ -540,7 +540,7 @@ export default function ReportsScreen() {
               <Icon
                 source={dataScope === "location" ? "map-marker" : "earth"}
                 size={20}
-                color={palette.info}
+                color={palette.blue}
               />
             </View>
             <View style={{ flex: 1 }}>
@@ -632,7 +632,7 @@ export default function ReportsScreen() {
               mode="parallax"
               data={[
                 { type: "sales-trend", color: palette.primary },
-                { type: "sales-by-location", color: palette.info },
+                { type: "sales-by-location", color: palette.blue },
                 { type: "top-products", color: palette.success },
                 { type: "payment-methods", color: palette.secondary },
                 { type: "low-stock", color: palette.warning },
@@ -777,7 +777,7 @@ export default function ReportsScreen() {
                             ? palette.success + "20"
                             : movement.movement_type === "exit"
                             ? palette.error + "20"
-                            : palette.info + "20",
+                            : palette.blue + "20",
                       },
                     ]}
                   >
@@ -794,7 +794,7 @@ export default function ReportsScreen() {
                           ? palette.success
                           : movement.movement_type === "exit"
                           ? palette.error
-                          : palette.info
+                          : palette.blue
                       }
                       size={24}
                     />
@@ -1618,9 +1618,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   locationBanner: {
-    backgroundColor: palette.info + "15",
+    backgroundColor: palette.blue + "15",
     borderLeftWidth: 4,
-    borderLeftColor: palette.info,
+    borderLeftColor: palette.blue,
     marginHorizontal: 20,
     marginTop: 12,
     borderRadius: 12,
@@ -1635,12 +1635,12 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: palette.info + "20",
+    backgroundColor: palette.blue + "20",
     justifyContent: "center",
     alignItems: "center",
   },
   locationBannerLabel: {
-    color: palette.info,
+    color: palette.blue,
     fontWeight: "600",
     textTransform: "uppercase",
   },

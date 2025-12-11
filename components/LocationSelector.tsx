@@ -156,7 +156,13 @@ export default function LocationSelector({
   }
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         {/* Header */}
         <View style={styles.header}>
@@ -328,6 +334,10 @@ const styles = StyleSheet.create({
   scrollContainer: {
     padding: 20,
     paddingBottom: 40,
+    maxWidth: 600,
+    alignSelf: "center",
+    justifyContent: "center",
+    minHeight: "100%",
   },
   header: {
     alignItems: "center",

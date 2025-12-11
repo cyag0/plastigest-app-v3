@@ -72,7 +72,12 @@ const ConfirmDialog = forwardRef<ConfirmDialogRef>((props, ref) => {
       <Dialog
         visible={state.visible}
         onDismiss={handleCancel}
-        style={{ backgroundColor: palette.background }}
+        style={{
+          backgroundColor: palette.background,
+          maxWidth: 400,
+          width: "90%",
+          alignSelf: "center",
+        }}
       >
         <Dialog.Title>
           <View style={{ flexDirection: "row", alignItems: "center" }}>

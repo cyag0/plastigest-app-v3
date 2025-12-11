@@ -1,424 +1,410 @@
-import React, { useEffect, useState } from "react";
-import { View, ScrollView, StyleSheet } from "react-native";
-import { Text, Card, Divider, ActivityIndicator, Chip, Button } from "react-native-paper";
-import { useLocalSearchParams, router } from "expo-router";
-import { useAlerts } from "@/hooks/useAlerts";
-import transferService, { Transfer } from "@/utils/services/transferService";
-import palette from "@/constants/palette";
 import AppBar from "@/components/App/AppBar";
+import palette from "@/constants/palette";
+import type { InventoryTransfer } from "@/utils/services/transferService";
+import transferService from "@/utils/services/transferService";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { Card, Chip, Divider, Text } from "react-native-paper";
 
-export default function TransferDetailScreen() {
+export default function TransferDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const alerts = useAlerts();
-  
+  const [transfer, setTransfer] = useState<InventoryTransfer | null>(null);
   const [loading, setLoading] = useState(true);
-  const [transfer, setTransfer] = useState<Transfer | null>(null);
-  const [processing, setProcessing] = useState(false);
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleString("es-ES", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
 
   useEffect(() => {
-    loadTransfer();
+    if (id) {
+      loadTransfer();
+    }
   }, [id]);
 
   const loadTransfer = async () => {
     try {
-      const data = await transferService.getById(Number(id));
+      setLoading(true);
+      const data = await transferService.getTransfer(Number(id));
       setTransfer(data);
-    } catch (error: any) {
-      alerts.error(error.response?.data?.message || "Error al cargar transferencia");
-      router.back();
+    } catch (error) {
+      console.error("Error loading transfer:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleApprove = async () => {
-    if (!transfer) return;
-    
-    setProcessing(true);
-    try {
-      await transferService.approve(transfer.id);
-      alerts.success("Transferencia aprobada exitosamente");
-      loadTransfer();
-    } catch (error: any) {
-      alerts.error(error.response?.data?.message || "Error al aprobar transferencia");
-    } finally {
-      setProcessing(false);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "ordered":
+        return palette.warning;
+      case "in_transit":
+        return palette.primary;
+      case "closed":
+        return palette.success;
+      case "rejected":
+        return palette.red;
+      default:
+        return palette.textSecondary;
     }
   };
 
-  const handleReject = async () => {
-    if (!transfer) return;
-    
-    alerts.confirm({
-      title: "Rechazar Transferencia",
-      message: "¿Está seguro que desea rechazar esta transferencia?",
-      onConfirm: async () => {
-        setProcessing(true);
-        try {
-          await transferService.reject(transfer.id, "Rechazada por el usuario");
-          alerts.success("Transferencia rechazada");
-          router.back();
-        } catch (error: any) {
-          alerts.error(error.response?.data?.message || "Error al rechazar transferencia");
-        } finally {
-          setProcessing(false);
-        }
-      },
-    });
-  };
-
-  const handleShip = () => {
-    if (!transfer) return;
-    router.push(`/(tabs)/home/transfers/ship/${transfer.id}` as any);
-  };
-
-  const handleReceive = () => {
-    if (!transfer) return;
-    router.push(`/(tabs)/home/transfers/receive/${transfer.id}` as any);
-  };
-
-  const getStatusInfo = (status: string) => {
-    const statusMap: Record<string, { color: string; label: string; bgColor: string }> = {
-      pending: { color: "#FFA726", label: "Pendiente", bgColor: "#FFF3E0" },
-      approved: { color: "#42A5F5", label: "Aprobada", bgColor: "#E3F2FD" },
-      in_transit: { color: "#FFA726", label: "En Tránsito", bgColor: "#FFF3E0" },
-      completed: { color: "#66BB6A", label: "Completada", bgColor: "#E8F5E9" },
-      cancelled: { color: "#EF5350", label: "Cancelada", bgColor: "#FFEBEE" },
-    };
-    return statusMap[status] || { color: "#9E9E9E", label: "Desconocido", bgColor: "#F5F5F5" };
-  };
-
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "N/A";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("es-MX", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case "ordered":
+        return "Ordenada";
+      case "in_transit":
+        return "En Tránsito";
+      case "closed":
+        return "Completada";
+      case "rejected":
+        return "Rechazada";
+      default:
+        return status;
+    }
   };
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" />
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text>Cargando...</Text>
+        </View>
       </View>
     );
   }
 
   if (!transfer) {
     return (
-      <View style={styles.centerContainer}>
-        <Text>Transferencia no encontrada</Text>
+      <View style={styles.container}>
+        <AppBar title="Detalle de Transferencia" showBackButton />
+        <View style={styles.loadingContainer}>
+          <Text>No se encontró la transferencia</Text>
+        </View>
       </View>
     );
   }
 
-  const statusInfo = getStatusInfo(transfer.status);
-
   return (
-    <>
-      <AppBar title="Detalle de Transferencia" goBack />
-      <ScrollView style={styles.container}>
-        {/* Header Card */}
+    <View style={styles.container}>
+      <ScrollView style={styles.content}>
         <Card style={styles.card}>
           <Card.Content>
-            <View style={styles.headerRow}>
-              <View style={styles.headerInfo}>
-                <Text variant="headlineSmall" style={styles.transferNumber}>
-                  #{transfer.transfer_number}
-                </Text>
-                <Text variant="bodyMedium" style={styles.transferDate}>
-                  {formatDate(transfer.transfer_date)}
-                </Text>
-              </View>
+            <View style={styles.header}>
+              <Text variant="headlineSmall">Transferencia #{transfer.id}</Text>
               <Chip
-                style={[styles.statusChip, { backgroundColor: statusInfo.bgColor }]}
-                textStyle={{ color: statusInfo.color, fontWeight: "600" }}
+                mode="flat"
+                style={{ backgroundColor: getStatusColor(transfer.status) }}
+                textStyle={{ color: "white" }}
               >
-                {statusInfo.label}
+                {getStatusLabel(transfer.status)}
               </Chip>
             </View>
-          </Card.Content>
-        </Card>
 
-        {/* Locations Card */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Ubicaciones
-            </Text>
-            <Divider style={styles.divider} />
-            
-            <View style={styles.infoRow}>
-              <Text style={styles.label}>Origen:</Text>
-              <Text style={styles.value}>{transfer.from_location?.name || "N/A"}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.label}>Destino:</Text>
-              <Text style={styles.value}>{transfer.to_location?.name || "N/A"}</Text>
-            </View>
-          </Card.Content>
-        </Card>
-
-        {/* Products Card */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Productos ({transfer.details?.length || 0})
-            </Text>
             <Divider style={styles.divider} />
 
-            {transfer.details?.map((detail, index) => (
-              <View key={detail.id}>
-                <View style={styles.productCard}>
-                  <Text variant="titleSmall" style={styles.productName}>
-                    {detail.product?.name || "N/A"}
-                  </Text>
-                  <Text variant="bodySmall" style={styles.productCode}>
-                    SKU: {detail.product?.sku || "N/A"} | Código: {detail.product?.code || "N/A"}
-                  </Text>
-                  
-                  <View style={styles.quantityRow}>
-                    <View style={styles.quantityItem}>
-                      <Text variant="bodySmall" style={styles.quantityLabel}>Solicitado:</Text>
-                      <Text variant="bodyMedium" style={styles.quantityValue}>
-                        {detail.quantity_requested}
-                      </Text>
-                    </View>
-                    
-                    {detail.quantity_shipped !== null && (
-                      <View style={styles.quantityItem}>
-                        <Text variant="bodySmall" style={styles.quantityLabel}>Enviado:</Text>
-                        <Text variant="bodyMedium" style={[styles.quantityValue, { color: "#1976d2" }]}>
-                          {detail.quantity_shipped}
-                        </Text>
-                      </View>
-                    )}
-                    
-                    {detail.quantity_received !== null && (
-                      <View style={styles.quantityItem}>
-                        <Text variant="bodySmall" style={styles.quantityLabel}>Recibido:</Text>
-                        <Text variant="bodyMedium" style={[styles.quantityValue, { color: "#66BB6A" }]}>
-                          {detail.quantity_received}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-
-                  {detail.unit_cost && (
-                    <Text variant="bodySmall" style={styles.unitCost}>
-                      Costo unitario: ${parseFloat(detail.unit_cost).toFixed(2)}
-                    </Text>
-                  )}
-
-                  {detail.notes && (
-                    <Text variant="bodySmall" style={styles.notes}>
-                      Notas: {detail.notes}
-                    </Text>
-                  )}
-                </View>
-                {index < (transfer.details?.length || 0) - 1 && (
-                  <Divider style={styles.productDivider} />
-                )}
-              </View>
-            ))}
-          </Card.Content>
-        </Card>
-
-        {/* Total Cost Card */}
-        {transfer.total_cost && (
-          <Card style={styles.card}>
-            <Card.Content>
-              <View style={styles.totalRow}>
-                <Text variant="titleMedium">Total:</Text>
-                <Text variant="headlineSmall" style={styles.totalAmount}>
-                  ${parseFloat(transfer.total_cost).toFixed(2)}
+            <View style={styles.infoColumn}>
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons
+                  name="map-marker"
+                  size={20}
+                  color={palette.primary}
+                  style={styles.infoIcon}
+                />
+                <Text variant="bodyMedium" style={styles.label}>
+                  Sucursal que solicita:
                 </Text>
               </View>
-            </Card.Content>
-          </Card>
-        )}
-
-        {/* Comments Card */}
-        {transfer.comments && (
-          <Card style={styles.card}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Comentarios
+              <Text variant="bodyMedium" style={styles.infoText}>
+                {transfer.to_location?.name}
               </Text>
-              <Divider style={styles.divider} />
-              <Text style={styles.commentsText}>{transfer.comments}</Text>
-            </Card.Content>
-          </Card>
-        )}
+            </View>
+            <View style={styles.infoColumn}>
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons
+                  name="store"
+                  size={20}
+                  color={palette.primary}
+                  style={styles.infoIcon}
+                />
+                <Text variant="bodyMedium" style={styles.label}>
+                  Sucursal que enviará:
+                </Text>
+              </View>
+              <Text variant="bodyMedium" style={styles.infoText}>
+                {transfer.from_location?.name}
+              </Text>
+            </View>
+            <View style={styles.infoColumn}>
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons
+                  name="account"
+                  size={20}
+                  color={palette.primary}
+                  style={styles.infoIcon}
+                />
+                <Text variant="bodyMedium" style={styles.label}>
+                  Solicitado por:
+                </Text>
+              </View>
+              <Text variant="bodyMedium" style={styles.infoText}>
+                {transfer.requested_by_user?.name}
+              </Text>
+            </View>
 
-        {/* Actions */}
-        <View style={styles.actionsContainer}>
-          {transfer.status === "pending" && (
-            <>
-              <Button
-                mode="contained"
-                onPress={handleApprove}
-                loading={processing}
-                disabled={processing}
-                style={[styles.actionButton, { backgroundColor: "#66BB6A" }]}
-              >
-                Aprobar
-              </Button>
-              <Button
-                mode="outlined"
-                onPress={handleReject}
-                disabled={processing}
-                style={[styles.actionButton, { borderColor: "#EF5350" }]}
-                textColor="#EF5350"
-              >
-                Rechazar
-              </Button>
-            </>
-          )}
+            <View style={styles.infoColumn}>
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons
+                  name="calendar"
+                  size={20}
+                  color={palette.primary}
+                  style={styles.infoIcon}
+                />
+                <Text variant="bodyMedium" style={styles.label}>
+                  Fecha de solicitud:
+                </Text>
+              </View>
+              <Text variant="bodyMedium" style={styles.infoText}>
+                {formatDate(transfer.created_at)}
+              </Text>
+            </View>
 
-          {transfer.status === "approved" && (
-            <Button
-              mode="contained"
-              onPress={handleShip}
-              style={styles.actionButton}
-            >
-              Preparar Envío
-            </Button>
-          )}
+            {transfer.approved_by_user && (
+              <View style={styles.infoColumn}>
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons
+                    name="check-circle"
+                    size={20}
+                    color={palette.success}
+                    style={styles.infoIcon}
+                  />
+                  <Text variant="bodyMedium" style={styles.label}>
+                    Aprobado por:
+                  </Text>
+                </View>
+                <Text variant="bodyMedium" style={styles.infoText}>
+                  {transfer.approved_by_user?.name}
+                </Text>
+              </View>
+            )}
 
-          {transfer.status === "in_transit" && (
-            <Button
-              mode="contained"
-              onPress={handleReceive}
-              style={[styles.actionButton, { backgroundColor: "#66BB6A" }]}
-            >
-              Recibir Productos
-            </Button>
-          )}
-        </View>
+            {transfer.approved_at && (
+              <View style={styles.infoColumn}>
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons
+                    name="clock-check-outline"
+                    size={20}
+                    color={palette.success}
+                    style={styles.infoIcon}
+                  />
+                  <Text variant="bodyMedium" style={styles.label}>
+                    Fecha de aprobación:
+                  </Text>
+                </View>
+                <Text variant="bodyMedium" style={styles.infoText}>
+                  {formatDate(transfer.approved_at)}
+                </Text>
+              </View>
+            )}
+
+            {transfer.rejection_reason && (
+              <View style={styles.infoColumn}>
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons
+                    name="close-circle"
+                    size={20}
+                    color={palette.error}
+                    style={styles.infoIcon}
+                  />
+                  <Text variant="bodyMedium" style={styles.label}>
+                    Motivo del rechazo:
+                  </Text>
+                </View>
+                <Text variant="bodyMedium" style={styles.rejectionReason}>
+                  {transfer.rejection_reason}
+                </Text>
+              </View>
+            )}
+
+            {transfer.notes && (
+              <>
+                <View style={styles.infoRow}>
+                  <MaterialCommunityIcons
+                    name="note-text"
+                    size={20}
+                    color={palette.primary}
+                    style={styles.infoIcon}
+                  />
+                  <Text variant="bodyMedium" style={styles.label}>
+                    Notas:
+                  </Text>
+                </View>
+                <Text variant="bodyMedium" style={styles.notes}>
+                  {transfer.notes}
+                </Text>
+              </>
+            )}
+          </Card.Content>
+        </Card>
+
+        <Card style={styles.card}>
+          <Card.Content>
+            <View style={styles.sectionTitleRow}>
+              <MaterialCommunityIcons
+                name="package-variant"
+                size={24}
+                color={palette.primary}
+              />
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Productos
+              </Text>
+            </View>
+
+            {transfer.details && transfer.details.length > 0 ? (
+              transfer.details.map((detail, index) => (
+                <View key={index} style={styles.productItem}>
+                  <Text variant="bodyLarge">{detail.product?.name}</Text>
+                  <Text variant="bodyMedium" style={styles.productCode}>
+                    Código: {detail.product?.code}
+                  </Text>
+                  <View style={styles.productInfo}>
+                    <Text variant="bodyMedium" style={styles.quantity}>
+                      Cantidad: {detail.quantity_requested}{" "}
+                      {detail.product?.unit?.abbreviation ||
+                        detail.unit?.abbreviation ||
+                        "ud"}
+                    </Text>
+                  </View>
+
+                  {detail.notes && (
+                    <Text variant="bodySmall" style={styles.productNotes}>
+                      Notas: {detail.notes || ""}
+                    </Text>
+                  )}
+
+                  {index < (transfer.details?.length || 0) - 1 && (
+                    <Divider style={styles.productDivider} />
+                  )}
+                </View>
+              ))
+            ) : (
+              <Text variant="bodyMedium" style={styles.noData}>
+                No hay productos en esta transferencia
+              </Text>
+            )}
+          </Card.Content>
+        </Card>
       </ScrollView>
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: palette.background,
   },
-  centerContainer: {
+  content: {
+    flex: 1,
+    padding: 16,
+  },
+  loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
   card: {
-    margin: 16,
-    marginBottom: 8,
+    marginBottom: 16,
+    elevation: 0,
+    shadowColor: "transparent",
   },
-  headerRow: {
+  header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
+    marginBottom: 16,
   },
-  headerInfo: {
-    flex: 1,
+  divider: {
+    marginBottom: 16,
   },
-  transferNumber: {
+  infoRow: {
+    flexDirection: "row",
+    marginBottom: 4,
+  },
+  infoColumn: {
+    flexDirection: "column",
+    marginBottom: 4,
+  },
+  infoIcon: {
+    marginRight: 8,
+  },
+  label: {
     fontWeight: "bold",
-    color: palette.primary,
+    minWidth: 140,
   },
-  transferDate: {
-    color: "#666",
+  infoText: {
+    flex: 1,
+    color: palette.text,
+    marginLeft: 28,
+  },
+  rejectionReason: {
+    color: palette.error,
     marginTop: 4,
+    fontStyle: "italic",
+    marginLeft: 28,
   },
-  statusChip: {
-    borderWidth: 1,
-    borderColor: "transparent",
+  notes: {
+    color: palette.textSecondary,
+    marginTop: 4,
+    fontStyle: "italic",
+    marginLeft: 28,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 16,
   },
   sectionTitle: {
     fontWeight: "bold",
     color: palette.primary,
   },
-  divider: {
-    marginVertical: 12,
+  noData: {
+    textAlign: "center",
+    color: palette.textSecondary,
+    fontStyle: "italic",
+    paddingVertical: 20,
   },
-  infoRow: {
-    flexDirection: "row",
-    marginBottom: 8,
-  },
-  label: {
-    fontWeight: "600",
-    width: 100,
-    color: "#666",
-  },
-  value: {
-    flex: 1,
-  },
-  productCard: {
-    marginBottom: 12,
-  },
-  productName: {
-    fontWeight: "bold",
-    marginBottom: 4,
+  productItem: {
+    paddingVertical: 8,
   },
   productCode: {
-    color: "#666",
-    marginBottom: 8,
+    color: palette.textSecondary,
+    marginTop: 2,
   },
-  quantityRow: {
-    flexDirection: "row",
-    gap: 16,
-    marginBottom: 8,
-  },
-  quantityItem: {
-    flex: 1,
-  },
-  quantityLabel: {
-    color: "#666",
-    marginBottom: 2,
-  },
-  quantityValue: {
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  unitCost: {
-    color: "#666",
-    marginTop: 4,
-  },
-  notes: {
-    marginTop: 8,
-    padding: 8,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 4,
-    fontStyle: "italic",
-    color: "#666",
-  },
-  productDivider: {
-    marginVertical: 12,
-    backgroundColor: "#ddd",
-  },
-  totalRow: {
+  productInfo: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    marginTop: 4,
   },
-  totalAmount: {
-    fontWeight: "bold",
-    color: palette.primary,
+  quantity: {
+    color: palette.text,
+    fontWeight: "500",
   },
-  commentsText: {
-    color: "#666",
+  productNotes: {
+    color: palette.textSecondary,
+    marginTop: 4,
     fontStyle: "italic",
   },
-  actionsContainer: {
-    flexDirection: "row",
-    padding: 16,
-    gap: 12,
-    marginBottom: 16,
-  },
-  actionButton: {
-    flex: 1,
+  productDivider: {
+    marginTop: 8,
   },
 });

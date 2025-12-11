@@ -123,6 +123,9 @@ const styles = StyleSheet.create({
   snackbar: {
     marginBottom: 16,
     borderRadius: 8,
+    maxWidth: 600,
+    alignSelf: "center",
+    width: "90%",
   },
   content: {
     flexDirection: "row",
