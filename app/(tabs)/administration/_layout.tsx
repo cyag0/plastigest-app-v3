@@ -254,7 +254,7 @@ export default function _layout() {
           title: "Horario de Trabajo",
         }}
       />
-         <Stack.Screen
+      <Stack.Screen
         name="recurring-tasks/index"
         options={{
           title: "Tareas Recurrentes",
@@ -276,6 +276,30 @@ export default function _layout() {
         name="recurring-tasks/[id]/edit"
         options={{
           title: "Editar Tarea Recurrente",
+        }}
+      />
+      <Stack.Screen
+        name="packages/index"
+        options={{
+          title: "Paquetes",
+        }}
+      />
+      <Stack.Screen
+        name="packages/form"
+        options={{
+          title: "Nuevo Paquete",
+        }}
+      />
+      <Stack.Screen
+        name="packages/[id]/index"
+        options={{
+          title: "Ver Paquete",
+        }}
+      />
+      <Stack.Screen
+        name="packages/[id]/edit"
+        options={{
+          title: "Editar Paquete",
         }}
       />
     </Stack>

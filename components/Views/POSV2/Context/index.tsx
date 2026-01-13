@@ -1,11 +1,5 @@
 import { useAlerts } from "@/hooks/useAlerts";
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { createContext, useContext, useRef, useState } from "react";
 import { RefCartSidebar } from "../Components/CartSidebar";
 
 export interface CartItem {
@@ -22,15 +16,20 @@ export interface CartItem {
   product_type?: string;
   main_image?: { uri: string };
   unit_id?: number;
+  unit_type?: string;
   unit_name?: string;
   unit_abbreviation?: string;
-  available_units?: Array<{
+  packages?: Array<{
     id: number;
-    name: string;
-    abbreviation: string;
-    factor_to_base: number;
-    is_base: boolean;
+    package_name: string;
+    barcode: string;
+    quantity_per_package: number;
+    purchase_price: number;
+    sale_price: number;
+    display_name: string;
+    available_stock: number;
   }>;
+  selected_package_id?: number | null;
 }
 
 export type CartEventType =
@@ -56,13 +55,14 @@ interface POSContextType {
   categories: App.Entities.Category[];
   setCategories: (categories: App.Entities.Category[]) => void;
   cartItems: React.MutableRefObject<CartItem[]>;
-  groupedUnits: Record<number, Array<any>>;
-  setGroupedUnits: (units: Record<number, Array<any>>) => void;
+  unitsByType: Record<string, Array<any>>;
+  setUnitsByType: (units: Record<string, Array<any>>) => void;
   initializeCart: (items: CartItem[]) => void;
   addToCart: (product: App.Entities.Product, quantity?: number) => void;
   removeFromCart: (productId: number) => Promise<void>;
   updateQuantity: (productId: number, quantity: number) => void;
   updateUnit: (productId: number, unitId: number) => void;
+  updatePackage: (productId: number, packageId: number | null) => void;
   clearCart: () => void;
   getCartTotal: () => number;
   getCartItemsCount: () => number;
@@ -82,7 +82,7 @@ interface POSProviderProps {
 export function POSProvider({ children, type = "sales" }: POSProviderProps) {
   const [products, setProducts] = useState<App.Entities.Product[]>([]);
   const [categories, setCategories] = useState<App.Entities.Category[]>([]);
-  const [groupedUnits, setGroupedUnits] = useState<Record<number, Array<any>>>(
+  const [unitsByType, setUnitsByType] = useState<Record<string, Array<any>>>(
     {}
   );
   const alerts = useAlerts();
@@ -138,11 +138,18 @@ export function POSProvider({ children, type = "sales" }: POSProviderProps) {
           return;
         }
 
+        // Asegurar que price sea un número válido
+        const price =
+          typeof cartItems.current[existingItemIndex].price === "number"
+            ? cartItems.current[existingItemIndex].price
+            : parseFloat(
+                String(cartItems.current[existingItemIndex].price || 0)
+              );
+
         cartItems.current[existingItemIndex].quantity = newQuantity;
-        cartItems.current[existingItemIndex].total =
-          newQuantity * cartItems.current[existingItemIndex].price;
-        cartItems.current[existingItemIndex].total_price =
-          cartItems.current[existingItemIndex].total;
+        cartItems.current[existingItemIndex].price = price;
+        cartItems.current[existingItemIndex].total = newQuantity * price;
+        cartItems.current[existingItemIndex].total_price = newQuantity * price;
 
         updateCart();
         emitEvent({
@@ -151,16 +158,16 @@ export function POSProvider({ children, type = "sales" }: POSProviderProps) {
         });
         alerts.success(`Se actualizó la cantidad de ${product.name}`);
       } else {
-        // Obtener las unidades disponibles para este producto
-        const productUnitId = product.unit_id;
+        // Obtener el tipo de unidad del producto y las unidades disponibles de ese tipo
+        const productUnitType = product.unit_type;
         const availableUnits =
-          productUnitId && groupedUnits[productUnitId]
-            ? groupedUnits[productUnitId]
+          productUnitType && unitsByType[productUnitType]
+            ? unitsByType[productUnitType]
             : [];
 
         // Buscar la unidad actual del producto
         const currentUnit = availableUnits.find(
-          (u: any) => u.id === productUnitId
+          (u: any) => u.id === product.unit_id
         );
 
         // Solo validar stock en ventas
@@ -175,31 +182,35 @@ export function POSProvider({ children, type = "sales" }: POSProviderProps) {
           return;
         }
 
+        // Usar el precio correcto según el tipo de operación
+        const basePrice =
+          type === "sales"
+            ? product.sale_price
+              ? parseFloat(product.sale_price.toString())
+              : 0
+            : product.purchase_price
+            ? parseFloat(product.purchase_price.toString())
+            : 0;
+
         const newItem: CartItem = {
           id: product.id,
           product_id: product.id,
           name: product.name,
           code: product.code || "",
-          price: product.sale_price
-            ? parseFloat(product.sale_price.toString())
-            : 0,
-          unit_price: product.sale_price
-            ? parseFloat(product.sale_price.toString())
-            : 0,
+          price: basePrice,
+          unit_price: basePrice,
           quantity,
-          total: product.sale_price
-            ? parseFloat(product.sale_price.toString()) * quantity
-            : 0,
-          total_price: product.sale_price
-            ? parseFloat(product.sale_price.toString()) * quantity
-            : 0,
+          total: basePrice * quantity,
+          total_price: basePrice * quantity,
           current_stock: product.current_stock ?? undefined,
           product_type: product.product_type?.toString(),
           main_image: product.main_image,
-          unit_id: productUnitId ?? undefined,
+          unit_id: product.unit_id ?? undefined,
+          unit_type: productUnitType,
           unit_name: currentUnit?.name,
           unit_abbreviation: currentUnit?.abbreviation,
-          available_units: availableUnits,
+          packages: product.packages || [],
+          selected_package_id: null,
         };
         cartItems.current.push(newItem);
 
@@ -259,11 +270,16 @@ export function POSProvider({ children, type = "sales" }: POSProviderProps) {
           return;
         }
 
+        // Asegurar que price sea un número válido
+        const price =
+          typeof item.price === "number"
+            ? item.price
+            : parseFloat(String(item.price || 0));
+
         cartItems.current[itemIndex].quantity = quantity;
-        cartItems.current[itemIndex].total =
-          quantity * cartItems.current[itemIndex].price;
-        cartItems.current[itemIndex].total_price =
-          cartItems.current[itemIndex].total;
+        cartItems.current[itemIndex].price = price;
+        cartItems.current[itemIndex].total = quantity * price;
+        cartItems.current[itemIndex].total_price = quantity * price;
 
         updateCart();
         emitEvent({
@@ -287,20 +303,35 @@ export function POSProvider({ children, type = "sales" }: POSProviderProps) {
 
       if (itemIndex >= 0) {
         const item = cartItems.current[itemIndex];
-        const availableUnits = item.available_units || [];
-        const newUnit = availableUnits.find((u) => u.id === unitId);
+
+        // No permitir cambio de unidad si hay un paquete seleccionado
+        if (item.selected_package_id) {
+          alerts.warning(
+            "No puedes cambiar la unidad cuando hay un paquete seleccionado"
+          );
+          return;
+        }
+
+        // Obtener las unidades disponibles del mismo tipo
+        const availableUnits =
+          item.unit_type && unitsByType[item.unit_type]
+            ? unitsByType[item.unit_type]
+            : [];
+
+        const newUnit = availableUnits.find((u: any) => u.id === unitId);
 
         if (newUnit) {
-          const oldUnit = availableUnits.find((u) => u.id === item.unit_id);
+          const oldUnit = availableUnits.find(
+            (u: any) => u.id === item.unit_id
+          );
 
-          // Calcular el nuevo precio basado en el factor de conversión
-          // Si cambias de unidad base (factor 1) a una derivada (factor > 1),
-          // el precio se multiplica por el factor
-          const oldFactor = oldUnit?.factor_to_base || 1;
-          const newFactor = newUnit.factor_to_base || 1;
+          // Calcular el nuevo precio basado en el factor de conversión - convertir a números
+          const oldFactor = Number(oldUnit?.factor_to_base || 1);
+          const newFactor = Number(newUnit.factor_to_base || 1);
 
           // Precio unitario ajustado
-          const basePricePerUnit = item.unit_price! / oldFactor;
+          const unitPrice = Number(item.unit_price || 0);
+          const basePricePerUnit = unitPrice / oldFactor;
           const newPrice = basePricePerUnit * newFactor;
 
           cartItems.current[itemIndex] = {
@@ -329,8 +360,73 @@ export function POSProvider({ children, type = "sales" }: POSProviderProps) {
     }
   };
 
+  const updatePackage = (productId: number, packageId: number | null) => {
+    try {
+      const itemIndex = cartItems.current.findIndex(
+        (item) => item.id === productId
+      );
+
+      if (itemIndex >= 0) {
+        const item = cartItems.current[itemIndex];
+        const packages = item.packages || [];
+
+        if (packageId === null) {
+          // Deseleccionar paquete - volver al precio original del producto
+          const unitPrice = Number(item.unit_price || 0);
+
+          cartItems.current[itemIndex] = {
+            ...item,
+            selected_package_id: null,
+            price: unitPrice,
+            total: unitPrice * item.quantity,
+            total_price: unitPrice * item.quantity,
+          };
+
+          updateCart();
+          alerts.success("Paquete deseleccionado");
+        } else {
+          const selectedPackage = packages.find((p) => p.id === packageId);
+
+          if (selectedPackage) {
+            // Usar el precio correcto según el tipo de operación y convertir a número
+            const packagePrice =
+              Number(
+                type === "sales"
+                  ? selectedPackage.sale_price
+                  : selectedPackage.purchase_price
+              ) || 0;
+
+            cartItems.current[itemIndex] = {
+              ...item,
+              selected_package_id: packageId,
+              price: packagePrice,
+              total: packagePrice * item.quantity,
+              total_price: packagePrice * item.quantity,
+            };
+
+            updateCart();
+            alerts.success(
+              `Paquete seleccionado: ${selectedPackage.package_name}`
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error updating package:", error);
+      alerts.error("No se pudo cambiar el paquete seleccionado");
+    }
+  };
+
   const initializeCart = (items: CartItem[]) => {
-    cartItems.current = items;
+    // Normalizar los datos para asegurar que price y total sean números
+    cartItems.current = items.map((item) => ({
+      ...item,
+      price: Number(item.price || 0),
+      unit_price: Number(item.unit_price || 0),
+      total: Number(item.total || 0),
+      total_price: Number(item.total_price || 0),
+      quantity: Number(item.quantity || 0),
+    }));
     //updateCart();
   };
 
@@ -356,13 +452,14 @@ export function POSProvider({ children, type = "sales" }: POSProviderProps) {
         categories,
         setCategories,
         cartItems,
-        groupedUnits,
-        setGroupedUnits,
+        unitsByType,
+        setUnitsByType,
         initializeCart,
         addToCart,
         removeFromCart,
         updateQuantity,
         updateUnit,
+        updatePackage,
         clearCart,
         getCartTotal,
         getCartItemsCount,

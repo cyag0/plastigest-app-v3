@@ -167,6 +167,16 @@ export default function AdministrationScreen() {
       requiredPermission: "units_list",
     },
     {
+      id: "packages",
+      title: "Paquetes de Producto",
+      description: "Define paquetes y presentaciones de productos",
+      icon: "weight-kilogram",
+      route: "/(tabs)/administration/packages",
+      color: palette.warning,
+      category: "catalog",
+      requiredPermission: "packages_list",
+    },
+    {
       id: "suppliers",
       title: "Proveedores",
       description: "Registra y gestiona proveedores de productos",

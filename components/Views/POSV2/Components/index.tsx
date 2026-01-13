@@ -1,8 +1,6 @@
 import palette from "@/constants/palette";
-import { useResponsive } from "@/hooks/useResponsive";
-import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   Dimensions,
@@ -22,14 +20,11 @@ export default function POSV2() {
     setProducts,
     categories,
     setCategories,
-    setGroupedUnits,
+    setUnitsByType,
     addToCart,
     type,
   } = usePOS();
 
-  const { selectedLocation } = useSelectedLocation();
-  const { isMobile } = useResponsive();
-  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
@@ -64,19 +59,18 @@ export default function POSV2() {
 
       const [productsRes, categoriesRes, unitsRes] = await Promise.all([
         Services.products.index({
-          location_id: selectedLocation?.id,
-          is_active: "1",
-          for_sale: "1",
-          supplier_id: params.supplier_id,
+          //location_id: selectedLocation?.id,
+          /*           for_sale: "1",
+          supplier_id: params.supplier_id, */
+          with_packages: "1",
         }),
         Services.categories.index({ all: true }),
-        Services.home.unidades.getGroupedByBase(),
+        Services.home.unidades.getGroupedByType(),
       ]);
 
-      // Manejar respuestas paginadas o arrays directos
-      const productsData = Array.isArray(productsRes)
-        ? productsRes
-        : (productsRes as any).data?.data || (productsRes as any).data || [];
+      // Los datos del nuevo endpoint ya vienen en el formato correcto
+      const productsData = productsRes?.data?.data || [];
+      const unitsByType = unitsRes?.data || {};
 
       const categoriesData = Array.isArray(categoriesRes)
         ? categoriesRes
@@ -84,11 +78,11 @@ export default function POSV2() {
           (categoriesRes as any).data ||
           [];
 
-      const unitsData = unitsRes?.data || {};
+      console.log("unitsByType", unitsByType);
 
       setProducts(productsData);
       setCategories(categoriesData);
-      setGroupedUnits(unitsData);
+      setUnitsByType(unitsByType);
     } catch (error) {
       console.error("Error loading POS data:", error);
     } finally {
