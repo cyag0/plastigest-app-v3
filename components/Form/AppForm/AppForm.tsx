@@ -175,26 +175,42 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         if (typeof props.initialValues === "function") {
           const result = await props.initialValues();
           formInstance.setValues(result);
+
+          return;
         }
         // Si initialValues es un objeto
         else {
+          const checkIdAndApi = Boolean(props.id && props.api);
+          console.log(checkIdAndApi, "Checking for ID and API");
+
           // Si hay ID y API, hacer petición automática
-          if (props.id && props.api) {
+          if (checkIdAndApi) {
+            //@ts-ignore
             const response = await props.api.show(props.id);
-            formInstance.setValues(response.data.data);
+            console.log("Fetched data for ID:", response.data.data);
+            const data = { ...props.initialValues, ...response.data.data };
+
+            console.log("Merging initial values with fetched data:", data);
+
+            formInstance.setValues(data);
           } else {
             formInstance.setValues(props.initialValues);
           }
+
+          return;
         }
       }
       // Si no hay initialValues pero hay ID y API
       else if (props.id && props.api) {
         const response = await props.api.show(props.id);
         formInstance.setValues(response.data.data);
+
+        return;
       }
       // Si no hay nada, usar objeto vacío
       else {
         formInstance.setValues({} as T);
+        return;
       }
     } catch (error) {
       console.error("Error loading initial values:", error);
@@ -314,6 +330,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
             contentContainerStyle={props.containerStyle}
           >
             {props.children}
+            <View style={{ height: props.disableScroll ? 0 : 16 }} />
           </ScrollView>
 
           {showButtons && (

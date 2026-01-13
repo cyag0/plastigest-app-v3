@@ -1,14 +1,45 @@
 import { Tabs } from "expo-router";
 import React from "react";
-import { Platform } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { Appbar } from "react-native-paper";
 
 import AppBar from "@/components/App/AppBar";
+import NavigationSidebar from "@/components/App/NavigationSidebar";
 import palette from "@/constants/palette";
 import { useColorScheme } from "@/hooks/useColorScheme";
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const isWeb = Platform.OS === "web";
+
+  if (isWeb) {
+    return (
+      <View style={styles.webContainer}>
+        <NavigationSidebar />
+        <View style={styles.webContent}>
+          <Tabs
+            screenOptions={{
+              tabBarStyle: { display: "none" },
+              headerShown: false,
+            }}
+            initialRouteName="home"
+          >
+            <Tabs.Screen name="home" />
+            <Tabs.Screen name="inventory" />
+            <Tabs.Screen name="reports" />
+            <Tabs.Screen name="administration" />
+            <Tabs.Screen name="profile" />
+            <Tabs.Screen
+              name="(stacks)"
+              options={{
+                tabBarButton: () => null,
+              }}
+            />
+          </Tabs>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <Tabs
@@ -104,3 +135,18 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  webContainer: {
+    flex: 1,
+    flexDirection: "row",
+    backgroundColor: palette.surface,
+    padding: 24,
+    paddingLeft: 0,
+  },
+  webContent: {
+    flex: 1,
+    overflow: "hidden",
+    borderRadius: 8,
+  },
+});

@@ -1,10 +1,18 @@
 import LocationSelector from "@/components/LocationSelector";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useSegments } from "expo-router";
 import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
-import { ActivityIndicator, Text } from "react-native-paper";
+import { Text } from "react-native-paper";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 
 export default function NavigationHandler({
   children,
@@ -32,6 +40,11 @@ export default function NavigationHandler({
     // 1. Verificar autenticación
     if (!user && inAuthGroup) {
       // Usuario no autenticado intentando acceder a rutas protegidas
+      router.replace("/login");
+      return;
+    }
+
+    if (!user && !inAuthGroup) {
       router.replace("/login");
       return;
     }
@@ -65,12 +78,7 @@ export default function NavigationHandler({
 
   // Mostrar loading mientras se verifica autenticación
   if (isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={palette.primary} />
-        <Text style={styles.loadingText}>Verificando autenticación...</Text>
-      </View>
-    );
+    return <LoaderWithLogo />;
   }
 
   // Si no hay usuario, mostrar children (login)
@@ -94,6 +102,67 @@ export default function NavigationHandler({
 
   // Todo OK, mostrar la app
   return <>{children}</>;
+}
+
+function LoaderWithLogo() {
+  const scale = useSharedValue(1);
+  const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.2, { duration: 800 }),
+        withTiming(1, { duration: 800 })
+      ),
+      -1,
+      false
+    );
+
+    opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.3, { duration: 800 }),
+        withTiming(1, { duration: 800 })
+      ),
+      -1,
+      false
+    );
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: scale.value }],
+      opacity: opacity.value,
+    };
+  });
+
+  return (
+    <View style={styles.loadingContainer}>
+      <Animated.View
+        style={[
+          {
+            justifyContent: "center",
+            alignItems: "center",
+          },
+        ]}
+      >
+        <MaterialCommunityIcons
+          name="package-variant"
+          size={80}
+          color={palette.error}
+        />
+
+        <Text
+          variant="displaySmall"
+          style={{
+            color: palette.error,
+            fontWeight: "bold",
+          }}
+        >
+          PlastiGest
+        </Text>
+      </Animated.View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

@@ -9,6 +9,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import {
   Dimensions,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -265,7 +266,7 @@ function Statistic(props: {
         flex: 1,
         backgroundColor: palette.card,
         borderRadius: 12,
-        elevation: 2,
+        shadowColor: "transparent",
       }}
     >
       <Card.Content
@@ -334,6 +335,10 @@ export default function ReportsScreen() {
     "location"
   );
 
+  const isWeb = Platform.OS === "web";
+  const screenWidth = Dimensions.get("window").width;
+  const isWideScreen = screenWidth >= 1024;
+
   const loadData = async () => {
     try {
       const params = {
@@ -398,33 +403,6 @@ export default function ReportsScreen() {
       default:
         return palette.textSecondary;
     }
-  };
-
-  // Datos para gráficas
-  const salesTrendData = {
-    labels: ["Sem 1", "Sem 2", "Sem 3", "Sem 4"],
-    datasets: [
-      {
-        data: [
-          (dashboardData?.sales || 0) * 0.7,
-          (dashboardData?.sales || 0) * 0.85,
-          (dashboardData?.sales || 0) * 0.95,
-          dashboardData?.sales || 0,
-        ],
-        color: (opacity = 1) => palette.success,
-        strokeWidth: 3,
-      },
-    ],
-  };
-
-  const profitabilityData = {
-    labels: ["Rentabilidad"],
-    data: [
-      dashboardData?.sales
-        ? Math.min((dashboardData.profit / dashboardData.sales) * 100, 100) /
-          100
-        : 0,
-    ],
   };
 
   if (loading) {
@@ -576,7 +554,12 @@ export default function ReportsScreen() {
           {/* Statistics Grid - 6 cards in 2 rows */}
           <View style={styles.statisticsGrid}>
             {/* First Row */}
-            <View style={styles.statisticsRow}>
+            <View
+              style={[
+                styles.statisticsRow,
+                isWeb && isWideScreen && { flexWrap: "nowrap" },
+              ]}
+            >
               <Statistic
                 icon="trending-up"
                 value={formatCurrency(dashboardData?.sales || 0)}
@@ -595,368 +578,691 @@ export default function ReportsScreen() {
                 label="Ganancia"
                 color={palette.primary}
               />
-            </View>
-            {/* Second Row */}
-            <View style={styles.statisticsRow}>
-              <Statistic
-                icon="swap-vertical"
-                value={dashboardData?.movements_count || 0}
-                label="Movimientos"
-                color={palette.blue}
-              />
-              <Statistic
-                icon="package-variant"
-                value={formatCurrency(dashboardData?.inventory_value || 0)}
-                label="Inventario"
-                color={palette.accent}
-              />
-              <Statistic
-                icon="alert-circle"
-                value={dashboardData?.low_stock_products || 0}
-                label="Stock Bajo"
-                color={palette.red}
-              />
-            </View>
-          </View>
-
-          {/* Charts Carousel */}
-          <View style={{ height: 280, marginBottom: 16 }}>
-            <Carousel
-              loop
-              width={Dimensions.get("window").width - 40}
-              height={280}
-              autoPlay={true}
-              autoPlayInterval={5000}
-              pagingEnabled={true}
-              snapEnabled={true}
-              mode="parallax"
-              data={[
-                { type: "sales-trend", color: palette.primary },
-                { type: "sales-by-location", color: palette.blue },
-                { type: "top-products", color: palette.success },
-                { type: "payment-methods", color: palette.secondary },
-                { type: "low-stock", color: palette.warning },
-              ]}
-              scrollAnimationDuration={1000}
-              renderItem={({ item }: { item: any }) => (
-                <CarrouselCard
-                  type={item.type}
-                  color={item.color}
-                  dataScope={dataScope}
-                  selectedPeriod={selectedPeriod}
-                  locationName={selectedLocation?.name}
-                />
+              {isWeb && isWideScreen && (
+                <>
+                  <Statistic
+                    icon="swap-vertical"
+                    value={dashboardData?.movements_count || 0}
+                    label="Movimientos"
+                    color={palette.blue}
+                  />
+                  <Statistic
+                    icon="package-variant"
+                    value={formatCurrency(dashboardData?.inventory_value || 0)}
+                    label="Inventario"
+                    color={palette.accent}
+                  />
+                  <Statistic
+                    icon="alert-circle"
+                    value={dashboardData?.low_stock_products || 0}
+                    label="Stock Bajo"
+                    color={palette.red}
+                  />
+                </>
               )}
-            />
-          </View>
-
-          {/* Top 5 Productos */}
-          <View style={{ marginBottom: 20 }}>
-            <View style={styles.sectionHeader}>
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Top 5 Productos Más Vendidos
-              </Text>
-              <TouchableRipple
-                onPress={() => router.push("/(tabs)/home/products" as any)}
-              >
-                <Text
-                  variant="bodySmall"
-                  style={{ color: palette.primary, fontWeight: "600" }}
-                >
-                  Ver todos
-                </Text>
-              </TouchableRipple>
             </View>
 
-            {topProducts.map((product, index) => (
-              <Card key={index} style={styles.productCard}>
-                <Card.Content style={styles.productCardContent}>
-                  <View
-                    style={[
-                      styles.productRank,
-                      {
-                        backgroundColor:
-                          index === 0
-                            ? palette.success + "30"
-                            : palette.surface,
-                      },
-                    ]}
-                  >
-                    <Text
-                      variant="labelSmall"
-                      style={{
-                        color: index === 0 ? palette.success : palette.text,
-                        fontWeight: "bold",
-                      }}
-                    >
-                      #{index + 1}
+            {/* Second Row - Solo en mobile */}
+            {(!isWeb || !isWideScreen) && (
+              <View style={styles.statisticsRow}>
+                <Statistic
+                  icon="swap-vertical"
+                  value={dashboardData?.movements_count || 0}
+                  label="Movimientos"
+                  color={palette.blue}
+                />
+                <Statistic
+                  icon="package-variant"
+                  value={formatCurrency(dashboardData?.inventory_value || 0)}
+                  label="Inventario"
+                  color={palette.accent}
+                />
+                <Statistic
+                  icon="alert-circle"
+                  value={dashboardData?.low_stock_products || 0}
+                  label="Stock Bajo"
+                  color={palette.red}
+                />
+              </View>
+            )}
+          </View>
+
+          {/* Charts - Carousel en mobile, Grid en web */}
+          {isWeb && isWideScreen ? (
+            <View style={styles.chartsGrid}>
+              <CarrouselCard
+                type="sales-trend"
+                color={palette.primary}
+                dataScope={dataScope}
+                selectedPeriod={selectedPeriod}
+                locationName={selectedLocation?.name}
+                isWeb={true}
+              />
+              <CarrouselCard
+                type="sales-by-location"
+                color={palette.blue}
+                dataScope={dataScope}
+                selectedPeriod={selectedPeriod}
+                locationName={selectedLocation?.name}
+                isWeb={true}
+              />
+              <CarrouselCard
+                type="top-products"
+                color={palette.success}
+                dataScope={dataScope}
+                selectedPeriod={selectedPeriod}
+                locationName={selectedLocation?.name}
+                isWeb={true}
+              />
+              <CarrouselCard
+                type="payment-methods"
+                color={palette.secondary}
+                dataScope={dataScope}
+                selectedPeriod={selectedPeriod}
+                locationName={selectedLocation?.name}
+                isWeb={true}
+              />
+            </View>
+          ) : (
+            <View style={{ height: 280, marginBottom: 16 }}>
+              <Carousel
+                loop
+                width={Dimensions.get("window").width - 40}
+                height={280}
+                autoPlay={true}
+                autoPlayInterval={5000}
+                pagingEnabled={true}
+                snapEnabled={true}
+                mode="parallax"
+                data={[
+                  { type: "sales-trend", color: palette.primary },
+                  { type: "sales-by-location", color: palette.blue },
+                  { type: "top-products", color: palette.success },
+                  { type: "payment-methods", color: palette.secondary },
+                  { type: "low-stock", color: palette.warning },
+                ]}
+                scrollAnimationDuration={1000}
+                renderItem={({ item }: { item: any }) => (
+                  <CarrouselCard
+                    type={item.type}
+                    color={item.color}
+                    dataScope={dataScope}
+                    selectedPeriod={selectedPeriod}
+                    locationName={selectedLocation?.name}
+                    isWeb={false}
+                  />
+                )}
+              />
+            </View>
+          )}
+
+          {/* Layout de 2 columnas para web */}
+          {isWeb && isWideScreen ? (
+            <View style={styles.twoColumnLayout}>
+              {/* Columna izquierda - Top productos y actividad */}
+              <View style={styles.leftColumnContent}>
+                {/* Top 5 Productos */}
+                <View style={{ marginBottom: 20 }}>
+                  <View style={styles.sectionHeader}>
+                    <Text variant="titleMedium" style={styles.sectionTitle}>
+                      Top 5 Productos Más Vendidos
                     </Text>
+                    <TouchableRipple
+                      onPress={() =>
+                        router.push("/(tabs)/home/products" as any)
+                      }
+                    >
+                      <Text
+                        variant="bodySmall"
+                        style={{ color: palette.primary, fontWeight: "600" }}
+                      >
+                        Ver todos
+                      </Text>
+                    </TouchableRipple>
                   </View>
 
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      variant="bodyMedium"
-                      style={{ fontWeight: "600", color: palette.text }}
-                    >
-                      {product.name}
-                    </Text>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 16,
-                        marginTop: 4,
-                      }}
-                    >
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
-                      >
-                        <Icon
-                          source="package-variant"
-                          size={14}
-                          color={palette.textSecondary}
-                        />
+                  {topProducts.map((product, index) => (
+                    <Card key={index} style={styles.productCard}>
+                      <Card.Content style={styles.productCardContent}>
+                        <View
+                          style={[
+                            styles.productRank,
+                            {
+                              backgroundColor:
+                                index === 0
+                                  ? palette.success + "30"
+                                  : palette.surface,
+                            },
+                          ]}
+                        >
+                          <Text
+                            variant="labelSmall"
+                            style={{
+                              color:
+                                index === 0 ? palette.success : palette.text,
+                              fontWeight: "bold",
+                            }}
+                          >
+                            #{index + 1}
+                          </Text>
+                        </View>
+
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            variant="bodyMedium"
+                            style={{ fontWeight: "600", color: palette.text }}
+                          >
+                            {product.name}
+                          </Text>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 16,
+                              marginTop: 4,
+                            }}
+                          >
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 4,
+                              }}
+                            >
+                              <Icon
+                                source="package-variant"
+                                size={14}
+                                color={palette.textSecondary}
+                              />
+                              <Text
+                                variant="bodySmall"
+                                style={{ color: palette.textSecondary }}
+                              >
+                                {product.quantity} uds
+                              </Text>
+                            </View>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 4,
+                              }}
+                            >
+                              <Icon
+                                source="cash"
+                                size={14}
+                                color={palette.success}
+                              />
+                              <Text
+                                variant="bodySmall"
+                                style={{
+                                  color: palette.success,
+                                  fontWeight: "600",
+                                }}
+                              >
+                                {formatCurrency(product.sales)}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      </Card.Content>
+                    </Card>
+                  ))}
+                </View>
+              </View>
+
+              {/* Columna derecha - Actividad reciente y alertas (solo web) */}
+              {isWeb && isWideScreen && (
+                <View style={styles.rightColumnContent}>
+                  {/* Actividad Reciente */}
+                  <View style={{ marginBottom: 20 }}>
+                    <View style={styles.sectionHeader}>
+                      <Text variant="titleMedium" style={styles.sectionTitle}>
+                        Actividad Reciente
+                      </Text>
+                      <TouchableRipple onPress={() => {}}>
                         <Text
                           variant="bodySmall"
-                          style={{ color: palette.textSecondary }}
+                          style={{ color: palette.primary, fontWeight: "600" }}
                         >
-                          {product.quantity} uds
+                          Ver historial
                         </Text>
-                      </View>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
-                      >
-                        <Icon source="cash" size={14} color={palette.success} />
-                        <Text
-                          variant="bodySmall"
-                          style={{ color: palette.success, fontWeight: "600" }}
-                        >
-                          {formatCurrency(product.sales)}
-                        </Text>
-                      </View>
+                      </TouchableRipple>
                     </View>
-                  </View>
-                </Card.Content>
-              </Card>
-            ))}
-          </View>
 
-          {/* Actividad Reciente */}
-          <View style={{ marginBottom: 20 }}>
-            <View style={styles.sectionHeader}>
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Actividad Reciente
-              </Text>
-              <TouchableRipple onPress={() => {}}>
-                <Text
-                  variant="bodySmall"
-                  style={{ color: palette.primary, fontWeight: "600" }}
-                >
-                  Ver historial
-                </Text>
-              </TouchableRipple>
+                    {(recentMovements || []).slice(0, 5).map((movement) => (
+                      <Card key={movement.id} style={styles.movementCard}>
+                        <Card.Content style={styles.movementCardContent}>
+                          <View
+                            style={[
+                              styles.movementIcon,
+                              {
+                                backgroundColor:
+                                  movement.movement_type === "entry"
+                                    ? palette.success + "20"
+                                    : movement.movement_type === "exit"
+                                    ? palette.error + "20"
+                                    : palette.blue + "20",
+                              },
+                            ]}
+                          >
+                            <Icon
+                              source={
+                                movement.movement_type === "entry"
+                                  ? "arrow-down"
+                                  : movement.movement_type === "exit"
+                                  ? "arrow-up"
+                                  : "swap-horizontal"
+                              }
+                              color={
+                                movement.movement_type === "entry"
+                                  ? palette.success
+                                  : movement.movement_type === "exit"
+                                  ? palette.error
+                                  : palette.blue
+                              }
+                              size={24}
+                            />
+                          </View>
+
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              variant="bodyMedium"
+                              style={{ fontWeight: "600", color: palette.text }}
+                            >
+                              {movement.movement_reason_label}
+                            </Text>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 12,
+                                marginTop: 4,
+                              }}
+                            >
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 4,
+                                }}
+                              >
+                                <Icon
+                                  source="calendar"
+                                  size={14}
+                                  color={palette.textSecondary}
+                                />
+                                <Text
+                                  variant="bodySmall"
+                                  style={{ color: palette.textSecondary }}
+                                >
+                                  {formatDate(movement.movement_date)}
+                                </Text>
+                              </View>
+                              {movement.products_count > 0 && (
+                                <View
+                                  style={{
+                                    flexDirection: "row",
+                                    alignItems: "center",
+                                    gap: 4,
+                                  }}
+                                >
+                                  <Icon
+                                    source="package-variant"
+                                    size={14}
+                                    color={palette.textSecondary}
+                                  />
+                                  <Text
+                                    variant="bodySmall"
+                                    style={{ color: palette.textSecondary }}
+                                  >
+                                    {movement.products_count} productos
+                                  </Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+
+                          {movement.generated_money &&
+                            movement.total_cost > 0 && (
+                              <View style={{ alignItems: "flex-end" }}>
+                                <Text
+                                  variant="titleSmall"
+                                  style={{
+                                    color: getMoneyTypeColor(
+                                      movement.money_type
+                                    ),
+                                    fontWeight: "bold",
+                                  }}
+                                >
+                                  {formatCurrency(movement.total_cost)}
+                                </Text>
+                                <Chip
+                                  style={{
+                                    backgroundColor:
+                                      getMoneyTypeColor(movement.money_type) +
+                                      "20",
+                                    marginTop: 4,
+                                  }}
+                                  textStyle={{
+                                    color: getMoneyTypeColor(
+                                      movement.money_type
+                                    ),
+                                    fontSize: 10,
+                                  }}
+                                >
+                                  {movement.money_type === "income"
+                                    ? "Ingreso"
+                                    : "Egreso"}
+                                </Chip>
+                              </View>
+                            )}
+                        </Card.Content>
+                      </Card>
+                    ))}
+                  </View>
+
+                  {/* Alertas e Inventario */}
+                  <View style={styles.alertsRow}>
+                    <Card
+                      style={[
+                        styles.alertCard,
+                        { borderLeftColor: palette.error },
+                      ]}
+                    >
+                      <Card.Content>
+                        <View style={styles.alertContent}>
+                          <IconButton
+                            icon="alert-circle"
+                            iconColor={palette.error}
+                            size={24}
+                            style={{ margin: 0 }}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              variant="titleSmall"
+                              style={styles.alertTitle}
+                            >
+                              Stock Bajo
+                            </Text>
+                            <Text variant="bodySmall" style={styles.alertText}>
+                              {dashboardData?.low_stock_products || 0} productos
+                              requieren reposición
+                            </Text>
+                          </View>
+                          <IconButton
+                            icon="chevron-right"
+                            size={20}
+                            iconColor={palette.textSecondary}
+                            style={{ margin: 0 }}
+                            onPress={() =>
+                              router.push(
+                                "/(tabs)/home/products?filter=low_stock" as any
+                              )
+                            }
+                          />
+                        </View>
+                      </Card.Content>
+                    </Card>
+
+                    <Card
+                      style={[
+                        styles.alertCard,
+                        { borderLeftColor: palette.blue },
+                      ]}
+                    >
+                      <Card.Content>
+                        <View style={styles.alertContent}>
+                          <IconButton
+                            icon="package-variant"
+                            iconColor={palette.blue}
+                            size={24}
+                            style={{ margin: 0 }}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text
+                              variant="titleSmall"
+                              style={styles.alertTitle}
+                            >
+                              Inventario Total
+                            </Text>
+                            <Text variant="bodySmall" style={styles.alertText}>
+                              {formatCurrency(
+                                dashboardData?.inventory_value || 0
+                              )}{" "}
+                              en stock
+                            </Text>
+                          </View>
+                          <IconButton
+                            icon="chevron-right"
+                            size={20}
+                            iconColor={palette.textSecondary}
+                            style={{ margin: 0 }}
+                            onPress={() =>
+                              router.push("/(tabs)/inventory" as any)
+                            }
+                          />
+                        </View>
+                      </Card.Content>
+                    </Card>
+                  </View>
+                </View>
+              )}
             </View>
-
-            {(recentMovements || []).slice(0, 5).map((movement) => (
-              <Card key={movement.id} style={styles.movementCard}>
-                <Card.Content style={styles.movementCardContent}>
-                  <View
-                    style={[
-                      styles.movementIcon,
-                      {
-                        backgroundColor:
-                          movement.movement_type === "entry"
-                            ? palette.success + "20"
-                            : movement.movement_type === "exit"
-                            ? palette.error + "20"
-                            : palette.blue + "20",
-                      },
-                    ]}
-                  >
-                    <Icon
-                      source={
-                        movement.movement_type === "entry"
-                          ? "arrow-down"
-                          : movement.movement_type === "exit"
-                          ? "arrow-up"
-                          : "swap-horizontal"
-                      }
-                      color={
-                        movement.movement_type === "entry"
-                          ? palette.success
-                          : movement.movement_type === "exit"
-                          ? palette.error
-                          : palette.blue
-                      }
-                      size={24}
-                    />
-                  </View>
-
-                  <View style={{ flex: 1 }}>
+          ) : (
+            <>
+              {/* Actividad Reciente - Mobile */}
+              <View style={{ marginBottom: 20 }}>
+                <View style={styles.sectionHeader}>
+                  <Text variant="titleMedium" style={styles.sectionTitle}>
+                    Actividad Reciente
+                  </Text>
+                  <TouchableRipple onPress={() => {}}>
                     <Text
-                      variant="bodyMedium"
-                      style={{ fontWeight: "600", color: palette.text }}
+                      variant="bodySmall"
+                      style={{ color: palette.primary, fontWeight: "600" }}
                     >
-                      {movement.movement_reason_label}
+                      Ver historial
                     </Text>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 12,
-                        marginTop: 4,
-                      }}
-                    >
+                  </TouchableRipple>
+                </View>
+
+                {(recentMovements || []).slice(0, 5).map((movement) => (
+                  <Card key={movement.id} style={styles.movementCard}>
+                    <Card.Content style={styles.movementCardContent}>
                       <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
+                        style={[
+                          styles.movementIcon,
+                          {
+                            backgroundColor:
+                              movement.movement_type === "entry"
+                                ? palette.success + "20"
+                                : movement.movement_type === "exit"
+                                ? palette.error + "20"
+                                : palette.blue + "20",
+                          },
+                        ]}
                       >
                         <Icon
-                          source="calendar"
-                          size={14}
-                          color={palette.textSecondary}
+                          source={
+                            movement.movement_type === "entry"
+                              ? "arrow-down"
+                              : movement.movement_type === "exit"
+                              ? "arrow-up"
+                              : "swap-horizontal"
+                          }
+                          color={
+                            movement.movement_type === "entry"
+                              ? palette.success
+                              : movement.movement_type === "exit"
+                              ? palette.error
+                              : palette.blue
+                          }
+                          size={24}
                         />
-                        <Text
-                          variant="bodySmall"
-                          style={{ color: palette.textSecondary }}
-                        >
-                          {formatDate(movement.movement_date)}
-                        </Text>
                       </View>
-                      {movement.products_count > 0 && (
+
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          variant="bodyMedium"
+                          style={{ fontWeight: "600", color: palette.text }}
+                        >
+                          {movement.movement_reason_label}
+                        </Text>
                         <View
                           style={{
                             flexDirection: "row",
                             alignItems: "center",
-                            gap: 4,
+                            gap: 12,
+                            marginTop: 4,
                           }}
                         >
-                          <Icon
-                            source="package-variant"
-                            size={14}
-                            color={palette.textSecondary}
-                          />
-                          <Text
-                            variant="bodySmall"
-                            style={{ color: palette.textSecondary }}
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
                           >
-                            {movement.products_count} productos
+                            <Icon
+                              source="calendar"
+                              size={14}
+                              color={palette.textSecondary}
+                            />
+                            <Text
+                              variant="bodySmall"
+                              style={{ color: palette.textSecondary }}
+                            >
+                              {formatDate(movement.movement_date)}
+                            </Text>
+                          </View>
+                          {movement.products_count > 0 && (
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 4,
+                              }}
+                            >
+                              <Icon
+                                source="package-variant"
+                                size={14}
+                                color={palette.textSecondary}
+                              />
+                              <Text
+                                variant="bodySmall"
+                                style={{ color: palette.textSecondary }}
+                              >
+                                {movement.products_count} productos
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+
+                      {movement.generated_money && movement.total_cost > 0 && (
+                        <View style={{ alignItems: "flex-end" }}>
+                          <Text
+                            variant="titleSmall"
+                            style={{
+                              color: getMoneyTypeColor(movement.money_type),
+                              fontWeight: "bold",
+                            }}
+                          >
+                            {formatCurrency(movement.total_cost)}
                           </Text>
+                          <Chip
+                            style={{
+                              backgroundColor:
+                                getMoneyTypeColor(movement.money_type) + "20",
+                              marginTop: 4,
+                            }}
+                            textStyle={{
+                              color: getMoneyTypeColor(movement.money_type),
+                              fontSize: 10,
+                            }}
+                          >
+                            {movement.money_type === "income"
+                              ? "Ingreso"
+                              : "Egreso"}
+                          </Chip>
                         </View>
                       )}
+                    </Card.Content>
+                  </Card>
+                ))}
+              </View>
+
+              {/* Alertas e Inventario - Mobile */}
+              <View style={styles.alertsRow}>
+                <Card
+                  style={[styles.alertCard, { borderLeftColor: palette.error }]}
+                >
+                  <Card.Content>
+                    <View style={styles.alertContent}>
+                      <IconButton
+                        icon="alert-circle"
+                        iconColor={palette.error}
+                        size={24}
+                        style={{ margin: 0 }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text variant="titleSmall" style={styles.alertTitle}>
+                          Stock Bajo
+                        </Text>
+                        <Text variant="bodySmall" style={styles.alertText}>
+                          {dashboardData?.low_stock_products || 0} productos
+                          requieren reposición
+                        </Text>
+                      </View>
+                      <IconButton
+                        icon="chevron-right"
+                        size={20}
+                        iconColor={palette.textSecondary}
+                        style={{ margin: 0 }}
+                        onPress={() =>
+                          router.push(
+                            "/(tabs)/home/products?filter=low_stock" as any
+                          )
+                        }
+                      />
                     </View>
-                  </View>
+                  </Card.Content>
+                </Card>
 
-                  {movement.generated_money && movement.total_cost > 0 && (
-                    <View style={{ alignItems: "flex-end" }}>
-                      <Text
-                        variant="titleSmall"
-                        style={{
-                          color: getMoneyTypeColor(movement.money_type),
-                          fontWeight: "bold",
-                        }}
-                      >
-                        {formatCurrency(movement.total_cost)}
-                      </Text>
-                      <Chip
-                        style={{
-                          backgroundColor:
-                            getMoneyTypeColor(movement.money_type) + "20",
-                          marginTop: 4,
-                        }}
-                        textStyle={{
-                          color: getMoneyTypeColor(movement.money_type),
-                          fontSize: 10,
-                        }}
-                      >
-                        {movement.money_type === "income"
-                          ? "Ingreso"
-                          : "Egreso"}
-                      </Chip>
+                <Card
+                  style={[styles.alertCard, { borderLeftColor: palette.blue }]}
+                >
+                  <Card.Content>
+                    <View style={styles.alertContent}>
+                      <IconButton
+                        icon="package-variant"
+                        iconColor={palette.blue}
+                        size={24}
+                        style={{ margin: 0 }}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text variant="titleSmall" style={styles.alertTitle}>
+                          Inventario Total
+                        </Text>
+                        <Text variant="bodySmall" style={styles.alertText}>
+                          {formatCurrency(dashboardData?.inventory_value || 0)}{" "}
+                          en stock
+                        </Text>
+                      </View>
+                      <IconButton
+                        icon="chevron-right"
+                        size={20}
+                        iconColor={palette.textSecondary}
+                        style={{ margin: 0 }}
+                        onPress={() => router.push("/(tabs)/inventory" as any)}
+                      />
                     </View>
-                  )}
-                </Card.Content>
-              </Card>
-            ))}
-          </View>
-
-          {/* Alertas e Inventario */}
-          <View style={styles.alertsRow}>
-            <Card
-              style={[styles.alertCard, { borderLeftColor: palette.error }]}
-            >
-              <Card.Content>
-                <View style={styles.alertContent}>
-                  <IconButton
-                    icon="alert-circle"
-                    iconColor={palette.error}
-                    size={24}
-                    style={{ margin: 0 }}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text variant="titleSmall" style={styles.alertTitle}>
-                      Stock Bajo
-                    </Text>
-                    <Text variant="bodySmall" style={styles.alertText}>
-                      {dashboardData?.low_stock_products || 0} productos
-                      requieren reposición
-                    </Text>
-                  </View>
-                  <IconButton
-                    icon="chevron-right"
-                    size={20}
-                    iconColor={palette.textSecondary}
-                    style={{ margin: 0 }}
-                    onPress={() =>
-                      router.push(
-                        "/(tabs)/home/products?filter=low_stock" as any
-                      )
-                    }
-                  />
-                </View>
-              </Card.Content>
-            </Card>
-
-            <Card style={[styles.alertCard, { borderLeftColor: palette.blue }]}>
-              <Card.Content>
-                <View style={styles.alertContent}>
-                  <IconButton
-                    icon="package-variant"
-                    iconColor={palette.blue}
-                    size={24}
-                    style={{ margin: 0 }}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text variant="titleSmall" style={styles.alertTitle}>
-                      Inventario Total
-                    </Text>
-                    <Text variant="bodySmall" style={styles.alertText}>
-                      {formatCurrency(dashboardData?.inventory_value || 0)} en
-                      stock
-                    </Text>
-                  </View>
-                  <IconButton
-                    icon="chevron-right"
-                    size={20}
-                    iconColor={palette.textSecondary}
-                    style={{ margin: 0 }}
-                    onPress={() => router.push("/(tabs)/inventory" as any)}
-                  />
-                </View>
-              </Card.Content>
-            </Card>
-          </View>
+                  </Card.Content>
+                </Card>
+              </View>
+            </>
+          )}
         </View>
       </ScrollView>
 
@@ -983,6 +1289,7 @@ interface CarouselCardProps {
   dataScope: "location" | "general";
   selectedPeriod: "today" | "week" | "month";
   locationName?: string;
+  isWeb?: boolean;
 }
 
 function CarrouselCard({
@@ -991,10 +1298,12 @@ function CarrouselCard({
   dataScope,
   selectedPeriod,
   locationName,
+  isWeb = false,
 }: CarouselCardProps) {
   const [chartData, setChartData] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
-  const chartWidth = Dimensions.get("window").width - 80;
+  const screenWidth = Dimensions.get("window").width;
+  const chartWidth = isWeb ? screenWidth / 2 - 100 : screenWidth - 80;
 
   React.useEffect(() => {
     loadChartData();
@@ -1673,6 +1982,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     elevation: 2,
     marginBottom: 8,
+    shadowColor: "transparent",
   },
   productCardContent: {
     flexDirection: "row",
@@ -1685,6 +1995,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     elevation: 2,
     marginBottom: 8,
+    shadowColor: "transparent",
   },
   movementCardContent: {
     flexDirection: "row",
@@ -1729,6 +2040,7 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderLeftWidth: 4,
     marginBottom: 12,
+    shadowColor: "transparent",
   },
   alertContent: {
     flexDirection: "row",
@@ -1742,5 +2054,23 @@ const styles = StyleSheet.create({
   },
   alertText: {
     color: palette.textSecondary,
+  },
+  // Web-specific styles
+  chartsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+    marginBottom: 20,
+    shadowColor: "transparent",
+  },
+  twoColumnLayout: {
+    flexDirection: "row",
+    gap: 20,
+  },
+  leftColumnContent: {
+    flex: 1,
+  },
+  rightColumnContent: {
+    flex: 1,
   },
 });

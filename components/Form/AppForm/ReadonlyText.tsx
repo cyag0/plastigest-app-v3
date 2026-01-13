@@ -1,4 +1,3 @@
-import palette from "@/constants/palette";
 import React from "react";
 import { Text } from "react-native";
 
@@ -11,7 +10,7 @@ export default function ReadonlyText(props: ReadonlyTextProps) {
   return (
     <Text
       style={{
-        color: palette.accent,
+        color: "#555",
         ...props.textStyle,
       }}
     >

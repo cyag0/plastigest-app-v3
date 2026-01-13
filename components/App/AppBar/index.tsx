@@ -2,7 +2,7 @@ import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import React from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { Appbar, Badge } from "react-native-paper";
 
 export interface AppBarProps {
@@ -40,6 +40,8 @@ export default function AppBar({
 }: AppBarProps) {
   const router = useRouter();
   const { unreadNotificationsCount } = useAuth();
+  const isWeb = Platform.OS === "web";
+
   const showBackButton = _showBackButton && router.canGoBack();
 
   const handleBack = () => {
@@ -60,7 +62,9 @@ export default function AppBar({
     onProfilePress?.();
   };
 
-  console.log(unreadNotificationsCount);
+  if (isWeb) {
+    return null;
+  }
 
   return (
     <Appbar.Header

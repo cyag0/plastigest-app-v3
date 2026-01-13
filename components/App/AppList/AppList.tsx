@@ -677,7 +677,6 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 16,
-    paddingBottom: 100,
     gap: 8,
   },
   searchbar: {

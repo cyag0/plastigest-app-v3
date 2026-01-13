@@ -98,7 +98,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       setUnreadNotificationsCount(response.data.count || 0);
     } catch (error) {
-      console.error("Error loading unread notifications count:", error);
+      console.log("Error loading unread notifications count:", error);
+      setUnreadNotificationsCount(0);
     }
   };
 

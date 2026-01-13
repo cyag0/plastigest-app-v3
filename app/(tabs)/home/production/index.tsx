@@ -15,7 +15,7 @@ export default function ProductionIndex() {
         title="Producción"
         service={Services.productions}
         renderCard={({ item }: { item: any }) => ({
-          title: `Producción #${item.production_number || item.id}`,
+          title: `Producción #${item.production_number || item.id}`.toString(),
           description: (
             <AppList.Description
               numberOfLines={1}
@@ -66,24 +66,8 @@ export default function ProductionIndex() {
                   color: palette.primary,
                 }}
               >
-                {item.quantity} unidades
+                {item.quantity + " unidades"}
               </AppList.Title>
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 8,
-                  alignItems: "center",
-                }}
-              >
-                <AppList.Description
-                  style={{
-                    fontWeight: "bold",
-                    color: palette.success,
-                  }}
-                >
-                  Completado
-                </AppList.Description>
-              </View>
             </View>
           ),
           bottom: [

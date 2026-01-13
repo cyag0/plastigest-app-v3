@@ -12,7 +12,6 @@ import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useFormikContext } from "formik";
 import React, { useEffect, useRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { IconButton } from "react-native-paper";
@@ -60,6 +59,18 @@ export default function ProductsForm(props: ProductsFormProps) {
   const { selectedLocation } = useSelectedLocation();
   const router = useRouter();
 
+  // Función para generar código de barras aleatorio en el frontend
+  const generateRandomBarcode = () => {
+    // Generar un código de 13 dígitos (similar a EAN-13)
+    const timestamp = Date.now().toString().slice(-8); // Últimos 8 dígitos del timestamp
+    const random = Math.floor(Math.random() * 100000)
+      .toString()
+      .padStart(5, "0"); // 5 dígitos aleatorios
+    const barcode = timestamp + random; // 13 dígitos en total
+
+    formRef.current?.setFieldValue("code", barcode);
+  };
+
   useEffect(() => {
     setTimeout(() => {
       console.log("Selected Location ID:", selectedLocation?.id);
@@ -102,8 +113,6 @@ export default function ProductsForm(props: ProductsFormProps) {
         required
       />
 
-      <Test />
-
       <FormInput
         name="description"
         label="Descripción"
@@ -131,6 +140,15 @@ export default function ProductsForm(props: ProductsFormProps) {
           iconColor="#fff"
           size={24}
           onPress={() => scannerRef.current?.open()}
+          style={styles.scanButton}
+        />
+        <IconButton
+          icon="auto-fix"
+          mode="contained"
+          containerColor={palette.accent}
+          iconColor="#fff"
+          size={24}
+          onPress={generateRandomBarcode}
           style={styles.scanButton}
         />
       </View>
@@ -276,12 +294,6 @@ export default function ProductsForm(props: ProductsFormProps) {
       />
     </AppForm>
   );
-}
-
-function Test() {
-  const form = useFormikContext<ProductFormData>();
-  console.log("Form values:", form.values);
-  return null;
 }
 
 const styles = StyleSheet.create({

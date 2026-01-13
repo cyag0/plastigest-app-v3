@@ -163,7 +163,14 @@ export default function LocationSelector({
         alignItems: "center",
       }}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <ScrollView
+        style={{
+          flex: 1,
+          maxWidth: 600,
+          width: "100%",
+        }}
+        contentContainerStyle={styles.scrollContainer}
+      >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerIcon}>
@@ -332,16 +339,12 @@ export default function LocationSelector({
 
 const styles = StyleSheet.create({
   scrollContainer: {
-    padding: 20,
-    paddingBottom: 40,
     maxWidth: 600,
-    alignSelf: "center",
-    justifyContent: "center",
-    minHeight: "100%",
+    width: "100%",
+    padding: 16,
   },
   header: {
     alignItems: "center",
-    marginBottom: 24,
   },
   headerIcon: {
     backgroundColor: palette.secondary + "15",
@@ -431,16 +434,14 @@ const styles = StyleSheet.create({
   locationsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
+    width: "100%",
     gap: 12,
     marginBottom: 24,
   },
   locationActionCard: {
-    flex: 1,
-    minWidth: "45%",
+    width: "48%",
     borderRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
     shadowColor: "transparent",
-    elevation: 2,
   },
   currentLocationActionCard: {
     backgroundColor: palette.secondary + "15",

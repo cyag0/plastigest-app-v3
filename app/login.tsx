@@ -6,7 +6,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   View,
@@ -97,8 +96,6 @@ export default function LoginScreen() {
         alerts.success("Sesión iniciada correctamente");
       }
     } catch (error: any) {
-      console.error("Login error:", error);
-
       let errorMessage = "";
       // Manejar diferentes tipos de errores
       if (error.code === "NETWORK_ERROR" || error.message?.includes("CORS")) {
@@ -116,18 +113,19 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
-        colors={[palette.primary, palette.primaryDark]}
+        colors={[palette.card, palette.background]}
         style={styles.gradient}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={styles.keyboardView}
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContainer}
-            keyboardShouldPersistTaps="handled"
-          >
-            <View style={styles.content}>
+          <View style={styles.content}>
+            <KeyboardAvoidingView
+              behavior={"position"}
+              style={styles.keyboardView}
+              keyboardVerticalOffset={30}
+            >
               {/* Logo/Header */}
               <View style={styles.header}>
                 <View style={styles.logoContainer}>
@@ -252,21 +250,21 @@ export default function LoginScreen() {
                   {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
                 </Button>
               </Surface>
+            </KeyboardAvoidingView>
 
-              {/* Footer */}
-              <View style={styles.footer}>
-                <MaterialCommunityIcons
-                  name="shield-check"
-                  size={16}
-                  color="#FFFFFF80"
-                />
-                <Text variant="bodySmall" style={styles.footerText}>
-                  PlastiGest v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
-                </Text>
-              </View>
+            {/* Footer */}
+            <View style={styles.footer}>
+              <MaterialCommunityIcons
+                name="shield-check"
+                size={16}
+                color="#FFFFFF80"
+              />
+              <Text variant="bodySmall" style={styles.footerText}>
+                PlastiGest v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
+              </Text>
             </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
+          </View>
+        </ScrollView>
       </LinearGradient>
     </SafeAreaView>
   );
