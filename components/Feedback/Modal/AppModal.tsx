@@ -128,6 +128,9 @@ const AppModal = forwardRef<AppModalRef, ModalProps>((props, ref) => {
         dismissable={config.dismissable}
         contentContainerStyle={[
           styles.modalContainer,
+          {
+            maxWidth: 800,
+          },
           config?.width ? { width: config.width } : {},
           config?.height ? { height: config.height } : {},
         ]}

@@ -62,15 +62,11 @@ export default function AppBar({
     onProfilePress?.();
   };
 
-  if (isWeb) {
-    return null;
-  }
-
   return (
     <Appbar.Header
       style={{
         backgroundColor,
-        elevation: 2,
+        elevation: isWeb ? 0 : 2,
         shadowColor: palette.textSecondary,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
@@ -137,14 +133,14 @@ export default function AppBar({
       )}
 
       {/* Botón de perfil */}
-      {showProfileButton && (
+      {/*  {showProfileButton && (
         <Appbar.Action
           icon="account-circle-outline"
           onPress={handleProfile}
           iconColor={iconColor}
           rippleColor={palette.primary}
         />
-      )}
+      )} */}
 
       {/* Acciones del lado derecho */}
       {rightActions}

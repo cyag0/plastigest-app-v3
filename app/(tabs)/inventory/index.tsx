@@ -5,6 +5,7 @@ import React from "react";
 import {
   ActivityIndicator,
   Dimensions,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -51,6 +52,8 @@ export default function InventoryScreen() {
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [stats, setStats] = React.useState<InventoryStats | null>(null);
+
+  const isWeb = Platform.OS === "web";
 
   const inventoryOptions: InventoryOption[] = [
     {
@@ -231,9 +234,12 @@ export default function InventoryScreen() {
   ];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container]}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { maxWidth: 800, alignSelf: "center" },
+        ]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -247,7 +253,7 @@ export default function InventoryScreen() {
         >
           <Carousel
             loop
-            width={Dimensions.get("window").width}
+            width={isWeb ? 800 : Dimensions.get("window").width}
             height={280}
             autoPlay={true}
             autoPlayInterval={2000}

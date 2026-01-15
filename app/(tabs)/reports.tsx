@@ -98,6 +98,9 @@ function FilterModal({
           marginHorizontal: 20,
           borderRadius: 16,
           padding: 24,
+          maxWidth: 800,
+          width: "90%",
+          alignSelf: "center",
         }}
       >
         <View style={{ gap: 20 }}>
@@ -578,7 +581,7 @@ export default function ReportsScreen() {
                 label="Ganancia"
                 color={palette.primary}
               />
-              {isWeb && isWideScreen && (
+              {/*  {isWeb && isWideScreen && (
                 <>
                   <Statistic
                     icon="swap-vertical"
@@ -599,32 +602,31 @@ export default function ReportsScreen() {
                     color={palette.red}
                   />
                 </>
-              )}
+              )} */}
             </View>
 
             {/* Second Row - Solo en mobile */}
-            {(!isWeb || !isWideScreen) && (
-              <View style={styles.statisticsRow}>
-                <Statistic
-                  icon="swap-vertical"
-                  value={dashboardData?.movements_count || 0}
-                  label="Movimientos"
-                  color={palette.blue}
-                />
-                <Statistic
-                  icon="package-variant"
-                  value={formatCurrency(dashboardData?.inventory_value || 0)}
-                  label="Inventario"
-                  color={palette.accent}
-                />
-                <Statistic
-                  icon="alert-circle"
-                  value={dashboardData?.low_stock_products || 0}
-                  label="Stock Bajo"
-                  color={palette.red}
-                />
-              </View>
-            )}
+
+            <View style={styles.statisticsRow}>
+              <Statistic
+                icon="swap-vertical"
+                value={dashboardData?.movements_count || 0}
+                label="Movimientos"
+                color={palette.blue}
+              />
+              <Statistic
+                icon="package-variant"
+                value={formatCurrency(dashboardData?.inventory_value || 0)}
+                label="Inventario"
+                color={palette.accent}
+              />
+              <Statistic
+                icon="alert-circle"
+                value={dashboardData?.low_stock_products || 0}
+                label="Stock Bajo"
+                color={palette.red}
+              />
+            </View>
           </View>
 
           {/* Charts - Carousel en mobile, Grid en web */}
@@ -2057,8 +2059,9 @@ const styles = StyleSheet.create({
   },
   // Web-specific styles
   chartsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    display: "grid" as any,
+    gridTemplateColumns: "repeat(2, 1fr)",
+    gridTemplateRows: "repeat(2, 1fr)",
     gap: 16,
     marginBottom: 20,
     shadowColor: "transparent",
