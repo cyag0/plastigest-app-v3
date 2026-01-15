@@ -3,20 +3,21 @@ import * as Device from "expo-device";
 import { useState } from "react";
 import { Platform } from "react-native";
 
+// Firebase DESHABILITADO - No se está usando actualmente
 // Importación condicional de Firebase
-let messaging: any = null;
-let PermissionsAndroid: any = null;
+// let messaging: any = null;
+// let PermissionsAndroid: any = null;
 
-try {
-  messaging = require("@react-native-firebase/messaging").default;
-  if (Platform.OS === "android") {
-    PermissionsAndroid = require("react-native").PermissionsAndroid;
-  }
-} catch (error) {
-  console.log(
-    "Firebase no disponible en Expo Go - Push notifications deshabilitadas"
-  );
-}
+// try {
+//   messaging = require("@react-native-firebase/messaging").default;
+//   if (Platform.OS === "android") {
+//     PermissionsAndroid = require("react-native").PermissionsAndroid;
+//   }
+// } catch (error) {
+//   console.log(
+//     "Firebase no disponible en Expo Go - Push notifications deshabilitadas"
+//   );
+// }
 
 interface RemoteMessage {
   messageId?: string;
