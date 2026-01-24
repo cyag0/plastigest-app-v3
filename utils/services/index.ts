@@ -259,6 +259,15 @@ const Services = {
         );
         return response.data;
       },
+      async getGroupedByType(params?: { company_id?: number }) {
+        const response = await axiosClient.get(
+          "/auth/admin/units/grouped-by-type",
+          {
+            params,
+          }
+        );
+        return response.data;
+      },
     },
     customerNotes: createCrudService<any>("/auth/admin/customer-notes"),
   },

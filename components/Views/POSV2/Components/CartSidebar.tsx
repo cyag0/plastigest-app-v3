@@ -27,27 +27,53 @@ export type RefCartSidebar = {
 // Componente individual para cada item del carrito
 interface CartItemComponentProps {
   item: CartItem;
+  unitsByType: Record<string, Array<any>>;
   onQuantityChange: (productId: number, delta: number) => void;
   onUnitChange: (productId: number, unitId: number) => void;
+  onPackageChange: (productId: number, packageId: number | null) => void;
   onRemove: (productId: number) => void;
 }
 
 function CartItemComponent({
   item,
+  unitsByType,
   onQuantityChange,
   onUnitChange,
+  onPackageChange,
   onRemove,
 }: CartItemComponentProps) {
   const [unitMenuVisible, setUnitMenuVisible] = useState(false);
+  const [packageMenuVisible, setPackageMenuVisible] = useState(false);
 
   const toggleUnitMenu = () => {
     setUnitMenuVisible((prev) => !prev);
+  };
+
+  const togglePackageMenu = () => {
+    setPackageMenuVisible((prev) => !prev);
   };
 
   const handleUnitChange = (unitId: number) => {
     onUnitChange(item.id, unitId);
     setUnitMenuVisible(false);
   };
+
+  const handlePackageChange = (packageId: number | null) => {
+    onPackageChange(item.id, packageId);
+    setPackageMenuVisible(false);
+  };
+
+  const selectedPackage = item.packages?.find(
+    (p) => p.id === item.selected_package_id
+  );
+
+  // Obtener unidades disponibles del mismo tipo
+  const availableUnits =
+    item.unit_type && unitsByType[item.unit_type]
+      ? unitsByType[item.unit_type]
+      : [];
+
+  console.log("CartItemComponent availableUnits", unitsByType, item.unit_type);
 
   return (
     <View style={styles.itemContainer}>
@@ -72,7 +98,7 @@ function CartItemComponent({
           <View
             style={{ flexDirection: "row", justifyContent: "space-between" }}
           >
-            <View>
+            <View style={{ flex: 1 }}>
               <Text
                 variant="bodyMedium"
                 style={styles.itemName}
@@ -85,19 +111,60 @@ function CartItemComponent({
               </Text>
             </View>
 
-            {/* Selector de unidad */}
-            {item.available_units && item.available_units.length > 1 && (
+            {/* Selector de paquete */}
+            {item.packages && item.packages.length > 0 && (
+              <Menu
+                visible={packageMenuVisible}
+                onDismiss={togglePackageMenu}
+                anchor={
+                  <Button
+                    mode="outlined"
+                    compact
+                    onPress={togglePackageMenu}
+                    style={{ marginRight: 4 }}
+                  >
+                    {selectedPackage
+                      ? selectedPackage.package_name
+                      : "Sin paquete"}
+                    <MaterialCommunityIcons name="chevron-down" size={16} />
+                  </Button>
+                }
+              >
+                <Menu.Item
+                  onPress={() => handlePackageChange(null)}
+                  title="Sin paquete"
+                  leadingIcon={!item.selected_package_id ? "check" : undefined}
+                />
+                {item.packages.map((pkg: any) => (
+                  <Menu.Item
+                    key={pkg.id}
+                    onPress={() => handlePackageChange(pkg.id)}
+                    title={`${pkg.name} (${pkg.quantity_per_package})`}
+                    leadingIcon={
+                      pkg.id === item.selected_package_id ? "check" : undefined
+                    }
+                  />
+                ))}
+              </Menu>
+            )}
+
+            {availableUnits && availableUnits.length > 1 && (
               <Menu
                 visible={unitMenuVisible}
                 onDismiss={toggleUnitMenu}
                 anchor={
-                  <Button mode="outlined" compact onPress={toggleUnitMenu}>
+                  <Button
+                    mode="outlined"
+                    compact
+                    onPress={toggleUnitMenu}
+                    disabled={!!item.selected_package_id}
+                  >
                     {item.unit_abbreviation || item.unit_name || "Unidad"}
                     <MaterialCommunityIcons name="chevron-down" size={16} />
                   </Button>
                 }
               >
-                {item.available_units.map((unit: any) => (
+                {availableUnits.map((unit: any) => (
                   <Menu.Item
                     key={unit.id}
                     onPress={() => handleUnitChange(unit.id)}
@@ -110,7 +177,7 @@ function CartItemComponent({
           </View>
 
           <Text variant="titleSmall" style={styles.itemPrice}>
-            ${item.price.toFixed(2)}
+            ${Number(item.price || 0).toFixed(2)}
             {item.unit_abbreviation && (
               <Text style={styles.unitLabel}> /{item.unit_abbreviation}</Text>
             )}
@@ -144,7 +211,7 @@ function CartItemComponent({
 
         <View style={styles.itemRight}>
           <Text variant="titleSmall" style={styles.itemTotal}>
-            ${item.total.toFixed(2)}
+            ${Number(item.total || 0).toFixed(2)}
           </Text>
           <IconButton
             icon="delete"
@@ -168,6 +235,8 @@ CartSidebarProps) => {
     removeFromCart,
     updateQuantity,
     updateUnit,
+    updatePackage,
+    unitsByType,
     getCartTotal,
     getCartItemsCount,
     clearCart,
@@ -202,6 +271,10 @@ CartSidebarProps) => {
 
   const handleUnitChange = (productId: number, unitId: number) => {
     updateUnit(productId, unitId);
+  };
+
+  const handlePackageChange = (productId: number, packageId: number | null) => {
+    updatePackage(productId, packageId);
   };
 
   const handleRemove = (productId: number) => {
@@ -287,8 +360,10 @@ CartSidebarProps) => {
           <React.Fragment key={item.id}>
             <CartItemComponent
               item={item}
+              unitsByType={unitsByType}
               onQuantityChange={handleQuantityChange}
               onUnitChange={handleUnitChange}
+              onPackageChange={handlePackageChange}
               onRemove={handleRemove}
             />
             {index < items.length - 1 && <Divider style={styles.divider} />}
