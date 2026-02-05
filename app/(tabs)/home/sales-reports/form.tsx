@@ -6,6 +6,17 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
+import dayjs from "dayjs";
+import "dayjs/locale/es";
+import localizedFormat from "dayjs/plugin/localizedFormat";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
+
+dayjs.extend(localizedFormat);
+dayjs.extend(timezone);
+dayjs.extend(utc);
+dayjs.locale("es");
+dayjs.tz.setDefault("America/Mexico_City");
 import {
   ActivityIndicator,
   Button,
@@ -26,6 +37,8 @@ interface DailyStats {
   total_cash: number;
   total_card: number;
   total_transfer: number;
+  total_expenses: number;
+  net_income: number;
   transactions_count: number;
 }
 
@@ -42,7 +55,7 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
   const [loadingStats, setLoadingStats] = useState(false);
   const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);
   const [reportDate, setReportDate] = useState(
-    new Date().toISOString().split("T")[0]
+    dayjs().tz("America/Mexico_City").format("YYYY-MM-DD")
   );
 
   // Form state
@@ -90,11 +103,15 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
     try {
       setLoadingStats(true);
       const response = await Services.sales.cashRegister({
-        date: "2025-12-10",
+        date: reportDate,
         location_id: location.id,
       });
 
       const stats = response.data;
+      
+      // Debug: Ver qué devuelve el backend
+      console.log('Cash Register Stats:', stats);
+      console.log('Summary:', stats.summary);
 
       // Parse payment methods
       let cashTotal = 0;
@@ -124,6 +141,8 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
         total_cash: cashTotal,
         total_card: cardTotal,
         total_transfer: transferTotal,
+        total_expenses: stats.summary?.total_expenses || 0,
+        net_income: stats.summary?.net_income || 0,
         transactions_count: stats.summary?.sales_count || 0,
       });
 
@@ -216,12 +235,7 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
                     {location?.name || "Sin ubicación"}
                   </Text>
                   <Text variant="bodySmall" style={styles.date}>
-                    {new Date(reportDate).toLocaleDateString("es-MX", {
-                      weekday: "long",
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
+                    {dayjs(reportDate).format("dddd, D [de] MMMM [de] YYYY")}
                   </Text>
                 </View>
               </View>
@@ -310,6 +324,28 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
                           {formatCurrency(dailyStats.total_transfer || 0)}
                         </Text>
                       </View>
+                    </View>
+
+                    {/* Gastos e Ingreso Neto */}
+                    <Divider style={{ marginVertical: 16 }} />
+                    <View style={styles.paymentMethod}>
+                      <MaterialCommunityIcons name="cash-minus" size={20} color={palette.red} />
+                      <Text style={{ flex: 1, marginLeft: 8, fontWeight: "600" }}>
+                        Total Gastos
+                      </Text>
+                      <Text variant="titleSmall" style={{ color: palette.red }}>
+                        -{formatCurrency(dailyStats.total_expenses || 0)}
+                      </Text>
+                    </View>
+                    
+                    <View style={[styles.paymentMethod, { backgroundColor: palette.success + "15", padding: 12, borderRadius: 8, marginTop: 8 }]}>
+                      <MaterialCommunityIcons name="chart-line" size={20} color={palette.success} />
+                      <Text style={{ flex: 1, marginLeft: 8, fontWeight: "bold" }}>
+                        Ingreso Neto
+                      </Text>
+                      <Text variant="titleMedium" style={{ color: palette.success, fontWeight: "bold" }}>
+                        {formatCurrency(dailyStats.net_income || 0)}
+                      </Text>
                     </View>
                   </>
                 ) : (

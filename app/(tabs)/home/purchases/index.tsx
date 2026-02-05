@@ -70,6 +70,20 @@ export default function PurchasesIndex() {
           title="Compras"
           service={Services.purchases}
           showAppBar={false}
+          filters={[
+            {
+              type: "simple",
+              name: "status",
+              label: "Estado",
+              options: [
+                { value: "", label: "Todos" },
+                { value: "draft", label: "Borrador" },
+                { value: "ordered", label: "Pedido" },
+                { value: "in_transit", label: "En Transporte" },
+                { value: "received", label: "Recibido" },
+              ],
+            },
+          ]}
           renderCard={({ item }: { item: any }) => {
             const statusConfig = getStatusConfig(item.status);
 

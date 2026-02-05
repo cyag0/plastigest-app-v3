@@ -22,20 +22,25 @@ interface TaskListProps {
 
 export default function TaskList({ limit, status }: TaskListProps) {
   const [tasks, setTasks] = useState<App.Entities.Task[]>([]);
+  const [reminders, setReminders] = useState<App.Entities.Reminder[]>([]);
   const [loading, setLoading] = useState(true);
+  const [completingTaskId, setCompletingTaskId] = useState<number | null>(null);
+  const [completingReminderId, setCompletingReminderId] = useState<number | null>(null);
   const { selectedCompany } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    loadTasks();
+    loadData();
   }, [selectedCompany, status]);
 
-  const loadTasks = async () => {
+  const loadData = async () => {
     if (!selectedCompany) return;
 
     try {
       setLoading(true);
-      const params: any = {
+      
+      // Cargar tareas
+      const tasksParams: any = {
         assigned_to: "me",
         sort_by: "due_date",
         sort_order: "asc",
@@ -43,19 +48,36 @@ export default function TaskList({ limit, status }: TaskListProps) {
       };
 
       if (status) {
-        params.status = status;
+        tasksParams.status = status;
       } else {
-        // By default show only pending and in_progress
-        params.status = "pending";
+        tasksParams.status = "pending";
       }
 
-      const response = await Services.tasks.index(params);
-      const data = Array.isArray(response.data)
-        ? response.data
-        : response.data?.data || [];
-      setTasks(data);
+      // Cargar recordatorios pendientes
+      const remindersParams: any = {
+        status: "pending",
+        sort_by: "reminder_date",
+        sort_order: "asc",
+        per_page: limit || 10,
+      };
+
+      const [tasksResponse, remindersResponse] = await Promise.all([
+        Services.tasks.index(tasksParams).catch(() => ({ data: [] })),
+        Services.reminders.index(remindersParams).catch(() => ({ data: [] })),
+      ]);
+
+      const tasksData = Array.isArray(tasksResponse.data)
+        ? tasksResponse.data
+        : tasksResponse.data?.data || [];
+      
+      const remindersData = Array.isArray(remindersResponse.data)
+        ? remindersResponse.data
+        : remindersResponse.data?.data || [];
+
+      setTasks(tasksData);
+      setReminders(remindersData);
     } catch (error) {
-      console.error("Error loading tasks:", error);
+      console.error("Error loading data:", error);
     } finally {
       setLoading(false);
     }
@@ -172,6 +194,66 @@ export default function TaskList({ limit, status }: TaskListProps) {
     return { text: date.toLocaleDateString(), color: palette.textSecondary };
   };
 
+  const getReminderTypeIcon = (type: string) => {
+    switch (type) {
+      case "payment":
+        return "cash";
+      case "renewal":
+        return "refresh-circle";
+      case "expiration":
+        return "alert-circle";
+      default:
+        return "bell";
+    }
+  };
+
+  const getReminderTypeColor = (type: string) => {
+    switch (type) {
+      case "payment":
+        return palette.warning;
+      case "renewal":
+        return palette.blue;
+      case "expiration":
+        return palette.red;
+      default:
+        return palette.accent;
+    }
+  };
+
+  const handleCompleteTask = async (taskId: number, event: any) => {
+    event.stopPropagation();
+    
+    try {
+      setCompletingTaskId(taskId);
+      await Services.tasks.changeStatus(taskId, "complete");
+      
+      // Actualizar la lista de tareas
+      setTasks(tasks.filter((t) => t.id !== taskId));
+    } catch (error: any) {
+      console.error("Error completing task:", error);
+      alert(error?.response?.data?.message || "Error al completar la tarea");
+    } finally {
+      setCompletingTaskId(null);
+    }
+  };
+
+  const handleCompleteReminder = async (reminderId: number, event: any) => {
+    event.stopPropagation();
+    
+    try {
+      setCompletingReminderId(reminderId);
+      await Services.reminders.markAsCompleted(reminderId);
+      
+      // Actualizar la lista de recordatorios
+      setReminders(reminders.filter((r) => r.id !== reminderId));
+    } catch (error: any) {
+      console.error("Error completing reminder:", error);
+      alert(error?.response?.data?.message || "Error al completar el recordatorio");
+    } finally {
+      setCompletingReminderId(null);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.wrapper}>
@@ -183,7 +265,7 @@ export default function TaskList({ limit, status }: TaskListProps) {
             <IconButton
               icon="refresh"
               size={20}
-              onPress={loadTasks}
+              onPress={loadData}
               disabled={loading}
             />
             <Chip
@@ -202,7 +284,7 @@ export default function TaskList({ limit, status }: TaskListProps) {
     );
   }
 
-  if (tasks.length === 0) {
+  if (tasks.length === 0 && reminders.length === 0) {
     return (
       <View style={styles.wrapper}>
         <View style={styles.header}>
@@ -213,7 +295,7 @@ export default function TaskList({ limit, status }: TaskListProps) {
             <IconButton
               icon="refresh"
               size={20}
-              onPress={loadTasks}
+              onPress={loadData}
               disabled={loading}
             />
             <Chip
@@ -259,7 +341,7 @@ export default function TaskList({ limit, status }: TaskListProps) {
           <IconButton
             icon="refresh"
             size={20}
-            onPress={loadTasks}
+            onPress={loadData}
             disabled={loading}
           />
           <Chip
@@ -272,8 +354,121 @@ export default function TaskList({ limit, status }: TaskListProps) {
         </View>
       </View>
 
-      <ScrollView style={{ marginBottom: 8 }}>
-        <View style={styles.container}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+        nestedScrollEnabled={true}
+      >
+          {/* Renderizar recordatorios */}
+          {reminders.map((reminder) => {
+            const dueDateInfo = formatDueDate(reminder.reminder_date);
+            const isOverdue = reminder.is_overdue;
+
+            return (
+              <TouchableRipple
+                key={`reminder-${reminder.id}`}
+                onPress={() =>
+                  router.push(`/(tabs)/home/reminders/${reminder.id}` as any)
+                }
+                style={styles.taskCard}
+              >
+                <Card style={[styles.card, isOverdue && styles.overdueCard]}>
+                  <Card.Content style={styles.cardContent}>
+                    <View style={styles.taskHeader}>
+                      <View
+                        style={[
+                          styles.iconContainer,
+                          {
+                            backgroundColor:
+                              getReminderTypeColor(reminder.type) + "20",
+                          },
+                        ]}
+                      >
+                        <MaterialCommunityIcons
+                          name={getReminderTypeIcon(reminder.type) as any}
+                          size={24}
+                          color={getReminderTypeColor(reminder.type)}
+                        />
+                      </View>
+                      <View style={styles.taskInfo}>
+                        <Text
+                          variant="titleSmall"
+                          style={styles.taskTitle}
+                          numberOfLines={1}
+                        >
+                          {reminder.title}
+                        </Text>
+                        {reminder.description && (
+                          <Text
+                            variant="bodySmall"
+                            style={styles.taskDescription}
+                            numberOfLines={1}
+                          >
+                            {reminder.description}
+                          </Text>
+                        )}
+                      </View>
+                      {reminder.status !== "completed" && (
+                        <IconButton
+                          icon="check-circle"
+                          size={28}
+                          iconColor={palette.success}
+                          style={styles.completeButton}
+                          disabled={completingReminderId === reminder.id}
+                          onPress={(e) => handleCompleteReminder(reminder.id, e)}
+                        />
+                      )}
+                    </View>
+
+                    <View style={styles.taskFooter}>
+                      <View style={styles.chips}>
+                        <Chip
+                          mode="flat"
+                          textStyle={{ fontSize: 11 }}
+                          style={{
+                            backgroundColor:
+                              getReminderTypeColor(reminder.type) + "20",
+                          }}
+                        >
+                          {reminder.type_label}
+                        </Chip>
+                        {reminder.is_recurring && (
+                          <Chip
+                            mode="flat"
+                            icon="refresh"
+                            textStyle={{ fontSize: 11 }}
+                            style={{
+                              backgroundColor: palette.blue + "20",
+                            }}
+                          >
+                            Recurrente
+                          </Chip>
+                        )}
+                      </View>
+                      {dueDateInfo && (
+                        <View style={styles.dueDate}>
+                          <MaterialCommunityIcons
+                            name="calendar-clock"
+                            size={14}
+                            color={dueDateInfo.color}
+                          />
+                          <Text
+                            variant="bodySmall"
+                            style={{ color: dueDateInfo.color, fontSize: 11 }}
+                          >
+                            {dueDateInfo.text}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </Card.Content>
+                </Card>
+              </TouchableRipple>
+            );
+          })}
+
+          {/* Renderizar tareas */}
           {tasks.map((task) => {
             const dueDateInfo = formatDueDate(task.due_date);
             const isOverdue = task.is_overdue || task.status === "overdue";
@@ -320,6 +515,16 @@ export default function TaskList({ limit, status }: TaskListProps) {
                           </Text>
                         )}
                       </View>
+                      {task.status !== "completed" && task.status !== "cancelled" && (
+                        <IconButton
+                          icon="check-circle"
+                          size={28}
+                          iconColor={palette.success}
+                          style={styles.completeButton}
+                          disabled={completingTaskId === task.id}
+                          onPress={(e) => handleCompleteTask(task.id, e)}
+                        />
+                      )}
                     </View>
 
                     <View style={styles.taskFooter}>
@@ -365,8 +570,7 @@ export default function TaskList({ limit, status }: TaskListProps) {
               </TouchableRipple>
             );
           })}
-        </View>
-      </ScrollView>
+        </ScrollView>
     </View>
   );
 }
@@ -386,6 +590,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+  },
+  scrollView: {
+    maxHeight: 600,
   },
   container: {
     gap: 12,
@@ -461,5 +668,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+  },
+  completeButton: {
+    margin: 0,
   },
 });

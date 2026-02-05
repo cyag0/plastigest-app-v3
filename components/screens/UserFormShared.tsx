@@ -224,7 +224,7 @@ export default function UserFormShared(props: UserFormSharedProps) {
         />
       )}
 
-      {isEditing && <FormCheckBox name="is_active" text="Usuario Activo" />}
+      <FormCheckBox name="is_active" text="Usuario Activo" />
 
       {/* Solo mostrar empresas en modo global */}
       {mode === "global" && (

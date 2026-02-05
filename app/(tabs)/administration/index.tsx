@@ -171,7 +171,7 @@ export default function AdministrationScreen() {
       title: "Proveedores",
       description: "Registra y gestiona proveedores de productos",
       icon: "truck-delivery",
-      route: "/(tabs)/home/suppliers",
+      route: "/(tabs)/administration/suppliers",
       color: palette.blue,
       category: "catalog",
       requiredPermission: "suppliers_list",

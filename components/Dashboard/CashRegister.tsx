@@ -23,12 +23,34 @@ interface CashRegisterData {
     sales_count: number;
     total_products: number;
     average_ticket: number;
+    total_expenses: number;
+    net_income: number;
   };
   payment_methods: Array<{
     method: string;
     total: number;
     percentage: number;
+    expenses: number;
+    net: number;
   }>;
+  expenses: {
+    total: number;
+    count: number;
+    by_category: Array<{
+      category: string;
+      total: number;
+      count: number;
+    }>;
+    items: Array<{
+      id: number;
+      category: string;
+      description: string;
+      amount: number;
+      payment_method: string;
+      user: string;
+      created_at: string;
+    }>;
+  };
   top_products: Array<{
     id: number;
     name: string;
@@ -265,7 +287,51 @@ export default function CashRegister() {
                 </Text>
               </Card.Content>
             </Card>
+
+            <Card style={styles.summaryCard}>
+              <Card.Content>
+                <View style={styles.summaryIconContainer}>
+                  <MaterialCommunityIcons
+                    name="cash-minus"
+                    size={32}
+                    color={palette.red}
+                  />
+                </View>
+                <Text variant="titleLarge" style={styles.summaryValue}>
+                  {formatCurrency(data.summary.total_expenses || 0)}
+                </Text>
+                <Text variant="bodySmall" style={styles.summaryLabel}>
+                  Total Gastos
+                </Text>
+              </Card.Content>
+            </Card>
           </View>
+
+          {/* Net Income Card */}
+          {data.summary.total_expenses > 0 && (
+            <Card style={[styles.card, { backgroundColor: palette.success + "15" }]}>
+              <Card.Content>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  <MaterialCommunityIcons
+                    name="chart-line"
+                    size={40}
+                    color={palette.success}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text variant="bodyLarge" style={{ color: palette.textSecondary }}>
+                      Ingreso Neto
+                    </Text>
+                    <Text variant="headlineMedium" style={{ color: palette.success, fontWeight: "bold" }}>
+                      {formatCurrency(data.summary.net_income || 0)}
+                    </Text>
+                    <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
+                      Ventas: {formatCurrency(data.summary.total_sales)} - Gastos: {formatCurrency(data.summary.total_expenses)}
+                    </Text>
+                  </View>
+                </View>
+              </Card.Content>
+            </Card>
+          )}
 
           {/* Payment Methods */}
           <Card style={styles.card}>
@@ -288,7 +354,14 @@ export default function CashRegister() {
                       size={24}
                       color={palette.primary}
                     />
-                    <Text style={styles.paymentMethodText}>{pm.method}</Text>
+                    <View>
+                      <Text style={styles.paymentMethodText}>{pm.method}</Text>
+                      {pm.expenses > 0 && (
+                        <Text style={{ fontSize: 12, color: palette.red }}>
+                          Gastos: -{formatCurrency(pm.expenses)}
+                        </Text>
+                      )}
+                    </View>
                   </View>
                   <View style={styles.paymentMethodRight}>
                     <Text style={styles.paymentMethodAmount}>
@@ -297,11 +370,48 @@ export default function CashRegister() {
                     <Text style={styles.paymentMethodPercentage}>
                       ({pm.percentage}%)
                     </Text>
+                    {pm.expenses > 0 && (
+                      <Text style={{ fontSize: 14, color: palette.success, fontWeight: "600" }}>
+                        Neto: {formatCurrency(pm.net)}
+                      </Text>
+                    )}
                   </View>
                 </View>
               ))}
             </Card.Content>
           </Card>
+
+          {/* Expenses Section */}
+          {data.expenses && data.expenses.count > 0 && (
+            <Card style={styles.card}>
+              <Card.Title
+                title={`Gastos del Día (${data.expenses.count})`}
+                left={(props) => (
+                  <MaterialCommunityIcons
+                    name="cash-minus"
+                    size={24}
+                    color={palette.red}
+                  />
+                )}
+              />
+              <Card.Content>
+                {/* By Category */}
+                {data.expenses.by_category.map((cat, index) => (
+                  <View key={index} style={styles.paymentMethodRow}>
+                    <Text style={styles.paymentMethodText}>{cat.category}</Text>
+                    <View style={styles.paymentMethodRight}>
+                      <Text style={[styles.paymentMethodAmount, { color: palette.red }]}>
+                        -{formatCurrency(cat.total)}
+                      </Text>
+                      <Text style={styles.paymentMethodPercentage}>
+                        ({cat.count} {cat.count === 1 ? 'gasto' : 'gastos'})
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </Card.Content>
+            </Card>
+          )}
 
           {/* Top Products */}
           {data.top_products.length > 0 && (

@@ -45,35 +45,40 @@ function FilterButton({ label, value, onPress, active }: FilterButtonProps) {
         gap: 4,
         alignItems: "center",
         paddingVertical: 4,
-        paddingHorizontal: 8,
-        borderRadius: 6,
-        backgroundColor: active ? palette.primary + "15" : "transparent",
+        paddingHorizontal: 0,
       }}
     >
       <Text
-        variant="bodySmall"
         style={{
-          opacity: 1,
           color: palette.textSecondary,
+          fontSize: 11,
+          fontWeight: "400",
+          opacity: 0.7,
         }}
       >
         {label}:
       </Text>
       <Text
-        variant="bodySmall"
         style={{
-          color: active ? palette.primary : palette.error,
-          fontWeight: "bold",
-          opacity: 1,
+          color: palette.textSecondary,
+          fontWeight: "500",
+          fontSize: 11,
+          opacity: 0.8,
         }}
       >
         {value}
       </Text>
-      <MaterialCommunityIcons
-        name="chevron-down"
-        size={16}
-        color={active ? palette.primary : palette.error}
-      />
+      <Text
+        style={{
+          color: palette.textSecondary,
+          fontSize: 11,
+          marginLeft: 4,
+          marginRight: 8,
+          opacity: 0.5,
+        }}
+      >
+        •
+      </Text>
     </TouchableOpacity>
   );
 }
@@ -428,11 +433,13 @@ export default function AppListFilterBar({
     <>
       <ScrollView
         horizontal
+        showsHorizontalScrollIndicator={false}
         style={{
-          maxHeight: 25,
-          marginVertical: 2,
-          marginTop: 4,
-          paddingHorizontal: 8,
+          minHeight: 24,
+          maxHeight: 28,
+          marginVertical: 0,
+          marginBottom: 8,
+          paddingHorizontal: 16,
         }}
         contentContainerStyle={[styles.container]}
       >
@@ -446,8 +453,12 @@ export default function AppListFilterBar({
             );
           } else {
             const value = values[filter.name];
+            // Un filtro tiene valor activo si está definido y no es vacío o "Todos"
             hasValue =
-              value && (Array.isArray(value) ? value.length > 0 : true);
+              value !== undefined &&
+              value !== null &&
+              value !== "" &&
+              (!Array.isArray(value) || value.length > 0);
           }
 
           return (
@@ -485,9 +496,9 @@ export default function AppListFilterBar({
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-    height: "100%",
+    gap: 0,
+    alignItems: "center",
+    paddingVertical: 0,
   },
   popoverContainer: {
     backgroundColor: palette.background,

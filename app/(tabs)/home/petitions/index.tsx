@@ -6,7 +6,7 @@ import type { InventoryTransfer } from "@/utils/services/transferService";
 import { useRouter } from "expo-router";
 import React from "react";
 import { View } from "react-native";
-import { Chip, IconButton } from "react-native-paper";
+import { IconButton, Text } from "react-native-paper";
 
 export default function PetitionsScreen() {
   const router = useRouter();
@@ -69,6 +69,21 @@ export default function PetitionsScreen() {
         defaultFilters={{
           mode: "petitions",
         }}
+        filters={[
+          {
+            type: "simple",
+            name: "status",
+            label: "Estado",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Borrador", value: "draft" },
+              { label: "Ordenado", value: "ordered" },
+              { label: "En Tránsito", value: "in_transit" },
+              { label: "Completada", value: "closed" },
+              { label: "Rechazada", value: "rejected" },
+            ],
+          },
+        ]}
         searchPlaceholder="Buscar peticiones..."
         renderCard={({ item }) => {
           const statusInfo = getStatusInfo(item.status);
@@ -88,20 +103,24 @@ export default function PetitionsScreen() {
             ),
             right: (
               <View style={styles.rightContent}>
-                <Chip
+                <View
                   style={[
-                    styles.statusChip,
+                    styles.statusBadge,
                     {
-                      backgroundColor: statusInfo.color + "15",
+                      backgroundColor: statusInfo.color + "20",
                       borderColor: statusInfo.color,
                     },
                   ]}
-                  textStyle={[styles.statusText, { color: statusInfo.color }]}
-                  compact
-                  mode="outlined"
                 >
-                  {statusInfo.label}
-                </Chip>
+                  <Text
+                    style={[
+                      styles.statusText,
+                      { color: palette.textSecondary },
+                    ]}
+                  >
+                    {statusInfo.label.toUpperCase()}
+                  </Text>
+                </View>
               </View>
             ),
             bottom: [
@@ -157,13 +176,15 @@ const styles = {
     alignItems: "flex-end" as const,
     gap: 4,
   },
-  statusChip: {
-    shadowColor: "transparent",
-    elevation: 0,
+  statusBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   statusText: {
-    //fontSize: 12,
-    fontWeight: "600" as const,
+    fontSize: 10,
+    fontWeight: "bold" as const,
   },
   dateText: {
     fontSize: 12,

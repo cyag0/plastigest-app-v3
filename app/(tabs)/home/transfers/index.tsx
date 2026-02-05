@@ -6,7 +6,7 @@ import transferService from "@/utils/services/transferService";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { View } from "react-native";
-import { Chip, IconButton, Text } from "react-native-paper";
+import { IconButton, Text } from "react-native-paper";
 
 export default function TransfersScreen() {
   const router = useRouter();
@@ -71,11 +71,24 @@ export default function TransfersScreen() {
       key={refreshKey}
       title="Historial de Transferencias"
       service={transferService}
+      numColumns={2}
       defaultFilters={{
         company_id: company.id,
         mode: "transfers",
         //location_id: location.id
       }}
+      filters={[
+        {
+          type: "simple",
+          name: "status",
+          label: "Estado",
+          options: [
+            { label: "Todos", value: "" },
+            { label: "Completada", value: "closed" },
+            { label: "Rechazada", value: "rejected" },
+          ],
+        },
+      ]}
       searchPlaceholder="Buscar transferencias..."
       renderCard={({ item }) => {
         const statusInfo = getStatusInfo(item.status);
@@ -95,20 +108,24 @@ export default function TransfersScreen() {
           ),
           right: (
             <View style={styles.rightContent}>
-              <Chip
+              <View
                 style={[
-                  styles.statusChip,
+                  styles.statusBadge,
                   {
-                    backgroundColor: statusInfo.color + "15",
+                    backgroundColor: statusInfo.color + "20",
                     borderColor: statusInfo.color,
                   },
                 ]}
-                textStyle={[styles.statusText, { color: statusInfo.color }]}
-                compact
-                mode="outlined"
               >
-                {statusInfo.label}
-              </Chip>
+                <Text
+                  style={[
+                    styles.statusText,
+                    { color: palette.textSecondary },
+                  ]}
+                >
+                  {statusInfo.label.toUpperCase()}
+                </Text>
+              </View>
               <Text style={styles.dateText}>
                 {formatDate(item.received_at || item.requested_at || "")}
               </Text>
@@ -159,11 +176,15 @@ const styles = {
     alignItems: "flex-end" as const,
     gap: 4,
   },
-  statusChip: {
-    shadowColor: "transparent",
+  statusBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   statusText: {
-    fontWeight: "600" as const,
+    fontSize: 10,
+    fontWeight: "bold" as const,
   },
   dateText: {
     fontSize: 12,

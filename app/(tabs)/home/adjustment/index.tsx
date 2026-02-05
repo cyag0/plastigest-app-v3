@@ -29,6 +29,31 @@ export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
       defaultFilters={{
         location_id: selectedLocation?.id,
       }}
+      filters={[
+        {
+          type: "simple",
+          name: "movement_type",
+          label: "Tipo",
+          options: [
+            { label: "Todos", value: "" },
+            { label: "Entrada", value: "entry" },
+            { label: "Salida", value: "exit" },
+          ],
+        },
+        {
+          type: "simple",
+          name: "movement_reason",
+          label: "Razón",
+          options: [
+            { label: "Todas", value: "" },
+            { label: "Ajuste", value: "adjustment" },
+            { label: "Retorno", value: "return" },
+            { label: "Daño", value: "damage" },
+            { label: "Pérdida", value: "loss" },
+            { label: "Merma", value: "shrinkage" },
+          ],
+        },
+      ]}
       onPressCreate={() => router.push(`${route}/form` as any)}
       renderCard={({ item }: { item: Adjustment }) => {
         const isIncrease = item.movement_type === "entry";

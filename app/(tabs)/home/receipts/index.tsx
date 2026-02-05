@@ -9,7 +9,6 @@ import React, { useState } from "react";
 import { Alert, View } from "react-native";
 import {
   Button,
-  Chip,
   Dialog,
   IconButton,
   Portal,
@@ -165,6 +164,20 @@ export default function ReceiptsScreen() {
         defaultFilters={{
           mode: "receipts",
         }}
+        filters={[
+          {
+            type: "simple",
+            name: "status",
+            label: "Estado",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Ordenado", value: "ordered" },
+              { label: "En Tránsito", value: "in_transit" },
+              { label: "Cerrada", value: "closed" },
+              { label: "Rechazada", value: "rejected" },
+            ],
+          },
+        ]}
         searchPlaceholder="Buscar recepciones..."
         renderCard={({ item }) => {
           const statusInfo = getStatusInfo(item.status);
@@ -184,20 +197,24 @@ export default function ReceiptsScreen() {
             ),
             right: (
               <View style={styles.rightContent}>
-                <Chip
+                <View
                   style={[
-                    styles.statusChip,
+                    styles.statusBadge,
                     {
-                      backgroundColor: statusInfo.color + "15",
+                      backgroundColor: statusInfo.color + "20",
                       borderColor: statusInfo.color,
                     },
                   ]}
-                  textStyle={[styles.statusText, { color: statusInfo.color }]}
-                  compact
-                  mode="outlined"
                 >
-                  {statusInfo.label}
-                </Chip>
+                  <Text
+                    style={[
+                      styles.statusText,
+                      { color: palette.textSecondary },
+                    ]}
+                  >
+                    {statusInfo.label.toUpperCase()}
+                  </Text>
+                </View>
               </View>
             ),
             bottom: [
@@ -238,12 +255,15 @@ const styles = {
     alignItems: "flex-end" as const,
     gap: 4,
   },
-  statusChip: {
-    shadowColor: "transparent",
-    elevation: 0,
+  statusBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   statusText: {
-    fontWeight: "600" as const,
+    fontSize: 10,
+    fontWeight: "bold" as const,
   },
   dateText: {
     fontSize: 12,

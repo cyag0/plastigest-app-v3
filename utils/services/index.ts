@@ -111,6 +111,49 @@ const Services = {
   salesReports: {
     ...createCrudService<any>("/auth/admin/sales-reports"),
   },
+  expenses: {
+    ...createCrudService<App.Entities.Expense>("/auth/admin/expenses"),
+    async getCategories() {
+      const response = await axiosClient.get("/auth/admin/expenses/categories");
+      return response.data;
+    },
+    async getStatistics(params?: {
+      location_id?: number;
+      start_date?: string;
+      end_date?: string;
+    }) {
+      const response = await axiosClient.get(
+        "/auth/admin/expenses/statistics",
+        {
+          params,
+        }
+      );
+      return response.data;
+    },
+  },
+  reminders: {
+    ...createCrudService<App.Entities.Reminder>("/auth/admin/reminders"),
+    async getTypes() {
+      const response = await axiosClient.get("/auth/admin/reminders/types");
+      return response.data;
+    },
+    async getRecurrenceTypes() {
+      const response = await axiosClient.get("/auth/admin/reminders/recurrence-types");
+      return response.data;
+    },
+    async getStatistics() {
+      const response = await axiosClient.get("/auth/admin/reminders/statistics");
+      return response.data;
+    },
+    async getUsers() {
+      const response = await axiosClient.get("/auth/admin/reminders/users");
+      return response.data;
+    },
+    async markAsCompleted(id: number) {
+      const response = await axiosClient.post(`/auth/admin/reminders/${id}/complete`);
+      return response.data;
+    },
+  },
   productions: {
     ...createCrudService<any>("/auth/admin/productions"),
   },
@@ -145,6 +188,12 @@ const Services = {
     async getUnreadCount() {
       const response = await axiosClient.get(
         "/auth/admin/notifications/unread-count"
+      );
+      return response.data;
+    },
+    async createTestNotifications() {
+      const response = await axiosClient.post(
+        "/auth/admin/notifications/create-test-notifications"
       );
       return response.data;
     },

@@ -228,7 +228,7 @@ export default function PurchaseDetailScreen() {
 
         {/* Acciones */}
         <View style={styles.actions}>
-          {purchase.status === "in_transit" && (
+          {(purchase.status === "in_transit" || purchase.status === "ordered") && (
             <Button
               mode="contained"
               onPress={handleReceivePurchase}

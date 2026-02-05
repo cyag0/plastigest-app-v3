@@ -85,6 +85,31 @@ export default function SalesIndex() {
           title="Ventas"
           service={Services.sales}
           showAppBar={false}
+          filters={[
+            {
+              type: "simple",
+              name: "status",
+              label: "Estado",
+              options: [
+                { label: "Todos", value: "" },
+                { label: "Borrador", value: "draft" },
+                { label: "Procesada", value: "processed" },
+                { label: "Cerrada", value: "closed" },
+                { label: "Cancelada", value: "cancelled" },
+              ],
+            },
+            {
+              type: "simple",
+              name: "payment_method",
+              label: "Método de Pago",
+              options: [
+                { label: "Todos", value: "" },
+                { label: "Efectivo", value: "efectivo" },
+                { label: "Tarjeta", value: "tarjeta" },
+                { label: "Transferencia", value: "transferencia" },
+              ],
+            },
+          ]}
           onItemPress={(entity) => {
             navigation.push(`/(tabs)/home/sales/${entity.id}` as any);
           }}
@@ -162,14 +187,26 @@ export default function SalesIndex() {
               </View>
             ),
             right: (
-              <AppList.Description
-                style={{
-                  color: getStatusColor(sale.status),
-                  fontWeight: "bold",
-                }}
-              >
-                {getStatusLabel(sale.status)}
-              </AppList.Description>
+              <View style={styles.rightContent}>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor: getStatusColor(sale.status) + "20",
+                      borderColor: getStatusColor(sale.status),
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusText,
+                      { color: palette.textSecondary },
+                    ]}
+                  >
+                    {getStatusLabel(sale.status).toUpperCase()}
+                  </Text>
+                </View>
+              </View>
             ),
           })}
           menu={{
@@ -272,5 +309,18 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: palette.error,
+  },
+  rightContent: {
+    alignItems: "flex-end" as const,
+  },
+  statusBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: "bold" as const,
   },
 });

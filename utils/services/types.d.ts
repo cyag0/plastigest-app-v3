@@ -276,6 +276,36 @@ namespace App {
       related?: any;
     }
 
+    interface Expense {
+      id: number;
+      company_id: number;
+      location_id: number;
+      user_id: number;
+      category: string;
+      category_label: string;
+      amount: number;
+      payment_method: string;
+      payment_method_label: string;
+      description: string;
+      expense_date: string;
+      receipt_image?: string | null;
+      created_at: string;
+      updated_at: string;
+      user?: {
+        id: number;
+        name: string;
+        email: string;
+      };
+      location?: {
+        id: number;
+        name: string;
+      };
+      company?: {
+        id: number;
+        name: string;
+      };
+    }
+
     interface TaskComment {
       id: number;
       task_id: number;
@@ -346,6 +376,41 @@ namespace App {
         enable_whatsapp_orders?: boolean;
         enable_pos_mode?: boolean;
       };
+    }
+
+    interface Reminder {
+      id: number;
+      company_id: number;
+      location_id?: number | null;
+      user_id: number;
+      title: string;
+      description?: string | null;
+      type: 'payment' | 'renewal' | 'expiration' | 'other';
+      type_label: string;
+      reminder_date: string;
+      reminder_time?: string | null;
+      status: 'pending' | 'completed' | 'overdue';
+      status_label: string;
+      completed_at?: string | null;
+      is_recurring: boolean;
+      recurrence_type?: 'daily' | 'weekly' | 'monthly' | 'yearly' | null;
+      recurrence_interval?: number;
+      recurrence_end_date?: string | null;
+      notify_enabled: boolean;
+      notify_days_before: number;
+      last_notified_at?: string | null;
+      supplier_id?: number | null;
+      product_id?: number | null;
+      amount?: number | null;
+      is_overdue: boolean;
+      days_until_due?: number | null;
+      company?: any;
+      location?: any;
+      user?: any;
+      supplier?: any;
+      product?: any;
+      created_at: string;
+      updated_at: string;
     }
   }
 }

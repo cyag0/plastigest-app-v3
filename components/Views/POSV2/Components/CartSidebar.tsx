@@ -3,7 +3,7 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Image, ScrollView, StyleSheet, View } from "react-native";
+import { Image, ScrollView, StyleSheet, View, Platform } from "react-native";
 import {
   Button,
   Divider,
@@ -12,6 +12,7 @@ import {
   Menu,
   Text,
 } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CartItem, usePOS } from "../Context";
 
 interface CartSidebarProps {
@@ -161,8 +162,8 @@ function CartItemComponent({
 const CartSidebar = ({
   isScreen = false,
   onFinish,
-}: //children,
-CartSidebarProps) => {
+  children,
+}: CartSidebarProps) => {
   const {
     cartItems,
     removeFromCart,
@@ -177,6 +178,7 @@ CartSidebarProps) => {
 
   const { isMobile } = useResponsive();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [items, setItems] = useState<CartItem[]>([]);
 
   // Inicializar items del carrito
@@ -278,26 +280,32 @@ CartSidebarProps) => {
 
       <Divider />
 
-      {/* Lista de productos */}
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-      >
-        {items.map((item, index) => (
-          <React.Fragment key={item.id}>
-            <CartItemComponent
-              item={item}
-              onQuantityChange={handleQuantityChange}
-              onUnitChange={handleUnitChange}
-              onRemove={handleRemove}
-            />
-            {index < items.length - 1 && <Divider style={styles.divider} />}
-          </React.Fragment>
-        ))}
-      </ScrollView>
+      {/* Lista de productos - con flex para ocupar espacio disponible */}
+      <View style={styles.contentContainer}>
+        <ScrollView
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {items.map((item, index) => (
+            <React.Fragment key={item.id}>
+              <CartItemComponent
+                item={item}
+                onQuantityChange={handleQuantityChange}
+                onUnitChange={handleUnitChange}
+                onRemove={handleRemove}
+              />
+              {index < items.length - 1 && <Divider style={styles.divider} />}
+            </React.Fragment>
+          ))}
+        </ScrollView>
+
+        {/* Contenido personalizado (como métodos de pago) */}
+        {children}
+      </View>
 
       {/* Footer con total y acciones */}
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <Divider />
         <View style={styles.totalContainer}>
           <Text variant="titleMedium" style={styles.totalLabel}>
@@ -314,7 +322,6 @@ CartSidebarProps) => {
             onPress={clearCart}
             style={styles.clearButton}
             textColor={palette.error}
-            compact
           >
             Limpiar
           </Button>
@@ -329,7 +336,6 @@ CartSidebarProps) => {
             }}
             style={styles.checkoutButton}
             buttonColor={palette.primary}
-            compact
           >
             Finalizar
           </Button>
@@ -387,8 +393,15 @@ const styles = StyleSheet.create({
     bottom: 16,
     backgroundColor: palette.primary,
   },
+  contentContainer: {
+    flex: 1,
+    overflow: "hidden",
+  },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 8,
   },
   itemContainer: {
     padding: 12,
@@ -479,14 +492,15 @@ const styles = StyleSheet.create({
   footer: {
     backgroundColor: "#fff",
     paddingHorizontal: 16,
-    paddingBottom: 16,
     paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
   },
   totalContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 16,
     marginTop: 8,
   },
   totalLabel: {

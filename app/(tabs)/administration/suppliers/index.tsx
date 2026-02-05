@@ -14,6 +14,18 @@ export default function SuppliersIndex() {
       <AppList
         title="Proveedores"
         service={Services.suppliers}
+        filters={[
+          {
+            type: "simple",
+            name: "is_active",
+            label: "Estado",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Activos", value: "1" },
+              { label: "Inactivos", value: "0" },
+            ],
+          },
+        ]}
         renderCard={({ item }: { item: any }) => {
           console.log("Rendering supplier item:", item);
 
@@ -88,10 +100,10 @@ export default function SuppliersIndex() {
           };
         }}
         onItemPress={(entity: any) => {
-          router.push(`/(tabs)/home/suppliers/${entity.id}` as any);
+          router.push(`/(tabs)/administration/suppliers/${entity.id}` as any);
         }}
         onPressCreate={() => {
-          router.push("/(tabs)/home/suppliers/form" as any);
+          router.push("/(tabs)/administration/suppliers/form" as any);
         }}
         fabLabel="Nuevo Proveedor"
       />

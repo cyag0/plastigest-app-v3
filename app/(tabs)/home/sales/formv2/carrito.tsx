@@ -40,6 +40,11 @@ export default function CarritoScreen() {
 
       // Preparar datos de la venta
       const saleData = {
+        movement_date: new Date(
+          new Date().getTime() - new Date().getTimezoneOffset() * 60000
+        )
+          .toISOString()
+          .split("T")[0],
         payment_method: paymentMethod.current,
         details: _cartItems.map((item) => ({
           product_id: item.product_id,

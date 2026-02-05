@@ -794,7 +794,11 @@ export function SideCart(props: SideCartProps) {
       // Preparar datos para el backend
       const payload = {
         location_id: auth.location.id,
-        movement_date: new Date().toISOString().split("T")[0],
+        movement_date: new Date(
+          new Date().getTime() - new Date().getTimezoneOffset() * 60000
+        )
+          .toISOString()
+          .split("T")[0],
         payment_method: values.payment_method,
         customer_name: values.customer_name,
         customer_phone: values.customer_phone,

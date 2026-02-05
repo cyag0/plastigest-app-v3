@@ -6,7 +6,7 @@ import transferService from "@/utils/services/transferService";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { View } from "react-native";
-import { Chip, IconButton, Text } from "react-native-paper";
+import { IconButton, Text } from "react-native-paper";
 
 export default function ShipmentsScreen() {
   const router = useRouter();
@@ -77,6 +77,18 @@ export default function ShipmentsScreen() {
           mode: "shipments",
           location_id: location.id,
         }}
+        filters={[
+          {
+            type: "simple",
+            name: "status",
+            label: "Estado",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Completada", value: "closed" },
+              { label: "Rechazada", value: "rejected" },
+            ],
+          },
+        ]}
         searchPlaceholder="Buscar envíos..."
         renderCard={({ item }) => {
           const statusInfo = getStatusInfo(item.status);
@@ -161,12 +173,15 @@ const styles = {
     alignItems: "flex-end" as const,
     gap: 4,
   },
-  statusChip: {
-    shadowColor: "transparent",
-    elevation: 0,
+  statusBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
   statusText: {
-    fontWeight: "600" as const,
+    fontSize: 10,
+    fontWeight: "bold" as const,
   },
   dateText: {
     fontSize: 12,

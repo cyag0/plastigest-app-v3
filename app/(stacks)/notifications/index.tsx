@@ -25,6 +25,7 @@ import {
   Searchbar,
   SegmentedButtons,
   Text,
+  Button,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -244,14 +245,23 @@ export default function NotificationsScreen() {
       if (search) {
         params.search = search;
       }
+      
+      console.log("Cargando notificaciones con params:", params);
       const response = await Services.notifications.index(params);
+      console.log("Respuesta del servidor:", response);
+      
       const data = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
+      
+      console.log("Notificaciones cargadas:", data.length);
       setNotifications(data);
     } catch (error: any) {
       console.error("Error loading notifications:", error);
-      alerts.error("Error al cargar las notificaciones");
+      console.error("Error details:", error.response?.data || error.message);
+      alerts.error(
+        error.response?.data?.message || "Error al cargar las notificaciones"
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -302,6 +312,17 @@ export default function NotificationsScreen() {
       loadUnreadNotificationsCount();
     } catch (error) {
       alerts.error("Error al marcar todas como leídas");
+    }
+  };
+
+  const handleCreateTestNotifications = async () => {
+    try {
+      await Services.notifications.createTestNotifications();
+      alerts.success("Notificaciones de prueba creadas");
+      loadNotifications();
+      loadUnreadNotificationsCount();
+    } catch (error) {
+      alerts.error("Error al crear notificaciones de prueba");
     }
   };
 
@@ -447,6 +468,20 @@ export default function NotificationsScreen() {
                     ? "No tienes notificaciones leídas"
                     : "No tienes ninguna notificación"}
                 </Text>
+                <Text 
+                  variant="bodySmall" 
+                  style={[styles.emptyText, { marginTop: 8, fontStyle: 'italic' }]}
+                >
+                  Las notificaciones aparecerán aquí cuando se generen eventos en el sistema
+                </Text>
+                <Button
+                  mode="contained"
+                  onPress={handleCreateTestNotifications}
+                  style={{ marginTop: 16 }}
+                  icon="test-tube"
+                >
+                  Crear notificaciones de prueba
+                </Button>
               </View>
             }
           />
