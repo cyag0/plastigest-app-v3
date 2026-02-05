@@ -299,4 +299,17 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: palette.error,
   },
+  rightContent: {
+    alignItems: "flex-end" as const,
+  },
+  statusBadge: {
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: "bold" as const,
+  },
 });

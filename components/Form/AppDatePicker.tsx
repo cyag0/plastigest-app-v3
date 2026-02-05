@@ -53,13 +53,16 @@ export default function AppDatePicker(props: AppDatePickerProps) {
       ) : (
         <View>
           <TouchableRipple onPress={() => setOpen(true)}>
-            <TextInput
-              readOnly
-              value={props.value || ""}
-              mode="outlined"
-              label={props.label}
-              placeholder={props.placeholder || "Selecciona una fecha"}
-            />
+            <View pointerEvents="none">
+              <TextInput
+                readOnly
+                value={props.value || ""}
+                mode="outlined"
+                label={props.label}
+                placeholder={props.placeholder || "Selecciona una fecha"}
+                right={<TextInput.Icon icon="calendar" />}
+              />
+            </View>
           </TouchableRipple>
           <DatePickerModal
             visible={open}
@@ -68,6 +71,10 @@ export default function AppDatePicker(props: AppDatePickerProps) {
             date={date}
             mode="single"
             locale="es"
+            label="Seleccionar fecha"
+            saveLabel="Guardar"
+            cancelLabel="Cancelar"
+            presentationStyle="pageSheet"
           />
         </View>
       )}

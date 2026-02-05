@@ -17,7 +17,8 @@ export default function SalesReportsIndexScreen() {
 
   const formatDate = (dateString: string) => {
     if (!dateString) return "";
-    const date = new Date(dateString);
+    // Agregar T00:00:00 para que JavaScript interprete la fecha como hora local
+    const date = new Date(dateString + "T00:00:00");
     return date.toLocaleDateString("es-MX", {
       day: "2-digit",
       month: "short",

@@ -251,13 +251,25 @@ namespace App {
       company?: Company;
     }
 
-    type TaskType = 'inventory_count' | 'receive_purchase' | 'approve_transfer' | 
-      'send_transfer' | 'receive_transfer' | 'sales_report' | 'stock_check' | 
-      'adjustment_review' | 'custom';
-    
-    type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'overdue';
-    
-    type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+    type TaskType =
+      | "inventory_count"
+      | "receive_purchase"
+      | "approve_transfer"
+      | "send_transfer"
+      | "receive_transfer"
+      | "sales_report"
+      | "stock_check"
+      | "adjustment_review"
+      | "custom";
+
+    type TaskStatus =
+      | "pending"
+      | "in_progress"
+      | "completed"
+      | "cancelled"
+      | "overdue";
+
+    type TaskPriority = "low" | "medium" | "high" | "urgent";
 
     interface Task {
       id: number;
@@ -278,7 +290,7 @@ namespace App {
       related_type?: string;
       related_id?: number;
       is_recurring: boolean;
-      recurrence_frequency?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
+      recurrence_frequency?: "daily" | "weekly" | "biweekly" | "monthly";
       recurrence_day?: number;
       recurrence_time?: string;
       last_generated_at?: string;
@@ -292,6 +304,36 @@ namespace App {
       completedBy?: User;
       location?: Location;
       related?: any;
+    }
+
+    interface Expense {
+      id: number;
+      company_id: number;
+      location_id: number;
+      user_id: number;
+      category: string;
+      category_label: string;
+      amount: number;
+      payment_method: string;
+      payment_method_label: string;
+      description: string;
+      expense_date: string;
+      receipt_image?: string | null;
+      created_at: string;
+      updated_at: string;
+      user?: {
+        id: number;
+        name: string;
+        email: string;
+      };
+      location?: {
+        id: number;
+        name: string;
+      };
+      company?: {
+        id: number;
+        name: string;
+      };
     }
 
     interface TaskComment {
@@ -349,10 +391,10 @@ namespace App {
       };
       auto_tasks?: {
         inventory_count_enabled?: boolean;
-        inventory_count_frequency?: 'daily' | 'weekly' | 'monthly';
+        inventory_count_frequency?: "daily" | "weekly" | "monthly";
         inventory_count_day?: number;
         sales_report_enabled?: boolean;
-        sales_report_frequency?: 'daily' | 'weekly';
+        sales_report_frequency?: "daily" | "weekly";
       };
       limits?: {
         max_discount_percentage?: number;
@@ -367,7 +409,12 @@ namespace App {
     }
 
     // Purchase V2 Types
-    type PurchaseStatus = 'draft' | 'ordered' | 'in_transit' | 'received' | 'cancelled';
+    type PurchaseStatus =
+      | "draft"
+      | "ordered"
+      | "in_transit"
+      | "received"
+      | "cancelled";
 
     interface PurchaseV2 {
       id: number;
@@ -414,6 +461,40 @@ namespace App {
         name: string;
         abbreviation: string;
       };
+    }
+    interface Reminder {
+      id: number;
+      company_id: number;
+      location_id?: number | null;
+      user_id: number;
+      title: string;
+      description?: string | null;
+      type: "payment" | "renewal" | "expiration" | "other";
+      type_label: string;
+      reminder_date: string;
+      reminder_time?: string | null;
+      status: "pending" | "completed" | "overdue";
+      status_label: string;
+      completed_at?: string | null;
+      is_recurring: boolean;
+      recurrence_type?: "daily" | "weekly" | "monthly" | "yearly" | null;
+      recurrence_interval?: number;
+      recurrence_end_date?: string | null;
+      notify_enabled: boolean;
+      notify_days_before: number;
+      last_notified_at?: string | null;
+      supplier_id?: number | null;
+      product_id?: number | null;
+      amount?: number | null;
+      is_overdue: boolean;
+      days_until_due?: number | null;
+      company?: any;
+      location?: any;
+      user?: any;
+      supplier?: any;
+      product?: any;
+      created_at: string;
+      updated_at: string;
     }
   }
 }

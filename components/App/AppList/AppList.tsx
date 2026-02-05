@@ -14,7 +14,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router } from "expo-router";
 import * as React from "react";
 import { useCallback, useEffect, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { Platform, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Divider, Menu, Searchbar, Text } from "react-native-paper";
 import AppListFilterBar, { FilterConfig } from "./AppListFilter";
 
@@ -267,6 +267,8 @@ interface AppListProps<T> {
 
   showDivider?: boolean;
   showAppBar?: boolean;
+  numColumns?: number; // Número de columnas para grid layout
+  columnGap?: number; // Espaciado entre columnas
 }
 
 function AppList<T extends { id: number | string }>({
@@ -288,6 +290,8 @@ function AppList<T extends { id: number | string }>({
   menu,
   showDivider = true,
   showAppBar = true,
+  numColumns = 1,
+  columnGap = 12,
 }: AppListProps<T>) {
   // Estados
   const [data, setData] = useState<T[]>([]);
@@ -444,12 +448,31 @@ function AppList<T extends { id: number | string }>({
   };
 
   if (loading) {
-    return <SkeletonListLoader />;
+    return (
+      <View style={styles.container}>
+        <SearchBarComponent 
+          onChangeText={setSearchQuery} 
+          value={searchQuery}
+        />
+        
+        {/* Barra de filtros */}
+        <AppListFilterBar
+          filters={filters}
+          values={activeFilters}
+          onChange={handleFilterChange}
+        />
+        
+        <SkeletonListLoader />
+      </View>
+    );
   }
 
   return (
     <View style={styles.container}>
-      <SearchBarComponent onChangeText={setSearchQuery} />
+      <SearchBarComponent 
+        onChangeText={setSearchQuery}
+        value={searchQuery}
+      />
 
       {/* Barra de filtros */}
       <AppListFilterBar
@@ -465,7 +488,11 @@ function AppList<T extends { id: number | string }>({
       ) : (
         <>
           <ScrollView
-            contentContainerStyle={styles.scrollContainer}
+            contentContainerStyle={
+              numColumns > 1
+                ? styles.scrollContainerGrid
+                : styles.scrollContainer
+            }
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -474,7 +501,106 @@ function AppList<T extends { id: number | string }>({
               />
             }
           >
-            {(data || []).map((item, index) => {
+            {numColumns > 1 ? (
+              // Grid layout
+              <View
+                style={styles.gridContainer}
+              >
+                {(data || []).map((item, index) => {
+                  const cardProps = renderCard({ item, index });
+
+                  const showView =
+                    typeof menu?.showView === "boolean"
+                      ? menu?.showView
+                      : typeof menu?.showView === "function"
+                      ? menu.showView(item)
+                      : true;
+
+                  const showEdit =
+                    typeof menu?.showEdit === "boolean"
+                      ? menu?.showEdit
+                      : typeof menu?.showEdit === "function"
+                      ? menu.showEdit(item)
+                      : true;
+
+                  const showDelete =
+                    typeof menu?.showDelete === "boolean"
+                      ? menu?.showDelete
+                      : typeof menu?.showDelete === "function"
+                      ? menu.showDelete(item)
+                      : true;
+
+                  return (
+                    <View
+                      key={item.id}
+                      style={styles.gridItem}
+                    >
+                      <AppListCard>
+                        <View
+                          style={[
+                            styles.cardMain,
+                            {
+                              flexDirection: 'column',
+                              alignItems: "flex-start",
+                              gap: 8,
+                            },
+                          ]}
+                        >
+                          {cardProps.left && (
+                            <View style={[styles.cardLeft, { alignSelf: 'center', marginBottom: 8 }]}>
+                              {cardProps.left}
+                            </View>
+                          )}
+
+                          <View style={[styles.cardCenter, { width: '100%' }]}>
+                            {cardProps.title && (
+                              <AppListTitle>{cardProps.title}</AppListTitle>
+                            )}
+
+                            {cardProps.subtitle && (
+                              <AppListSubtitle>{cardProps.subtitle}</AppListSubtitle>
+                            )}
+
+                            {cardProps.description && (
+                              <AppListDescription>
+                                {cardProps.description}
+                              </AppListDescription>
+                            )}
+                          </View>
+
+                          {cardProps.right && (
+                            <View style={[styles.cardRight, { alignSelf: 'flex-end' }]}>
+                              {cardProps.right}
+                            </View>
+                          )}
+
+                          <ItemMenu
+                            item={item}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                            onViewDetails={handleItemPress}
+                            showView={showView}
+                            showEdit={showEdit}
+                            showDelete={showDelete}
+                            customActions={menu?.customActions}
+                          />
+                        </View>
+
+                        {cardProps.bottom && (
+                          <AppListBottom items={cardProps.bottom} />
+                        )}
+
+                        {cardProps.actions && cardProps.actions.length > 0 && (
+                          <AppListActions actions={cardProps.actions} />
+                        )}
+                      </AppListCard>
+                    </View>
+                  );
+                })}
+              </View>
+            ) : (
+              // List layout
+              (data || []).map((item, index) => {
               const cardProps = renderCard({ item, index });
 
               const showView =
@@ -619,7 +745,8 @@ function AppList<T extends { id: number | string }>({
                   )}
                 </React.Fragment>
               );
-            })}
+            })
+            )}
           </ScrollView>
 
           {/* Información de paginación */}
@@ -639,17 +766,28 @@ function AppList<T extends { id: number | string }>({
 
 interface SearchBarComponentProps {
   onChangeText: (text: string) => void;
+  value: string;
 }
 
 function SearchBarComponent(props: SearchBarComponentProps) {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(props.value);
   const { run } = useDebounce((text: string) => {
     props.onChangeText(text);
   });
 
+  // Sincronizar con el valor externo si cambia
+  useEffect(() => {
+    setSearchQuery(props.value);
+  }, [props.value]);
+
   const handleChangeText = (text: string) => {
     setSearchQuery(text);
     run(text);
+  };
+
+  const handleClear = () => {
+    setSearchQuery("");
+    props.onChangeText(""); // Actualizar inmediatamente sin debounce
   };
 
   return (
@@ -659,7 +797,7 @@ function SearchBarComponent(props: SearchBarComponentProps) {
       value={searchQuery}
       style={styles.searchbar}
       mode="bar"
-      onClearIconPress={() => setSearchQuery("")}
+      onClearIconPress={handleClear}
     />
   );
 }
@@ -678,6 +816,20 @@ const styles = StyleSheet.create({
   scrollContainer: {
     padding: 16,
     gap: 8,
+  },
+  scrollContainerGrid: {
+    padding: 0,
+  },
+  gridContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+  },
+  gridItem: {
+    width: '48%',
+    marginHorizontal: '1%',
+    marginBottom: 16,
   },
   searchbar: {
     margin: 16,

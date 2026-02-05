@@ -14,7 +14,12 @@ import { usePOS } from "../Context";
 import CartSidebar from "./CartSidebar";
 import ProductCard from "./ProductCard";
 
-export default function POSV2() {
+interface POSV2Props {
+  customCartRender?: React.ReactNode;
+  onFinish?: () => void | Promise<void>;
+}
+
+export default function POSV2({ customCartRender, onFinish }: POSV2Props = {}) {
   const {
     products,
     setProducts,
@@ -191,24 +196,24 @@ export default function POSV2() {
 
   return (
     <View style={styles.container}>
-      {/* {isMobile ? (
+       {isMobile ? (
         // Vista móvil: productos con FAB
         <>
           {renderContent()}
-          <CartSidebar />
+          <CartSidebar onFinish={onFinish}>{customCartRender}</CartSidebar>
         </>
       ) : (
         // Vista desktop: productos + sidebar
         <View style={styles.desktopContainer}>
           {renderContent()}
           <View style={styles.sidebarContainer}>
-            <CartSidebar />
+            <CartSidebar onFinish={onFinish}>{customCartRender}</CartSidebar>
           </View>
         </View>
-      )} */}
+      )} 
 
-      {renderContent()}
-      <CartSidebar />
+     {/*  {renderContent()}
+      <CartSidebar /> */}
     </View>
   );
 }

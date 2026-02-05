@@ -14,6 +14,18 @@ export default function ClientsIndex() {
       <AppList
         title="Clientes"
         service={Services.customers}
+        filters={[
+          {
+            type: "simple",
+            name: "is_active",
+            label: "Estado",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Activos", value: "1" },
+              { label: "Inactivos", value: "0" },
+            ],
+          },
+        ]}
         renderCard={({ item }: { item: any }) => {
           console.log("Rendering client item:", item);
 

@@ -327,7 +327,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
           <ScrollView
             scrollEnabled={!props.disableScroll}
             style={[{ padding: 16 }, props.style]}
-            contentContainerStyle={props.containerStyle}
+            contentContainerStyle={[props.containerStyle,{maxWidth: 800, alignSelf: "center", width : "100%"}]}
           >
             {props.children}
             <View style={{ height: props.disableScroll ? 0 : 16 }} />

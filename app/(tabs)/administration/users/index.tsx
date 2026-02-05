@@ -20,7 +20,7 @@ export default function UsersIndexScreen() {
           <Avatar.Image
             size={50}
             source={
-              item.avatar && item.avatar.length > 0
+              item.avatar && item.avatar.length > 0 && item.avatar[0]?.uri
                 ? { uri: item.avatar[0].uri }
                 : require("@/assets/images/icon.png")
             }
