@@ -79,48 +79,54 @@ export default function SalesIndex() {
   };
 
   const renderListRoute = useMemo(
-    () => () =>
-      (
-        <AppList
-          title="Ventas"
-          service={Services.sales}
-          showAppBar={false}
-          onItemPress={(entity) => {
-            navigation.push(`/(tabs)/home/sales/${entity.id}` as any);
-          }}
-          onPressCreate={() => {
-            navigation.push("/(tabs)/home/sales/formv2/productos" as any);
-          }}
-          renderCard={({ item: sale }) => ({
-            title: (
-              <>
-                <AppList.Title>
-                  {sale.sale_number || `Venta #${sale.id}`}
-                </AppList.Title>
-              </>
-            ),
-            bottom: [
-              {
-                label: "Fecha",
-                value: new Date(sale.sale_date).toLocaleDateString("es-MX", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
-              },
-              {
-                label: "Método de pago",
-                value:
-                  sale.payment_method === "efectivo"
-                    ? "Efectivo"
-                    : sale.payment_method === "tarjeta"
+    () => () => (
+      <AppList
+        title="Ventas"
+        service={Services.sales}
+        showAppBar={false}
+        onItemPress={(entity) => {
+          navigation.push(`/(tabs)/home/sales/${entity.id}` as any);
+        }}
+        onPressCreate={() => {
+          navigation.push("/(tabs)/home/sales/formv2/productos" as any);
+        }}
+        renderCard={({ item: sale }) => ({
+          title: (
+            <>
+              <AppList.Title>
+                {sale.sale_number || `Venta #${sale.id}`}
+              </AppList.Title>
+            </>
+          ),
+          bottom: [
+            {
+              label: "Fecha",
+              value: new Date(sale.sale_date).toLocaleDateString("es-MX", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              }),
+            },
+            {
+              label: "Método de pago",
+              value:
+                sale.payment_method === "efectivo"
+                  ? "Efectivo"
+                  : sale.payment_method === "tarjeta"
                     ? "Tarjeta"
                     : "Transferencia",
-              },
-            ],
-            description: (
-              <View style={{ gap: 8, marginTop: 8 }}>
-                {/* Productos y Total */}
+            },
+          ],
+          description: (
+            <View style={{ gap: 8, marginTop: 8 }}>
+              {/* Productos y Total */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
                 <View
                   style={{
                     flexDirection: "row",
@@ -128,62 +134,82 @@ export default function SalesIndex() {
                     gap: 6,
                   }}
                 >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="package-variant"
-                      size={14}
-                      color={palette.textSecondary}
-                    />
-                    <Text
-                      variant="bodySmall"
-                      style={{ color: palette.textSecondary }}
-                    >
-                      {sale.details?.length || 0}{" "}
-                      {sale.details?.length === 1 ? "producto" : "productos"}
-                    </Text>
-                  </View>
-
+                  <MaterialCommunityIcons
+                    name="package-variant"
+                    size={14}
+                    color={palette.textSecondary}
+                  />
                   <Text
-                    variant="titleSmall"
-                    style={{ fontWeight: "bold", color: palette.primary }}
+                    variant="bodySmall"
+                    style={{ color: palette.textSecondary }}
                   >
-                    {new Intl.NumberFormat("es-MX", {
-                      style: "currency",
-                      currency: "MXN",
-                    }).format(sale.total_cost)}
+                    {sale.details?.length || 0}{" "}
+                    {sale.details?.length === 1 ? "producto" : "productos"}
                   </Text>
                 </View>
+
+                <Text
+                  variant="titleSmall"
+                  style={{ fontWeight: "bold", color: palette.primary }}
+                >
+                  {new Intl.NumberFormat("es-MX", {
+                    style: "currency",
+                    currency: "MXN",
+                  }).format(sale.total_cost)}
+                </Text>
               </View>
-            ),
-            right: (
-              <AppList.Description
-                style={{
-                  color: getStatusColor(sale.status),
-                  fontWeight: "bold",
-                }}
-              >
-                {getStatusLabel(sale.status)}
-              </AppList.Description>
-            ),
-          })}
-          menu={{
-            showDelete(item) {
-              return item.status !== "closed";
-            },
-            showEdit(item) {
-              return item.status !== "closed";
-            },
-          }}
-          searchPlaceholder="Buscar ventas..."
-        />
-      ),
-    [navigation]
+
+              {/* Estado de pago */}
+              {sale.payment_status && (
+                <View style={{ marginTop: 4 }}>
+                  <Text
+                    variant="bodySmall"
+                    style={{
+                      color:
+                        sale.payment_status === "paid"
+                          ? palette.success
+                          : sale.payment_status === "partial"
+                            ? palette.warning
+                            : palette.error,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {sale.payment_status === "paid"
+                      ? "✓ Pagado"
+                      : sale.payment_status === "partial"
+                        ? `Parcial: ${new Intl.NumberFormat("es-MX", {
+                            style: "currency",
+                            currency: "MXN",
+                          }).format(sale.paid_amount || 0)}`
+                        : "Pendiente de pago"}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ),
+          right: (
+            <AppList.Description
+              style={{
+                color: getStatusColor(sale.status),
+                fontWeight: "bold",
+              }}
+            >
+              {getStatusLabel(sale.status)}
+            </AppList.Description>
+          ),
+        })}
+        menu={{
+          showDelete(item) {
+            return item.status !== "closed";
+          },
+          showEdit(item) {
+            return item.status !== "closed";
+          },
+        }}
+        searchPlaceholder="Buscar ventas..."
+      />
+    ),
+    [navigation],
   );
 
   const renderStatsRoute = useMemo(() => () => <SaleStats />, []);
@@ -197,7 +223,7 @@ export default function SalesIndex() {
         stats: renderStatsRoute,
         cashRegister: renderCashRegisterRoute,
       }),
-    [renderListRoute, renderStatsRoute, renderCashRegisterRoute]
+    [renderListRoute, renderStatsRoute, renderCashRegisterRoute],
   );
 
   return (

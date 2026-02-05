@@ -1,19 +1,23 @@
-import CartSidebar from "@/components/Views/POSV2/Components/CartSidebar";
-import { useRouter } from "expo-router";
+import { Cart } from "@/components/Views/POSV3/components";
 import React from "react";
 import { View } from "react-native";
+import { Button } from "react-native-paper";
+import { usePurchase } from "./PurchaseContext";
 
 export default function CarritoScreen() {
-  const router = useRouter();
+  const { cartItems, handleRemoveProduct, handleItemChange } = usePurchase();
 
   return (
     <View style={{ flex: 1 }}>
-      <CartSidebar
-        isScreen={true}
-        onFinish={() => {
-          //router.replace("/(tabs)/home/purchases/index");
-        }}
-      />
+      <Cart
+        items={cartItems}
+        onRemoveItem={handleRemoveProduct}
+        onItemChange={handleItemChange}
+      >
+        <View style={{ padding: 16 }}>
+          <Button mode="contained">Finalizar Compra</Button>
+        </View>
+      </Cart>
     </View>
   );
 }

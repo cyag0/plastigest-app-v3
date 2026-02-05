@@ -64,84 +64,79 @@ export default function PurchasesIndex() {
   const modalRef = useRef<CreatePurchaseModalRef>(null);
 
   const renderListRoute = useMemo(
-    () => () =>
-      (
-        <AppList
-          title="Compras"
-          service={Services.purchases}
-          showAppBar={false}
-          renderCard={({ item }: { item: any }) => {
-            const statusConfig = getStatusConfig(item.status);
+    () => () => (
+      <AppList
+        title="Compras"
+        service={Services.purchasesV2}
+        showAppBar={false}
+        renderCard={({ item }: { item: any }) => {
+          const statusConfig = getStatusConfig(item.status);
 
-            return {
-              title: `Compra #${item.document_number || item.id}`,
-              description: `Proveedor: ${
-                item.supplier_name || "Sin proveedor"
-              }`,
-              right: (
-                <View style={styles.rightContent}>
-                  <View
+          return {
+            title: `Compra #${item.document_number || item.id}`,
+            description: `Proveedor: ${item.supplier_name || "Sin proveedor"}`,
+            right: (
+              <View style={styles.rightContent}>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor: statusConfig.backgroundColor,
+                      borderColor: statusConfig.borderColor,
+                    },
+                  ]}
+                >
+                  <Text
                     style={[
-                      styles.statusBadge,
-                      {
-                        backgroundColor: statusConfig.backgroundColor,
-                        borderColor: statusConfig.borderColor,
-                      },
+                      styles.statusText,
+                      { color: statusConfig.textColor },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.statusText,
-                        { color: statusConfig.textColor },
-                      ]}
-                    >
-                      {statusConfig.label}
-                    </Text>
-                  </View>
+                    {statusConfig.label}
+                  </Text>
                 </View>
-              ),
-              bottom: [
-                {
-                  label: "Fecha",
-                  value: new Date(item.created_at).toLocaleDateString("es-PE", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  }),
-                },
-                {
-                  label: "Productos",
-                  value: `${item.products_count || 0} items`,
-                },
-              ],
-            };
-          }}
-          menu={{
-            onEdit(item) {
-              // Solo permitir editar si está en borrador
-              if (item.status === "draft") {
-                router.push(
-                  `/(tabs)/home/purchases/formv2?id=${item.id}` as any
-                );
-              }
-            },
-            showEdit(item) {
-              return item.status === "draft";
-            },
-            onShow(item) {
-              router.push(`/(tabs)/home/purchases/${item.id}` as any);
-            },
-            showDelete(item) {
-              return item.status === "draft";
-            },
-          }}
-          onPressCreate={() => {
-            modalRef.current?.show();
-          }}
-          fabLabel="Nueva Compra"
-        />
-      ),
-    [router]
+              </View>
+            ),
+            bottom: [
+              {
+                label: "Fecha",
+                value: new Date(item.created_at).toLocaleDateString("es-PE", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                }),
+              },
+              {
+                label: "Productos",
+                value: `${item.products_count || 0} items`,
+              },
+            ],
+          };
+        }}
+        menu={{
+          onEdit(item) {
+            // Solo permitir editar si está en borrador
+            if (item.status === "draft") {
+              router.push(`/(tabs)/home/purchases/formv2?id=${item.id}` as any);
+            }
+          },
+          showEdit(item) {
+            return item.status === "draft";
+          },
+          onShow(item) {
+            router.push(`/(tabs)/home/purchases/${item.id}` as any);
+          },
+          showDelete(item) {
+            return item.status === "draft";
+          },
+        }}
+        onPressCreate={() => {
+          modalRef.current?.show();
+        }}
+        fabLabel="Nueva Compra"
+      />
+    ),
+    [router],
   );
 
   const renderStatsRoute = useMemo(() => () => <PurchaseStats />, []);
@@ -152,7 +147,7 @@ export default function PurchasesIndex() {
         list: renderListRoute,
         stats: renderStatsRoute,
       }),
-    [renderListRoute, renderStatsRoute]
+    [renderListRoute, renderStatsRoute],
   );
 
   return (
@@ -189,6 +184,7 @@ export default function PurchasesIndex() {
       <CreatePurchaseModal
         ref={modalRef}
         onSuccess={(purchaseId) => {
+          // El modal ya navega automáticamente a productos
           console.log("Purchase created with ID:", purchaseId);
         }}
       />

@@ -1,6 +1,17 @@
-import POSV2 from "@/components/Views/POSV2/Components";
+import ListProducts from "@/components/Views/POSV3/components/ListProducts";
 import React from "react";
+import { useSale } from "./SaleContext";
 
 export default function ProductosScreen() {
-  return <POSV2 />;
+  const saleContext = useSale();
+
+  return (
+    <ListProducts
+      products={saleContext.products}
+      categories={saleContext.categories}
+      groupedUnits={saleContext.groupedUnits}
+      onAddProduct={saleContext.handleAddProduct}
+      loading={saleContext.loading}
+    />
+  );
 }

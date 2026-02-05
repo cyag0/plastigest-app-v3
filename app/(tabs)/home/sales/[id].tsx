@@ -3,15 +3,29 @@ import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React from "react";
-import { Dimensions, Image, ScrollView, View } from "react-native";
-import { Button, Card, Chip, Divider, Surface, Text } from "react-native-paper";
+import React, { useState } from "react";
+import { Dimensions, Image, ScrollView, TextInput, View } from "react-native";
+import {
+  Button,
+  Card,
+  Chip,
+  Dialog,
+  Divider,
+  Portal,
+  RadioButton,
+  Surface,
+  Text,
+} from "react-native-paper";
 
 export default function SaleDetail() {
   const params = useLocalSearchParams();
   const id = params.id as string;
   const [sale, setSale] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentNotes, setPaymentNotes] = useState("");
   const alerts = useAlerts();
 
   React.useEffect(() => {
@@ -28,7 +42,7 @@ export default function SaleDetail() {
       alerts.error(
         error.response?.data?.message ||
           error.message ||
-          "Error al cargar la venta"
+          "Error al cargar la venta",
       );
     } finally {
       setLoading(false);
@@ -113,7 +127,7 @@ export default function SaleDetail() {
         title: "Avanzar Estado",
         okText: "Avanzar",
         cancelText: "Cancelar",
-      }
+      },
     );
 
     if (!confirmed) return;
@@ -124,7 +138,7 @@ export default function SaleDetail() {
       loadSale();
     } catch (error: any) {
       alerts.error(
-        error.response?.data?.message || "Error al avanzar el estado"
+        error.response?.data?.message || "Error al avanzar el estado",
       );
     }
   };
@@ -136,7 +150,7 @@ export default function SaleDetail() {
         title: "Retroceder Estado",
         okText: "Retroceder",
         cancelText: "Cancelar",
-      }
+      },
     );
 
     if (!confirmed) return;
@@ -147,7 +161,7 @@ export default function SaleDetail() {
       loadSale();
     } catch (error: any) {
       alerts.error(
-        error.response?.data?.message || "Error al retroceder el estado"
+        error.response?.data?.message || "Error al retroceder el estado",
       );
     }
   };
@@ -159,7 +173,7 @@ export default function SaleDetail() {
         title: "Cancelar Venta",
         okText: "Cancelar Venta",
         cancelText: "No",
-      }
+      },
     );
 
     if (!confirmed) return;
@@ -170,8 +184,80 @@ export default function SaleDetail() {
       loadSale();
     } catch (error: any) {
       alerts.error(
-        error.response?.data?.message || "Error al cancelar la venta"
+        error.response?.data?.message || "Error al cancelar la venta",
       );
+    }
+  };
+
+  const handleAddPayment = async () => {
+    try {
+      if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
+        alerts.error("Ingresa un monto válido");
+        return;
+      }
+
+      const amount = parseFloat(paymentAmount);
+      const pendingAmount = sale.total_cost - (sale.paid_amount || 0);
+
+      if (amount > pendingAmount) {
+        alerts.error(
+          `El monto no puede ser mayor al saldo pendiente ($${pendingAmount.toFixed(2)})`,
+        );
+        return;
+      }
+
+      const confirmed = await alerts.confirm(
+        `¿Registrar pago de $${amount.toFixed(2)}?`,
+        {
+          title: "Confirmar Pago",
+          okText: "Confirmar",
+          cancelText: "Cancelar",
+        },
+      );
+
+      if (!confirmed) return;
+
+      await (Services.sales as any).addPayment(id, {
+        amount,
+        payment_method: paymentMethod,
+        notes: paymentNotes || undefined,
+      });
+
+      alerts.success("Pago registrado correctamente");
+      setShowPaymentDialog(false);
+      setPaymentAmount("");
+      setPaymentNotes("");
+      loadSale();
+    } catch (error: any) {
+      alerts.error(
+        error.response?.data?.message || "Error al registrar el pago",
+      );
+    }
+  };
+
+  const getPaymentStatusColor = (status: string) => {
+    switch (status) {
+      case "paid":
+        return palette.success;
+      case "partial":
+        return palette.warning;
+      case "pending":
+        return palette.error;
+      default:
+        return palette.textSecondary;
+    }
+  };
+
+  const getPaymentStatusLabel = (status: string) => {
+    switch (status) {
+      case "paid":
+        return "Pagado";
+      case "partial":
+        return "Pago Parcial";
+      case "pending":
+        return "Pendiente";
+      default:
+        return status;
     }
   };
 
@@ -315,12 +401,28 @@ export default function SaleDetail() {
           elevation: 2,
         }}
       >
-        <Text
-          variant="titleMedium"
-          style={{ fontWeight: "bold", marginBottom: 16 }}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 16,
+          }}
         >
-          Información de Pago
-        </Text>
+          <Text variant="titleMedium" style={{ fontWeight: "bold" }}>
+            Información de Pago
+          </Text>
+          {sale.payment_status && (
+            <Chip
+              style={{
+                backgroundColor: getPaymentStatusColor(sale.payment_status),
+              }}
+              textStyle={{ color: "white", fontWeight: "600" }}
+            >
+              {getPaymentStatusLabel(sale.payment_status)}
+            </Chip>
+          )}
+        </View>
 
         <View style={{ gap: 12 }}>
           <View
@@ -348,47 +450,179 @@ export default function SaleDetail() {
             </View>
           </View>
 
-          {sale.payment_method === "efectivo" &&
-            sale.content?.received_amount && (
-              <>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    paddingVertical: 8,
-                  }}
-                >
-                  <Text style={{ color: palette.textSecondary }}>
-                    Monto Recibido:
-                  </Text>
-                  <Text style={{ fontWeight: "600" }}>
-                    {new Intl.NumberFormat("es-MX", {
-                      style: "currency",
-                      currency: "MXN",
-                    }).format(sale.content.received_amount)}
-                  </Text>
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    paddingVertical: 8,
-                  }}
-                >
-                  <Text style={{ color: palette.textSecondary }}>Cambio:</Text>
-                  <Text style={{ fontWeight: "600" }}>
-                    {new Intl.NumberFormat("es-MX", {
-                      style: "currency",
-                      currency: "MXN",
-                    }).format(
-                      sale.content.received_amount - parseFloat(sale.total_cost)
-                    )}
-                  </Text>
-                </View>
-              </>
-            )}
+          {/* Resumen de pagos */}
+          <Divider />
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              paddingVertical: 8,
+            }}
+          >
+            <Text style={{ fontWeight: "600" }}>Total:</Text>
+            <Text style={{ fontWeight: "600" }}>
+              {new Intl.NumberFormat("es-MX", {
+                style: "currency",
+                currency: "MXN",
+              }).format(sale.total_cost)}
+            </Text>
+          </View>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              paddingVertical: 8,
+            }}
+          >
+            <Text style={{ color: palette.textSecondary }}>Pagado:</Text>
+            <Text style={{ fontWeight: "600", color: palette.success }}>
+              {new Intl.NumberFormat("es-MX", {
+                style: "currency",
+                currency: "MXN",
+              }).format(sale.paid_amount || 0)}
+            </Text>
+          </View>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              paddingVertical: 8,
+            }}
+          >
+            <Text style={{ fontWeight: "600" }}>Saldo Pendiente:</Text>
+            <Text
+              style={{
+                fontWeight: "600",
+                color:
+                  sale.total_cost - (sale.paid_amount || 0) > 0
+                    ? palette.error
+                    : palette.success,
+              }}
+            >
+              {new Intl.NumberFormat("es-MX", {
+                style: "currency",
+                currency: "MXN",
+              }).format(sale.total_cost - (sale.paid_amount || 0))}
+            </Text>
+          </View>
+
+          {/* Botón para agregar pago si hay saldo pendiente */}
+          {sale.payment_status !== "paid" && sale.status !== "cancelled" && (
+            <Button
+              mode="contained"
+              onPress={() => setShowPaymentDialog(true)}
+              icon="cash-plus"
+              buttonColor={palette.primary}
+              style={{ marginTop: 8 }}
+            >
+              Agregar Pago
+            </Button>
+          )}
         </View>
       </Surface>
+
+      {/* Historial de Pagos */}
+      {sale.payment_history && sale.payment_history.length > 0 && (
+        <Surface
+          style={{
+            backgroundColor: "white",
+            borderRadius: 12,
+            padding: 20,
+            marginBottom: 16,
+            elevation: 2,
+          }}
+        >
+          <Text
+            variant="titleMedium"
+            style={{ fontWeight: "bold", marginBottom: 16 }}
+          >
+            Historial de Pagos ({sale.payment_history.length})
+          </Text>
+
+          <View style={{ gap: 12 }}>
+            {sale.payment_history.map((payment: any, index: number) => (
+              <Card
+                key={index}
+                style={{
+                  backgroundColor: palette.background,
+                }}
+              >
+                <Card.Content style={{ padding: 12 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                          marginBottom: 4,
+                        }}
+                      >
+                        <MaterialCommunityIcons
+                          name={getPaymentMethodIcon(payment.payment_method)}
+                          size={18}
+                          color={palette.primary}
+                        />
+                        <Text
+                          variant="bodyMedium"
+                          style={{ fontWeight: "600" }}
+                        >
+                          {getPaymentMethodLabel(payment.payment_method)}
+                        </Text>
+                      </View>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <MaterialCommunityIcons
+                          name="calendar"
+                          size={14}
+                          color={palette.textSecondary}
+                        />
+                        <Text
+                          variant="bodySmall"
+                          style={{ color: palette.textSecondary }}
+                        >
+                          {new Date(payment.date).toLocaleString("es-MX", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </Text>
+                      </View>
+                      {payment.notes && (
+                        <Text
+                          variant="bodySmall"
+                          style={{ color: palette.textSecondary, marginTop: 4 }}
+                        >
+                          {payment.notes}
+                        </Text>
+                      )}
+                    </View>
+                    <Text
+                      variant="titleMedium"
+                      style={{ fontWeight: "bold", color: palette.success }}
+                    >
+                      {new Intl.NumberFormat("es-MX", {
+                        style: "currency",
+                        currency: "MXN",
+                      }).format(payment.amount)}
+                    </Text>
+                  </View>
+                </Card.Content>
+              </Card>
+            ))}
+          </View>
+        </Surface>
+      )}
 
       {/* Información del Cliente */}
       {(sale.content?.customer_name ||
@@ -552,7 +786,7 @@ export default function SaleDetail() {
                         }).format(
                           detail.unit_cost ||
                             parseFloat(detail.total_cost) /
-                              parseFloat(detail.quantity)
+                              parseFloat(detail.quantity),
                         )}
                       </Text>
                       <Text
@@ -568,7 +802,7 @@ export default function SaleDetail() {
                         }).format(
                           detail.total_cost ||
                             parseFloat(detail.quantity) *
-                              (detail.unit_cost || 0)
+                              (detail.unit_cost || 0),
                         )}
                       </Text>
                     </View>
@@ -658,6 +892,100 @@ export default function SaleDetail() {
           Volver
         </Button>
       </View>
+
+      {/* Dialog para agregar pago */}
+      <Portal>
+        <Dialog
+          visible={showPaymentDialog}
+          onDismiss={() => setShowPaymentDialog(false)}
+        >
+          <Dialog.Title>Agregar Pago</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodyMedium" style={{ marginBottom: 16 }}>
+              Saldo pendiente:{" "}
+              <Text style={{ fontWeight: "bold", color: palette.error }}>
+                {new Intl.NumberFormat("es-MX", {
+                  style: "currency",
+                  currency: "MXN",
+                }).format(sale?.total_cost - (sale?.paid_amount || 0))}
+              </Text>
+            </Text>
+
+            <Text style={{ marginBottom: 8, fontWeight: "600" }}>
+              Monto a pagar *
+            </Text>
+            <TextInput
+              style={{
+                borderWidth: 1,
+                borderColor: palette.border,
+                borderRadius: 8,
+                padding: 12,
+                marginBottom: 16,
+                fontSize: 16,
+              }}
+              placeholder="0.00"
+              value={paymentAmount}
+              onChangeText={setPaymentAmount}
+              keyboardType="decimal-pad"
+            />
+
+            <Text style={{ marginBottom: 8, fontWeight: "600" }}>
+              Método de Pago
+            </Text>
+            <RadioButton.Group
+              onValueChange={setPaymentMethod}
+              value={paymentMethod}
+            >
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <RadioButton value="cash" />
+                  <Text>Efectivo</Text>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <RadioButton value="card" />
+                  <Text>Tarjeta</Text>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <RadioButton value="transfer" />
+                  <Text>Transferencia</Text>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <RadioButton value="credit" />
+                  <Text>Crédito</Text>
+                </View>
+              </View>
+            </RadioButton.Group>
+
+            <Text style={{ marginTop: 16, marginBottom: 8, fontWeight: "600" }}>
+              Notas (opcional)
+            </Text>
+            <TextInput
+              style={{
+                borderWidth: 1,
+                borderColor: palette.border,
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 14,
+                minHeight: 80,
+                textAlignVertical: "top",
+              }}
+              placeholder="Notas adicionales..."
+              value={paymentNotes}
+              onChangeText={setPaymentNotes}
+              multiline
+              numberOfLines={3}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setShowPaymentDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onPress={handleAddPayment} buttonColor={palette.primary}>
+              Confirmar
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </ScrollView>
   );
 }

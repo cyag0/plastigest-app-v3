@@ -21,20 +21,18 @@ interface AppSelectProps {
 export default function AppSelect(props: AppSelectProps) {
   const dropdownRef = React.useRef<SelectDropdown>(null);
 
-  console.log("AppSelect props.value", props);
-
   // Normalizar el valor para el procesamiento interno
   const normalizedValue = props.multiple
     ? Array.isArray(props.value)
       ? props.value.map((v) => String(v))
       : props.value
-      ? [String(props.value)]
-      : []
+        ? [String(props.value)]
+        : []
     : Array.isArray(props.value)
-    ? props.value.map((v) => String(v))[0]
-    : props.value
-    ? String(props.value)
-    : undefined;
+      ? props.value.map((v) => String(v))[0]
+      : props.value
+        ? String(props.value)
+        : undefined;
 
   // Para múltiple, obtener los elementos seleccionados
   const selectedItems =
@@ -48,7 +46,7 @@ export default function AppSelect(props: AppSelectProps) {
 
   function handleOnChange(
     selectedItem: { value: string; label: string },
-    index: number
+    index: number,
   ) {
     if (props.onChange) {
       // Detectar si el valor original era numérico para mantener el tipo
@@ -73,13 +71,13 @@ export default function AppSelect(props: AppSelectProps) {
         // Esta es una implementación simplificada
         const currentValues = Array.isArray(props.value) ? props.value : [];
         const valueExists = currentValues.some(
-          (v) => String(v) === selectedItem.value
+          (v) => String(v) === selectedItem.value,
         );
 
         if (valueExists) {
           // Remover si ya existe
           const filtered = currentValues.filter(
-            (v) => String(v) !== selectedItem.value
+            (v) => String(v) !== selectedItem.value,
           );
           props.onChange(filtered as string[] | number[]);
         } else {
@@ -124,14 +122,6 @@ export default function AppSelect(props: AppSelectProps) {
           renderItem={(item, index, isSelected) => {
             const selectedItem = normalizedValue === item.value;
 
-            console.log(
-              "item",
-              item,
-              "isSelected",
-              isSelected,
-              "selectedItem",
-              selectedItem
-            );
             return (
               <View
                 style={[
@@ -163,11 +153,7 @@ export default function AppSelect(props: AppSelectProps) {
         data={props.data || []}
         onSelect={handleOnChange}
         renderButton={(selectedItem, isOpened) => (
-          <TouchableRipple
-            onPress={() => {
-              console.log("Dropdown pressed");
-            }}
-          >
+          <TouchableRipple onPress={() => {}}>
             <View
               style={[styles.dropdownButton, props.disabled && styles.disabled]}
             >

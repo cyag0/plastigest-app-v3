@@ -86,7 +86,7 @@ interface FormProps<T> {
 }
 
 const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
-  T extends Record<string, any>
+  T extends Record<string, any>,
 >(props: FormProps<T>, ref: React.Ref<AppFormRef<T>>) {
   const [initialValues, setInitialValues] = useState<T>({} as T);
   const [loading, setLoading] = useState(props.loading || false);
@@ -125,14 +125,14 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         console.log("Setting field value:", field, value);
         console.log(
           "Before set, current value:",
-          formInstance.getFieldProps(field).value
+          formInstance.getFieldProps(field).value,
         );
         formInstance.setFieldValue(field, value);
 
         console.log(
           "After set, new value:",
           formInstance,
-          formInstance.getFieldProps(field).value
+          formInstance.getFieldProps(field).value,
         );
       },
       setFieldTouched: (field: string, touched?: boolean) =>
@@ -163,7 +163,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       setReadonly: (value: boolean) => setReadonly(value),
       readonly,
     }),
-    [formInstance, loadInitialValues]
+    [formInstance, loadInitialValues],
   );
 
   async function loadInitialValues() {
@@ -187,7 +187,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
           if (checkIdAndApi) {
             //@ts-ignore
             const response = await props.api.show(props.id);
-            console.log("Fetched data for ID:", response.data.data);
+            console.log("Fetched data for ID:", response.data);
             const data = { ...props.initialValues, ...response.data.data };
 
             console.log("Merging initial values with fetched data:", data);
@@ -227,7 +227,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       setLoading(true);
 
       const values = (await objectToFormDataWithNestedInputsAsync(
-        _values
+        _values,
       )) as any;
 
       // Si se pasa handleSubmit personalizado, usarlo
@@ -242,7 +242,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
             okText: "Sí, guardar",
             cancelText: "Cancelar",
             title: "Confirmar guardado",
-          }
+          },
         );
 
         if (!res) {
@@ -398,7 +398,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
 
                               if (!isValid) {
                                 alerts.error(
-                                  "Por favor, completa todos los campos requeridos."
+                                  "Por favor, completa todos los campos requeridos.",
                                 );
                                 return;
                               }

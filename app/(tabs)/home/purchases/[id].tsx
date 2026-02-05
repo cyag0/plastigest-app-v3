@@ -8,14 +8,33 @@ import React, { useEffect, useState } from "react";
 import { FlatList, Image, StyleSheet, View } from "react-native";
 import { Button, Divider, Text } from "react-native-paper";
 
+interface PurchaseDetail {
+  id: number;
+  product_id: number;
+  product_name: string;
+  product_code: string;
+  product_image?: any;
+  package_id?: number;
+  package_name?: string;
+  quantity: number;
+  quantity_received?: number;
+  unit_id: number;
+  unit_name: string;
+  unit_abbreviation: string;
+  unit_price: number;
+  subtotal: number;
+}
+
 interface Purchase {
   id: number;
   document_number: string;
+  purchase_number: string;
   status: string;
   supplier_name: string;
   purchase_date: string;
-  total_amount: number;
-  cart_items?: any[];
+  total: number;
+  notes?: string;
+  details?: PurchaseDetail[];
   details_count?: number;
 }
 
@@ -24,6 +43,7 @@ const statusSteps = [
   { key: "ordered", label: "Pedido", icon: "cart-check" },
   { key: "in_transit", label: "En Tránsito", icon: "truck-delivery" },
   { key: "received", label: "Recibido", icon: "package-variant-closed-check" },
+  { key: "cancelled", label: "Cancelado", icon: "close-circle-outline" },
 ];
 
 const getStatusIndex = (status: string) => {
@@ -40,6 +60,8 @@ const getStatusColor = (status: string) => {
       return palette.accent;
     case "received":
       return palette.success;
+    case "cancelled":
+      return palette.error;
     default:
       return palette.textSecondary;
   }
@@ -60,7 +82,7 @@ export default function PurchaseDetailScreen() {
   const loadPurchase = async () => {
     try {
       setLoading(true);
-      const response = await Services.purchases.show(Number(id));
+      const response = await Services.purchasesV2.show(Number(id));
       setPurchase(response.data.data);
     } catch (error) {
       console.error("Error loading purchase:", error);
@@ -70,33 +92,135 @@ export default function PurchaseDetailScreen() {
     }
   };
 
-  const handleReceivePurchase = async () => {
+  const handleConfirmOrder = async () => {
     try {
       const confirmed = await alerts.confirm(
-        "¿Confirmar que la compra ha sido recibida? Esto actualizará el stock de los productos.",
+        "¿Confirmar el pedido de compra?",
         {
-          title: "Recibir Compra",
+          title: "Confirmar Pedido",
           okText: "Confirmar",
           cancelText: "Cancelar",
-        }
+        },
       );
 
       if (!confirmed) return;
 
       setReceivingPurchase(true);
-      const response = await Services.purchases.receivePurchase(Number(id));
+      const response = await Services.purchasesV2.confirm(Number(id));
+
+      if (response.success) {
+        alerts.success("Pedido confirmado exitosamente");
+        await loadPurchase();
+      } else {
+        alerts.error(response.message || "Error al confirmar el pedido");
+      }
+    } catch (error: any) {
+      console.error("Error confirming order:", error);
+      alerts.error(error.message || "Error al confirmar el pedido");
+    } finally {
+      setReceivingPurchase(false);
+    }
+  };
+
+  const handleMarkInTransit = async () => {
+    try {
+      const confirmed = await alerts.confirm(
+        "¿Marcar la compra como en tránsito?",
+        {
+          title: "En Tránsito",
+          okText: "Confirmar",
+          cancelText: "Cancelar",
+        },
+      );
+
+      if (!confirmed) return;
+
+      setReceivingPurchase(true);
+      const response = await Services.purchasesV2.markInTransit(Number(id));
+
+      if (response.success) {
+        alerts.success("Compra marcada como en tránsito");
+        await loadPurchase();
+      } else {
+        alerts.error(response.message || "Error al actualizar el estado");
+      }
+    } catch (error: any) {
+      console.error("Error marking in transit:", error);
+      alerts.error(error.message || "Error al actualizar el estado");
+    } finally {
+      setReceivingPurchase(false);
+    }
+  };
+
+  const handleReceivePurchase = async () => {
+    try {
+      if (!purchase?.details || purchase.details.length === 0) {
+        alerts.error("No hay productos para recibir");
+        return;
+      }
+
+      const confirmed = await alerts.confirm(
+        "¿Confirmar que la compra ha sido recibida? Esto actualizará el stock de los productos. Esta acción no se puede deshacer.",
+        {
+          title: "Recibir Compra",
+          okText: "Confirmar",
+          cancelText: "Cancelar",
+        },
+      );
+
+      if (!confirmed) return;
+
+      setReceivingPurchase(true);
+
+      // Crear detalles con las cantidades recibidas (por defecto, toda la cantidad pedida)
+      const details = purchase.details.map((detail: PurchaseDetail) => ({
+        id: detail.id,
+        quantity_received: detail.quantity,
+      }));
+
+      const response = await Services.purchasesV2.receive(Number(id), details);
 
       if (response.success) {
         alerts.success(
-          "Compra recibida exitosamente. El stock ha sido actualizado."
+          "Compra recibida exitosamente. El stock ha sido actualizado.",
         );
-        await loadPurchase(); // Recargar datos
+        await loadPurchase();
       } else {
         alerts.error(response.message || "Error al recibir la compra");
       }
     } catch (error: any) {
       console.error("Error receiving purchase:", error);
       alerts.error(error.message || "Error al recibir la compra");
+    } finally {
+      setReceivingPurchase(false);
+    }
+  };
+
+  const handleCancelPurchase = async () => {
+    try {
+      const confirmed = await alerts.confirm(
+        "¿Estás seguro de cancelar esta compra? Esta acción no se puede deshacer.",
+        {
+          title: "Cancelar Compra",
+          okText: "Cancelar Compra",
+          cancelText: "Volver",
+        },
+      );
+
+      if (!confirmed) return;
+
+      setReceivingPurchase(true);
+      const response = await Services.purchasesV2.cancel(Number(id));
+
+      if (response.success) {
+        alerts.success("Compra cancelada exitosamente");
+        await loadPurchase();
+      } else {
+        alerts.error(response.message || "Error al cancelar la compra");
+      }
+    } catch (error: any) {
+      console.error("Error cancelling purchase:", error);
+      alerts.error(error.message || "Error al cancelar la compra");
     } finally {
       setReceivingPurchase(false);
     }
@@ -140,23 +264,21 @@ export default function PurchaseDetailScreen() {
                 {
                   day: "2-digit",
                   month: "short",
-                }
+                },
               )}
               label="Fecha"
               color={palette.blue}
             />
             <StatCard
               icon="cash"
-              value={`$${purchase.total_amount?.toFixed(2) || "0.00"}`}
+              value={`$${parseFloat(purchase.total || "0").toFixed(2)}`}
               label="Total"
               color={palette.primary}
             />
           </View>
           <StatCard
             icon="package-variant"
-            value={
-              (purchase.cart_items || [])?.length || purchase.details_count || 0
-            }
+            value={purchase.details_count || 0}
             label="Productos"
             color={palette.accent}
           />
@@ -171,18 +293,23 @@ export default function PurchaseDetailScreen() {
     return (
       <>
         {/* Productos */}
-        {purchase.cart_items && (purchase.cart_items || []).length > 0 && (
+        {purchase.details && purchase.details.length > 0 && (
           <View style={styles.section}>
             <Text variant="titleLarge" style={styles.sectionTitle}>
-              Productos
+              Productos ({purchase.details.length})
             </Text>
-            {purchase.cart_items.map((item: any, index: number) => (
-              <View key={index}>
+            {purchase.details.map((detail: PurchaseDetail, index: number) => (
+              <View key={detail.id}>
                 <View style={styles.productRow}>
                   {/* Imagen del producto */}
-                  {item.main_image?.uri ? (
+                  {detail.product_image ? (
                     <Image
-                      source={{ uri: item.main_image.uri }}
+                      source={{
+                        uri:
+                          typeof detail.product_image === "string"
+                            ? detail.product_image
+                            : detail.product_image.uri,
+                      }}
                       style={styles.productImage}
                       resizeMode="cover"
                     />
@@ -198,36 +325,90 @@ export default function PurchaseDetailScreen() {
 
                   <View style={styles.productInfo}>
                     <Text variant="bodyLarge" style={styles.productName}>
-                      {item.name}
+                      {detail.product_name}
+                      {detail.package_name && (
+                        <Text style={{ color: palette.textSecondary }}>
+                          {" "}
+                          - {detail.package_name}
+                        </Text>
+                      )}
                     </Text>
                     <Text variant="bodyMedium" style={styles.productCode}>
-                      {item.code}
+                      {detail.product_code}
                     </Text>
-                    {item.unit_name && (
-                      <Text variant="bodySmall" style={styles.productUnit}>
-                        Unidad: {item.unit_name} ({item.unit_abbreviation})
-                      </Text>
-                    )}
+                    <Text variant="bodySmall" style={styles.productUnit}>
+                      Unidad: {detail.unit_name} ({detail.unit_abbreviation})
+                    </Text>
+                    {purchase.status === "received" &&
+                      detail.quantity_received && (
+                        <Text
+                          variant="bodySmall"
+                          style={styles.receivedQuantity}
+                        >
+                          Recibido: {detail.quantity_received}{" "}
+                          {detail.unit_abbreviation}
+                        </Text>
+                      )}
                   </View>
                   <View style={styles.productDetails}>
                     <Text variant="bodyMedium" style={styles.quantity}>
-                      {item.quantity} × ${item.unit_price?.toFixed(2)}
+                      {detail.quantity} × $
+                      {parseFloat(detail.unit_price || "0").toFixed(2)}
                     </Text>
                     <Text variant="titleMedium" style={styles.productTotal}>
-                      ${item.total?.toFixed(2)}
+                      ${parseFloat(detail.subtotal || "0").toFixed(2)}
                     </Text>
                   </View>
                 </View>
-                {index < (purchase.cart_items || []).length - 1 && (
+                {index < purchase.details.length - 1 && (
                   <Divider style={styles.productDivider} />
                 )}
               </View>
             ))}
+
+            {/* Total */}
+            <Divider style={styles.divider} />
+            <View style={styles.totalRow}>
+              <Text variant="titleLarge" style={styles.totalLabel}>
+                Total
+              </Text>
+              <Text variant="headlineSmall" style={styles.totalValue}>
+                ${parseFloat(purchase.total || "0").toFixed(2)}
+              </Text>
+            </View>
           </View>
         )}
 
         {/* Acciones */}
         <View style={styles.actions}>
+          {purchase.status === "draft" && (
+            <Button
+              mode="contained"
+              onPress={handleConfirmOrder}
+              loading={receivingPurchase}
+              disabled={receivingPurchase}
+              icon="cart-check"
+              buttonColor={palette.blue}
+              style={styles.button}
+            >
+              Confirmar Pedido
+            </Button>
+          )}
+
+          {purchase.status === "ordered" && (
+            <Button
+              mode="contained"
+              onPress={handleMarkInTransit}
+              loading={receivingPurchase}
+              disabled={receivingPurchase}
+              icon="truck-delivery"
+              buttonColor={palette.accent}
+              style={styles.button}
+            >
+              Marcar en Tránsito
+            </Button>
+          )}
+
           {purchase.status === "in_transit" && (
             <Button
               mode="contained"
@@ -242,20 +423,51 @@ export default function PurchaseDetailScreen() {
             </Button>
           )}
 
-          {purchase.status === "draft" && (
-            <Button
-              mode="contained"
-              onPress={() =>
-                router.push(
-                  `/(tabs)/home/purchases/formv2?id=${purchase.id}` as any
-                )
-              }
-              icon="pencil"
-              buttonColor={palette.primary}
-              style={styles.button}
-            >
-              Editar Compra
-            </Button>
+          {purchase.status !== "received" &&
+            purchase.status !== "cancelled" && (
+              <Button
+                mode="outlined"
+                onPress={handleCancelPurchase}
+                loading={receivingPurchase}
+                disabled={receivingPurchase}
+                icon="close-circle-outline"
+                textColor={palette.error}
+                style={[styles.button, { borderColor: palette.error }]}
+              >
+                Cancelar Compra
+              </Button>
+            )}
+
+          {purchase.status === "received" && (
+            <View style={styles.completedMessage}>
+              <MaterialCommunityIcons
+                name="check-circle"
+                size={24}
+                color={palette.success}
+              />
+              <Text
+                variant="bodyLarge"
+                style={{ color: palette.success, marginLeft: 8 }}
+              >
+                Compra completada
+              </Text>
+            </View>
+          )}
+
+          {purchase.status === "cancelled" && (
+            <View style={styles.completedMessage}>
+              <MaterialCommunityIcons
+                name="close-circle"
+                size={24}
+                color={palette.error}
+              />
+              <Text
+                variant="bodyLarge"
+                style={{ color: palette.error, marginLeft: 8 }}
+              >
+                Compra cancelada
+              </Text>
+            </View>
           )}
         </View>
       </>
@@ -265,15 +477,23 @@ export default function PurchaseDetailScreen() {
   const renderTimeline = () => {
     if (!purchase) return null;
 
+    // Filtrar estados para no mostrar cancelled en el flujo normal
+    const displaySteps =
+      purchase.status === "cancelled"
+        ? statusSteps.filter((step) => step.key === "cancelled")
+        : statusSteps.filter((step) => step.key !== "cancelled");
+
     return (
       <View style={styles.section}>
         <Text variant="titleLarge" style={styles.sectionTitle}>
           Estado de la Compra
         </Text>
-        {statusSteps.map((step, index) => {
-          const isActive = index === currentStatusIndex;
-          const isCompleted = index < currentStatusIndex;
-          const isLast = index === statusSteps.length - 1;
+        {displaySteps.map((step, index) => {
+          const isActive = step.key === purchase.status;
+          const stepIndex = statusSteps.findIndex((s) => s.key === step.key);
+          const isCompleted =
+            stepIndex < currentStatusIndex && purchase.status !== "cancelled";
+          const isLast = index === displaySteps.length - 1;
           const itemColor =
             isActive || isCompleted ? statusColor : palette.textSecondary;
 
@@ -327,8 +547,8 @@ export default function PurchaseDetailScreen() {
                   {isActive
                     ? "Estado actual"
                     : isCompleted
-                    ? "Completado"
-                    : "Pendiente"}
+                      ? "Completado"
+                      : "Pendiente"}
                 </Text>
               </View>
               {(isActive || isCompleted) && (
@@ -496,6 +716,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
   },
+  receivedQuantity: {
+    color: palette.success,
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+  },
   productDetails: {
     alignItems: "flex-end",
   },
@@ -516,5 +742,27 @@ const styles = StyleSheet.create({
   },
   button: {
     borderRadius: 8,
+  },
+  completedMessage: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    backgroundColor: palette.background,
+    borderRadius: 8,
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 16,
+  },
+  totalLabel: {
+    fontWeight: "bold",
+    color: palette.text,
+  },
+  totalValue: {
+    fontWeight: "bold",
+    color: palette.primary,
   },
 });

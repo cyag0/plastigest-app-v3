@@ -77,12 +77,17 @@ namespace App {
       name: string;
       description?: string | null;
       code?: string | null;
-      purchase_price?: number | null;
-      sale_price?: number | null;
+      purchase_price?: string | null;
+      sale_price?: string | null;
       company_id?: number | null;
       category_id?: number | null;
       unit_id?: number | null;
-      unit?: any; // Unidad base del producto
+      unit?: {
+        id: number;
+        name: string;
+        abbreviation: string;
+        unit_type?: "mass" | "volume" | "quantity";
+      };
       supplier_id?: number | null;
       product_type?: string | number | null;
       is_active: boolean;
@@ -101,6 +106,19 @@ namespace App {
         quantity: number;
         notes?: string | null;
       }>;
+      active_packages?: ProductPackage[];
+    }
+
+    interface ProductPackage {
+      id: number;
+      package_name: string;
+      barcode: string;
+      quantity_per_package: number;
+      purchase_price: string;
+      sale_price: string;
+      is_active: boolean;
+      is_default: boolean;
+      sort_order: number;
     }
 
     interface Category {
@@ -345,6 +363,56 @@ namespace App {
         enable_barcode_scanner?: boolean;
         enable_whatsapp_orders?: boolean;
         enable_pos_mode?: boolean;
+      };
+    }
+
+    // Purchase V2 Types
+    type PurchaseStatus = 'draft' | 'ordered' | 'in_transit' | 'received' | 'cancelled';
+
+    interface PurchaseV2 {
+      id: number;
+      company_id: number;
+      location_id: number;
+      supplier_id?: number;
+      purchase_number: string;
+      purchase_date: string;
+      expected_delivery_date?: string;
+      delivery_date?: string;
+      status: PurchaseStatus;
+      total: string;
+      notes?: string;
+      document_number?: string;
+      user_id: number;
+      received_by?: number;
+      created_at: string;
+      updated_at: string;
+      supplier?: Supplier;
+      location?: Location;
+      user?: User;
+      received_by_user?: User;
+      details?: PurchaseDetailV2[];
+    }
+
+    interface PurchaseDetailV2 {
+      id: number;
+      purchase_id: number;
+      product_id: number;
+      package_id?: number;
+      quantity: string;
+      unit_id: number;
+      unit_price: string;
+      total: string;
+      quantity_received?: string;
+      received_at?: string;
+      notes?: string;
+      created_at: string;
+      updated_at: string;
+      product?: Product;
+      package?: ProductPackage;
+      unit?: {
+        id: number;
+        name: string;
+        abbreviation: string;
       };
     }
   }

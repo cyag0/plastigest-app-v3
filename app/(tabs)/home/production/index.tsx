@@ -5,12 +5,27 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { Avatar } from "react-native-paper";
+import Animated, { SharedTransition } from "react-native-reanimated";
+
+const customTransition = SharedTransition.duration(550).springify();
 
 export default function ProductionIndex() {
   const router = useRouter();
 
   return (
     <>
+      <Animated.Image
+        source={require("../../../../assets/images/dashboard/categories.png")}
+        sharedTransitionTag="production"
+        sharedTransitionStyle={customTransition}
+        style={{
+          width: 300,
+          height: 300,
+          marginBottom: 10,
+          backgroundColor: "#333",
+        }}
+      />
+
       <AppList
         title="Producción"
         service={Services.productions}
@@ -74,7 +89,7 @@ export default function ProductionIndex() {
             {
               label: "Fecha",
               value: new Date(
-                item.production_date || item.movement_date
+                item.production_date || item.movement_date,
               ).toLocaleDateString(),
             },
             {

@@ -1,8 +1,8 @@
 import AppBar from "@/components/App/AppBar";
-import { POSProvider } from "@/components/Views/POSV2/Context";
 import palette from "@/constants/palette";
 import { Stack, usePathname, useRouter } from "expo-router";
 import React from "react";
+import { SaleProvider } from "./SaleContext";
 
 function StackContent() {
   const router = useRouter();
@@ -87,8 +87,8 @@ function StackContent() {
 
 export default function _layout() {
   return (
-    <POSProvider type="sales">
+    <SaleProvider>
       <StackContent />
-    </POSProvider>
+    </SaleProvider>
   );
 }

@@ -30,7 +30,6 @@ interface PackageFormData {
 
 const validationSchema = Yup.object().shape({
   product_id: Yup.number().required("El producto es requerido"),
-  company_id: Yup.number().required("La compañía es requerida"),
   package_name: Yup.string().required("El nombre del paquete es requerido"),
   barcode: Yup.string().required("El código de barras es requerido"),
   quantity_per_package: Yup.number()
@@ -41,9 +40,6 @@ const validationSchema = Yup.object().shape({
     .nullable()
     .min(0, "El precio no puede ser negativo"),
   sale_price: Yup.number().nullable().min(0, "El precio no puede ser negativo"),
-  is_active: Yup.boolean(),
-  is_default: Yup.boolean(),
-  sort_order: Yup.number(),
 });
 
 interface PackagesFormProps {
@@ -92,21 +88,11 @@ export default function PackagesForm(props: PackagesFormProps) {
       id={packageId}
       readonly={props?.readonly || false}
       validationSchema={validationSchema}
-      initialValues={{
-        product_id: 0,
-        company_id: company?.id || undefined,
-        package_name: "",
-        barcode: "",
-        quantity_per_package: 1,
-        unit_id: null,
-        purchase_price: 0,
-        sale_price: 0,
-        is_active: true,
-        is_default: false,
-        sort_order: 0,
-      }}
       onSuccess={() => {
         router.back();
+      }}
+      initialValues={{
+        company_id: company.id,
       }}
     >
       {/* Información básica del paquete */}

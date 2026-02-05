@@ -13,6 +13,7 @@ import {
   View,
 } from "react-native";
 import { Text, TouchableRipple } from "react-native-paper";
+import Animated, { SharedTransition } from "react-native-reanimated";
 import ReportsScreen from "../reports";
 
 interface Operation {
@@ -25,6 +26,8 @@ interface Operation {
   link: Href;
   iconName: string;
 }
+
+const customTransition = SharedTransition.duration(550).springify();
 
 const operations: Operation[] = [
   {
@@ -296,6 +299,17 @@ export default function OperationsScreen() {
         >
           Accesos Rápidos
         </Text>
+        <Animated.Image
+          source={require("../../../assets/images/dashboard/categories.png")}
+          sharedTransitionTag="production"
+          sharedTransitionStyle={customTransition}
+          style={{
+            width: 100,
+            height: 100,
+            marginBottom: 10,
+            backgroundColor: "#333",
+          }}
+        />
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}

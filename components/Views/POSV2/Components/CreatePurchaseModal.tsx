@@ -53,9 +53,8 @@ const CreatePurchaseModal = forwardRef<
 
   const handleCreatePurchase = async (values: FormData) => {
     try {
-      values.append("status", "draft");
-
-      const response = await Services.purchases.store(values);
+      // El servicio upsertDraft creará un nuevo borrador automáticamente
+      const response = await Services.purchasesV2.upsertDraft(values);
 
       const purchase = response.data?.data || response.data;
 
@@ -65,7 +64,7 @@ const CreatePurchaseModal = forwardRef<
       onSuccess?.(purchase.id);
 
       // Navegar a la vista de productos del POS
-      router.push(`/(tabs)/home/purchases/formv2?id=${purchase.id}` as any);
+      router.push(`/(tabs)/home/purchases/formv2/productos` as any);
     } catch (error: any) {
       console.error("Error creating purchase:", error);
       throw error;

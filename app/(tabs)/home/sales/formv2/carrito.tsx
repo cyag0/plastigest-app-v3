@@ -1,27 +1,20 @@
-import CartSidebar from "@/components/Views/POSV2/Components/CartSidebar";
-import { usePOS } from "@/components/Views/POSV2/Context";
+import Cart from "@/components/Views/POSV3/components/Cart";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
-import Services from "@/utils/services";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
-import { Text } from "react-native-paper";
+import React from "react";
+import { View } from "react-native";
+import { useSale } from "./SaleContext";
 
 export default function CarritoScreen() {
-  const { cartItems, clearCart } = usePOS();
+  const saleContext = useSale();
   const alerts = useAlerts();
   const router = useRouter();
 
-  const paymentMethod = useRef<string>("efectivo");
-
   const handleFinish = async () => {
     try {
-      const _cartItems = cartItems.current || [];
-
       // Validar que haya productos en el carrito
-      if (!_cartItems || _cartItems.length === 0) {
+      if (!saleContext.cartItems || saleContext.cartItems.length === 0) {
         alerts.error("Debes agregar al menos un producto al carrito");
         return;
       }
@@ -33,127 +26,41 @@ export default function CarritoScreen() {
           title: "Finalizar Venta",
           okText: "Finalizar",
           cancelText: "Cancelar",
-        }
+        },
       );
 
       if (!confirmed) return;
 
-      // Preparar datos de la venta
-      const saleData = {
-        payment_method: paymentMethod.current,
-        details: _cartItems.map((item) => ({
-          product_id: item.product_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-        })),
-      };
-
-      // Crear la venta
-      const response = await Services.sales.store(saleData);
-
-      alerts.success("Venta registrada exitosamente");
-      clearCart();
+      // La confirmación se manejará desde el formulario principal
+      // que incluye el método de pago y otros datos
+      alerts.info(
+        "Por favor, completa la información de pago en el formulario principal",
+      );
       router.back();
     } catch (error: any) {
-      console.error("Error creating sale:", error);
-      console.error("Error details:", {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-      });
-
-      const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
-        "Error al registrar la venta";
+      console.error("Error:", error);
+      const errorMessage = error.message || "Error al procesar la venta";
       alerts.error(errorMessage);
     }
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      <CartSidebar isScreen={true} onFinish={handleFinish}>
-        <CartContent paymentMethod={paymentMethod} />
-      </CartSidebar>
+    <View style={{ flex: 1, backgroundColor: palette.background }}>
+      <Cart
+        cartItems={saleContext.cartItems}
+        onItemChange={saleContext.handleItemChange}
+        onRemoveItem={saleContext.handleRemoveProduct}
+        onClearCart={saleContext.clearCart}
+        onFinish={handleFinish}
+        groupedUnits={saleContext.groupedUnits}
+        showFinishButton={true}
+        finishButtonText="Ir a Pago"
+      />
     </View>
   );
 }
 
-interface CartContentProps {
-  paymentMethod: React.MutableRefObject<string>;
-}
-
-function CartContent(props: CartContentProps) {
-  const [paymentMethod, setPaymentMethod] = useState<string>("efectivo");
-  const paymentMethods = [
-    {
-      label: "Efectivo",
-      value: "efectivo",
-      icon: "cash" as const,
-      color: palette.success,
-    },
-    {
-      label: "Tarjeta",
-      value: "tarjeta",
-      icon: "credit-card" as const,
-      color: palette.blue,
-    },
-    {
-      label: "Transferencia",
-      value: "transferencia",
-      icon: "bank-transfer" as const,
-      color: palette.warning,
-    },
-  ];
-
-  useEffect(() => {
-    props.paymentMethod.current = paymentMethod;
-  }, [paymentMethod]);
-
-  return (
-    <View style={styles.paymentContainer}>
-      <Text variant="titleSmall" style={styles.paymentTitle}>
-        Método de Pago
-      </Text>
-      <View style={styles.paymentMethods}>
-        {paymentMethods.map((method) => {
-          const isSelected = paymentMethod === method.value;
-          return (
-            <TouchableOpacity
-              key={method.value}
-              style={[
-                styles.paymentButton,
-                isSelected && {
-                  backgroundColor: method.color,
-                  borderColor: method.color,
-                },
-              ]}
-              onPress={() => setPaymentMethod(method.value)}
-              activeOpacity={0.7}
-            >
-              <MaterialCommunityIcons
-                name={method.icon}
-                size={28}
-                color={isSelected ? "#fff" : method.color}
-              />
-              <Text
-                variant="bodyMedium"
-                style={[
-                  styles.paymentLabel,
-                  isSelected && styles.paymentLabelSelected,
-                ]}
-              >
-                {method.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
+/* const styles = StyleSheet.create({
   paymentContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -190,4 +97,4 @@ const styles = StyleSheet.create({
   paymentLabelSelected: {
     color: "#fff",
   },
-});
+}); */

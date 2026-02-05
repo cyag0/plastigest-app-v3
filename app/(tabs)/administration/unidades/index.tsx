@@ -52,14 +52,13 @@ export default function UnidadesScreen() {
           `/(tabs)/administration/unidades/${item.id}` as any
         }
         searchPlaceholder="Buscar unidades..."
-        defaultFilters={{ company_id: company.id }}
         onItemPress={(item) => {
           router.push(`/(tabs)/administration/unidades/${item.id}` as any);
         }}
         menu={{
           onEdit(item) {
             router.push(
-              `/(tabs)/administration/unidades/${item.id}/edit` as any
+              `/(tabs)/administration/unidades/${item.id}/edit` as any,
             );
           },
         }}

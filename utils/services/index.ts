@@ -5,7 +5,7 @@ import saleService from "./saleService";
 
 const movements = {
   adjustments: createCrudService<App.Entities.Adjustment.Adjustment>(
-    "/auth/admin/adjustments"
+    "/auth/admin/adjustments",
   ),
 };
 
@@ -25,7 +25,7 @@ const Services = {
         { quantity },
         {
           responseType: "blob",
-        }
+        },
       );
       return response.data;
     },
@@ -38,14 +38,14 @@ const Services = {
     async searchByBarcode(barcode: string) {
       const response = await axiosClient.post(
         "/auth/admin/product-packages/search-barcode",
-        { barcode }
+        { barcode },
       );
       return response.data;
     },
     async generateBarcode(productId: number) {
       const response = await axiosClient.post(
         "/auth/admin/product-packages/generate-barcode",
-        { product_id: productId }
+        { product_id: productId },
       );
       return response.data;
     },
@@ -68,26 +68,152 @@ const Services = {
     async updateDetails(purchaseId: number, data: any) {
       const response = await axiosClient.post(
         `/auth/admin/purchases/${purchaseId}/details`,
-        data
+        data,
       );
       return response.data;
     },
     async startOrder(purchaseId: number) {
       const response = await axiosClient.post(
-        `/auth/admin/purchases/${purchaseId}/start-order`
+        `/auth/admin/purchases/${purchaseId}/start-order`,
       );
       return response.data;
     },
     async receivePurchase(purchaseId: number) {
       const response = await axiosClient.post(
-        `/auth/admin/purchases/${purchaseId}/receive`
+        `/auth/admin/purchases/${purchaseId}/receive`,
       );
+      return response.data;
+    },
+  },
+  purchasesV2: {
+    async addDetail(data: {
+      purchase_id?: number;
+      supplier_id?: number;
+      product_id: number;
+      package_id?: number;
+      quantity: number;
+      unit_id: number;
+      price: number;
+    }) {
+      const response = await axiosClient.post(
+        "/auth/admin/purchases-v2/add-detail",
+        data,
+      );
+      return response.data;
+    },
+    async updateDetail(
+      detailId: number,
+      data: {
+        quantity?: number;
+        unit_id?: number;
+        price?: number;
+      },
+    ) {
+      const response = await axiosClient.post(
+        `/auth/admin/purchases-v2/details/${detailId}/update`,
+        data,
+      );
+      return response.data;
+    },
+    async removeDetail(detailId: number) {
+      const response = await axiosClient.delete(
+        `/auth/admin/purchases-v2/details/${detailId}`,
+      );
+      return response.data;
+    },
+    async upsertDraft(data: {
+      purchase_id?: number;
+      supplier_id?: number;
+      notes?: string;
+      items?: Array<{
+        id: string | number;
+        product_id: number;
+        package_id?: number;
+        quantity: number;
+        unit_id: number;
+        price: number;
+      }>;
+    }) {
+      const response = await axiosClient.post(
+        "/auth/admin/purchases-v2/upsert-draft",
+        data,
+      );
+      return response.data;
+    },
+    async getDraft() {
+      const response = await axiosClient.get("/auth/admin/purchases-v2/draft");
+      return response.data;
+    },
+    async confirm(
+      id: number,
+      data?: {
+        expected_delivery_date?: string;
+        document_number?: string;
+      },
+    ) {
+      const response = await axiosClient.post(
+        `/auth/admin/purchases-v2/${id}/confirm`,
+        data,
+      );
+      return response.data;
+    },
+    async markInTransit(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/purchases-v2/${id}/mark-in-transit`,
+      );
+      return response.data;
+    },
+    async receive(
+      id: number,
+      details: Array<{
+        id: number;
+        quantity_received: number;
+      }>,
+    ) {
+      const response = await axiosClient.post(
+        `/auth/admin/purchases-v2/${id}/receive`,
+        { details },
+      );
+      return response.data;
+    },
+    async cancel(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/purchases-v2/${id}/cancel`,
+      );
+      return response.data;
+    },
+    async index(params?: {
+      status?: string;
+      location_id?: number;
+      page?: number;
+    }) {
+      const response = await axiosClient.get("/auth/admin/purchases-v2", {
+        params,
+      });
+      return response.data;
+    },
+    async show(id: number) {
+      const response = await axiosClient.get(`/auth/admin/purchases-v2/${id}`);
       return response.data;
     },
   },
   sales: {
     ...createCrudService<App.Entities.Sale>("/auth/admin/sales"),
     ...saleService,
+    async getInitialData() {
+      const response = await axiosClient.get("/auth/admin/sales/initial-data");
+      return response.data;
+    },
+    async addPayment(
+      id: number,
+      data: { amount: number; payment_method: string; notes?: string },
+    ) {
+      const response = await axiosClient.post(
+        `/auth/admin/sales/${id}/add-payment`,
+        data,
+      );
+      return response.data;
+    },
     async stats(params?: {
       location_id?: number;
       start_date?: string;
@@ -103,7 +229,7 @@ const Services = {
         "/auth/admin/sales/cash-register",
         {
           params,
-        }
+        },
       );
       return response.data;
     },
@@ -122,29 +248,29 @@ const Services = {
   },
   notifications: {
     ...createCrudService<App.Entities.Notification>(
-      "/auth/admin/notifications"
+      "/auth/admin/notifications",
     ),
     async markAsRead(id: number) {
       const response = await axiosClient.post(
-        `/auth/admin/notifications/${id}/mark-as-read`
+        `/auth/admin/notifications/${id}/mark-as-read`,
       );
       return response.data;
     },
     async markAsUnread(id: number) {
       const response = await axiosClient.post(
-        `/auth/admin/notifications/${id}/mark-as-unread`
+        `/auth/admin/notifications/${id}/mark-as-unread`,
       );
       return response.data;
     },
     async markAllAsRead() {
       const response = await axiosClient.post(
-        "/auth/admin/notifications/mark-all-as-read"
+        "/auth/admin/notifications/mark-all-as-read",
       );
       return response.data;
     },
     async getUnreadCount() {
       const response = await axiosClient.get(
-        "/auth/admin/notifications/unread-count"
+        "/auth/admin/notifications/unread-count",
       );
       return response.data;
     },
@@ -159,18 +285,18 @@ const Services = {
     },
     async changeStatus(
       taskId: number,
-      action: "start" | "complete" | "cancel"
+      action: "start" | "complete" | "cancel",
     ) {
       const response = await axiosClient.post(
         `/auth/admin/tasks/${taskId}/change-status`,
-        { action }
+        { action },
       );
       return response.data;
     },
     async addComment(taskId: number, comment: string, attachments?: any[]) {
       const response = await axiosClient.post(
         `/auth/admin/tasks/${taskId}/comments`,
-        { comment, attachments }
+        { comment, attachments },
       );
       return response.data;
     },
@@ -180,12 +306,12 @@ const Services = {
   },
   inventoryCounts: {
     ...createCrudService<App.Entities.InventoryCount.InventoryCount>(
-      "/auth/admin/inventory-counts"
+      "/auth/admin/inventory-counts",
     ),
   },
   inventoryCountsDetails: {
     ...createCrudService<App.Entities.InventoryCount.Detail>(
-      "/auth/admin/inventory-counts-details"
+      "/auth/admin/inventory-counts-details",
     ),
   },
   reports: {
@@ -255,7 +381,7 @@ const Services = {
           "/auth/admin/units/grouped-by-base",
           {
             params,
-          }
+          },
         );
         return response.data;
       },
@@ -264,7 +390,7 @@ const Services = {
           "/auth/admin/units/grouped-by-type",
           {
             params,
-          }
+          },
         );
         return response.data;
       },

@@ -2,16 +2,16 @@ import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppDependency from "@/components/Form/AppDependency";
 import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormProSelect } from "@/components/Form/AppProSelect";
-import { CartItem, usePOS } from "@/components/Views/POSV2/Context";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFormikContext } from "formik";
-import React, { useState } from "react";
+import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Button, Text } from "react-native-paper";
+import { usePurchase } from "./PurchaseContext";
 
 interface PurchasesFormProps {
   id?: number;
@@ -20,8 +20,9 @@ interface PurchasesFormProps {
 
 export default function PurchaseFormScreen(props: PurchasesFormProps) {
   const router = useRouter();
-  const { cartItems = { current: [] } } = usePOS();
   const alerts = useAlerts();
+
+  const purchaseContext = usePurchase();
 
   const id = useLocalSearchParams().id
     ? parseInt(useLocalSearchParams().id as string)
@@ -30,16 +31,12 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
   const handleSubmit = async (values: FormData) => {
     try {
       console.log("Submitting purchase form with values:", values);
-      const _cartItems = cartItems.current || [];
-
-      // Validar que tengamos el ID de la compra
-      if (!id) {
-        alerts.error("No se encontró el ID de la compra");
-        return false;
-      }
 
       // Validar que haya productos en el carrito
-      if (!_cartItems || _cartItems.length === 0) {
+      if (
+        !purchaseContext.cartItems ||
+        purchaseContext.cartItems.length === 0
+      ) {
         alerts.error("Debes agregar al menos un producto al carrito");
         return false;
       }
@@ -55,20 +52,17 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
         return false;
       }
 
-      // Llamar al endpoint para iniciar el pedido
-      const response = await Services.purchases.startOrder(id);
+      // Confirmar la compra usando el contexto
+      await purchaseContext.confirmPurchase({
+        document_number: values.get("document_number")?.toString(),
+      });
 
       router.replace(`/(tabs)/home/purchases` as any);
+      alerts.success("Compra confirmada exitosamente");
 
-      if (response.success) {
-        alerts.success("Pedido iniciado exitosamente");
-      } else {
-        alerts.error(response.message || "Error al iniciar el pedido");
-      }
-
-      return true; // No guardar el formulario, solo cambiar estado
+      return true;
     } catch (error: any) {
-      console.error("Error starting order:", error);
+      console.error("Error confirming purchase:", error);
       console.error("Error details:", {
         message: error.message,
         response: error.response?.data,
@@ -78,32 +72,29 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
       const errorMessage =
         error.response?.data?.message ||
         error.message ||
-        "Error al iniciar el pedido";
+        "Error al confirmar la compra";
       alerts.error(errorMessage);
-      return true;
+      return false;
     }
   };
 
   return (
     <AppForm
-      api={Services.purchases}
+      api={Services.purchasesV2}
       id={id}
-      submitButtonText="Iniciar Pedido"
+      submitButtonText="Confirmar Compra"
       initialValues={{
-        //company_id: company?.id.toString() || "",
-        status: "draft",
-        //location_origin_id: selectedLocation?.id?.toString(),
+        supplier_id: "",
         purchase_date: new Date().toISOString().split("T")[0],
+        notes: "",
+        document_number: "",
       }}
       onSubmit={async (values: any) => {
-        const res = await alerts.confirm(
-          "¿Deseas iniciar el pedido de compra?",
-          {
-            title: "Iniciar Pedido",
-            okText: "Iniciar",
-            cancelText: "Cancelar",
-          }
-        );
+        const res = await alerts.confirm("¿Deseas confirmar esta compra?", {
+          title: "Confirmar Compra",
+          okText: "Confirmar",
+          cancelText: "Cancelar",
+        });
 
         if (res) {
           await handleSubmit(values);
@@ -124,10 +115,10 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
           color={palette.primary}
         />
         <Text variant="headlineMedium" style={styles.title}>
-          Compras {id}
+          Compra #{purchaseContext.currentPurchaseId || "Nueva"}
         </Text>
         <Text variant="bodyMedium" style={styles.subtitle}>
-          Sistema de compras rápidas
+          Sistema de compras
         </Text>
       </View>
 
@@ -140,7 +131,7 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
       />
 
       <FormProSelect
-        name="location_origin_id"
+        name="location_id"
         label="Ubicación"
         model="admin.locations"
         placeholder="Seleccionar ubicación"
@@ -176,30 +167,12 @@ interface PurchasesContentProps {
 
 function PurchasesContent(props: PurchasesContentProps) {
   const router = useRouter();
-  const posContext = usePOS();
   const formContext = useFormikContext<any>();
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [initialized, setInitialized] = React.useState(false);
 
-  // Inicializar carrito desde formContext solo la primera vez
-  React.useEffect(() => {
-    if (!initialized && formContext.values.cart_items) {
-      console.log(
-        "Initializing cart from form data:",
-        formContext.values.cart_items
-      );
-      posContext.initializeCart(formContext.values.cart_items);
-      setCartItems(formContext.values.cart_items);
-      setInitialized(true);
-    }
-  }, [formContext.values.cart_items, initialized, posContext]);
+  const purchaseContext = usePurchase();
 
-  // Sincronizar UI con el carrito en cada focus
-  useFocusEffect(
-    React.useCallback(() => {
-      setCartItems([...posContext.cartItems.current]);
-    }, [posContext])
-  );
+  const cartItems = purchaseContext.cartItems || [];
+  const cartTotal = cartItems.reduce((sum, item) => sum + (item.total || 0), 0);
 
   return (
     <>
@@ -220,7 +193,7 @@ function PurchasesContent(props: PurchasesContentProps) {
             variant="headlineSmall"
             style={[styles.statValue, { color: palette.primary }]}
           >
-            ${posContext.getCartTotal().toFixed(2)}
+            {cartTotal.toFixed(2)} MXN
           </Text>
         </View>
       </View>
@@ -230,7 +203,7 @@ function PurchasesContent(props: PurchasesContentProps) {
           mode="contained"
           onPress={() =>
             router.push(
-              `/(tabs)/home/purchases/formv2/productos?supplier_id=${props.supplier_id}` as any
+              `/(tabs)/home/purchases/formv2/productos?supplier_id=${props.supplier_id}` as any,
             )
           }
           style={styles.button}

@@ -84,6 +84,7 @@ export default function _layout() {
         name="production/index"
         options={{
           title: "Producción",
+          animation: "none",
         }}
       />
       <Stack.Screen
