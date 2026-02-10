@@ -1,6 +1,9 @@
-import { useAlerts } from "@/hooks/useAlerts";
+import AppSelect from "@/components/Form/AppSelect";
+import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
@@ -8,15 +11,11 @@ import {
   ActivityIndicator,
   Button,
   Card,
+  Switch,
   Text,
   TextInput,
-  Switch,
-  Chip,
 } from "react-native-paper";
-import palette from "@/constants/palette";
-import AppSelect from "@/components/Form/AppSelect";
 import { DatePickerInput } from "react-native-paper-dates";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 interface ReminderFormProps {
   id?: number;
@@ -47,13 +46,13 @@ export default function ReminderForm(props: ReminderFormProps) {
   const [assignedUserId, setAssignedUserId] = useState<string>("");
 
   const [types, setTypes] = useState<Array<{ label: string; value: string }>>(
-    []
+    [],
   );
   const [recurrenceTypes, setRecurrenceTypes] = useState<
     Array<{ label: string; value: string }>
   >([]);
   const [users, setUsers] = useState<Array<{ label: string; value: string }>>(
-    []
+    [],
   );
 
   useEffect(() => {
@@ -75,14 +74,14 @@ export default function ReminderForm(props: ReminderFormProps) {
         Object.entries(typesRes.data).map(([value, label]) => ({
           label: label as string,
           value,
-        }))
+        })),
       );
 
       setRecurrenceTypes(
         Object.entries(recurrenceRes.data).map(([value, label]) => ({
           label: label as string,
           value,
-        }))
+        })),
       );
     } catch (error) {
       console.error("Error loading types:", error);
@@ -91,21 +90,21 @@ export default function ReminderForm(props: ReminderFormProps) {
 
   const loadUsers = async () => {
     try {
-      const response = await Services.reminders.getUsers();
+      const response = await Services.users.index();
       console.log("Users response:", response);
-      
+
       // La respuesta puede venir en response.data.data o response.data
-      const usersData = Array.isArray(response.data) 
-        ? response.data 
+      const usersData = Array.isArray(response.data)
+        ? response.data
         : response.data?.data || [];
-      
+
       console.log("Users data:", usersData);
-      
+
       setUsers(
         usersData.map((user: any) => ({
           label: user.name,
           value: user.id.toString(),
-        }))
+        })),
       );
     } catch (error) {
       console.error("Error loading users:", error);
@@ -158,7 +157,7 @@ export default function ReminderForm(props: ReminderFormProps) {
         title,
         type,
         reminder_date: new Date(
-          reminderDate.getTime() - reminderDate.getTimezoneOffset() * 60000
+          reminderDate.getTime() - reminderDate.getTimezoneOffset() * 60000,
         )
           .toISOString()
           .split("T")[0],
@@ -185,7 +184,7 @@ export default function ReminderForm(props: ReminderFormProps) {
         data.recurrence_interval = parseInt(recurrenceInterval) || 1;
       }
 
-      console.log('Datos a enviar:', data);
+      console.log("Datos a enviar:", data);
 
       if (reminderId) {
         await Services.reminders.update(reminderId, data);
@@ -200,19 +199,19 @@ export default function ReminderForm(props: ReminderFormProps) {
       console.error("Error saving reminder:", error);
       console.error("Error response:", error.response?.data);
       console.error("Validation errors:", error.response?.data?.errors);
-      
+
       // Mostrar errores de validación específicos
       if (error.response?.data?.errors) {
         const errors = error.response.data.errors;
         const errorMessages = Object.entries(errors)
           .map(([field, messages]: [string, any]) => {
-            return `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`;
+            return `${field}: ${Array.isArray(messages) ? messages.join(", ") : messages}`;
           })
-          .join('\n');
+          .join("\n");
         alerts.error(`Errores de validación:\n${errorMessages}`);
       } else {
-        const errorMessage = error.response?.data?.message || 
-                            "Error al guardar el recordatorio";
+        const errorMessage =
+          error.response?.data?.message || "Error al guardar el recordatorio";
         alerts.error(errorMessage);
       }
     } finally {
@@ -249,12 +248,18 @@ export default function ReminderForm(props: ReminderFormProps) {
             <View style={styles.input}>
               <AppSelect
                 value={assignedUserId}
-                onChange={setAssignedUserId}
+                onChange={(value) => {
+                  console.log("Usuario seleccionado:", value);
+                  setAssignedUserId(value);
+                }}
                 data={users}
                 placeholder="Selecciona un usuario"
                 label="Asignar a"
               />
-              <Text variant="bodySmall" style={{ color: palette.textSecondary, marginTop: 4 }}>
+              <Text
+                variant="bodySmall"
+                style={{ color: palette.textSecondary, marginTop: 4 }}
+              >
                 El recordatorio solo será visible para el usuario seleccionado
               </Text>
             </View>
@@ -325,7 +330,10 @@ export default function ReminderForm(props: ReminderFormProps) {
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
                 <Text variant="bodyLarge">Recordatorio Recurrente</Text>
-                <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: palette.textSecondary }}
+                >
                   Se creará automáticamente el siguiente
                 </Text>
               </View>
@@ -379,7 +387,10 @@ export default function ReminderForm(props: ReminderFormProps) {
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
                 <Text variant="bodyLarge">Activar Notificaciones</Text>
-                <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
+                <Text
+                  variant="bodySmall"
+                  style={{ color: palette.textSecondary }}
+                >
                   Recibe alertas antes de la fecha
                 </Text>
               </View>

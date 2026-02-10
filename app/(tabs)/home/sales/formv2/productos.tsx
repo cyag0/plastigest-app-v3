@@ -1,5 +1,9 @@
 import ListProducts from "@/components/Views/POSV3/components/ListProducts";
-import React from "react";
+import palette from "@/constants/palette";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import React, { useEffect, useState } from "react";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { Text } from "react-native-paper";
 import { useSale } from "./SaleContext";
 
 export default function ProductosScreen() {

@@ -1,18 +1,18 @@
 import { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import {
-    ProductCategory,
-    ProductListItem,
+  ProductCategory,
+  ProductListItem,
 } from "@/components/Views/POSV3/components";
 import { Unit } from "@/components/Views/POSV3/components/ListProducts";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import React, {
-    createContext,
-    useContext,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 
 type unitType = "mass" | "volume" | "quantity";
@@ -197,13 +197,15 @@ export function SaleProvider({ children }: SaleProviderProps) {
         // Si es un paquete, multiplicar por quantity_per_package
         const productData = products.find((p) => p.id === key);
         if (productData?.is_package && productData.quantity_per_package) {
-          totalUsed += item.quantity * productData.quantity_per_package;
+          const qtyPerPkg = Number(productData.quantity_per_package);
+          totalUsed += item.quantity * qtyPerPkg;
         } else {
           // Producto individual - considerar el factor de conversión de la unidad
           const selectedUnit = productData?.available_units?.find(
             (u) => u.id === item.unit_id,
           );
-          const factorToBase = selectedUnit?.factor_to_base || 1;
+
+          const factorToBase = Number(selectedUnit?.factor_to_base || 1);
           totalUsed += item.quantity * factorToBase;
         }
       }
@@ -224,7 +226,12 @@ export function SaleProvider({ children }: SaleProviderProps) {
     const baseProduct = products.find(
       (p) => p.id === `product_${numericProductId}`,
     );
-    const availableStock = baseProduct?.current_stock || 0;
+    const availableStock = Number(baseProduct?.current_stock || 0);
+
+    // Para paquetes, usar el unit_id del producto base
+    const finalUnitId = product.is_package 
+      ? (baseProduct?.unit_id || 0)
+      : unitId;
 
     // Calcular cuánto stock ya está siendo usado en el carrito
     const usedStock = calculateUsedStock(numericProductId);
@@ -232,23 +239,34 @@ export function SaleProvider({ children }: SaleProviderProps) {
     // Calcular cuánto stock adicional se requiere para esta operación (en unidades base)
     let requiredStock = 1;
     if (product.is_package && product.quantity_per_package) {
-      requiredStock = product.quantity_per_package;
+      requiredStock = Number(product.quantity_per_package);
     } else {
       // Para productos individuales, considerar el factor de conversión
-      const selectedUnit = product.available_units?.find(
-        (u) => u.id === unitId,
+      const selectedUnit = baseProduct?.available_units?.find(
+        (u) => u.id === finalUnitId,
       );
-      const factorToBase = selectedUnit?.factor_to_base || 1;
+      const factorToBase = Number(selectedUnit?.factor_to_base || 1);
       requiredStock = factorToBase;
     }
 
+    console.log("Validación handleAddProduct:", {
+      productName: product.name,
+      isPackage: product.is_package,
+      availableStock,
+      usedStock,
+      requiredStock,
+      sum: usedStock + requiredStock,
+      willFail: usedStock + requiredStock > availableStock,
+    });
+
     // Validar que hay stock suficiente (usedStock ya incluye lo que está en el carrito)
     if (usedStock + requiredStock > availableStock) {
-      const selectedUnit = product.available_units?.find(
-        (u) => u.id === unitId,
+      const productBaseUnit = baseProduct?.available_units?.find(
+        (u) => u.id === baseProduct.unit_id,
       );
+      const remaining = availableStock - usedStock;
       alerts.error(
-        `Stock insuficiente. Disponible: ${availableStock} ${baseProduct?.available_units?.[0]?.abbreviation || ""}, En carrito: ${usedStock}, Requiere adicional: ${requiredStock}`,
+        `Stock insuficiente. Disponible: ${availableStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, En carrito: ${usedStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, Restante: ${remaining.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, Requiere: ${requiredStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}`,
       );
       return;
     }
@@ -264,7 +282,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
       product_id: numericProductId,
       package_id: product.package_id,
       quantity: 1,
-      unit_id: unitId,
+      unit_id: finalUnitId,
       price: parseFloat(product.price),
       detail_id: undefined,
     };
@@ -292,9 +310,14 @@ export function SaleProvider({ children }: SaleProviderProps) {
     action: "increment" | "decrement" | "unit",
     data?: any,
   ) => {
+    console.log("handleItemChange called:", { productId, action, data });
+
     setSelectedProducts((prev) => {
       const product = prev[productId];
-      if (!product) return prev;
+      if (!product) {
+        console.log("Product not found in selectedProducts:", productId);
+        return prev;
+      }
 
       const updated = { ...prev };
 
@@ -304,24 +327,37 @@ export function SaleProvider({ children }: SaleProviderProps) {
         const baseProduct = products.find(
           (p) => p.id === `product_${product.product_id}`,
         );
-        const availableStock = baseProduct?.current_stock || 0;
+        const availableStock = Number(baseProduct?.current_stock || 0);
         const usedStock = calculateUsedStock(product.product_id);
 
         let requiredStock = 1;
         if (productData?.is_package && productData.quantity_per_package) {
-          requiredStock = productData.quantity_per_package;
+          requiredStock = Number(productData.quantity_per_package);
         } else {
           // Para productos individuales, considerar el factor de conversión
           const selectedUnit = productData?.available_units?.find(
             (u) => u.id === product.unit_id,
           );
-          const factorToBase = selectedUnit?.factor_to_base || 1;
+          const factorToBase = Number(selectedUnit?.factor_to_base || 1);
           requiredStock = factorToBase;
         }
 
+        console.log("Validación de stock increment:", {
+          availableStock,
+          usedStock,
+          requiredStock,
+          sum: usedStock + requiredStock,
+          willFail: usedStock + requiredStock > availableStock,
+        });
+
         if (usedStock + requiredStock > availableStock) {
+          const productBaseUnitId = baseProduct?.unit_id;
+          const productBaseUnit = productData?.available_units?.find(
+            (u) => u.id === productBaseUnitId,
+          );
+          const remaining = availableStock - usedStock;
           alerts.error(
-            `Stock insuficiente. Disponible: ${availableStock} ${baseProduct?.available_units?.[0]?.abbreviation || ""}, En uso: ${usedStock}`,
+            `Stock insuficiente. Disponible: ${availableStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, En uso: ${usedStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, Restante: ${remaining.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, Requiere: ${requiredStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}`,
           );
           return prev;
         }
@@ -340,7 +376,11 @@ export function SaleProvider({ children }: SaleProviderProps) {
           delete updated[productId];
           alerts.success("Producto eliminado del carrito");
         }
-      } else if (action === "unit" && data?.unit_id) {
+      } else if (action === "unit" && data) {
+        const unitId = data;
+
+        console.log("Cambiando unidad para producto:", productId, unitId);
+
         // Validar que con la nueva unidad no se exceda el stock
         const productData = products.find((p) => p.id === productId);
         const baseProduct = products.find(
@@ -350,18 +390,18 @@ export function SaleProvider({ children }: SaleProviderProps) {
 
         // Obtener la nueva unidad
         const newUnit = productData?.available_units?.find(
-          (u) => u.id === data.unit_id,
+          (u) => u.id === unitId,
         );
 
         // Calcular cuánto stock en unidad base requiere la cantidad actual con la nueva unidad
-        const factorToBase = newUnit?.factor_to_base || 1;
+        const factorToBase = Number(newUnit?.factor_to_base || 1);
         const requiredStockInBaseUnit = product.quantity * factorToBase;
 
         // Calcular cuánto stock está usando actualmente este producto
         const currentUnit = productData?.available_units?.find(
           (u) => u.id === product.unit_id,
         );
-        const currentFactorToBase = currentUnit?.factor_to_base || 1;
+        const currentFactorToBase = Number(currentUnit?.factor_to_base || 1);
         const currentUsedStock = product.quantity * currentFactorToBase;
 
         // Calcular stock usado por otros productos (excluyendo este)
@@ -379,9 +419,17 @@ export function SaleProvider({ children }: SaleProviderProps) {
           return prev;
         }
 
+        // Calcular el nuevo precio basado en el precio base del producto y el factor de conversión
+        const basePrice = parseFloat(productData?.price || "0");
+        const newPrice =
+          newUnit?.is_base_unit || !newUnit?.factor_to_base
+            ? basePrice
+            : basePrice * Number(factorToBase);
+
         updated[productId] = {
           ...product,
-          unit_id: data.unit_id,
+          unit_id: unitId,
+          price: newPrice,
         };
       }
 
@@ -413,6 +461,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
       const details = Object.values(selectedProducts).map((item) => ({
         product_id: item.product_id,
         package_id: item.package_id,
+        unit_id: item.unit_id,
         quantity: item.quantity,
         unit_price: item.price,
       }));

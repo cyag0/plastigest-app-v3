@@ -88,7 +88,7 @@ export default function SalesIndex() {
           navigation.push(`/(tabs)/home/sales/${entity.id}` as any);
         }}
         onPressCreate={() => {
-          navigation.push("/(tabs)/home/sales/formv2/productos" as any);
+          navigation.push("/(tabs)/home/sales/formv2" as any);
         }}
         renderCard={({ item: sale }) => ({
           title: (

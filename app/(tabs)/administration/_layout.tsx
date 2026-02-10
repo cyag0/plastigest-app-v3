@@ -302,6 +302,31 @@ export default function _layout() {
           title: "Editar Paquete",
         }}
       />
+
+      <Stack.Screen
+        name="suppliers/index"
+        options={{
+          title: "Proveedores",
+        }}
+      />
+      <Stack.Screen
+        name="suppliers/form"
+        options={{
+          title: "Nuevo Proveedor",
+        }}
+      />
+      <Stack.Screen
+        name="suppliers/[id]/index"
+        options={{
+          title: "Ver Proveedor",
+        }}
+      />
+      <Stack.Screen
+        name="suppliers/[id]/edit"
+        options={{
+          title: "Editar Proveedor",
+        }}
+      />
     </Stack>
   );
 }

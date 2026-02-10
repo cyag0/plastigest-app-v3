@@ -118,7 +118,7 @@ async function requestUserPermission(): Promise<string | undefined> {
       PermissionsAndroid
     ) {
       const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
+        PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS,
       );
 
       if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
@@ -168,7 +168,7 @@ async function registerTokenInBackend(token: string, retryCount = 0) {
     // Reintentar si no se alcanzó el máximo de reintentos
     if (retryCount < MAX_RETRIES) {
       console.log(
-        `Reintentando registro de token (${retryCount + 1}/${MAX_RETRIES})...`
+        `Reintentando registro de token (${retryCount + 1}/${MAX_RETRIES})...`,
       );
 
       /* setTimeout(() => {
@@ -176,7 +176,7 @@ async function registerTokenInBackend(token: string, retryCount = 0) {
       }, RETRY_DELAY * (retryCount + 1)); // Incrementar delay en cada reintento */
     } else {
       console.error(
-        `No se pudo registrar el token después de ${MAX_RETRIES} intentos`
+        `No se pudo registrar el token después de ${MAX_RETRIES} intentos`,
       );
     }
   }

@@ -24,15 +24,21 @@ export default function CompanyUsersIndexScreen() {
         renderCard={({ item }) => ({
           title: item.name,
           description: item.email,
-          left: (
+          left: item.avatar ? (
             <Avatar.Image
               size={50}
               source={
-                item.avatar && item.avatar.length > 0 && item.avatar[0]?.uri
-                  ? { uri: item.avatar[0].uri }
-                  : require("@/assets/images/icon.png")
+                item.avatar &&
+                item.avatar.length > 0 &&
+                item.avatar[0]?.uri && { uri: item.avatar[0].uri }
               }
               style={{ backgroundColor: palette.primary }}
+            />
+          ) : (
+            <Avatar.Text
+              size={50}
+              label={(item.name || "T").charAt(0).toUpperCase()}
+              style={{ backgroundColor: palette.surface }}
             />
           ),
           right: (
@@ -52,18 +58,18 @@ export default function CompanyUsersIndexScreen() {
         menu={{
           onEdit: (entity) => {
             navigation.push(
-              `/(tabs)/administration/company-users/form?id=${entity.id}` as any
+              `/(tabs)/administration/company-users/form?id=${entity.id}` as any,
             );
           },
           onShow(item) {
             navigation.push(
-              `/(tabs)/administration/company-users/${item.id}` as any
+              `/(tabs)/administration/company-users/${item.id}` as any,
             );
           },
         }}
         onItemPress={(entity) => {
           navigation.push(
-            `/(tabs)/administration/company-users/${entity.id}` as any
+            `/(tabs)/administration/company-users/${entity.id}` as any,
           );
         }}
         onPressCreate={() => {
