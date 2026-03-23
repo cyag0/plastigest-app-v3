@@ -145,19 +145,10 @@ export default function PurchaseStats() {
       <View style={styles.statsGrid}>
         {/* Fila 1 */}
         <View style={styles.statsRow}>
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, { backgroundColor: palette.primary }]}>
             <Card.Content style={styles.statContent}>
-              <View
-                style={[
-                  styles.statIcon,
-                  { backgroundColor: palette.primary + "20" },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name="cart"
-                  size={24}
-                  color={palette.primary}
-                />
+              <View style={styles.statIcon}>
+                <MaterialCommunityIcons name="cart" size={24} color="#FFFFFF" />
               </View>
               <View style={styles.statInfo}>
                 <Text style={styles.statValue}>{stats.total_purchases}</Text>
@@ -166,19 +157,10 @@ export default function PurchaseStats() {
             </Card.Content>
           </Card>
 
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, { backgroundColor: palette.blue }]}>
             <Card.Content style={styles.statContent}>
-              <View
-                style={[
-                  styles.statIcon,
-                  { backgroundColor: palette.success + "20" },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name="cash"
-                  size={24}
-                  color={palette.success}
-                />
+              <View style={styles.statIcon}>
+                <MaterialCommunityIcons name="cash" size={24} color="#FFFFFF" />
               </View>
               <View style={styles.statInfo}>
                 <Text style={styles.statValue}>
@@ -192,18 +174,13 @@ export default function PurchaseStats() {
 
         {/* Fila 2 */}
         <View style={styles.statsRow}>
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, { backgroundColor: palette.accent }]}>
             <Card.Content style={styles.statContent}>
-              <View
-                style={[
-                  styles.statIcon,
-                  { backgroundColor: palette.accent + "20" },
-                ]}
-              >
+              <View style={styles.statIcon}>
                 <MaterialCommunityIcons
                   name="package-variant-closed"
                   size={24}
-                  color={palette.accent}
+                  color="#FFFFFF"
                 />
               </View>
               <View style={styles.statInfo}>
@@ -213,18 +190,13 @@ export default function PurchaseStats() {
             </Card.Content>
           </Card>
 
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, { backgroundColor: palette.red }]}>
             <Card.Content style={styles.statContent}>
-              <View
-                style={[
-                  styles.statIcon,
-                  { backgroundColor: palette.warning + "20" },
-                ]}
-              >
+              <View style={styles.statIcon}>
                 <MaterialCommunityIcons
                   name="clock-outline"
                   size={24}
-                  color={palette.warning}
+                  color="#FFFFFF"
                 />
               </View>
               <View style={styles.statInfo}>
@@ -388,11 +360,11 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 20,
     fontWeight: "700",
-    color: palette.text,
+    color: "#FFFFFF",
   },
   statLabel: {
     fontSize: 12,
-    color: palette.textSecondary,
+    color: "#FFFFFF",
     marginTop: 2,
   },
   chartCard: {

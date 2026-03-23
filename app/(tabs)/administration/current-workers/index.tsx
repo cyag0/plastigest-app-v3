@@ -115,16 +115,16 @@ export default function CurrentWorkersIndexScreen() {
         })}
         onItemPress={(entity) => {
           navigation.push(
-            `/(tabs)/administration/current-workers/${entity.id}` as any
+            `/(tabs)/administration/workers/${entity.id}` as any
           );
         }}
         onPressCreate={() => {
-          navigation.push("/(tabs)/administration/current-workers/form" as any);
+          navigation.push("/(tabs)/administration/workers/form" as any);
         }}
         menu={{
           onEdit(item) {
             navigation.push(
-              `/(tabs)/administration/current-workers/${item.id}/edit` as any
+              `/(tabs)/administration/workers/${item.id}/edit` as any
             );
           },
         }}

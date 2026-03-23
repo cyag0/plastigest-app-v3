@@ -2,21 +2,53 @@ import AppList from "@/components/App/AppList/AppList";
 import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import FilterModal from "@/components/Feedback/Modal/FilterModal";
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import * as React from "react";
 import { View } from "react-native";
-import { Avatar, Chip, Icon, Text } from "react-native-paper";
+import { Avatar, Chip, Icon, IconButton, Text } from "react-native-paper";
 
 export default function WorkerIndexScreen() {
   const navigation = useRouter();
   const modalRef = React.useRef<AppModalRef>(null);
+  const { location } = useAuth();
+
+  if (!location) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 32,
+        }}
+      >
+        <IconButton icon="alert-circle" size={64} iconColor={palette.warning} />
+        <Text
+          variant="titleLarge"
+          style={{ fontWeight: "700", marginTop: 16, marginBottom: 8 }}
+        >
+          Sin Sucursal Seleccionada
+        </Text>
+        <Text
+          variant="bodyMedium"
+          style={{ color: palette.textSecondary, textAlign: "center" }}
+        >
+          Debes seleccionar una sucursal primero
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <>
       <AppList
-        title="Trabajadores"
+        title={`Trabajadores - ${location.name}`}
         service={Services.admin.workers}
+        defaultFilters={{
+          location_id: location.id,
+        }}
         renderCard={({ item }) => ({
           title: item.user?.name || item.user_name || "Sin nombre",
           description: `${item.position || "Sin cargo"} • ${

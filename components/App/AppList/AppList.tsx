@@ -14,8 +14,15 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { router } from "expo-router";
 import * as React from "react";
 import { useCallback, useEffect, useState } from "react";
-import { Platform, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
-import { Divider, Menu, Searchbar, Text } from "react-native-paper";
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import { Divider, IconButton, Menu, Searchbar, Text } from "react-native-paper";
+import AppListDataTable, { AppListColumn } from "./AppListDataTable";
 import AppListFilterBar, { FilterConfig } from "./AppListFilter";
 
 // Tipos para las props del componente
@@ -87,8 +94,8 @@ function ItemMenu<T>({
           typeof action.show === "boolean"
             ? action.show
             : typeof action.show === "function"
-            ? action.show(item)
-            : true;
+              ? action.show(item)
+              : true;
 
         if (!shouldShow) return null;
 
@@ -269,6 +276,12 @@ interface AppListProps<T> {
   showAppBar?: boolean;
   numColumns?: number; // Número de columnas para grid layout
   columnGap?: number; // Espaciado entre columnas
+
+  // Vista de tabla para tablet/desktop
+  columns?: AppListColumn<T>[];
+  tabletBreakpoint?: number;
+  actionColumnTitle?: string;
+  actionColumnWidth?: number;
 }
 
 function AppList<T extends { id: number | string }>({
@@ -292,6 +305,10 @@ function AppList<T extends { id: number | string }>({
   showAppBar = true,
   numColumns = 1,
   columnGap = 12,
+  columns = [],
+  tabletBreakpoint = 768,
+  actionColumnTitle = "Acciones",
+  actionColumnWidth = 220,
 }: AppListProps<T>) {
   // Estados
   const [data, setData] = useState<T[]>([]);
@@ -305,6 +322,18 @@ function AppList<T extends { id: number | string }>({
   // Hooks
   const alerts = useAlerts();
   const navigation = useNavigation();
+  const { width } = useWindowDimensions();
+  const shouldUseDataTable = width >= tabletBreakpoint && columns.length > 0;
+
+  const getMenuFlag = (
+    flag: ((item: T) => boolean) | boolean | undefined,
+    item: T,
+    defaultValue = true,
+  ) => {
+    if (typeof flag === "boolean") return flag;
+    if (typeof flag === "function") return flag(item);
+    return defaultValue;
+  };
 
   // Ya no configuramos el header nativo, usamos Appbar
   useFocusEffect(
@@ -324,7 +353,7 @@ function AppList<T extends { id: number | string }>({
           return null;
         },
       });
-    }, [])
+    }, []),
   );
 
   // Cargar datos
@@ -379,7 +408,7 @@ function AppList<T extends { id: number | string }>({
       if (refreshOnFocus) {
         loadData(true);
       }
-    }, [refreshOnFocus])
+    }, [refreshOnFocus]),
   );
 
   // Handlers
@@ -430,7 +459,7 @@ function AppList<T extends { id: number | string }>({
         title: "Confirmar eliminación",
         okText: "Eliminar",
         cancelText: "Cancelar",
-      }
+      },
     );
 
     if (!confirmed) {
@@ -450,18 +479,15 @@ function AppList<T extends { id: number | string }>({
   if (loading) {
     return (
       <View style={styles.container}>
-        <SearchBarComponent 
-          onChangeText={setSearchQuery} 
-          value={searchQuery}
-        />
-        
+        <SearchBarComponent onChangeText={setSearchQuery} value={searchQuery} />
+
         {/* Barra de filtros */}
         <AppListFilterBar
           filters={filters}
           values={activeFilters}
           onChange={handleFilterChange}
         />
-        
+
         <SkeletonListLoader />
       </View>
     );
@@ -469,10 +495,7 @@ function AppList<T extends { id: number | string }>({
 
   return (
     <View style={styles.container}>
-      <SearchBarComponent 
-        onChangeText={setSearchQuery}
-        value={searchQuery}
-      />
+      <SearchBarComponent onChangeText={setSearchQuery} value={searchQuery} />
 
       {/* Barra de filtros */}
       <AppListFilterBar
@@ -489,9 +512,11 @@ function AppList<T extends { id: number | string }>({
         <>
           <ScrollView
             contentContainerStyle={
-              numColumns > 1
-                ? styles.scrollContainerGrid
-                : styles.scrollContainer
+              shouldUseDataTable
+                ? styles.tableScrollContainer
+                : numColumns > 1
+                  ? styles.scrollContainerGrid
+                  : styles.scrollContainer
             }
             refreshControl={
               <RefreshControl
@@ -501,64 +526,101 @@ function AppList<T extends { id: number | string }>({
               />
             }
           >
-            {numColumns > 1 ? (
+            {shouldUseDataTable ? (
+              <AppListDataTable<T>
+                data={data || []}
+                columns={columns}
+                actionColumnTitle={actionColumnTitle}
+                actionColumnWidth={actionColumnWidth}
+                onRowPress={handleItemPress}
+                renderActionsCell={(item) => {
+                  const showView = getMenuFlag(menu?.showView, item, true);
+                  const showEdit = getMenuFlag(menu?.showEdit, item, true);
+                  const showDelete = getMenuFlag(menu?.showDelete, item, true);
+
+                  return (
+                    <View style={styles.tableActionsRow}>
+                      {showView && (
+                        <IconButton
+                          icon="eye-outline"
+                          size={18}
+                          iconColor={palette.textSecondary}
+                          onPress={() => handleItemPress(item)}
+                          style={styles.tableActionButton}
+                        />
+                      )}
+                      {showEdit && (
+                        <IconButton
+                          icon="pencil-outline"
+                          size={18}
+                          iconColor={palette.primary}
+                          onPress={() => handleEdit(item)}
+                          style={styles.tableActionButton}
+                        />
+                      )}
+                      {showDelete && (
+                        <IconButton
+                          icon="delete-outline"
+                          size={18}
+                          iconColor={palette.error}
+                          onPress={() => handleDelete(item)}
+                          style={styles.tableActionButton}
+                        />
+                      )}
+
+                      {menu?.customActions && menu.customActions.length > 0 && (
+                        <ItemMenu
+                          item={item}
+                          onEdit={handleEdit}
+                          onDelete={handleDelete}
+                          onViewDetails={handleItemPress}
+                          showView={showView}
+                          showEdit={showEdit}
+                          showDelete={showDelete}
+                          customActions={menu.customActions}
+                        />
+                      )}
+                    </View>
+                  );
+                }}
+              />
+            ) : numColumns > 1 ? (
               // Grid layout
-              <View
-                style={styles.gridContainer}
-              >
+              <View style={styles.gridContainer}>
                 {(data || []).map((item, index) => {
                   const cardProps = renderCard({ item, index });
 
-                  const showView =
-                    typeof menu?.showView === "boolean"
-                      ? menu?.showView
-                      : typeof menu?.showView === "function"
-                      ? menu.showView(item)
-                      : true;
-
-                  const showEdit =
-                    typeof menu?.showEdit === "boolean"
-                      ? menu?.showEdit
-                      : typeof menu?.showEdit === "function"
-                      ? menu.showEdit(item)
-                      : true;
-
-                  const showDelete =
-                    typeof menu?.showDelete === "boolean"
-                      ? menu?.showDelete
-                      : typeof menu?.showDelete === "function"
-                      ? menu.showDelete(item)
-                      : true;
+                  const showView = getMenuFlag(menu?.showView, item, true);
+                  const showEdit = getMenuFlag(menu?.showEdit, item, true);
+                  const showDelete = getMenuFlag(menu?.showDelete, item, true);
 
                   return (
-                    <View
-                      key={item.id}
-                      style={styles.gridItem}
-                    >
+                    <View key={item.id} style={styles.gridItem}>
                       <AppListCard>
                         <View
                           style={[
                             styles.cardMain,
                             {
-                              flexDirection: 'column',
+                              flexDirection: "column",
                               alignItems: "flex-start",
                               gap: 8,
                             },
                           ]}
                         >
                           {cardProps.left && (
-                            <View style={[styles.cardLeft, { alignSelf: 'center', marginBottom: 8 }]}>
+                            <View
+                              style={[
+                                styles.cardLeft,
+                                { alignSelf: "center", marginBottom: 8 },
+                              ]}
+                            >
                               {cardProps.left}
                             </View>
                           )}
 
-                          <View style={[styles.cardCenter, { width: '100%' }]}>
+                          <View style={[styles.cardCenter, { width: "100%" }]}>
                             {cardProps.title && (
                               <AppListTitle>{cardProps.title}</AppListTitle>
-                            )}
-
-                            {cardProps.subtitle && (
-                              <AppListSubtitle>{cardProps.subtitle}</AppListSubtitle>
                             )}
 
                             {cardProps.description && (
@@ -569,7 +631,12 @@ function AppList<T extends { id: number | string }>({
                           </View>
 
                           {cardProps.right && (
-                            <View style={[styles.cardRight, { alignSelf: 'flex-end' }]}>
+                            <View
+                              style={[
+                                styles.cardRight,
+                                { alignSelf: "flex-end" },
+                              ]}
+                            >
                               {cardProps.right}
                             </View>
                           )}
@@ -585,14 +652,6 @@ function AppList<T extends { id: number | string }>({
                             customActions={menu?.customActions}
                           />
                         </View>
-
-                        {cardProps.bottom && (
-                          <AppListBottom items={cardProps.bottom} />
-                        )}
-
-                        {cardProps.actions && cardProps.actions.length > 0 && (
-                          <AppListActions actions={cardProps.actions} />
-                        )}
                       </AppListCard>
                     </View>
                   );
@@ -601,93 +660,120 @@ function AppList<T extends { id: number | string }>({
             ) : (
               // List layout
               (data || []).map((item, index) => {
-              const cardProps = renderCard({ item, index });
+                const cardProps = renderCard({ item, index });
 
-              const showView =
-                typeof menu?.showView === "boolean"
-                  ? menu?.showView
-                  : typeof menu?.showView === "function"
-                  ? menu.showView(item)
-                  : true;
+                const showView = getMenuFlag(menu?.showView, item, true);
+                const showEdit = getMenuFlag(menu?.showEdit, item, true);
+                const showDelete = getMenuFlag(menu?.showDelete, item, true);
 
-              const showEdit =
-                typeof menu?.showEdit === "boolean"
-                  ? menu?.showEdit
-                  : typeof menu?.showEdit === "function"
-                  ? menu.showEdit(item)
-                  : true;
-
-              const showDelete =
-                typeof menu?.showDelete === "boolean"
-                  ? menu?.showDelete
-                  : typeof menu?.showDelete === "function"
-                  ? menu.showDelete(item)
-                  : true;
-
-              return (
-                <React.Fragment key={item.id}>
-                  <AppListCard /* onPress={() => handleItemPress(item)} */>
-                    <View
-                      style={[
-                        styles.cardMain,
-                        {
-                          alignItems: "center",
-                          gap: 8,
-                        },
-                      ]}
-                    >
-                      {cardProps.left && (
-                        <View style={[styles.cardLeft]}>{cardProps.left}</View>
-                      )}
-
-                      <View style={[styles.cardCenter]}>
-                        {cardProps.title && (
-                          <AppListTitle>{cardProps.title}</AppListTitle>
+                return (
+                  <React.Fragment key={item.id}>
+                    <AppListCard /* onPress={() => handleItemPress(item)} */>
+                      <View
+                        style={[
+                          styles.cardMain,
+                          {
+                            alignItems: "center",
+                            gap: 8,
+                          },
+                        ]}
+                      >
+                        {cardProps.left && (
+                          <View style={[styles.cardLeft]}>
+                            {cardProps.left}
+                          </View>
                         )}
 
-                        {cardProps.description && (
-                          <AppListDescription>
-                            {cardProps.description}
-                          </AppListDescription>
+                        <View style={[styles.cardCenter]}>
+                          {cardProps.title && (
+                            <AppListTitle>{cardProps.title}</AppListTitle>
+                          )}
+
+                          {cardProps.description && (
+                            <AppListDescription>
+                              {cardProps.description}
+                            </AppListDescription>
+                          )}
+                        </View>
+
+                        {cardProps.right && (
+                          <View style={styles.cardRight}>
+                            {cardProps.right}
+                          </View>
                         )}
+
+                        <ItemMenu
+                          item={item}
+                          onEdit={handleEdit}
+                          onDelete={handleDelete}
+                          onViewDetails={handleItemPress}
+                          showView={showView}
+                          showEdit={showEdit}
+                          showDelete={showDelete}
+                          customActions={menu?.customActions}
+                        />
                       </View>
-
-                      {cardProps.right && (
-                        <View style={styles.cardRight}>{cardProps.right}</View>
-                      )}
-
-                      <ItemMenu
-                        item={item}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                        onViewDetails={handleItemPress}
-                        showView={showView}
-                        showEdit={showEdit}
-                        showDelete={showDelete}
-                        customActions={menu?.customActions}
+                    </AppListCard>
+                    {showDivider && (
+                      <Divider
+                        style={{
+                          height: 2,
+                          backgroundColor: palette.border,
+                        }}
                       />
-                    </View>
-                  </AppListCard>
-                  {showDivider && (
-                    <Divider
-                      style={{
-                        height: 2,
-                        backgroundColor: palette.border,
-                      }}
-                    />
-                  )}
+                    )}
 
-                  {cardProps.bottom ? (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        padding: 4,
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 8,
-                        //flexWrap: "wrap",
-                      }}
-                    >
+                    {cardProps.bottom ? (
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          padding: 4,
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 8,
+                          //flexWrap: "wrap",
+                        }}
+                      >
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            padding: 4,
+                            alignItems: "center",
+                          }}
+                        >
+                          <AppList.Description>ID: </AppList.Description>
+                          <AppList.Description
+                            style={{
+                              color: palette.textSecondary,
+                              fontWeight: "bold",
+                            }}
+                          >
+                            {(item.id || "").toString()}
+                          </AppList.Description>
+                        </View>
+                        {cardProps.bottom.map((item, idx) => (
+                          <View
+                            key={item.value.toString() + idx}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                            }}
+                          >
+                            <AppList.Description>
+                              {item.label + ": "}
+                            </AppList.Description>
+                            <AppList.Description
+                              style={{
+                                color: palette.textSecondary,
+                                fontWeight: "bold",
+                              }}
+                            >
+                              {item.value.toString()}
+                            </AppList.Description>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
                       <View
                         style={{
                           flexDirection: "row",
@@ -705,47 +791,10 @@ function AppList<T extends { id: number | string }>({
                           {(item.id || "").toString()}
                         </AppList.Description>
                       </View>
-                      {cardProps.bottom.map((item, idx) => (
-                        <View
-                          key={item.value.toString() + idx}
-                          style={{ flexDirection: "row", alignItems: "center" }}
-                        >
-                          <AppList.Description>
-                            {item.label + ": "}
-                          </AppList.Description>
-                          <AppList.Description
-                            style={{
-                              color: palette.textSecondary,
-                              fontWeight: "bold",
-                            }}
-                          >
-                            {item.value.toString()}
-                          </AppList.Description>
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        padding: 4,
-                        alignItems: "center",
-                      }}
-                    >
-                      <AppList.Description>ID: </AppList.Description>
-                      <AppList.Description
-                        style={{
-                          color: palette.textSecondary,
-                          fontWeight: "bold",
-                        }}
-                      >
-                        {(item.id || "").toString()}
-                      </AppList.Description>
-                    </View>
-                  )}
-                </React.Fragment>
-              );
-            })
+                    )}
+                  </React.Fragment>
+                );
+              })
             )}
           </ScrollView>
 
@@ -817,6 +866,9 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 8,
   },
+  tableScrollContainer: {
+    padding: 16,
+  },
   scrollContainerGrid: {
     padding: 0,
   },
@@ -827,8 +879,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   gridItem: {
-    width: '48%',
-    marginHorizontal: '1%',
+    width: "48%",
+    marginHorizontal: "1%",
     marginBottom: 16,
   },
   searchbar: {
@@ -891,6 +943,13 @@ const styles = StyleSheet.create({
   paginationText: {
     color: palette.textSecondary,
     opacity: 0.6,
+  },
+  tableActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  tableActionButton: {
+    margin: 0,
   },
   fab: {
     position: "absolute",

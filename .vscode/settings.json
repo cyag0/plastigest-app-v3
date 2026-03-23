@@ -1,7 +1,37 @@
 {
   "editor.codeActionsOnSave": {
-    "source.fixAll": "explicit",
-    "source.organizeImports": "explicit",
-    "source.sortMembers": "explicit"
+    "source.fixAll": "never",
+    "source.organizeImports": "never",
+    "source.sortMembers": "never"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": false
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": false
+  },
+  "editor.formatOnSave": false,
+  "files.exclude": {
+    "node_modules": true,
+    ".expo": true,
+    "build": true,
+    ".git": true
+  },
+  "search.exclude": {
+    "node_modules": true,
+    ".expo": true,
+    "build": true,
+    "android": true
+  },
+  "typescript.tsserver.useSeparateValidationServer": false,
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "files.watcherExclude": {
+    "**/.expo/**": true,
+    "**/node_modules/**": true,
+    "**/android/**": true,
+    "**/.git/**": true,
+    "**/build/**": true
   }
 }

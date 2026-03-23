@@ -267,7 +267,7 @@ function Statistic(props: {
     <Card
       style={{
         flex: 1,
-        backgroundColor: palette.card,
+        backgroundColor: props.color,
         borderRadius: 12,
         shadowColor: "transparent",
       }}
@@ -282,7 +282,7 @@ function Statistic(props: {
         <Text
           variant="labelSmall"
           style={{
-            color: palette.textSecondary,
+            color: "#FFFFFF",
             marginBottom: 12,
             textAlign: "center",
           }}
@@ -298,11 +298,11 @@ function Statistic(props: {
             overflow: "hidden",
           }}
         >
-          <Icon source={props.icon} color={props.color} size={32} />
+          <Icon source={props.icon} color="#FFFFFF" size={32} />
           <Text
             variant="headlineMedium"
             style={{
-              color: palette.text,
+              color: "#FFFFFF",
               fontSize: 20,
               fontWeight: "bold",
               textOverflow: "ellipsis",

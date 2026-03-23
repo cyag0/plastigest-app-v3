@@ -31,7 +31,23 @@ const Services = {
     },
   },
   transfers: {
-    ...createCrudService<App.Entities.Company>("/auth/admin/movements"),
+    ...createCrudService<App.Entities.Company>("/auth/admin/inventory-transfers"),
+  },
+  inventoryAdjustments: {
+    ...createCrudService<any>("/auth/admin/inventory-adjustments"),
+    async apply(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/inventory-adjustments/${id}/apply`,
+      );
+      return response.data;
+    },
+    async cancel(id: number, data?: { reason?: string }) {
+      const response = await axiosClient.post(
+        `/auth/admin/inventory-adjustments/${id}/cancel`,
+        data,
+      );
+      return response.data;
+    },
   },
   productPackages: {
     ...createCrudService<any>("/auth/admin/product-packages"),
@@ -200,8 +216,10 @@ const Services = {
   sales: {
     ...createCrudService<App.Entities.Sale>("/auth/admin/sales"),
     ...saleService,
-    async getInitialData() {
-      const response = await axiosClient.get("/auth/admin/sales/initial-data");
+    async getInitialData(params?: { location_id?: number }) {
+      const response = await axiosClient.get("/auth/admin/sales/initial-data", {
+        params,
+      });
       return response.data;
     },
     async addPayment(
@@ -425,7 +443,7 @@ const Services = {
     proveedores: createCrudService<any>("/api/proveedores"),
     unidades: {
       ...createCrudService<any>("/auth/admin/units"),
-      async getGroupedByBase(params?: { company_id?: number }) {
+      async getGroupedByBase(params?: { company_id?: number; unit_id?: number }) {
         const response = await axiosClient.get(
           "/auth/admin/units/grouped-by-base",
           {

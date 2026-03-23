@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Card, IconButton, Text } from "react-native-paper";
 import { SceneMap, TabView } from "react-native-tab-view";
+
 interface TransferModule {
   id: string;
   title: string;
@@ -19,42 +20,27 @@ interface TransferModule {
   icon: string;
   route: string;
   color: string;
+  badge?: string;
 }
 
 const modules: TransferModule[] = [
   {
-    id: "receipts",
-    title: "Solicitudes Recibidas",
-    description: "Peticiones que otras sucursales hicieron a esta sucursal",
-    icon: "clipboard-check",
-    route: "/(tabs)/home/receipts",
-    color: palette.success,
-  },
-  {
-    id: "petitions",
-    title: "Mis Solicitudes",
-    description: "Peticiones enviadas por mí a otras sucursales",
-    icon: "file-document-edit",
-    route: "/(tabs)/home/petitions",
+    id: "pending",
+    title: "Solicitudes Pendientes",
+    description:
+      "Gestiona peticiones enviadas y recibidas que requieren acción",
+    icon: "clipboard-text-clock",
+    route: "/(tabs)/home/transfers/pending",
     color: palette.warning,
+    badge: "Nuevo",
   },
   {
-    id: "shipments",
-    title: "Envíos Realizados",
-    description:
-      "Envíos completados que esta sucursal envió a otras sucursales",
-    icon: "package-variant",
-    route: "/(tabs)/home/shipments",
+    id: "history",
+    title: "Historial",
+    description: "Consulta envíos realizados y recibidos completados",
+    icon: "history",
+    route: "/(tabs)/home/transfers/history",
     color: palette.blue,
-  },
-  {
-    id: "transfers",
-    title: "Envíos Recibidos",
-    description:
-      "Envíos completados que esta sucursal recibió de otras sucursales",
-    icon: "truck-delivery",
-    route: "/(tabs)/home/transfers",
-    color: palette.error,
   },
 ];
 
@@ -71,89 +57,134 @@ export default function TransfersMenuScreen() {
     router.push(route as any);
   };
 
+  const handleCreateTransfer = () => {
+    router.push("/(tabs)/home/transfers/formv2" as any);
+  };
+
   const renderModulesRoute = useMemo(
-    () => () =>
-      (
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerIcon}>
-              <IconButton
-                icon="swap-horizontal"
+    () => () => (
+      <ScrollView contentContainerStyle={styles.scrollContainer}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerIcon}>
+            <IconButton
+              icon="swap-horizontal"
+              size={32}
+              iconColor={palette.primary}
+              style={{ margin: 0 }}
+            />
+          </View>
+          <Text variant="headlineSmall" style={styles.title}>
+            Sistema de Transferencias
+          </Text>
+          <Text variant="bodyMedium" style={styles.subtitle}>
+            Gestiona el movimiento de productos entre ubicaciones
+          </Text>
+        </View>
+
+        {/* Quick Action */}
+        <Card
+          style={[
+            styles.quickActionCard,
+            styles.noShadowCard,
+            { backgroundColor: palette.success },
+          ]}
+          onPress={handleCreateTransfer}
+        >
+          <Card.Content style={styles.quickActionContent}>
+            <View style={styles.quickActionIcon}>
+              <MaterialCommunityIcons
+                name="plus-circle"
                 size={32}
-                iconColor={palette.primary}
-                style={{ margin: 0 }}
+                color="#FFFFFF"
               />
             </View>
-            <Text variant="headlineSmall" style={styles.title}>
-              Sistema de Transferencias
-            </Text>
-            <Text variant="bodyMedium" style={styles.subtitle}>
-              Selecciona el módulo que deseas gestionar
-            </Text>
-          </View>
-
-          {/* Modules Grid */}
-          <Text variant="titleSmall" style={styles.sectionTitle}>
-            Módulos Disponibles
-          </Text>
-          <View style={styles.modulesGrid}>
-            {modules.map((module) => (
-              <Card
-                key={module.id}
-                style={styles.moduleCard}
-                onPress={() => handleModulePress(module.route)}
-              >
-                <Card.Content style={styles.moduleContent}>
-                  {/* Icon */}
-                  <View style={styles.moduleIconContainer}>
-                    <MaterialCommunityIcons
-                      name={module.icon as any}
-                      size={40}
-                      color={module.color}
-                    />
-                  </View>
-
-                  {/* Module Name */}
-                  <Text
-                    variant="titleMedium"
-                    style={[styles.moduleName, { color: module.color }]}
-                    numberOfLines={2}
-                  >
-                    {module.title}
-                  </Text>
-
-                  {/* Description */}
-                  <Text
-                    variant="bodySmall"
-                    style={styles.moduleDescription}
-                    numberOfLines={2}
-                  >
-                    {module.description}
-                  </Text>
-                </Card.Content>
-              </Card>
-            ))}
-          </View>
-
-          {/* Info Card */}
-          <Card style={styles.infoCard}>
-            <Card.Content style={styles.infoContent}>
-              <MaterialCommunityIcons
-                name="information"
-                size={20}
-                color={palette.blue}
-              />
-              <Text variant="bodySmall" style={styles.infoText}>
-                Las transferencias te permiten mover productos entre diferentes
-                ubicaciones de tu empresa. Puedes crear solicitudes, enviar
-                productos y confirmar recepciones.
+            <View style={styles.quickActionText}>
+              <Text variant="titleMedium" style={styles.quickActionTitle}>
+                Nueva Transferencia
               </Text>
-            </Card.Content>
-          </Card>
-        </ScrollView>
-      ),
-    []
+              <Text variant="bodySmall" style={styles.quickActionSubtitle}>
+                Solicita productos de otra ubicación
+              </Text>
+            </View>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={24}
+              color="#FFFFFF"
+            />
+          </Card.Content>
+        </Card>
+
+        {/* Modules Grid */}
+        <Text variant="titleSmall" style={styles.sectionTitle}>
+          Consultas
+        </Text>
+        <View style={styles.modulesGrid}>
+          {modules.map((module) => (
+            <Card
+              key={module.id}
+              style={[
+                styles.moduleCard,
+                styles.noShadowCard,
+                { backgroundColor: module.color },
+              ]}
+              onPress={() => handleModulePress(module.route)}
+            >
+              <Card.Content style={styles.moduleContent}>
+                {/* Icon */}
+                <View style={styles.moduleIconContainer}>
+                  <MaterialCommunityIcons
+                    name={module.icon as any}
+                    size={48}
+                    color="#FFFFFF"
+                  />
+                  {module.badge && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{module.badge}</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Module Name */}
+                <Text
+                  variant="titleMedium"
+                  style={styles.moduleName}
+                  numberOfLines={2}
+                >
+                  {module.title}
+                </Text>
+
+                {/* Description */}
+                <Text
+                  variant="bodySmall"
+                  style={styles.moduleDescription}
+                  numberOfLines={3}
+                >
+                  {module.description}
+                </Text>
+              </Card.Content>
+            </Card>
+          ))}
+        </View>
+
+        {/* Info Card */}
+        <Card style={styles.infoCard}>
+          <Card.Content style={styles.infoContent}>
+            <MaterialCommunityIcons
+              name="information"
+              size={20}
+              color={palette.blue}
+            />
+            <Text variant="bodySmall" style={styles.infoText}>
+              Crea solicitudes para pedir productos entre ubicaciones. El
+              sistema valida automáticamente el stock disponible y gestiona el
+              flujo completo hasta la recepción.
+            </Text>
+          </Card.Content>
+        </Card>
+      </ScrollView>
+    ),
+    [handleCreateTransfer],
   );
 
   const renderStatsRoute = useMemo(() => () => <TransferStats />, []);
@@ -164,7 +195,7 @@ export default function TransfersMenuScreen() {
         modules: renderModulesRoute,
         stats: renderStatsRoute,
       }),
-    [renderModulesRoute, renderStatsRoute]
+    [renderModulesRoute, renderStatsRoute],
   );
 
   return (
@@ -235,6 +266,8 @@ const styles = StyleSheet.create({
   scrollContainer: {
     padding: 20,
     paddingBottom: 40,
+    maxWidth: 800,
+    alignSelf: "center",
   },
   header: {
     alignItems: "center",
@@ -263,6 +296,38 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     marginTop: 8,
   },
+  quickActionCard: {
+    borderRadius: 12,
+    marginBottom: 24,
+    borderWidth: 0,
+  },
+  quickActionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 8,
+  },
+  quickActionIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  quickActionText: {
+    flex: 1,
+  },
+  quickActionTitle: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  quickActionSubtitle: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    opacity: 0.9,
+  },
   modulesGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -271,35 +336,46 @@ const styles = StyleSheet.create({
   },
   moduleCard: {
     flex: 1,
-    minWidth: "47%",
-    maxWidth: "48%",
-    backgroundColor: palette.card,
+    minWidth: "100%",
     borderRadius: 12,
-    elevation: 2,
-    shadowColor: "transparent",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    borderWidth: 0,
   },
   moduleContent: {
     alignItems: "center",
-    paddingVertical: 20,
-    paddingHorizontal: 12,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
     gap: 8,
   },
   moduleIconContainer: {
     marginBottom: 8,
+    position: "relative",
+  },
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -8,
+    backgroundColor: palette.error,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  badgeText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "bold",
   },
   moduleName: {
+    color: "#FFFFFF",
     fontWeight: "700",
     textAlign: "center",
     marginBottom: 4,
   },
   moduleDescription: {
-    color: palette.textSecondary,
+    color: "#FFFFFF",
     textAlign: "center",
     fontSize: 12,
     lineHeight: 16,
+    opacity: 0.92,
   },
   infoCard: {
     backgroundColor: palette.blue + "10",
@@ -307,7 +383,6 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: palette.blue,
     marginTop: 8,
-    shadowColor: "transparent",
   },
   infoContent: {
     flexDirection: "row",
@@ -318,5 +393,12 @@ const styles = StyleSheet.create({
     flex: 1,
     color: palette.text,
     lineHeight: 20,
+  },
+  noShadowCard: {
+    elevation: 0,
+    shadowColor: "transparent",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
   },
 });

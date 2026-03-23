@@ -258,7 +258,8 @@ export default function Cart({
       </ScrollView>
 
       {/* Children - contenido adicional */}
-      {children}
+     
+        {children}
 
       {/* Footer - Total y botón de finalizar */}
       {showFooter && items.length > 0 && (

@@ -1,6 +1,7 @@
 import AppBar from "@/components/App/AppBar";
 import { router, Stack } from "expo-router";
 import React from "react";
+import { Appbar } from "react-native-paper";
 
 export default function _layout() {
   return (
@@ -12,7 +13,7 @@ export default function _layout() {
           const right = options.headerRight;
 
           function rightActions() {
-            return right ? right() : null;
+            return right ? right({} as any) : null;
           }
 
           return (
@@ -20,7 +21,7 @@ export default function _layout() {
               title={options.title || route.name}
               showSearchButton={false}
               onNotificationPress={() =>
-                router.push("/(tabs)/home/notifications")
+                router.push("/(tabs)/home/notifications" as any)
               }
               onProfilePress={() => console.log("Profile pressed")}
               rightActions={rightActions()}
@@ -165,57 +166,44 @@ export default function _layout() {
         name="transfers-menu/index"
         options={{
           title: "Transferencias",
+          headerRight: () => (
+            <Appbar.Action
+              icon="help-circle-outline"
+              onPress={() => router.push("/(tabs)/home/transfers/log-guide")}
+              accessibilityLabel="Ver ayuda del log de transferencias"
+            />
+          ),
         }}
       />
       <Stack.Screen
-        name="petitions/index"
-        options={{
-          title: "Solicitudes de Transferencia",
-        }}
-      />
-      <Stack.Screen
-        name="petitions/[id]"
-        options={{
-          title: "Detalle de Solicitud de Transferencia",
-        }}
-      />
-
-      <Stack.Screen
-        name="petitions/form"
+        name="transfers/formv2/index"
         options={{
           title: "Nueva Solicitud de Transferencia",
-        }}
-      />
-
-      <Stack.Screen
-        name="receipts/index"
-        options={{
-          title: "Solicitudes Recibidas",
-        }}
-      />
-      <Stack.Screen
-        name="receipts/[id]"
-        options={{
-          title: "Detalle de Solicitud Recibida",
-        }}
-      />
-
-      <Stack.Screen
-        name="shipments/index"
-        options={{
-          title: "Envíos Realizados",
+          headerRight: () => (
+            <Appbar.Action
+              icon="help-circle-outline"
+              onPress={() => router.push("/(tabs)/home/transfers/log-guide")}
+              accessibilityLabel="Ver ayuda del log de transferencias"
+            />
+          ),
         }}
       />
       <Stack.Screen
-        name="shipments/[id]"
+        name="transfers/pending/index"
         options={{
-          title: "Detalle de Envío Realizado",
+          title: "Solicitudes Pendientes",
         }}
       />
       <Stack.Screen
-        name="transfers/index"
+        name="transfers/history/index"
         options={{
-          title: "Envíos Recibidos",
+          title: "Historial de Transferencias",
+        }}
+      />
+      <Stack.Screen
+        name="transfers/log-guide"
+        options={{
+          title: "Guía del Log de Transferencias",
         }}
       />
       <Stack.Screen

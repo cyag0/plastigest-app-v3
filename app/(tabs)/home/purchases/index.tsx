@@ -1,4 +1,5 @@
 import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PurchaseStats from "@/components/Dashboard/PurchaseStats";
 import CreatePurchaseModal, {
   CreatePurchaseModalRef,
@@ -62,6 +63,66 @@ export default function PurchasesIndex() {
   ]);
 
   const modalRef = useRef<CreatePurchaseModalRef>(null);
+
+  const columns = useMemo<AppListColumn<any>[]>(
+    () => [
+      {
+        title: "Compra",
+        key: "document_number",
+        width: 140,
+        render: (_, item) => `#${item.document_number || item.id}`,
+      },
+      {
+        title: "Proveedor",
+        key: "supplier_name",
+        width: 240,
+        render: (_, item) => item.supplier_name || "Sin proveedor",
+      },
+      {
+        title: "Estado",
+        key: "status",
+        width: 170,
+        render: (_, item) => {
+          const statusConfig = getStatusConfig(item.status);
+
+          return (
+            <View
+              style={{
+                alignSelf: "flex-start",
+                backgroundColor: statusConfig.borderColor,
+                borderRadius: 999,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+              }}
+            >
+              <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
+                {statusConfig.label}
+              </Text>
+            </View>
+          );
+        },
+      },
+      {
+        title: "Productos",
+        key: "products_count",
+        width: 110,
+        align: "right",
+        render: (_, item) => item.products_count || 0,
+      },
+      {
+        title: "Fecha",
+        key: "created_at",
+        width: 130,
+        render: (_, item) =>
+          new Date(item.created_at).toLocaleDateString("es-PE", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
+      },
+    ],
+    [],
+  );
 
   const renderListRoute = useMemo(
     () => () => (
@@ -134,9 +195,10 @@ export default function PurchasesIndex() {
           modalRef.current?.show();
         }}
         fabLabel="Nueva Compra"
+        columns={columns}
       />
     ),
-    [router],
+    [router, columns],
   );
 
   const renderStatsRoute = useMemo(() => () => <PurchaseStats />, []);

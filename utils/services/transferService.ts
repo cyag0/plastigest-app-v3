@@ -1,4 +1,6 @@
+import type { UploadedFile } from "@/components/Form/AppUpload";
 import { default as apiClient, default as axiosClient } from "@/utils/axios";
+import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
 import { createCrudService, LaravelResponse } from "./crudService";
 
 // Interfaces para Transferencias
@@ -15,6 +17,11 @@ export interface Product {
   name: string;
   code: string;
   sku: string;
+  main_image?: {
+    uri?: string;
+    url?: string;
+    path?: string;
+  } | null;
   description?: string;
   unit: string;
   unit_id: number;
@@ -59,6 +66,32 @@ export interface TransferShipment {
   damage_report?: string;
 }
 
+export interface TransferGeneratedAdjustment {
+  id: number;
+  reason?: "loss" | "damage" | string;
+  reason_label?: string;
+  product_id?: number;
+  product_name?: string;
+  quantity?: number;
+  unit?: {
+    id?: number;
+    name?: string;
+    abbreviation?: string;
+  } | null;
+  notes?: string;
+  applied_at?: string;
+  content?: {
+    adjustment_comment?: string;
+    evidence_files?: Array<{
+      name?: string;
+      uri?: string;
+      url?: string;
+      path?: string;
+    }>;
+    [key: string]: any;
+  };
+}
+
 export interface ShippingEvidence {
   type: "photo" | "document" | "signature";
   url: string;
@@ -66,6 +99,75 @@ export interface ShippingEvidence {
 }
 
 export interface InventoryTransfer {
+  content?: {
+    current_step: number;
+    ended_at_step?: number | null;
+    flow_state?: "in_progress" | "completed" | "failed";
+    step_1?: {
+      status?: "pending" | "approved" | "rejected";
+      created_at?: string;
+      requested_by?: number;
+      approved_at?: string;
+      approved_by?: number;
+      rejected_at?: string;
+      rejected_by?: number;
+      reason?: string;
+      items?: Array<{
+        detail_id: number;
+        quantity_requested: number;
+      }>;
+    } | null;
+    step_2?: {
+      status?: "pending" | "shipped" | "completed" | "failed" | "skipped";
+      shipped_at?: string;
+      shipped_by?: number;
+      items_count?: number;
+      evidence_files?: Array<{
+        url?: string;
+        name?: string;
+        path?: string;
+      }>;
+    } | null;
+    step_3?: {
+      status?: "pending" | "received" | "completed" | "failed" | "skipped";
+      received_at?: string;
+      received_by?: number;
+      items_count?: number;
+      evidence_files?: Array<{
+        url?: string;
+        name?: string;
+        path?: string;
+      }>;
+    } | null;
+    step_4?: {
+      status?: "pending" | "completed" | "failed";
+      closed_at?: string;
+      closed_by?: number;
+      closed_reason?: string;
+    } | null;
+    progress?: {
+      step_1?: {
+        visited?: boolean;
+        result?: "pending" | "completed" | "failed" | "skipped";
+        ended_here?: boolean;
+      };
+      step_2?: {
+        visited?: boolean;
+        result?: "pending" | "completed" | "failed" | "skipped";
+        ended_here?: boolean;
+      };
+      step_3?: {
+        visited?: boolean;
+        result?: "pending" | "completed" | "failed" | "skipped";
+        ended_here?: boolean;
+      };
+      step_4?: {
+        visited?: boolean;
+        result?: "pending" | "completed" | "failed" | "skipped";
+        ended_here?: boolean;
+      };
+    };
+  };
   id: number;
   transfer_number?: string;
   company_id: number;
@@ -82,6 +184,8 @@ export interface InventoryTransfer {
     | "cancelled";
   status_label: string;
   status_color: string;
+  current_step?: number;
+  requested_by?: number;
   requested_by_user_id: number;
   requested_by_user: User;
   requested_at: string;
@@ -110,6 +214,7 @@ export interface InventoryTransfer {
   total_cost?: number;
   details?: TransferDetail[];
   shipments?: TransferShipment[];
+  generated_adjustments?: TransferGeneratedAdjustment[];
   created_at: string;
   updated_at: string;
 }
@@ -130,6 +235,18 @@ export interface ShipmentData {
   shipping_evidence?: ShippingEvidence[];
 }
 
+export interface TransferShipStepItem {
+  detail_id: number;
+  quantity_shipped: number;
+  notes?: string;
+}
+
+export interface TransferShipStepPayload {
+  items: TransferShipStepItem[];
+  shipping_notes?: string;
+  evidence: UploadedFile[];
+}
+
 export interface ReceiptItem {
   shipment_id: number;
   quantity_received: number;
@@ -143,13 +260,86 @@ export interface ReceiptData {
   difference_notes?: string;
 }
 
+export interface TransferReceiveStepItem {
+  detail_id: number;
+  quantity_received: number;
+  adjustment_reason?: "loss" | "damage";
+  adjustment_comment?: string;
+  adjustment_notes?: string;
+  adjustment_evidence?: UploadedFile[];
+}
+
+export interface TransferReceiveStepPayload {
+  items: TransferReceiveStepItem[];
+  receiving_notes?: string;
+  evidence: UploadedFile[];
+}
+
 // Para compatibilidad con el código anterior
 export interface Transfer extends InventoryTransfer {}
 
 // Crear el servicio base
 const baseService = createCrudService<InventoryTransfer>(
-  "/auth/admin/movements"
+  "/auth/admin/inventory-transfers",
 );
+
+async function buildStepFormData(
+  payload: TransferShipStepPayload | TransferReceiveStepPayload,
+  notesField: "shipping_notes" | "receiving_notes",
+): Promise<FormData> {
+  const normalizedItems = payload.items.map((item) => {
+    if ("quantity_shipped" in item) {
+      return {
+        detail_id: item.detail_id,
+        quantity_shipped: item.quantity_shipped,
+        ...(item.notes ? { notes: item.notes } : {}),
+      };
+    }
+
+    return {
+      detail_id: item.detail_id,
+      quantity_received: item.quantity_received,
+      ...(item.adjustment_reason
+        ? { adjustment_reason: item.adjustment_reason }
+        : {}),
+      ...(item.adjustment_comment
+        ? { adjustment_comment: item.adjustment_comment }
+        : {}),
+      ...(item.adjustment_notes
+        ? { adjustment_notes: item.adjustment_notes }
+        : {}),
+      ...(item.adjustment_evidence && item.adjustment_evidence.length > 0
+        ? {
+            adjustment_evidence: item.adjustment_evidence.map((file, index) => ({
+              uri: file.uri,
+              name: file.name || `adjustment_${item.detail_id}_${index}.jpg`,
+              type: file.type || "image/jpeg",
+              ...(file.size ? { size: file.size } : {}),
+            })),
+          }
+        : {}),
+    };
+  });
+
+  const normalizedEvidence = (payload.evidence || []).map((file, index) => ({
+    uri: file.uri,
+    name: file.name || `evidence_${index}.jpg`,
+    type: file.type || "image/jpeg",
+    ...(file.size ? { size: file.size } : {}),
+  }));
+
+  const formPayload: Record<string, any> = {
+    items: normalizedItems,
+    evidence: normalizedEvidence,
+  };
+
+  const notesValue = (payload as any)[notesField];
+  if (notesValue) {
+    formPayload[notesField] = notesValue;
+  }
+
+  return objectToFormDataWithNestedInputsAsync(formPayload);
+}
 
 // Extender con métodos personalizados
 const transferService = {
@@ -163,8 +353,8 @@ const transferService = {
    */
   async getPetitions(params?: any): Promise<InventoryTransfer[]> {
     const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
-      "/auth/admin/movements/petitions",
-      { params }
+      "/auth/admin/inventory-transfers/petitions",
+      { params },
     );
     return response.data.data;
   },
@@ -175,8 +365,8 @@ const transferService = {
    */
   async getShipments(params?: any): Promise<InventoryTransfer[]> {
     const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
-      "/auth/admin/movements/shipments",
-      { params }
+      "/auth/admin/inventory-transfers/shipments",
+      { params },
     );
     return response.data.data;
   },
@@ -187,8 +377,8 @@ const transferService = {
    */
   async getReceipts(params?: any): Promise<InventoryTransfer[]> {
     const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
-      "/auth/admin/movements/receipts",
-      { params }
+      "/auth/admin/inventory-transfers/receipts",
+      { params },
     );
     return response.data.data;
   },
@@ -199,8 +389,8 @@ const transferService = {
    */
   async getTransfers(params?: any): Promise<InventoryTransfer[]> {
     const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
-      "/auth/admin/movements/transfers",
-      { params }
+      "/auth/admin/inventory-transfers/transfers",
+      { params },
     );
     return response.data.data;
   },
@@ -263,8 +453,8 @@ const transferService = {
   // Aprobar transferencia
   async approve(id: number, data?: any): Promise<InventoryTransfer> {
     const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
-      `/auth/admin/movements/${id}/approve`,
-      data || {}
+      `/auth/admin/inventory-transfers/${id}/approve`,
+      data || {},
     );
     return response.data.data;
   },
@@ -272,24 +462,48 @@ const transferService = {
   // Rechazar transferencia
   async reject(id: number, reason: string): Promise<InventoryTransfer> {
     const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
-      `/auth/admin/movements/${id}/reject`,
-      { rejection_reason: reason }
+      `/auth/admin/inventory-transfers/${id}/reject`,
+      { rejection_reason: reason },
     );
     return response.data.data;
   },
 
   // Enviar transferencia
-  async ship(id: number): Promise<InventoryTransfer> {
+  async ship(
+    id: number,
+    data?: TransferShipStepPayload,
+  ): Promise<InventoryTransfer> {
+    if (!data) {
+      const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
+        `/auth/admin/inventory-transfers/${id}/ship`,
+      );
+      return response.data.data;
+    }
+
+    const formData = await buildStepFormData(data, "shipping_notes");
     const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
-      `/auth/admin/movements/${id}/ship`
+      `/auth/admin/inventory-transfers/${id}/ship`,
+      formData,
     );
     return response.data.data;
   },
 
   // Recibir transferencia
-  async receive(id: number): Promise<InventoryTransfer> {
+  async receive(
+    id: number,
+    data?: TransferReceiveStepPayload,
+  ): Promise<InventoryTransfer> {
+    if (!data) {
+      const response = await axiosClient.post<
+        LaravelResponse<InventoryTransfer>
+      >(`/auth/admin/inventory-transfers/${id}/receive`);
+      return response.data.data;
+    }
+
+    const formData = await buildStepFormData(data, "receiving_notes");
     const response = await axiosClient.post<LaravelResponse<InventoryTransfer>>(
-      `/auth/admin/movements/${id}/receive`
+      `/auth/admin/inventory-transfers/${id}/receive`,
+      formData,
     );
     return response.data.data;
   },

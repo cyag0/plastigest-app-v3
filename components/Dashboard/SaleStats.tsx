@@ -119,12 +119,12 @@ export default function SaleStats() {
           Resumen General
         </Text>
         <View style={styles.statsGrid}>
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, { backgroundColor: palette.red }]}>
             <Card.Content>
               <MaterialCommunityIcons
                 name="cart"
                 size={32}
-                color={palette.primary}
+                color="#FFFFFF"
               />
               <Text variant="headlineMedium" style={styles.statValue}>
                 {stats.overview?.total_sales || 0}
@@ -135,12 +135,12 @@ export default function SaleStats() {
             </Card.Content>
           </Card>
 
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, { backgroundColor: palette.blue }]}>
             <Card.Content>
               <MaterialCommunityIcons
                 name="cash-multiple"
                 size={32}
-                color={palette.success}
+                color="#FFFFFF"
               />
               <Text variant="headlineMedium" style={styles.statValue}>
                 $
@@ -155,12 +155,12 @@ export default function SaleStats() {
             </Card.Content>
           </Card>
 
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, { backgroundColor: palette.secondary }]}>
             <Card.Content>
               <MaterialCommunityIcons
                 name="chart-line"
                 size={32}
-                color={palette.info}
+                color="#FFFFFF"
               />
               <Text variant="headlineMedium" style={styles.statValue}>
                 $
@@ -175,12 +175,12 @@ export default function SaleStats() {
             </Card.Content>
           </Card>
 
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, { backgroundColor: palette.error }]}>
             <Card.Content>
               <MaterialCommunityIcons
                 name="calendar-today"
                 size={32}
-                color={palette.warning}
+                color="#FFFFFF"
               />
               <Text variant="headlineMedium" style={styles.statValue}>
                 $
@@ -198,12 +198,12 @@ export default function SaleStats() {
             </Card.Content>
           </Card>
 
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, { backgroundColor: palette.accent }]}>
             <Card.Content>
               <MaterialCommunityIcons
                 name="calendar-check"
                 size={32}
-                color={palette.accent}
+                color="#FFFFFF"
               />
               <Text variant="headlineMedium" style={styles.statValue}>
                 {stats.overview?.today_sales || 0}
@@ -214,12 +214,12 @@ export default function SaleStats() {
             </Card.Content>
           </Card>
 
-          <Card style={styles.statCard}>
+          <Card style={[styles.statCard, { backgroundColor: palette.primary }]}>
             <Card.Content>
               <MaterialCommunityIcons
                 name="cash-check"
                 size={32}
-                color={palette.success}
+                color="#FFFFFF"
               />
               <Text variant="headlineMedium" style={styles.statValue}>
                 $
@@ -303,20 +303,22 @@ export default function SaleStats() {
                           : "bank-transfer"
                       }
                       size={24}
-                      color={palette.primary}
+                      color="#FFFFFF"
                     />
                     <View style={styles.paymentMethodInfo}>
-                      <Text variant="titleMedium">{value.label}</Text>
+                      <Text variant="titleMedium" style={{ color: "#FFFFFF" }}>
+                        {value.label}
+                      </Text>
                       <Text
                         variant="bodySmall"
-                        style={{ color: palette.textSecondary }}
+                        style={{ color: "#FFFFFF" }}
                       >
                         {value.count} {value.count === 1 ? "venta" : "ventas"}
                       </Text>
                     </View>
                     <Text
                       variant="titleMedium"
-                      style={{ color: palette.primary }}
+                      style={{ color: "#FFFFFF" }}
                     >
                       $
                       {(value.total || 0).toLocaleString("es-MX", {
@@ -375,7 +377,7 @@ export default function SaleStats() {
                   </Text>
                   <Text
                     variant="bodySmall"
-                    style={{ color: palette.textSecondary }}
+                    style={{ color: "#FFFFFF" }}
                   >
                     {product.quantity_sold} unidades vendidas
                   </Text>
@@ -444,18 +446,18 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontWeight: "bold",
-    color: palette.text,
+    color: "#FFFFFF",
     marginTop: 8,
   },
   statLabel: {
-    color: palette.textSecondary,
+    color: "#FFFFFF",
     marginTop: 4,
   },
   statusContainer: {
     gap: 12,
   },
   statusCard: {
-    backgroundColor: palette.surface,
+    backgroundColor: palette.blue,
     borderRadius: 12,
   },
   statusContent: {
@@ -468,15 +470,15 @@ const styles = StyleSheet.create({
   },
   statusLabel: {
     fontWeight: "600",
-    color: palette.text,
+    color: "#FFFFFF",
   },
   statusCount: {
     fontWeight: "bold",
-    color: palette.primary,
+    color: "#FFFFFF",
   },
   statusAmount: {
     fontWeight: "bold",
-    color: palette.success,
+    color: "#FFFFFF",
   },
   chartCard: {
     backgroundColor: palette.surface,
@@ -490,7 +492,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   paymentMethodCard: {
-    backgroundColor: palette.surface,
+    backgroundColor: palette.secondary,
     borderRadius: 12,
   },
   paymentMethodContent: {
@@ -502,7 +504,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   productCard: {
-    backgroundColor: palette.surface,
+    backgroundColor: palette.primary,
     borderRadius: 12,
     marginBottom: 12,
   },
@@ -521,17 +523,17 @@ const styles = StyleSheet.create({
   },
   rankNumber: {
     fontWeight: "bold",
-    color: palette.primary,
+    color: "#FFFFFF",
   },
   productInfo: {
     flex: 1,
   },
   productName: {
     fontWeight: "600",
-    color: palette.text,
+    color: "#FFFFFF",
   },
   productAmount: {
     fontWeight: "bold",
-    color: palette.success,
+    color: "#FFFFFF",
   },
 });

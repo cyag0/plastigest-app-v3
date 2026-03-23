@@ -1,5 +1,5 @@
 import AppModal, { AppModalRef } from "@/components/Feedback/Modal/AppModal";
-import AppCheckBox, { FormCheckBox } from "@/components/Form/AppCheckBox";
+import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { InputLabel } from "@/components/Form/AppForm/hoc";
@@ -7,12 +7,11 @@ import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import palette from "@/constants/palette";
-import { useAsync } from "@/hooks/AHooks";
+import { useAuth } from "@/contexts/AuthContext";
 import { AlertsProvider } from "@/hooks/useAlerts";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useFormikContext } from "formik";
 import React, { useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import {
@@ -34,7 +33,7 @@ interface WorkerFormData {
   company_id: number;
   user_id?: number;
   role_id?: number;
-  location_ids?: number[];
+  location_id?: number;
 }
 
 interface WorkersFormProps {
@@ -52,37 +51,7 @@ export default function WorkersForm(props: WorkersFormProps) {
   const router = useRouter();
 
   const { company } = useSelectedCompany();
-
-  const [locations, setLocations] = useState<App.Entities.Location[]>([]);
-
-  const [loadingLocations, setLoadingLocations] = useState(false);
-
-  // Hook para observar cambios en company_ids
-  const { values } = {
-    values: {
-      company_ids: [],
-      location_ids: [],
-      role_ids: [],
-    },
-  };
-
-  useAsync(async () => {
-    try {
-      const locations = await Services.admin.locations.index({
-        company_id: company?.id,
-        all: true,
-      });
-
-      const locationData = Array.isArray(locations.data)
-        ? locations.data
-        : locations.data?.data || [];
-      setLocations(locationData);
-
-      console.log("Fetched locations on mount:", locations);
-    } catch (error) {
-      console.error("Error fetching locations on mount:", error);
-    }
-  });
+  const { location } = useAuth();
 
   return (
     <AppForm
@@ -92,7 +61,7 @@ export default function WorkersForm(props: WorkersFormProps) {
       readonly={props.readonly}
       onSuccess={() => router.back()}
       initialValues={{
-        location_ids: [],
+        location_id: location?.id,
         company_id: company?.id || undefined,
         position: "",
         department: "",
@@ -164,11 +133,12 @@ export default function WorkersForm(props: WorkersFormProps) {
             variant="bodySmall"
             style={{ marginBottom: 16, color: palette.textSecondary }}
           >
-            Define el rol y las sucursales donde trabajará este empleado
+            Define el rol para la sucursal actual
           </Text>
 
           <View style={{ display: "none" }}>
             <FormInput name="company_id" />
+            <FormInput name="location_id" />
           </View>
 
           <FormProSelect
@@ -180,72 +150,34 @@ export default function WorkersForm(props: WorkersFormProps) {
             required
           />
 
-          {/* Ubicaciones organizadas por compañía */}
-          {locations.length > 0 && (
-            <>
-              <Text
-                variant="bodyMedium"
-                style={{
-                  marginBottom: 8,
-                  marginTop: 16,
-                  fontWeight: "500",
-                  color: palette.text,
-                }}
-              >
-                Sucursales Asignadas
-              </Text>
+          <Text
+            variant="bodyMedium"
+            style={{
+              marginBottom: 8,
+              marginTop: 16,
+              fontWeight: "500",
+              color: palette.text,
+            }}
+          >
+            Sucursal Asignada
+          </Text>
 
-              <Text
-                variant="bodySmall"
-                style={{ marginBottom: 16, color: palette.textSecondary }}
+          <Card style={styles.card}>
+            <Card.Content>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
               >
-                Selecciona las sucursales donde este trabajador podrá operar
+                <Icon source="map-marker" size={20} color={palette.info} />
+                <Text variant="bodyMedium" style={{ color: palette.text }}>
+                  {location?.name || "Sin sucursal seleccionada"}
+                </Text>
+              </View>
+              <Text variant="bodySmall" style={styles.companyDescription}>
+                Esta asignacion se guarda automaticamente con la sucursal
+                actual.
               </Text>
-
-              {loadingLocations ? (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color={palette.primary} />
-                  <Text style={{ marginLeft: 8, color: palette.textSecondary }}>
-                    Cargando sucursales...
-                  </Text>
-                </View>
-              ) : (
-                <Card style={styles.card}>
-                  <Card.Content>
-                    <Card.Title
-                      title={company?.name || "Empresa Actual"}
-                      titleStyle={styles.companyLabel}
-                      subtitle={`${locations.length} ${
-                        locations.length === 1
-                          ? "sucursal disponible"
-                          : "sucursales disponibles"
-                      }`}
-                      subtitleStyle={styles.companyDescription}
-                      left={(props) => (
-                        <Icon
-                          source="office-building"
-                          size={24}
-                          color={palette.primary}
-                        />
-                      )}
-                    />
-                    <Divider style={{ marginVertical: 12 }} />
-                    <View style={{ gap: 8 }}>
-                      {locations.map((location) => {
-                        return (
-                          <LocationCheckBox
-                            formRef={formRef as any}
-                            key={location.id}
-                            location={location}
-                          />
-                        );
-                      })}
-                    </View>
-                  </Card.Content>
-                </Card>
-              )}
-            </>
-          )}
+            </Card.Content>
+          </Card>
 
           <View style={{ height: 100 }} />
         </View>
@@ -269,9 +201,9 @@ const userValidationSchema = Yup.object().shape({
     .required("La contraseña es requerida"),
 });
 
-function UserInformation({ isEditing }: UserInformationProps) {
+function UserInformation({ isEditing, onChange }: UserInformationProps) {
   const [users, setUsers] = useState<Array<{ value: string; label: string }>>(
-    []
+    [],
   );
   const [loading, setLoading] = useState(false);
   const modalRef = useRef<AppModalRef>(null);
@@ -294,7 +226,7 @@ function UserInformation({ isEditing }: UserInformationProps) {
         userData.map((user: any) => ({
           value: String(user.id),
           label: `${user.name} (${user.email})`,
-        }))
+        })),
       );
     } catch (error) {
       console.error("Error loading users:", error);
@@ -450,59 +382,7 @@ function UserInformation({ isEditing }: UserInformationProps) {
   );
 }
 
-function LocationCheckBox({
-  location,
-  formRef,
-}: {
-  location: App.Entities.Location;
-  formRef: React.RefObject<AppFormRef<any>>;
-}) {
-  const form = useFormikContext<WorkerFormData>();
-
-  const [value, setValue] = useState(false);
-
-  useEffect(() => {
-    const initialValue =
-      form.values.location_ids?.includes(location.id) || false;
-
-    setValue(initialValue);
-  }, []);
-
-  return (
-    <AppCheckBox
-      onChange={(value) => {
-        const currentLocationsSelected =
-          formRef.current?.getFieldValue("location_ids") || [];
-        if (value) {
-          // Agregar ubicación
-          formRef.current?.setFieldValue("location_ids", [
-            ...currentLocationsSelected,
-            location.id,
-          ]);
-        } else {
-          // Remover ubicación
-          formRef.current?.setFieldValue(
-            "location_ids",
-            currentLocationsSelected.filter((id: number) => id !== location.id)
-          );
-        }
-        setValue(value);
-      }}
-      value={value}
-      text={location.name}
-    />
-  );
-}
-
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: palette.surface,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
   card: {
     marginBottom: 16,
     backgroundColor: palette.card,

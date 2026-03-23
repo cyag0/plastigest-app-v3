@@ -83,16 +83,6 @@ export default function AdministrationScreen() {
       requiredPermission: "locations_list",
     },
     {
-      id: "workers",
-      title: "Trabajadores",
-      description: "Administra empleados, roles y asignaciones de sucursales",
-      icon: "account-hard-hat",
-      route: "/(tabs)/administration/workers",
-      color: palette.blue,
-      category: "company",
-      requiredPermission: "workers_list",
-    },
-    {
       id: "roles",
       title: "Roles y Permisos",
       description: "Define roles y gestiona permisos de acceso",

@@ -1,13 +1,16 @@
 import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PrintLabelsModal from "@/components/Products/PrintLabelsModal";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import axios from "@/utils/axios";
 import Services from "@/utils/services";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Href, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
+import { Text } from "react-native-paper";
 
 interface ProductsIndexProps {
   route?: Href;
@@ -32,6 +35,119 @@ export default function ProductsIndex(props: ProductsIndexProps) {
   });
 
   const route: Href = "/(tabs)/inventory/products";
+
+  const columns: AppListColumn<any>[] = [
+    {
+      title: "Imagen",
+      key: "image",
+      width: 96,
+      render: (_, item) => {
+        if (item.main_image?.uri) {
+          return (
+            <Image
+              source={{ uri: item.main_image.uri }}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: "#E5E7EB",
+                backgroundColor: "#F3F4F6",
+              }}
+            />
+          );
+        }
+
+        return (
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
+              backgroundColor: "#F9FAFB",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <MaterialCommunityIcons
+              name="image-off-outline"
+              size={16}
+              color="#6B7280"
+            />
+          </View>
+        );
+      },
+    },
+    {
+      title: "Producto",
+      key: "name",
+      dataIndex: "name",
+      width: 240,
+    },
+    {
+      title: "Estado",
+      key: "is_active",
+      width: 130,
+      render: (_, item) => (
+        <View
+          style={{
+            alignSelf: "flex-start",
+            backgroundColor: item.is_active ? "#2E7D32" : "#B3261E",
+            borderRadius: 999,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+          }}
+        >
+          <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
+            {item.is_active ? "Activo" : "Inactivo"}
+          </Text>
+        </View>
+      ),
+    },
+    {
+      title: "Stock",
+      key: "stock",
+      width: 170,
+      render: (_, item) => {
+        const stock =
+          item.current_stock !== null && item.current_stock !== undefined
+            ? Number(item.current_stock)
+            : 0;
+        const minStock = Number(item.minimum_stock || 0);
+        const isHealthy = minStock > 0 ? stock > minStock : stock > 0;
+        const stockColor = isHealthy ? "#2E7D32" : "#B3261E";
+
+        return (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <MaterialCommunityIcons
+              name={isHealthy ? "arrow-up-bold" : "arrow-down-bold"}
+              size={14}
+              color={stockColor}
+            />
+            <Text style={{ color: stockColor, fontWeight: "700" }}>{stock}</Text>
+          </View>
+        );
+      },
+    },
+    {
+      title: "Precio",
+      key: "sale_price",
+      width: 120,
+      align: "right",
+      render: (_, item) =>
+        item.sale_price
+          ? `$${Number(item.sale_price).toFixed(2)}`
+          : "-",
+    },
+    {
+      title: "Creado",
+      key: "created_at",
+      width: 120,
+      render: (_, item) => formatDate(item.created_at),
+    },
+  ];
 
   // Determinar filtros iniciales basados en parámetros
   const getDefaultFilters = () => {
@@ -275,6 +391,7 @@ export default function ProductsIndex(props: ProductsIndexProps) {
           router.push(`${route}/form` as any);
         }}
         fabLabel="Nuevo Producto"
+        columns={columns}
       />
 
       <PrintLabelsModal

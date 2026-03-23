@@ -1,4 +1,5 @@
 import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import CashRegister from "@/components/Dashboard/CashRegister";
 import SaleStats from "@/components/Dashboard/SaleStats";
 import palette from "@/constants/palette";
@@ -77,6 +78,160 @@ export default function SalesIndex() {
         return "cash";
     }
   };
+
+  const getPaymentMethodLabel = (method: string) => {
+    switch (method) {
+      case "efectivo":
+        return "Efectivo";
+      case "tarjeta":
+        return "Tarjeta";
+      case "transferencia":
+        return "Transferencia";
+      default:
+        return method || "-";
+    }
+  };
+
+  const getPaymentMethodColor = (method: string) => {
+    switch (method) {
+      case "efectivo":
+        return "#2E7D32";
+      case "tarjeta":
+        return "#1565C0";
+      case "transferencia":
+        return "#6D4C41";
+      default:
+        return "#607D8B";
+    }
+  };
+
+  const getPaymentStatusLabel = (status?: string) => {
+    switch (status) {
+      case "paid":
+        return "Pagado";
+      case "partial":
+        return "Parcial";
+      case "pending":
+        return "Pendiente";
+      default:
+        return status || "-";
+    }
+  };
+
+  const getPaymentStatusColor = (status?: string) => {
+    switch (status) {
+      case "paid":
+        return "#2E7D32";
+      case "partial":
+        return "#B45309";
+      case "pending":
+        return "#B3261E";
+      default:
+        return "#607D8B";
+    }
+  };
+
+  const columns = useMemo<AppListColumn<any>[]>(
+    () => [
+      {
+        title: "Venta",
+        key: "sale_number",
+        width: 130,
+        render: (_, sale) => sale.sale_number || `#${sale.id}`,
+      },
+      {
+        title: "Fecha",
+        key: "sale_date",
+        width: 130,
+        render: (_, sale) =>
+          new Date(sale.sale_date).toLocaleDateString("es-MX", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          }),
+      },
+      {
+        title: "Estado",
+        key: "status",
+        width: 150,
+        render: (_, sale) => (
+          <View
+            style={{
+              alignSelf: "flex-start",
+              backgroundColor: getStatusColor(sale.status),
+              borderRadius: 999,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+            }}
+          >
+            <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
+              {getStatusLabel(sale.status)}
+            </Text>
+          </View>
+        ),
+      },
+      {
+        title: "Pago",
+        key: "payment_method",
+        width: 150,
+        render: (_, sale) => (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              alignSelf: "flex-start",
+              backgroundColor: getPaymentMethodColor(sale.payment_method),
+              borderRadius: 999,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+            }}
+          >
+            <MaterialCommunityIcons
+              name={getPaymentMethodIcon(sale.payment_method)}
+              size={13}
+              color="#fff"
+            />
+            <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
+              {getPaymentMethodLabel(sale.payment_method)}
+            </Text>
+          </View>
+        ),
+      },
+      {
+        title: "Estado pago",
+        key: "payment_status",
+        width: 150,
+        render: (_, sale) => (
+          <View
+            style={{
+              alignSelf: "flex-start",
+              backgroundColor: getPaymentStatusColor(sale.payment_status),
+              borderRadius: 999,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+            }}
+          >
+            <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
+              {getPaymentStatusLabel(sale.payment_status)}
+            </Text>
+          </View>
+        ),
+      },
+      {
+        title: "Total",
+        key: "total_cost",
+        width: 120,
+        align: "right",
+        render: (_, sale) =>
+          new Intl.NumberFormat("es-MX", {
+            style: "currency",
+            currency: "MXN",
+          }).format(sale.total_cost || 0),
+      },
+    ],
+    [],
+  );
 
   const renderListRoute = useMemo(
     () => () => (
@@ -207,9 +362,10 @@ export default function SalesIndex() {
           },
         }}
         searchPlaceholder="Buscar ventas..."
+        columns={columns}
       />
     ),
-    [navigation],
+    [navigation, columns],
   );
 
   const renderStatsRoute = useMemo(() => () => <SaleStats />, []);
