@@ -7,7 +7,7 @@ import { FormInput } from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import useDebounce from "@/hooks/useDebounce";
-import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import { useAuth } from "@/contexts/AuthContext";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -67,7 +67,7 @@ type Detail = {
 };
 
 export default function InventoryForm(props: InventoryFormProps) {
-  const { selectedLocation } = useSelectedLocation();
+  const { selectedLocation: location } = useAuth();
   const formRef = useRef<AppFormRef<InventoryFormData>>(null);
 
   const router = useRouter();
@@ -82,7 +82,7 @@ export default function InventoryForm(props: InventoryFormProps) {
       setLoading(true);
       const [productsRes, detailsRes] = await Promise.all([
         Services.products.index({
-          location_id: selectedLocation?.id,
+          location_id: location?.id,
           with_stock: true,
         }),
         Services.inventoryCounts.show(props.id),
@@ -103,7 +103,7 @@ export default function InventoryForm(props: InventoryFormProps) {
           responses["product_" + product.id] = {
             id: existingResponse?.id || undefined,
             product_id: product.id,
-            location_id: existingResponse?.location_id || selectedLocation?.id,
+            location_id: existingResponse?.location_id || location?.id,
             system_quantity: existingResponse?.system_quantity || 0,
             counted_quantity: existingResponse?.counted_quantity || 0,
             difference: existingResponse?.difference || 0,
@@ -115,7 +115,7 @@ export default function InventoryForm(props: InventoryFormProps) {
       formRef.current?.setValues({
         name: detailsRes.data.data.name || "",
         count_date: detailsRes.data.data.count_date || "",
-        location_id: detailsRes.data.data.location?.id || selectedLocation?.id,
+        location_id: detailsRes.data.data.location?.id || location?.id,
         status: detailsRes.data.data.status || "planning",
         notes: detailsRes.data.data.notes || "",
         details: (responses || {}) as any,
@@ -128,8 +128,10 @@ export default function InventoryForm(props: InventoryFormProps) {
   }
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (location?.id) {
+      fetchData();
+    }
+  }, [location?.id]);
 
   return (
     <AppForm
@@ -294,7 +296,7 @@ const fieldsToLabels = {
 function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
   const form = useFormikContext<InventoryFormData>();
   const formContext = useAppForm();
-  const { selectedLocation } = useSelectedLocation();
+  const { selectedLocation: location } = useAuth();
 
   const [detail, setDetail] = useState<ProductDetail>({
     id: undefined,
@@ -346,7 +348,7 @@ function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
     try {
       const newDetail: App.Entities.InventoryCount.Detail = {
         product_id: product.id,
-        location_id: (detail.location_id || selectedLocation?.id) ?? 0,
+        location_id: (detail.location_id || location?.id) ?? 0,
         system_quantity: product.current_stock || 0,
         counted_quantity: value ? product.current_stock || 0 : 0,
         difference: 0,
@@ -388,7 +390,7 @@ function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
       inventory_count_id: inventoryCountId,
       system_quantity: product.current_stock || 0,
       product_id: product.id,
-      location_id: (detail.location_id || selectedLocation?.id) ?? 0,
+      location_id: (detail.location_id || location?.id) ?? 0,
     };
 
     try {

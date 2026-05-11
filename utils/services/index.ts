@@ -112,7 +112,7 @@ const Services = {
       price: number;
     }) {
       const response = await axiosClient.post(
-        "/auth/admin/purchases-v2/add-detail",
+        "/auth/admin/purchases/add-detail",
         data,
       );
       return response.data;
@@ -151,13 +151,13 @@ const Services = {
       }>;
     }) {
       const response = await axiosClient.post(
-        "/auth/admin/purchases-v2/upsert-draft",
+        "/auth/admin/purchases/upsert-draft",
         data,
       );
       return response.data;
     },
     async getDraft() {
-      const response = await axiosClient.get("/auth/admin/purchases-v2/draft");
+      const response = await axiosClient.get("/auth/admin/purchases/draft");
       return response.data;
     },
     async confirm(
@@ -168,14 +168,14 @@ const Services = {
       },
     ) {
       const response = await axiosClient.post(
-        `/auth/admin/purchases-v2/${id}/confirm`,
+        `/auth/admin/purchases/${id}/confirm`,
         data,
       );
       return response.data;
     },
     async markInTransit(id: number) {
       const response = await axiosClient.post(
-        `/auth/admin/purchases-v2/${id}/mark-in-transit`,
+        `/auth/admin/purchases/${id}/mark-in-transit`,
       );
       return response.data;
     },
@@ -187,14 +187,14 @@ const Services = {
       }>,
     ) {
       const response = await axiosClient.post(
-        `/auth/admin/purchases-v2/${id}/receive`,
+        `/auth/admin/purchases/${id}/receive`,
         { details },
       );
       return response.data;
     },
     async cancel(id: number) {
       const response = await axiosClient.post(
-        `/auth/admin/purchases-v2/${id}/cancel`,
+        `/auth/admin/purchases/${id}/cancel`,
       );
       return response.data;
     },
@@ -203,13 +203,13 @@ const Services = {
       location_id?: number;
       page?: number;
     }) {
-      const response = await axiosClient.get("/auth/admin/purchases-v2", {
+      const response = await axiosClient.get("/auth/admin/purchases", {
         params,
       });
       return response.data;
     },
     async show(id: number) {
-      const response = await axiosClient.get(`/auth/admin/purchases-v2/${id}`);
+      const response = await axiosClient.get(`/auth/admin/purchases/${id}`);
       return response.data;
     },
   },

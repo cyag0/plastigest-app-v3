@@ -2,7 +2,7 @@ import palette from "@/constants/palette";
 import { FastField, FieldConfig, getIn } from "formik";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { useAppForm } from "./AppForm";
+import { useAppFormSafe } from "./AppForm";
 import { InjectedFormProps, WithFormProps } from "./types";
 
 function MakeForm<TProps extends Record<string, any>>(
@@ -20,7 +20,7 @@ function MakeForm<TProps extends Record<string, any>>(
       ...restProps
     } = props;
 
-    const formContext = useAppForm();
+    const formContext = useAppFormSafe();
     const readonly = props.readonly || formContext?.readonly || false;
 
     return (

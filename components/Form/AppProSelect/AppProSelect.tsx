@@ -162,7 +162,17 @@ export default function AppProSelect(props: AppProSelectProps) {
 
   // Convertir datos internos al formato esperado por AppSelect
   const selectData = useMemo(() => {
-    return (internalData || []).map((item) => ({
+    const data = internalData || [];
+    console.log('🔍 FormProSelect selectData:', {
+      model,
+      fetchParams,
+      effectiveFetchParams,
+      internalData: data,
+      selectDataLength: data.length,
+      isLoading,
+      error,
+    });
+    return (data).map((item) => ({
       value: String(item[valueField]),
       label: String(item[labelField] || item[valueField] || "Sin nombre"),
     }));

@@ -61,7 +61,9 @@ export default function LocationSelector({
   };
 
   const handleSelectLocation = async (locationId: number) => {
+    console.log("🔄 LocationSelector - Intentando seleccionar ubicación con ID:", locationId);
     const locationToSelect = locations.find((l) => l.id === locationId);
+    console.log("📍 LocationSelector - Ubicación encontrada:", locationToSelect);
     if (!locationToSelect) {
       alerts.error("Ubicación no encontrada");
       return;
@@ -88,6 +90,7 @@ export default function LocationSelector({
 
       // Seleccionar la ubicación usando el contexto
       await selectLocation(locationToSelect);
+      console.log("✅ LocationSelector - Ubicación seleccionada correctamente:", locationToSelect);
 
       alerts.success(`Has cambiado a ${locationToSelect.name}`);
 

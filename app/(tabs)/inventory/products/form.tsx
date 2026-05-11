@@ -3,13 +3,14 @@ import AppDependency from "@/components/Form/AppDependency";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
+import { useSelectData } from "@/components/Form/AppProSelect/context";
 import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import { FormUpload } from "@/components/Form/AppUpload";
 import BarcodeScanner from "@/components/Form/BarcodeScanner";
 import IngredientsTable from "@/components/Form/IngredientsTable/IngredientsTable";
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
-import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef } from "react";
@@ -38,8 +39,10 @@ interface ProductFormData {
   ingredients?: {
     ingredient_id: number;
     quantity: number;
+    unit_id?: number;
     notes?: string;
   }[];
+  productIngredients?: any[]; // Ingredientes cargados del API (antes de transformar)
 }
 
 interface ProductsFormProps {
@@ -56,7 +59,7 @@ export default function ProductsForm(props: ProductsFormProps) {
   const scannerRef = useRef<any>(null);
 
   const { company } = useSelectedCompany();
-  const { selectedLocation } = useSelectedLocation();
+  const { location: selectedLocation } = useAuth();
   const router = useRouter();
 
   // Función para generar código de barras aleatorio en el frontend
@@ -72,17 +75,84 @@ export default function ProductsForm(props: ProductsFormProps) {
   };
 
   useEffect(() => {
-    setTimeout(() => {
-      console.log("Selected Location ID:", selectedLocation?.id);
-
+    if (selectedLocation?.id) {
+      console.log("🎯 ProductsForm - selectedLocation actualizado:", selectedLocation);
       formRef.current?.setFieldValue(
         "current_location_id",
-        selectedLocation?.id || ""
+        selectedLocation.id
       );
+    } else {
+      console.log("⚠️ ProductsForm - selectedLocation es NULL o sin ID");
+    }
+  }, [selectedLocation?.id]);
 
-      console.log("values", formRef.current?.getValues());
-    }, 500);
-  }, []);
+  // Transformar productIngredients a ingredients cuando se cargan datos
+  useEffect(() => {
+    if (!isEditing) return;
+
+    const checkAndTransform = () => {
+      const values = formRef.current?.getValues();
+      
+      console.log("Verificando valores del formulario:", {
+        hasValues: !!values,
+        productIngredients: values?.productIngredients,
+        ingredients: values?.ingredients,
+      });
+      
+      if (values && values.productIngredients && Array.isArray(values.productIngredients)) {
+        // Verificar si ya fue transformado
+        const currentIngredients = values.ingredients || [];
+        if (currentIngredients.length === 0 && values.productIngredients.length > 0) {
+          // Transformar productIngredients a ingredients
+          const transformedIngredients = values.productIngredients.map((item: any, index: number) => ({
+            id: `product-ingredient-${item.id}-${index}`, // ID único para identificar en el formulario
+            ingredient_id: item.ingredient_id || item.ingredient?.id, // Usar ingredient.id si es relación
+            quantity: item.quantity,
+            unit_id: item.unit_id,
+            notes: item.notes || "",
+          }));
+
+          console.log("🔄 Transformando ingredientes:", {
+            original: values.productIngredients,
+            transformed: transformedIngredients,
+          });
+
+          // Establecer los ingredientes transformados
+          formRef.current?.setFieldValue("ingredients", transformedIngredients);
+          
+          // Limpiar productIngredients para evitar conflictos
+          formRef.current?.setFieldValue("productIngredients", undefined);
+          
+          return true; // Transformación completada
+        }
+      }
+      return false;
+    };
+
+    // Intentar transformar inmediatamente
+    if (checkAndTransform()) {
+      return;
+    }
+
+    // Si no está disponible, reintentar cada 100ms hasta 5 segundos (más agresivo)
+    let attempts = 0;
+    const maxAttempts = 50; // 50 * 100ms = 5 segundos
+    
+    const timer = setInterval(() => {
+      attempts++;
+      console.log(`Intento ${attempts}/${maxAttempts} de transformar ingredientes`);
+      if (checkAndTransform() || attempts >= maxAttempts) {
+        if (attempts >= maxAttempts) {
+          console.warn("⚠️ No se pudieron cargar los ingredientes después de 5 segundos");
+        }
+        clearInterval(timer);
+      }
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [isEditing]);
+
+  const selectDataContext = useSelectData();
 
   return (
     <AppForm
@@ -91,6 +161,8 @@ export default function ProductsForm(props: ProductsFormProps) {
       id={productId}
       readonly={props.readonly}
       onSuccess={() => {
+        // Limpiar caché de productos para que cargue la lista actualizada
+        selectDataContext.clearCache("products");
         router.back();
       }}
       initialValues={{
@@ -98,6 +170,7 @@ export default function ProductsForm(props: ProductsFormProps) {
         location_id: selectedLocation?.id || undefined,
         product_type: "raw_material", // Valor por defecto
         ingredients: [], // Array vacío por defecto
+        productIngredients: [], // Campo para ingredientes del API
         for_sale: true, // Por defecto disponible para venta
         current_location_id: selectedLocation?.id || undefined,
         is_active: true, // Por defecto activo en la sucursal

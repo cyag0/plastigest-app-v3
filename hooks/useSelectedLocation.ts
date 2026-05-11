@@ -1,7 +1,9 @@
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
+import { useAuth } from "@/contexts/AuthContext";
 import Services from "@/utils/services";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
 
 interface Location {
   id: number;
@@ -147,6 +149,26 @@ export function useSelectedLocation(): UseSelectedLocationReturn {
   useEffect(() => {
     loadLocations();
   }, [loadLocations]);
+
+  // Recargar ubicación seleccionada cada vez que la pantalla obtiene el foco
+  useFocusEffect(
+    useCallback(() => {
+      const reloadSelectedLocation = async () => {
+        if (!company?.id) return;
+        try {
+          const cachedLocation = await AsyncStorage.getItem(
+            `${SELECTED_LOCATION_KEY}_${company.id}`
+          );
+          if (cachedLocation) {
+            setSelectedLocation(JSON.parse(cachedLocation));
+          }
+        } catch (error) {
+          console.error("Error reloading selected location:", error);
+        }
+      };
+      reloadSelectedLocation();
+    }, [company?.id])
+  );
 
   return {
     selectedLocation,

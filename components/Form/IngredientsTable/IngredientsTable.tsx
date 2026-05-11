@@ -1,13 +1,15 @@
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
+import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
+import Services from "@/utils/services";
 import { Ionicons } from "@expo/vector-icons";
 import { getIn, useFormikContext } from "formik";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { Button } from "react-native-paper";
-import { useAppForm } from "../AppForm/AppForm";
+import { useAppFormSafe } from "../AppForm/AppForm";
 import { InputLabel } from "../AppForm/hoc";
 
 interface Ingredient {
@@ -15,12 +17,97 @@ interface Ingredient {
   ingredient_id: number;
   quantity: number;
   notes?: string;
+  unit_id?: number; // ID de la unidad seleccionada
 }
 
 interface IngredientsTableProps {
   name: string;
   label?: string;
   required?: boolean;
+}
+
+// Componente interno para una fila de ingrediente
+function IngredientRow({
+  name,
+  index,
+  ingredient,
+  onRemove,
+  readonly,
+}: {
+  name: string;
+  index: number;
+  ingredient: Ingredient;
+  onRemove: (id: string) => void;
+  readonly: boolean;
+}) {
+  const { values, setFieldValue } = useFormikContext();
+
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        paddingVertical: 8,
+        paddingHorizontal: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: "#F3F4F6",
+        alignItems: "center",
+      }}
+    >
+      {/* Selector de Materia Prima */}
+      <View style={{ flex: 2.5, paddingRight: 8 }}>
+        <FormProSelect
+          name={`${name}.${index}.ingredient_id`}
+          model="products"
+          fetchParams={{
+            product_type: ["raw_material"],
+          }}
+          placeholder="Seleccione materia prima"
+        />
+      </View>
+
+      {/* Cantidad */}
+      <View style={{ flex: 1, paddingHorizontal: 4 }}>
+        <FormInput
+          name={`${name}.${index}.quantity`}
+          placeholder="0.00"
+          keyboardType="numeric"
+        />
+      </View>
+
+      {/* Selector de Unidad de Medida */}
+      <View style={{ flex: 1.2, paddingHorizontal: 4 }}>
+        <FormProSelect
+          name={`${name}.${index}.unit_id`}
+          model="home.unidades"
+          placeholder="Unidad"
+        />
+      </View>
+
+      {/* Input de Notas */}
+      <View style={{ flex: 1.3, paddingHorizontal: 4 }}>
+        <FormInput
+          name={`${name}.${index}.notes`}
+          placeholder="Notas opcionales"
+        />
+      </View>
+
+      {/* Botón Eliminar */}
+      {!readonly && (
+        <View style={{ width: 50, alignItems: "center" }}>
+          <TouchableOpacity
+            onPress={() => onRemove(ingredient.id)}
+            style={{
+              backgroundColor: "#FEE2E2",
+              padding: 8,
+              borderRadius: 4,
+            }}
+          >
+            <Ionicons name="trash" size={16} color={palette.red} />
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
 }
 
 export default function IngredientsTable({
@@ -32,7 +119,8 @@ export default function IngredientsTable({
   const alert = useAlerts();
   const ingredients: Ingredient[] = getIn(values, name) || [];
 
-  const formContext = useAppForm();
+  // Usar el hook seguro que no lanza error
+  const formContext = useAppFormSafe();
   const readonly = formContext?.readonly || false;
 
   const addIngredient = () => {
@@ -40,6 +128,7 @@ export default function IngredientsTable({
       id: Date.now().toString(),
       ingredient_id: 0,
       quantity: 0,
+      unit_id: undefined,
       notes: "",
     };
 
@@ -109,7 +198,7 @@ export default function IngredientsTable({
             >
               <Text
                 style={{
-                  flex: 3,
+                  flex: 2.5,
                   fontWeight: "600",
                   color: "#374151",
                   fontSize: 14,
@@ -130,7 +219,18 @@ export default function IngredientsTable({
               </Text>
               <Text
                 style={{
-                  flex: 2,
+                  flex: 1.2,
+                  fontWeight: "600",
+                  color: "#374151",
+                  fontSize: 14,
+                  textAlign: "center",
+                }}
+              >
+                Unidad
+              </Text>
+              <Text
+                style={{
+                  flex: 1.3,
                   fontWeight: "600",
                   color: "#374151",
                   fontSize: 14,
@@ -143,62 +243,14 @@ export default function IngredientsTable({
 
             {/* Table Rows */}
             {(ingredients || []).map((ingredient, index) => (
-              <View
+              <IngredientRow
                 key={ingredient.id}
-                style={{
-                  flexDirection: "row",
-                  paddingVertical: 8,
-                  paddingHorizontal: 8,
-                  borderBottomWidth: index < ingredients.length - 1 ? 1 : 0,
-                  borderBottomColor: "#F3F4F6",
-                  alignItems: "center",
-                }}
-              >
-                {/* Selector de Materia Prima */}
-                <View style={{ flex: 3, paddingRight: 8 }}>
-                  <FormProSelect
-                    name={`${name}.${index}.ingredient_id`}
-                    model="products"
-                    fetchParams={{
-                      product_type: ["raw_material"],
-                    }}
-                    placeholder="Seleccione materia prima"
-                  />
-                </View>
-
-                {/* Input de Cantidad */}
-                <View style={{ flex: 1, paddingHorizontal: 4 }}>
-                  <FormInput
-                    name={`${name}.${index}.quantity`}
-                    placeholder="0.00"
-                    keyboardType="numeric"
-                  />
-                </View>
-
-                {/* Input de Notas */}
-                <View style={{ flex: 2, paddingHorizontal: 4 }}>
-                  <FormInput
-                    name={`${name}.${index}.notes`}
-                    placeholder="Notas opcionales"
-                  />
-                </View>
-
-                {/* Botón Eliminar */}
-                {!readonly && (
-                  <View style={{ width: 50, alignItems: "center" }}>
-                    <TouchableOpacity
-                      onPress={() => removeIngredient(ingredient.id)}
-                      style={{
-                        backgroundColor: "#FEE2E2",
-                        padding: 8,
-                        borderRadius: 4,
-                      }}
-                    >
-                      <Ionicons name="trash" size={16} color={palette.red} />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
+                name={name}
+                index={index}
+                ingredient={ingredient}
+                onRemove={removeIngredient}
+                readonly={readonly}
+              />
             ))}
           </View>
         </ScrollView>

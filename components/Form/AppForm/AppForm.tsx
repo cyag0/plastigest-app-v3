@@ -187,12 +187,16 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
           if (checkIdAndApi) {
             //@ts-ignore
             const response = await props.api.show(props.id);
-            console.log("Fetched data for ID:", response.data);
+            console.log("✅ Fetched data for ID:", response.data.data);
             const data = { ...props.initialValues, ...response.data.data };
 
-            console.log("Merging initial values with fetched data:", data);
+            console.log("📋 Initial values:", props.initialValues);
+            console.log("📦 API Response productIngredients:", response.data.data.productIngredients);
+            console.log("🔀 Merged data:", data);
 
             formInstance.setValues(data);
+            
+            console.log("✨ Form values after setValues:", formInstance.getFieldMeta("productIngredients"));
           } else {
             formInstance.setValues(props.initialValues);
           }
@@ -226,13 +230,65 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     try {
       setLoading(true);
 
+      // Si no hay code, generar uno automáticamente
+      if (_values && typeof _values === 'object' && 'code' in _values && !_values.code) {
+        const timestamp = Date.now().toString().slice(-8);
+        const random = Math.floor(Math.random() * 100000).toString().padStart(5, '0');
+        _values.code = timestamp + random;
+        console.log("Generated barcode:", _values.code);
+      }
+
+      // Filtrar campo 'id' temporal de ingredientes (solo frontend, no se debe enviar al backend)
+      // También remover campos como productIngredients que no deben enviarse
+      let cleanedValues = { ..._values };
+      if (cleanedValues && typeof cleanedValues === 'object') {
+        // Remover el campo 'id' de cada ingrediente y filtrar ingredientes vacíos
+        if ('ingredients' in cleanedValues && Array.isArray(cleanedValues.ingredients)) {
+          cleanedValues.ingredients = cleanedValues.ingredients
+            .map((ing: any) => {
+              const { id, ...rest } = ing; // Remover el campo 'id'
+              return rest;
+            });
+          console.log("Ingredientes ANTES de filtrar:", cleanedValues.ingredients);
+          cleanedValues.ingredients = cleanedValues.ingredients
+            .filter((ing: any) => {
+              // Filtrar ingredientes vacíos o incompletos
+              const isValid = ing.ingredient_id && ing.ingredient_id > 0 && ing.quantity && ing.quantity > 0;
+              console.log("🔍 Validando ingrediente:", {
+                ingredient_id: ing.ingredient_id,
+                quantity: ing.quantity,
+                isValid,
+                fullData: ing,
+              });
+              return isValid;
+            });
+          console.log("Ingredientes limpiados (sin id temporal y vacíos):", cleanedValues.ingredients);
+        }
+        
+        // Remover campos que no deben enviarse (relaciones de solo lectura)
+        delete (cleanedValues as any).productIngredients;
+        delete (cleanedValues as any).locations;
+        delete (cleanedValues as any).activeLocations;
+        delete (cleanedValues as any).category;
+        delete (cleanedValues as any).company;
+        delete (cleanedValues as any).unit;
+        delete (cleanedValues as any).supplier;
+        delete (cleanedValues as any).mainImage;
+        delete (cleanedValues as any).images;
+        delete (cleanedValues as any).ingredient; // Si viene de la API
+      }
+
       const values = (await objectToFormDataWithNestedInputsAsync(
-        _values,
+        cleanedValues as any,
       )) as any;
+
+      // Log para debugging
+      console.log("Form values before submit:", _values);
+      console.log("FormData keys:", Array.from(values.entries ? values.entries() : []));
 
       // Si se pasa handleSubmit personalizado, usarlo
       if (props.onSubmit) {
-        await props.onSubmit(values as T, formInstance);
+        await props.onSubmit(_values as T, formInstance);
       }
       // Si no hay handleSubmit pero hay API, usar store automático
       else if (props.api) {
@@ -266,8 +322,34 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       }
     } catch (error: any) {
       console.error("Error submitting form:", error);
-      const errorMessage =
-        error?.response?.data?.message || error?.message || "Error al guardar";
+      console.error("Error response data:", error?.response?.data);
+      
+      // Log detallado de errores de validación
+      if (error?.response?.data?.errors) {
+        console.error("Validation errors:", error.response.data.errors);
+        const errorsList = Object.entries(error.response.data.errors)
+          .map(([field, messages]: [string, any]) => {
+            const msgs = Array.isArray(messages) ? messages.join(', ') : messages;
+            return `${field}: ${msgs}`;
+          })
+          .join('\n');
+        console.error("Detailed validation errors:\n", errorsList);
+      }
+      
+      // Intentar extraer mensaje de error más específico
+      let errorMessage = error?.message || "Error al guardar";
+      
+      if (error?.response?.data) {
+        // Prioridad 1: error specific field
+        if (error.response.data.error) {
+          errorMessage = error.response.data.error;
+        }
+        // Prioridad 2: message field
+        else if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        }
+      }
+      
       alerts.error(errorMessage);
       props.onError?.(error, _values);
     } finally {
@@ -540,6 +622,139 @@ export function useAppForm<T = any>() {
     },
 
     // Custom methods
+    reload: () => {
+      return formRef?.current?.reload();
+    },
+
+    clear: () => {
+      return formRef?.current?.clear();
+    },
+
+    getFormikInstance: () => {
+      return formRef?.current?.getFormikInstance();
+    },
+  };
+
+  return methods;
+}
+
+// Hook seguro que no lanza error si no está dentro de AppForm
+export function useAppFormSafe<T = any>() {
+  const context = useContext(AppFormContext);
+  
+  // Si no hay contexto, retornar un objeto con valores por defecto
+  if (!context) {
+    return {
+      readonly: false,
+      ref: null,
+      submitForm: () => Promise.resolve(),
+      resetForm: () => {},
+      setValues: () => {},
+      setFieldValue: () => {},
+      setFieldTouched: () => {},
+      validateForm: () => Promise.resolve({}),
+      validateField: () => Promise.resolve(),
+      setSubmitting: () => {},
+      setErrors: () => {},
+      setStatus: () => {},
+      setTouched: () => {},
+      getValues: () => undefined,
+      getFieldValue: () => undefined,
+      getErrors: () => ({}),
+      getTouched: () => ({}),
+      isValid: () => false,
+      isDirty: () => false,
+      isSubmitting: () => false,
+      reload: () => {},
+      clear: () => {},
+      getFormikInstance: () => null,
+    };
+  }
+
+  const { readonly = false, formRef } = context;
+
+  // Retornar los mismos métodos que useAppForm
+  const methods = {
+    get readonly() {
+      return readonly;
+    },
+
+    get ref() {
+      return formRef?.current;
+    },
+
+    submitForm: () => {
+      return formRef?.current?.submitForm();
+    },
+
+    resetForm: () => {
+      return formRef?.current?.resetForm();
+    },
+
+    setValues: (values: T) => {
+      return formRef?.current?.setValues(values);
+    },
+
+    setFieldValue: (field: string, value: any) => {
+      return formRef?.current?.setFieldValue(field, value);
+    },
+
+    setFieldTouched: (field: string, touched?: boolean) => {
+      return formRef?.current?.setFieldTouched(field, touched);
+    },
+
+    validateForm: () => {
+      return formRef?.current?.validateForm();
+    },
+
+    validateField: (field: string) => {
+      return formRef?.current?.validateField(field);
+    },
+
+    setSubmitting: (isSubmitting: boolean) => {
+      return formRef?.current?.setSubmitting(isSubmitting);
+    },
+
+    setErrors: (errors: any) => {
+      return formRef?.current?.setErrors(errors);
+    },
+
+    setStatus: (status: any) => {
+      return formRef?.current?.setStatus(status);
+    },
+
+    setTouched: (touched: any) => {
+      return formRef?.current?.setTouched(touched);
+    },
+
+    getValues: (): T | undefined => {
+      return formRef?.current?.getValues();
+    },
+
+    getFieldValue: (field: string) => {
+      return formRef?.current?.getFieldValue(field);
+    },
+
+    getErrors: () => {
+      return formRef?.current?.getErrors();
+    },
+
+    getTouched: () => {
+      return formRef?.current?.getTouched();
+    },
+
+    isValid: (): boolean => {
+      return formRef?.current?.isValid() || false;
+    },
+
+    isDirty: (): boolean => {
+      return formRef?.current?.isDirty() || false;
+    },
+
+    isSubmitting: (): boolean => {
+      return formRef?.current?.isSubmitting() || false;
+    },
+
     reload: () => {
       return formRef?.current?.reload();
     },

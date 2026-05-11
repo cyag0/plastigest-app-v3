@@ -3,8 +3,8 @@ import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Href, useRouter } from "expo-router";
-import React, { useState } from "react";
+import { Href, useRouter, useFocusEffect } from "expo-router";
+import React, { useState, useCallback } from "react";
 import {
   Dimensions,
   Platform,
@@ -122,7 +122,14 @@ export default function OperationsScreen() {
   const isWideScreen = screenWidth >= 1024;
 
   const auth = useAuth();
-  const { selectedLocation } = useSelectedLocation();
+  const { selectedLocation, loadLocations } = useSelectedLocation();
+
+  // Recargar ubicación cuando la pantalla obtiene el foco (volver del selector)
+  useFocusEffect(
+    useCallback(() => {
+      loadLocations();
+    }, [loadLocations])
+  );
 
   // Vista combinada para web con pantalla ancha
   if (isWeb && isWideScreen) {

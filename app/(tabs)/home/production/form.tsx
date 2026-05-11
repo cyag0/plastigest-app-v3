@@ -5,10 +5,10 @@ import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
-import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import { useAuth } from "@/contexts/AuthContext";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFormikContext } from "formik";
 import React, { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
@@ -35,8 +35,9 @@ interface ProductionFormData {
   production_number?: string;
   production_date: string;
   location_id?: string;
-  product_id?: number;
-  quantity: number;
+  product_id?: number | null;
+  package_id?: number | null; // Paquete seleccionado (presentación)
+  quantity: number; // Cantidad de paquetes
   comments?: string;
   company_id: number;
 }
@@ -50,105 +51,171 @@ interface ProductionFormProps {
 function IngredientsList() {
   const { values, setFieldError, setFieldValue } =
     useFormikContext<ProductionFormData>();
-  const { selectedLocation } = useSelectedLocation();
+  const { selectedLocation: location } = useAuth();
   const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [maxQuantity, setMaxQuantity] = useState<number | null>(null);
   const alerts = useAlerts();
 
-  // Fetch product info when product_id changes
+  // Fetch product info when product_id or package_id changes
   useEffect(() => {
-    if (!values.product_id || !selectedLocation?.id) {
+    // Convertir product_id a número si viene como string
+    const productId = typeof values.product_id === 'string' ? parseInt(values.product_id, 10) : values.product_id;
+    
+    // Validación estricta: product_id debe ser un número válido
+    if (!productId || typeof productId !== 'number' || productId <= 0 || isNaN(productId)) {
+      console.log('❌ Validación falló:', { productId, type: typeof productId, isNaN: isNaN(productId) });
       setProductInfo(null);
       setMaxQuantity(null);
       return;
     }
 
+    console.log('✅ Validación pasada, llamando API con product_id:', productId);
+
     const fetchProductInfo = async () => {
       try {
         setLoading(true);
-        if (!values.product_id) return;
+        if (!productId || isNaN(productId) || productId <= 0) return;
 
-        const response = await Services.products.show(values.product_id);
+        console.log('🔄 Fetching product:', productId);
+        const response = await Services.products.show(productId);
         const product = response.data.data;
+
+        console.log('🔍 Producto cargado:', {
+          id: product.id,
+          name: product.name,
+          ingredients: product.ingredients,
+          productIngredients: product.productIngredients,
+        });
+
+        // Obtener información del paquete si se seleccionó
+        let unitsPerPackage = 1;
+        if (values.package_id) {
+          try {
+            const packageResponse = await Services.productPackages.show(values.package_id);
+            const packageData = packageResponse.data.data;
+            unitsPerPackage = packageData.quantity_per_package || 1;
+          } catch (error) {
+            console.error("Error fetching package info:", error);
+          }
+        }
 
         // Obtener ingredientes con stock disponible
         if (product.ingredients && product.ingredients.length > 0) {
-          const ingredientsWithStock = await Promise.all(
-            product.ingredients.map(async (ingredientData: any) => {
-              try {
-                // El resource retorna ingredient_id, no id del ingrediente
-                const ingredientId = ingredientData.ingredient_id;
-
-                // Obtener información completa del ingrediente incluyendo stock
-                const ingredientResponse = await Services.products.show(
-                  ingredientId
-                );
-                const ingredient = ingredientResponse.data.data;
-
-                const availableStock = ingredient.current_stock || 0;
-                const quantityNeeded = ingredientData.quantity || 1;
-
-                return {
-                  id: ingredientId,
-                  name: ingredientData.ingredient_name || ingredient.name,
-                  code: ingredientData.ingredient_code || ingredient.code,
-                  quantity_needed: quantityNeeded,
-                  available_stock: availableStock,
-                  unit: (ingredient as any).unit || "unidad",
-                };
-              } catch (error) {
-                console.error(
-                  `Error fetching stock for ingredient ${ingredientData.ingredient_id}:`,
-                  error
-                );
-                return {
-                  id: ingredientData.ingredient_id,
-                  name: ingredientData.ingredient_name || "Desconocido",
-                  code: ingredientData.ingredient_code || "",
-                  quantity_needed: ingredientData.quantity || 1,
-                  available_stock: 0,
-                  unit: "unidad",
-                };
-              }
-            })
-          );
-
-          // Calcular cantidad máxima que se puede producir
-          const maxProducible = Math.min(
-            ...ingredientsWithStock.map((ing) =>
-              Math.floor(ing.available_stock / ing.quantity_needed)
-            )
-          );
-
-          setProductInfo({
-            id: product.id,
-            name: product.name,
-            code: product.code || "",
-            ingredients: ingredientsWithStock,
+          console.log('✅ Ingredientes encontrados:', product.ingredients);
+          const firstIng = product.ingredients[0];
+          console.log('📋 Primer ingrediente estructura:', {
+            keys: Object.keys(firstIng),
+            id: firstIng.id,
+            ingredient_id: firstIng.ingredient_id,
+            quantity: firstIng.quantity,
+            unit_id: firstIng.unit_id,
+            notes: firstIng.notes,
+            full: firstIng,
           });
+          
+          try {
+            const ingredientsWithStock = await Promise.all(
+              product.ingredients.map(async (ingredientData: any) => {
+                try {
+                  // El resource retorna ingredient_id, no id del ingrediente
+                  const ingredientId = ingredientData.ingredient_id;
 
-          setMaxQuantity(maxProducible);
+                  // Obtener información completa del ingrediente incluyendo stock
+                  const ingredientResponse = await Services.products.show(
+                    ingredientId
+                  );
+                  const ingredient = ingredientResponse.data.data;
 
-          // Validar cantidad actual y mostrar alerta
-          if (values.quantity > maxProducible) {
-            setFieldError(
-              "quantity",
-              `La cantidad máxima que puedes producir es ${maxProducible}`
+                  const availableStock = ingredient.current_stock || 0;
+                  // Cantidad de ingrediente por unidad individual
+                  const quantityNeeded = ingredientData.quantity || 1;
+
+                  return {
+                    id: ingredientId,
+                    name: ingredientData.ingredient_name || ingredient.name,
+                    code: ingredientData.ingredient_code || ingredient.code,
+                    quantity_needed: quantityNeeded,
+                    available_stock: availableStock,
+                    unit: typeof ingredient.unit === 'object' 
+                      ? (ingredient.unit?.abbreviation || ingredient.unit?.name || 'unidad')
+                      : (ingredient.unit || 'unidad'),
+                  };
+                } catch (error) {
+                  console.error(
+                    `Error fetching stock for ingredient ${ingredientData.ingredient_id}:`,
+                    error
+                  );
+                  return {
+                    id: ingredientData.ingredient_id,
+                    name: ingredientData.ingredient_name || "Desconocido",
+                    code: ingredientData.ingredient_code || "",
+                    quantity_needed: ingredientData.quantity || 1,
+                    available_stock: 0,
+                    unit: "unidad",
+                  };
+                }
+              })
             );
-            setFieldValue("quantity", maxProducible);
 
-            if (maxProducible === 0) {
-              alerts.warning(
-                "No hay stock suficiente de los ingredientes para producir este producto"
+            console.log('✅ Ingredientes procesados:', ingredientsWithStock);
+
+            // Calcular cantidad máxima que se puede producir
+            // Si hay paquete: cantidad máxima de paquetes
+            // Si no: cantidad máxima de unidades
+            const maxProducible = Math.min(
+              ...ingredientsWithStock.map((ing) =>
+                Math.floor(ing.available_stock / (ing.quantity_needed * unitsPerPackage))
+              )
+            );
+
+            const newProductInfo = {
+              id: product.id,
+              name: product.name,
+              code: product.code || "",
+              ingredients: ingredientsWithStock,
+            };
+            
+            console.log('📦 Llamando setProductInfo con:', {
+              ...newProductInfo,
+              ingredients_count: newProductInfo.ingredients.length,
+              first_ingredient: newProductInfo.ingredients[0],
+            });
+
+            setProductInfo(newProductInfo);
+
+            setMaxQuantity(maxProducible);
+
+            // Validar cantidad actual y mostrar alerta
+            if (values.quantity > maxProducible) {
+              setFieldError(
+                "quantity",
+                `La cantidad máxima que puedes producir es ${maxProducible}`
               );
-            } else {
-              alerts.warning(
-                `Se ha ajustado la cantidad. Máximo producible: ${maxProducible} unidades`
-              );
+              setFieldValue("quantity", maxProducible);
+
+              if (maxProducible === 0) {
+                alerts.warning(
+                  "No hay stock suficiente de los ingredientes para producir este producto"
+                );
+              } else {
+                const unitLabel = values.package_id ? "paquetes" : "unidades";
+                alerts.warning(
+                  `Se ha ajustado la cantidad. Máximo producible: ${maxProducible} ${unitLabel}`
+                );
+              }
             }
+          } catch (ingredientError) {
+            console.error("❌ Error processing ingredients:", ingredientError);
+            setProductInfo(null);
+            setMaxQuantity(null);
+            alerts.error("Error al procesar los ingredientes del producto");
           }
         } else {
+          console.log('❌ No hay ingredientes:', { 
+            has_ingredients: !!product.ingredients, 
+            length: product.ingredients?.length 
+          });
           setProductInfo(null);
           setMaxQuantity(null);
         }
@@ -162,7 +229,7 @@ function IngredientsList() {
     };
 
     fetchProductInfo();
-  }, [values.product_id, selectedLocation?.id]);
+  }, [values.product_id, values.package_id, location?.id]);
 
   // Validar cantidad cuando cambia
   useEffect(() => {
@@ -203,6 +270,10 @@ function IngredientsList() {
   }
 
   if (!productInfo || productInfo.ingredients.length === 0) {
+    console.log('⚠️ Renderizando mensaje de no ingredientes:', {
+      productInfo: productInfo ? 'exists' : 'null',
+      ingredients_length: productInfo?.ingredients.length,
+    });
     return (
       <Card style={{ marginBottom: 16, backgroundColor: palette.warning }}>
         <Card.Content>
@@ -221,6 +292,8 @@ function IngredientsList() {
       </Card>
     );
   }
+
+  console.log('✅ Renderizando IngredientsList con', productInfo.ingredients.length, 'ingredientes');
 
   const hasInsufficientStock = productInfo.ingredients.some(
     (ing) => ing.available_stock < ing.quantity_needed * values.quantity
@@ -289,9 +362,11 @@ function IngredientsList() {
               <DataTable.Title numeric>Por Unidad</DataTable.Title>
               <DataTable.Title numeric>Total</DataTable.Title>
               <DataTable.Title numeric>Disponible</DataTable.Title>
+              <DataTable.Title numeric>Unidad</DataTable.Title>
             </DataTable.Header>
 
             {productInfo.ingredients.map((ingredient) => {
+              // Calcular total necesario considerando la cantidad (unidades o paquetes)
               const totalNeeded = ingredient.quantity_needed * values.quantity;
               const isInsufficient = ingredient.available_stock < totalNeeded;
 
@@ -338,6 +413,11 @@ function IngredientsList() {
                   <DataTable.Cell numeric>
                     <Text style={{ color: palette.text }}>
                       {ingredient.available_stock}
+                    </Text>
+                  </DataTable.Cell>
+                  <DataTable.Cell numeric>
+                    <Text style={{ color: palette.text, fontSize: 12 }}>
+                      {ingredient.unit}
                     </Text>
                   </DataTable.Cell>
                 </DataTable.Row>
@@ -389,109 +469,58 @@ function IngredientsList() {
   );
 }
 
-export default function ProductionForm(props: ProductionFormProps) {
-  const params = useLocalSearchParams();
-  const productionId =
-    props.id || (params.id ? parseInt(params.id as string) : undefined);
-  const formRef = useRef<AppFormRef<ProductionFormData>>(null);
+// Componente que contiene el contenido del formulario (accede a Formik context)
+function FormContent() {
+  const { values, setFieldValue } = useFormikContext<ProductionFormData>();
+  const [productUnit, setProductUnit] = useState<any>(null);
+  const [availablePackages, setAvailablePackages] = useState<any[]>([]);
 
-  const { company } = useSelectedCompany();
-  const { selectedLocation } = useSelectedLocation();
-  const alerts = useAlerts();
-
-  // Handler para validar antes de enviar
-  const handleSubmit = async (values: ProductionFormData) => {
-    // Obtener información del producto para validar stock
-    try {
-      const product = await Services.products.show(values.product_id!);
-
-      const productData = product.data as any;
-
-      if (!productData.ingredients || productData.ingredients.length === 0) {
-        alerts.error("Este producto no tiene ingredientes configurados");
-        throw new Error("Sin ingredientes configurados");
-      }
-
-      // Verificar disponibilidad de ingredientes
-      const ingredientsWithStock = await Promise.all(
-        productData.ingredients.map(async (ing: any) => {
-          try {
-            const ingredientData = await Services.products.show(
-              ing.ingredient_id
-            );
-            const ingData = ingredientData.data as any;
-            return {
-              name: ingData.name,
-              needed: ing.quantity * values.quantity,
-              available: ingData.current_stock || 0,
-            };
-          } catch {
-            return {
-              name: ing.ingredient_name || "Desconocido",
-              needed: ing.quantity * values.quantity,
-              available: 0,
-            };
-          }
-        })
-      );
-
-      const hasInsufficient = ingredientsWithStock.some(
-        (ing: any) => ing.available < ing.needed
-      );
-
-      if (hasInsufficient) {
-        const confirmed = await alerts.confirm(
-          "Algunos ingredientes no tienen stock suficiente. ¿Deseas continuar de todas formas?",
-          {
-            title: "Stock insuficiente",
-            okText: "Sí, continuar",
-            cancelText: "Cancelar",
-          }
-        );
-
-        if (!confirmed) {
-          throw new Error("Cancelado por el usuario");
-        }
-      } else {
-        // Confirmar producción normal
-        const confirmed = await alerts.confirm(
-          `¿Confirmas el registro de ${values.quantity} unidades? Se restarán los ingredientes del inventario.`,
-          {
-            title: "Confirmar producción",
-            okText: "Confirmar",
-            cancelText: "Cancelar",
-          }
-        );
-
-        if (!confirmed) {
-          throw new Error("Cancelado por el usuario");
-        }
-      }
-    } catch (error: any) {
-      if (error.message === "Cancelado por el usuario") {
-        throw error;
-      }
-      alerts.error("Error al validar la producción: " + error.message);
-      throw error;
+  // Cargar la unidad del producto automáticamente cuando se selecciona
+  useEffect(() => {
+    // Convertir product_id a número si viene como string
+    const productId = typeof values.product_id === 'string' ? parseInt(values.product_id, 10) : values.product_id;
+    
+    // Validación más estricta: verificar que product_id sea un número válido
+    if (!productId || typeof productId !== 'number' || productId <= 0 || isNaN(productId)) {
+      setProductUnit(null);
+      setAvailablePackages([]);
+      return;
     }
-  };
+
+    const loadProductUnit = async () => {
+      try {
+        const response = await Services.products.show(productId);
+        const product = response.data.data;
+        
+        // Guardar la unidad del producto
+        if (product.unit) {
+          setProductUnit(product.unit);
+        }
+        
+        // Cargar los paquetes disponibles
+        if (product.active_packages && product.active_packages.length > 0) {
+          setAvailablePackages(product.active_packages);
+          
+          // Si no hay uno seleccionado, seleccionar el primero (preferencia: es_default)
+          if (!values.package_id) {
+            const defaultPackage = product.active_packages.find((pkg: any) => pkg.is_default) || product.active_packages[0];
+            setFieldValue('package_id', defaultPackage.id);
+          }
+        } else {
+          setAvailablePackages([]);
+          // Limpiar package_id si no hay paquetes disponibles
+          setFieldValue('package_id', null);
+        }
+      } catch (error) {
+        console.error('Error loading product unit:', error);
+      }
+    };
+
+    loadProductUnit();
+  }, [values.product_id, setFieldValue]);
 
   return (
-    <AppForm
-      ref={formRef}
-      api={Services.productions}
-      id={productionId}
-      readonly={props.readonly}
-      style={{ backgroundColor: palette.background }}
-      submitButtonText="Registrar Producción"
-      onSubmit={handleSubmit}
-      initialValues={{
-        company_id: company?.id || 0,
-        location_id: selectedLocation?.id?.toString() || "",
-        production_date: new Date().toISOString().split("T")[0],
-        quantity: 1,
-      }}
-    >
+    <>
       {/* Información General */}
       <View
         style={{
@@ -592,14 +621,33 @@ export default function ProductionForm(props: ProductionFormProps) {
         }}
         placeholder="Seleccionar producto procesado"
         required
+        onChange={(value) => {
+          console.log('📋 FormProSelect onChange - product_id:', value);
+        }}
       />
+
+      {/* Selector de Paquete/Presentación (solo si hay múltiples opciones) */}
+      {values.product_id && availablePackages.length > 1 && (
+        <View>
+          <FormProSelect
+            name="package_id"
+            label="Presentación/Paquete"
+            model="productPackages"
+            fetchParams={{
+              only_active: true,
+              product_id: values.product_id,
+            }}
+            placeholder="Seleccionar presentación"
+          />
+        </View>
+      )}
 
       {/* Mostrar ingredientes y validaciones */}
       <IngredientsList />
 
       <FormInput
         name="quantity"
-        label="Cantidad producida"
+        label={values.package_id ? "Cantidad de Paquetes a Producir" : "Cantidad de Unidades a Producir"}
         placeholder="Ingrese la cantidad"
         keyboardType="numeric"
         required
@@ -707,6 +755,156 @@ export default function ProductionForm(props: ProductionFormProps) {
           </View>
         </Card.Content>
       </Card>
+    </>
+  );
+}
+
+export default function ProductionForm(props: ProductionFormProps) {
+  const params = useLocalSearchParams();
+  const router = useRouter();
+  const productionId =
+    props.id || (params.id ? parseInt(params.id as string) : undefined);
+  const formRef = useRef<AppFormRef<ProductionFormData>>(null);
+
+  const { company } = useSelectedCompany();
+  const { selectedLocation } = useAuth();
+  const alerts = useAlerts();
+
+  // Handler para validar antes de enviar
+  const handleSubmit = async (values: ProductionFormData) => {
+    // Convertir product_id a número si viene como string
+    const productId = typeof values.product_id === 'string' ? parseInt(values.product_id, 10) : (values.product_id || null);
+    
+    console.log('📝 handleSubmit - values.product_id:', {
+      original: values.product_id,
+      type: typeof values.product_id,
+      parsed: productId,
+      parsedType: typeof productId,
+    });
+    
+    // Validar que product_id sea válido
+    if (!productId || productId <= 0) {
+      console.log('❌ Validación falló en handleSubmit:', { productId });
+      alerts.error("Debe seleccionar un producto válido");
+      throw new Error("Producto inválido");
+    }
+
+    // Obtener información del producto para validar stock
+    try {
+      const product = await Services.products.show(productId);
+
+      const productData = product.data.data as any;
+
+      if (!productData.ingredients || productData.ingredients.length === 0) {
+        alerts.error("Este producto no tiene ingredientes configurados");
+        throw new Error("Sin ingredientes configurados");
+      }
+
+      // Verificar disponibilidad de ingredientes
+      const ingredientsWithStock = await Promise.all(
+        productData.ingredients.map(async (ing: any) => {
+          try {
+            const ingredientData = await Services.products.show(
+              ing.ingredient_id
+            );
+            const ingData = ingredientData.data as any;
+            return {
+              name: ingData.name,
+              needed: ing.quantity * values.quantity,
+              available: ingData.current_stock || 0,
+            };
+          } catch {
+            return {
+              name: ing.ingredient_name || "Desconocido",
+              needed: ing.quantity * values.quantity,
+              available: 0,
+            };
+          }
+        })
+      );
+
+      const hasInsufficient = ingredientsWithStock.some(
+        (ing: any) => ing.available < ing.needed
+      );
+
+      if (hasInsufficient) {
+        const confirmed = await alerts.confirm(
+          "Algunos ingredientes no tienen stock suficiente. ¿Deseas continuar de todas formas?",
+          {
+            title: "Stock insuficiente",
+            okText: "Sí, continuar",
+            cancelText: "Cancelar",
+          }
+        );
+
+        if (!confirmed) {
+          throw new Error("Cancelado por el usuario");
+        }
+      } else {
+        // Confirmar producción normal
+        const confirmed = await alerts.confirm(
+          `¿Confirmas el registro de ${values.quantity} unidades? Se restarán los ingredientes del inventario.`,
+          {
+            title: "Confirmar producción",
+            okText: "Confirmar",
+            cancelText: "Cancelar",
+          }
+        );
+
+        if (!confirmed) {
+          throw new Error("Cancelado por el usuario");
+        }
+      }
+
+      // Guardar la producción
+      console.log('💾 Guardando producción con valores:', values);
+      const response = await Services.productions.store(values);
+      console.log('✅ Producción guardada correctamente:', response.data);
+      
+      alerts.success("Producción registrada correctamente");
+      
+      // Navegar al listado de producciones
+      router.push('/(tabs)/home/production');
+    } catch (error: any) {
+      if (error.message === "Cancelado por el usuario") {
+        throw error;
+      }
+      console.error('❌ Error al guardar producción:', error);
+      
+      // Extraer mensaje de error específico
+      let errorMessage = "Error al registrar la producción";
+      if (error?.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      alerts.error(errorMessage);
+      throw error;
+    }
+  };
+
+  return (
+    <AppForm
+      ref={formRef}
+      api={Services.productions}
+      id={productionId}
+      readonly={props.readonly}
+      style={{ backgroundColor: palette.background }}
+      submitButtonText="Registrar Producción"
+      onSubmit={handleSubmit}
+      initialValues={{
+        company_id: company?.id || 0,
+        location_id: selectedLocation?.id?.toString() || "",
+        production_date: new Date().toISOString().split("T")[0],
+        product_id: null,
+        package_id: null,
+        quantity: 1,
+      }}
+    >
+      <FormContent />
     </AppForm>
   );
 }
