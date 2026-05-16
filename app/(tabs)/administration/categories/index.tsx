@@ -1,4 +1,5 @@
 import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
@@ -7,11 +8,30 @@ import React from "react";
 export default function CategoriesIndex() {
   const router = useRouter();
 
+  const columns: AppListColumn<any>[] = [
+    { title: "Nombre", dataIndex: "name", key: "name", width: 200 },
+    { title: "Descripción", dataIndex: "description", key: "description", width: 260 },
+    {
+      title: "Estado",
+      key: "is_active",
+      width: 100,
+      align: "center",
+      render: (_, item) => (
+        <AppList.Description
+          style={{ fontWeight: "bold", color: item.is_active ? palette.success : palette.red }}
+        >
+          {item.is_active ? "Activo" : "Inactivo"}
+        </AppList.Description>
+      ),
+    },
+  ];
+
   return (
     <>
       <AppList
         title="Categorías"
         service={Services.categories}
+        columns={columns}
         renderCard={({ item }: { item: any }) => ({
           title: item.name,
           description: (

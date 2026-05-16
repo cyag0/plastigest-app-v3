@@ -1,4 +1,5 @@
 import AppList from "@/components/App/AppList";
+import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -52,7 +53,8 @@ export default function ExpensesIndex() {
   };
 
   return (
-    <AppList
+    <PermissionGate permission="expenses_list">
+      <AppList
       title="Gastos"
       service={Services.expenses}
       filters={[
@@ -189,5 +191,6 @@ export default function ExpensesIndex() {
         sort: "-expense_date",
       }}
     />
+    </PermissionGate>
   );
 }

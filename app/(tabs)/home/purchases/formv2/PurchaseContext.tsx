@@ -57,6 +57,7 @@ interface PurchaseContextType {
   confirmPurchase: (data?: {
     expected_delivery_date?: string;
     document_number?: string;
+    payment_method?: string;
   }) => Promise<void>;
 }
 
@@ -456,6 +457,7 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
   const confirmPurchase = async (data?: {
     expected_delivery_date?: string;
     document_number?: string;
+    payment_method?: string;
   }) => {
     if (!currentPurchaseId) {
       throw new Error("No hay compra para confirmar");

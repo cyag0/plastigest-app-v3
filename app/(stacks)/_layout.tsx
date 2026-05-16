@@ -42,6 +42,12 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
+        name="notification-preferences/index"
+        options={{
+          title: "Preferencias de Notificaciones",
+        }}
+      />
+      <Stack.Screen
         name="tasks/index"
         options={{
           title: "Tareas",
@@ -51,6 +57,12 @@ export default function _layout() {
         name="tasks/[id]"
         options={{
           title: "Detalle de Tarea",
+        }}
+      />
+      <Stack.Screen
+        name="change-password"
+        options={{
+          title: "Cambiar Contraseña",
         }}
       />
     </Stack>

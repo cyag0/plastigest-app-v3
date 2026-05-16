@@ -1,5 +1,6 @@
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import PermissionGate from "@/components/App/PermissionGate";
 import CashRegister from "@/components/Dashboard/CashRegister";
 import SaleStats from "@/components/Dashboard/SaleStats";
 import palette from "@/constants/palette";
@@ -383,7 +384,8 @@ export default function SalesIndex() {
   );
 
   return (
-    <View style={styles.container}>
+    <PermissionGate permission="sales_list">
+      <View style={styles.container}>
       {/* Tabs Header */}
       <View style={styles.tabsContainer}>
         <Pressable
@@ -421,6 +423,7 @@ export default function SalesIndex() {
         renderTabBar={() => null}
       />
     </View>
+    </PermissionGate>
   );
 }
 

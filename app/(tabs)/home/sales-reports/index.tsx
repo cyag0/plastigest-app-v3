@@ -1,4 +1,5 @@
 import AppList from "@/components/App/AppList/AppList";
+import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import axios from "@/utils/axios";
@@ -35,7 +36,8 @@ export default function SalesReportsIndexScreen() {
   };
 
   return (
-    <View style={{ flex: 1 }}>
+    <PermissionGate permission="reports_view">
+      <View style={{ flex: 1 }}>
       <AppList
         title="Reportes de Ventas"
         service={Services.salesReports}
@@ -102,6 +104,7 @@ export default function SalesReportsIndexScreen() {
           router.push("/(tabs)/home/sales-reports/form" as any);
         }}
       />
-    </View>
+      </View>
+    </PermissionGate>
   );
 }

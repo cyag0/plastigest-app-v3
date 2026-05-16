@@ -143,10 +143,6 @@ export function useSelectedLocation(): UseSelectedLocationReturn {
     loadSelectedLocation();
   }, [company?.id]);
 
-  // Cargar ubicaciones cuando cambie la compañía
-  useEffect(() => {
-    loadLocations();
-  }, [loadLocations]);
 
   return {
     selectedLocation,

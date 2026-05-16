@@ -1,79 +1,45 @@
-import StatCard from "@/components/Dashboard/StatCard";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { FlatList, Image, StyleSheet, View } from "react-native";
-import { Button, Divider, Text } from "react-native-paper";
+import { Image, ScrollView, StyleSheet, View } from "react-native";
+import { Button, Chip, Divider, Surface, Text } from "react-native-paper";
 
-interface PurchaseDetail {
-  id: number;
-  product_id: number;
-  product_name: string;
-  product_code: string;
-  product_image?: any;
-  package_id?: number;
-  package_name?: string;
-  quantity: number;
-  quantity_received?: number;
-  unit_id: number;
-  unit_name: string;
-  unit_abbreviation: string;
-  unit_price: number;
-  subtotal: number;
-}
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const fmt = (value: number) =>
+  new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
 
-interface Purchase {
-  id: number;
-  document_number: string;
-  purchase_number: string;
-  status: string;
-  supplier_name: string;
-  purchase_date: string;
-  total: number;
-  notes?: string;
-  details?: PurchaseDetail[];
-  details_count?: number;
-}
-
-const statusSteps = [
-  { key: "draft", label: "Borrador", icon: "file-document-edit-outline" },
-  { key: "ordered", label: "Pedido", icon: "cart-check" },
-  { key: "in_transit", label: "En Tránsito", icon: "truck-delivery" },
-  { key: "received", label: "Recibido", icon: "package-variant-closed-check" },
-  { key: "cancelled", label: "Cancelado", icon: "close-circle-outline" },
-];
-
-const getStatusIndex = (status: string) => {
-  return statusSteps.findIndex((step) => step.key === status);
+const toNum = (v: any): number => {
+  const n = parseFloat(v);
+  return isNaN(n) ? 0 : n;
 };
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "draft":
-      return palette.warning;
-    case "ordered":
-      return palette.blue;
-    case "in_transit":
-      return palette.accent;
-    case "received":
-      return palette.success;
-    case "cancelled":
-      return palette.error;
-    default:
-      return palette.textSecondary;
-  }
+// ── Status config ─────────────────────────────────────────────────────────────
+const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
+  draft:      { color: "#f59e0b", icon: "file-document-edit-outline",  label: "Borrador" },
+  ordered:    { color: "#3b82f6", icon: "cart-check",                   label: "Pedido" },
+  in_transit: { color: "#8b5cf6", icon: "truck-delivery",              label: "En Tránsito" },
+  received:   { color: "#10b981", icon: "package-variant-closed-check", label: "Recibido" },
+  cancelled:  { color: "#ef4444", icon: "close-circle-outline",         label: "Cancelado" },
+};
+
+const FLOW_STEPS = ["draft", "ordered", "in_transit", "received"] as const;
+
+const PAYMENT_METHOD_CONFIG: Record<string, { icon: string; label: string }> = {
+  cash:     { icon: "cash",            label: "Efectivo" },
+  card:     { icon: "credit-card",     label: "Tarjeta" },
+  transfer: { icon: "bank-transfer",   label: "Transferencia" },
+  other:    { icon: "dots-horizontal", label: "Otro" },
 };
 
 export default function PurchaseDetailScreen() {
   const { id } = useLocalSearchParams();
-  const router = useRouter();
   const alerts = useAlerts();
-  const [purchase, setPurchase] = useState<Purchase | null>(null);
+  const [purchase, setPurchase] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [receivingPurchase, setReceivingPurchase] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     loadPurchase();
@@ -84,8 +50,7 @@ export default function PurchaseDetailScreen() {
       setLoading(true);
       const response = await Services.purchasesV2.show(Number(id));
       setPurchase(response.data.data);
-    } catch (error) {
-      console.error("Error loading purchase:", error);
+    } catch {
       alerts.error("Error al cargar la compra");
     } finally {
       setLoading(false);
@@ -93,676 +58,571 @@ export default function PurchaseDetailScreen() {
   };
 
   const handleConfirmOrder = async () => {
+    if (
+      !await alerts.confirm("¿Confirmar el pedido de compra?", {
+        title: "Confirmar Pedido",
+        okText: "Confirmar",
+        cancelText: "Cancelar",
+      })
+    )
+      return;
     try {
-      const confirmed = await alerts.confirm(
-        "¿Confirmar el pedido de compra?",
-        {
-          title: "Confirmar Pedido",
-          okText: "Confirmar",
-          cancelText: "Cancelar",
-        },
-      );
-
-      if (!confirmed) return;
-
-      setReceivingPurchase(true);
+      setBusy(true);
       const response = await Services.purchasesV2.confirm(Number(id));
-
       if (response.success) {
         alerts.success("Pedido confirmado exitosamente");
         await loadPurchase();
       } else {
         alerts.error(response.message || "Error al confirmar el pedido");
       }
-    } catch (error: any) {
-      console.error("Error confirming order:", error);
-      alerts.error(error.message || "Error al confirmar el pedido");
+    } catch (e: any) {
+      alerts.error(e.message || "Error al confirmar el pedido");
     } finally {
-      setReceivingPurchase(false);
+      setBusy(false);
     }
   };
 
   const handleMarkInTransit = async () => {
+    if (
+      !await alerts.confirm("¿Marcar la compra como en tránsito?", {
+        title: "En Tránsito",
+        okText: "Confirmar",
+        cancelText: "Cancelar",
+      })
+    )
+      return;
     try {
-      const confirmed = await alerts.confirm(
-        "¿Marcar la compra como en tránsito?",
-        {
-          title: "En Tránsito",
-          okText: "Confirmar",
-          cancelText: "Cancelar",
-        },
-      );
-
-      if (!confirmed) return;
-
-      setReceivingPurchase(true);
+      setBusy(true);
       const response = await Services.purchasesV2.markInTransit(Number(id));
-
       if (response.success) {
         alerts.success("Compra marcada como en tránsito");
         await loadPurchase();
       } else {
         alerts.error(response.message || "Error al actualizar el estado");
       }
-    } catch (error: any) {
-      console.error("Error marking in transit:", error);
-      alerts.error(error.message || "Error al actualizar el estado");
+    } catch (e: any) {
+      alerts.error(e.message || "Error al actualizar el estado");
     } finally {
-      setReceivingPurchase(false);
+      setBusy(false);
     }
   };
 
   const handleReceivePurchase = async () => {
-    try {
-      if (!purchase?.details || purchase.details.length === 0) {
-        alerts.error("No hay productos para recibir");
-        return;
-      }
-
-      const confirmed = await alerts.confirm(
-        "¿Confirmar que la compra ha sido recibida? Esto actualizará el stock de los productos. Esta acción no se puede deshacer.",
+    if (!purchase?.details?.length) {
+      alerts.error("No hay productos para recibir");
+      return;
+    }
+    if (
+      !await alerts.confirm(
+        "¿Confirmar que la compra ha sido recibida? Esto actualizará el stock de los productos.",
         {
           title: "Recibir Compra",
           okText: "Confirmar",
           cancelText: "Cancelar",
         },
-      );
-
-      if (!confirmed) return;
-
-      setReceivingPurchase(true);
-
-      // Crear detalles con las cantidades recibidas (por defecto, toda la cantidad pedida)
-      const details = purchase.details.map((detail: PurchaseDetail) => ({
-        id: detail.id,
-        quantity_received: detail.quantity,
+      )
+    )
+      return;
+    try {
+      setBusy(true);
+      const details = purchase.details.map((d: any) => ({
+        id: d.id,
+        quantity_received: toNum(d.quantity),
       }));
-
       const response = await Services.purchasesV2.receive(Number(id), details);
-
       if (response.success) {
-        alerts.success(
-          "Compra recibida exitosamente. El stock ha sido actualizado.",
-        );
+        alerts.success("Compra recibida. Stock actualizado.");
         await loadPurchase();
       } else {
         alerts.error(response.message || "Error al recibir la compra");
       }
-    } catch (error: any) {
-      console.error("Error receiving purchase:", error);
-      alerts.error(error.message || "Error al recibir la compra");
+    } catch (e: any) {
+      alerts.error(e.message || "Error al recibir la compra");
     } finally {
-      setReceivingPurchase(false);
+      setBusy(false);
     }
   };
 
   const handleCancelPurchase = async () => {
-    try {
-      const confirmed = await alerts.confirm(
-        "¿Estás seguro de cancelar esta compra? Esta acción no se puede deshacer.",
+    if (
+      !await alerts.confirm(
+        "¿Cancelar esta compra? Esta acción no se puede deshacer.",
         {
           title: "Cancelar Compra",
           okText: "Cancelar Compra",
           cancelText: "Volver",
         },
-      );
-
-      if (!confirmed) return;
-
-      setReceivingPurchase(true);
+      )
+    )
+      return;
+    try {
+      setBusy(true);
       const response = await Services.purchasesV2.cancel(Number(id));
-
       if (response.success) {
-        alerts.success("Compra cancelada exitosamente");
+        alerts.success("Compra cancelada");
         await loadPurchase();
       } else {
-        alerts.error(response.message || "Error al cancelar la compra");
+        alerts.error(response.message || "Error al cancelar");
       }
-    } catch (error: any) {
-      console.error("Error cancelling purchase:", error);
-      alerts.error(error.message || "Error al cancelar la compra");
+    } catch (e: any) {
+      alerts.error(e.message || "Error al cancelar");
     } finally {
-      setReceivingPurchase(false);
+      setBusy(false);
     }
-  };
-
-  const currentStatusIndex = purchase ? getStatusIndex(purchase.status) : -1;
-  const statusColor = purchase
-    ? getStatusColor(purchase.status)
-    : palette.textSecondary;
-
-  const renderHeader = () => {
-    if (!purchase) return null;
-
-    return (
-      <View style={styles.section}>
-        {/* Información General */}
-        <View style={styles.header}>
-          <MaterialCommunityIcons
-            name="cart-outline"
-            size={40}
-            color={palette.primary}
-          />
-          <View style={styles.headerText}>
-            <Text variant="headlineMedium" style={styles.title}>
-              Compra #{purchase.document_number || purchase.id}
-            </Text>
-            <Text variant="bodyLarge" style={styles.subtitle}>
-              {purchase.supplier_name || "Sin proveedor"}
-            </Text>
-          </View>
-        </View>
-
-        <Divider style={styles.divider} />
-
-        <View style={styles.statsRow}>
-          <View style={{ flex: 1, flexDirection: "row", gap: 8 }}>
-            <StatCard
-              icon="calendar-outline"
-              value={new Date(purchase.purchase_date).toLocaleDateString(
-                "es-PE",
-                {
-                  day: "2-digit",
-                  month: "short",
-                },
-              )}
-              label="Fecha"
-              color={palette.blue}
-            />
-            <StatCard
-              icon="cash"
-              value={`$${parseFloat(purchase.total || "0").toFixed(2)}`}
-              label="Total"
-              color={palette.primary}
-            />
-          </View>
-          <StatCard
-            icon="package-variant"
-            value={purchase.details_count || 0}
-            label="Productos"
-            color={palette.accent}
-          />
-        </View>
-      </View>
-    );
-  };
-
-  const renderFooter = () => {
-    if (!purchase) return null;
-
-    return (
-      <>
-        {/* Productos */}
-        {purchase.details && purchase.details.length > 0 && (
-          <View style={styles.section}>
-            <Text variant="titleLarge" style={styles.sectionTitle}>
-              Productos ({purchase.details.length})
-            </Text>
-            {purchase.details.map((detail: PurchaseDetail, index: number) => (
-              <View key={detail.id}>
-                <View style={styles.productRow}>
-                  {/* Imagen del producto */}
-                  {detail.product_image ? (
-                    <Image
-                      source={{
-                        uri:
-                          typeof detail.product_image === "string"
-                            ? detail.product_image
-                            : detail.product_image.uri,
-                      }}
-                      style={styles.productImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.productImagePlaceholder}>
-                      <MaterialCommunityIcons
-                        name="package-variant"
-                        size={24}
-                        color={palette.textSecondary}
-                      />
-                    </View>
-                  )}
-
-                  <View style={styles.productInfo}>
-                    <Text variant="bodyLarge" style={styles.productName}>
-                      {detail.product_name}
-                      {detail.package_name && (
-                        <Text style={{ color: palette.textSecondary }}>
-                          {" "}
-                          - {detail.package_name}
-                        </Text>
-                      )}
-                    </Text>
-                    <Text variant="bodyMedium" style={styles.productCode}>
-                      {detail.product_code}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.productUnit}>
-                      Unidad: {detail.unit_name} ({detail.unit_abbreviation})
-                    </Text>
-                    {purchase.status === "received" &&
-                      detail.quantity_received && (
-                        <Text
-                          variant="bodySmall"
-                          style={styles.receivedQuantity}
-                        >
-                          Recibido: {detail.quantity_received}{" "}
-                          {detail.unit_abbreviation}
-                        </Text>
-                      )}
-                  </View>
-                  <View style={styles.productDetails}>
-                    <Text variant="bodyMedium" style={styles.quantity}>
-                      {detail.quantity} × $
-                      {parseFloat(detail.unit_price || "0").toFixed(2)}
-                    </Text>
-                    <Text variant="titleMedium" style={styles.productTotal}>
-                      ${parseFloat(detail.subtotal || "0").toFixed(2)}
-                    </Text>
-                  </View>
-                </View>
-                {index < purchase.details.length - 1 && (
-                  <Divider style={styles.productDivider} />
-                )}
-              </View>
-            ))}
-
-            {/* Total */}
-            <Divider style={styles.divider} />
-            <View style={styles.totalRow}>
-              <Text variant="titleLarge" style={styles.totalLabel}>
-                Total
-              </Text>
-              <Text variant="headlineSmall" style={styles.totalValue}>
-                ${parseFloat(purchase.total || "0").toFixed(2)}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Acciones */}
-        <View style={styles.actions}>
-          {purchase.status === "draft" && (
-            <Button
-              mode="contained"
-              onPress={handleConfirmOrder}
-              loading={receivingPurchase}
-              disabled={receivingPurchase}
-              icon="cart-check"
-              buttonColor={palette.blue}
-              style={styles.button}
-            >
-              Confirmar Pedido
-            </Button>
-          )}
-
-          {purchase.status === "ordered" && (
-            <Button
-              mode="contained"
-              onPress={handleMarkInTransit}
-              loading={receivingPurchase}
-              disabled={receivingPurchase}
-              icon="truck-delivery"
-              buttonColor={palette.accent}
-              style={styles.button}
-            >
-              Marcar en Tránsito
-            </Button>
-          )}
-
-          {purchase.status === "in_transit" && (
-            <Button
-              mode="contained"
-              onPress={handleReceivePurchase}
-              loading={receivingPurchase}
-              disabled={receivingPurchase}
-              icon="package-variant-closed-check"
-              buttonColor={palette.success}
-              style={styles.button}
-            >
-              Confirmar Recepción
-            </Button>
-          )}
-
-          {purchase.status !== "received" &&
-            purchase.status !== "cancelled" && (
-              <Button
-                mode="outlined"
-                onPress={handleCancelPurchase}
-                loading={receivingPurchase}
-                disabled={receivingPurchase}
-                icon="close-circle-outline"
-                textColor={palette.error}
-                style={[styles.button, { borderColor: palette.error }]}
-              >
-                Cancelar Compra
-              </Button>
-            )}
-
-          {purchase.status === "received" && (
-            <View style={styles.completedMessage}>
-              <MaterialCommunityIcons
-                name="check-circle"
-                size={24}
-                color={palette.success}
-              />
-              <Text
-                variant="bodyLarge"
-                style={{ color: palette.success, marginLeft: 8 }}
-              >
-                Compra completada
-              </Text>
-            </View>
-          )}
-
-          {purchase.status === "cancelled" && (
-            <View style={styles.completedMessage}>
-              <MaterialCommunityIcons
-                name="close-circle"
-                size={24}
-                color={palette.error}
-              />
-              <Text
-                variant="bodyLarge"
-                style={{ color: palette.error, marginLeft: 8 }}
-              >
-                Compra cancelada
-              </Text>
-            </View>
-          )}
-        </View>
-      </>
-    );
-  };
-
-  const renderTimeline = () => {
-    if (!purchase) return null;
-
-    // Filtrar estados para no mostrar cancelled en el flujo normal
-    const displaySteps =
-      purchase.status === "cancelled"
-        ? statusSteps.filter((step) => step.key === "cancelled")
-        : statusSteps.filter((step) => step.key !== "cancelled");
-
-    return (
-      <View style={styles.section}>
-        <Text variant="titleLarge" style={styles.sectionTitle}>
-          Estado de la Compra
-        </Text>
-        {displaySteps.map((step, index) => {
-          const isActive = step.key === purchase.status;
-          const stepIndex = statusSteps.findIndex((s) => s.key === step.key);
-          const isCompleted =
-            stepIndex < currentStatusIndex && purchase.status !== "cancelled";
-          const isLast = index === displaySteps.length - 1;
-          const itemColor =
-            isActive || isCompleted ? statusColor : palette.textSecondary;
-
-          return (
-            <View key={step.key} style={styles.timelineItem}>
-              <View style={styles.timelineLeft}>
-                <View
-                  style={[
-                    styles.timelineDot,
-                    {
-                      backgroundColor: itemColor,
-                      borderColor: itemColor,
-                    },
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name={step.icon as any}
-                    size={16}
-                    color="#fff"
-                  />
-                </View>
-                {!isLast && (
-                  <View
-                    style={[
-                      styles.timelineLine,
-                      {
-                        backgroundColor: isCompleted
-                          ? statusColor
-                          : palette.border,
-                      },
-                    ]}
-                  />
-                )}
-              </View>
-              <View style={styles.timelineContent}>
-                <Text
-                  variant="titleMedium"
-                  style={[
-                    styles.timelineTitle,
-                    {
-                      color:
-                        isActive || isCompleted
-                          ? palette.text
-                          : palette.textSecondary,
-                    },
-                  ]}
-                >
-                  {step.label}
-                </Text>
-                <Text variant="bodySmall" style={styles.timelineSubtitle}>
-                  {isActive
-                    ? "Estado actual"
-                    : isCompleted
-                      ? "Completado"
-                      : "Pendiente"}
-                </Text>
-              </View>
-              {(isActive || isCompleted) && (
-                <MaterialCommunityIcons
-                  name="check-circle"
-                  size={20}
-                  color={itemColor}
-                  style={styles.timelineCheck}
-                />
-              )}
-            </View>
-          );
-        })}
-      </View>
-    );
   };
 
   if (loading) {
     return (
-      <View style={[styles.container, { padding: 16 }]}>
-        <Text>Cargando compra...</Text>
+      <View style={styles.center}>
+        <Text>Cargando...</Text>
       </View>
     );
   }
 
+  if (!purchase) {
+    return (
+      <View style={styles.center}>
+        <Text>No se encontró la compra</Text>
+      </View>
+    );
+  }
+
+  const status =
+    STATUS_CONFIG[purchase.status] ?? {
+      color: "#6c757d",
+      icon: "help-circle",
+      label: purchase.status,
+    };
+  const total = toNum(purchase.total);
+  const isCancelled = purchase.status === "cancelled";
+  const currentStepIndex = FLOW_STEPS.indexOf(purchase.status as any);
+
   return (
-    <View style={{ flex: 1, backgroundColor: palette.background }}>
-      <FlatList
-        data={[1]}
-        renderItem={() => renderTimeline()}
-        keyExtractor={(item) => item.toString()}
-        ListHeaderComponent={renderHeader}
-        ListFooterComponent={renderFooter}
-        style={styles.container}
-        contentContainerStyle={{ paddingHorizontal: 16 }}
-      />
-    </View>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* ── Header con estado ── */}
+      <Surface style={[styles.card, { backgroundColor: status.color }]} elevation={4}>
+        <View style={styles.headerTop}>
+          <View style={{ flex: 1 }}>
+            <Text variant="labelMedium" style={styles.purchaseLabel}>
+              COMPRA
+            </Text>
+            <Text variant="headlineMedium" style={styles.purchaseNumber}>
+              {purchase.purchase_number || `#${purchase.id}`}
+            </Text>
+            <View style={styles.row}>
+              <MaterialCommunityIcons
+                name="store-outline"
+                size={14}
+                color="rgba(255,255,255,0.8)"
+              />
+              <Text variant="bodySmall" style={styles.headerMeta}>
+                {purchase.supplier_name || "Sin proveedor"}
+              </Text>
+            </View>
+            <View style={styles.row}>
+              <MaterialCommunityIcons
+                name="calendar-outline"
+                size={14}
+                color="rgba(255,255,255,0.8)"
+              />
+              <Text variant="bodySmall" style={styles.headerMeta}>
+                {new Date(purchase.purchase_date).toLocaleDateString("es-MX", {
+                  dateStyle: "long",
+                })}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.statusBadge}>
+            <MaterialCommunityIcons
+              name={status.icon as any}
+              size={32}
+              color="rgba(255,255,255,0.95)"
+            />
+            <Text variant="labelMedium" style={styles.statusText}>
+              {status.label}
+            </Text>
+          </View>
+        </View>
+
+        <Divider
+          style={{ backgroundColor: "rgba(255,255,255,0.3)", marginVertical: 16 }}
+        />
+
+        <View style={styles.totalRow}>
+          <Text variant="titleSmall" style={{ color: "rgba(255,255,255,0.8)" }}>
+            Total de compra
+          </Text>
+          <Text variant="headlineMedium" style={styles.totalValue}>
+            {fmt(total)}
+          </Text>
+        </View>
+
+        {purchase.payment_method && (() => {
+          const pm = PAYMENT_METHOD_CONFIG[purchase.payment_method];
+          return (
+            <View style={[styles.row, { marginTop: 10 }]}>
+              <MaterialCommunityIcons
+                name={(pm?.icon ?? "help-circle") as any}
+                size={15}
+                color="rgba(255,255,255,0.8)"
+              />
+              <Text variant="bodySmall" style={{ color: "rgba(255,255,255,0.85)" }}>
+                {pm?.label ?? purchase.payment_method}
+              </Text>
+            </View>
+          );
+        })()}
+      </Surface>
+
+      {/* ── Timeline de progreso ── */}
+      {!isCancelled && (
+        <Surface style={styles.card} elevation={1}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            Progreso
+          </Text>
+          <View style={{ marginTop: 16 }}>
+            {FLOW_STEPS.map((key, index) => {
+              const cfg = STATUS_CONFIG[key];
+              const isActive = key === purchase.status;
+              const isCompleted = index < currentStepIndex;
+              const isLast = index === FLOW_STEPS.length - 1;
+              const dotColor =
+                isActive || isCompleted ? status.color : "#e4e7ec";
+
+              return (
+                <View key={key} style={styles.timelineItem}>
+                  <View style={styles.timelineLeft}>
+                    <View
+                      style={[
+                        styles.timelineDot,
+                        { backgroundColor: dotColor, borderColor: dotColor },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name={(isCompleted ? "check" : cfg.icon) as any}
+                        size={14}
+                        color="white"
+                      />
+                    </View>
+                    {!isLast && (
+                      <View
+                        style={[
+                          styles.timelineLine,
+                          {
+                            backgroundColor: isCompleted
+                              ? status.color
+                              : "#e4e7ec",
+                          },
+                        ]}
+                      />
+                    )}
+                  </View>
+                  <View style={styles.timelineContent}>
+                    <Text
+                      variant="bodyMedium"
+                      style={{
+                        fontWeight: isActive ? "700" : "400",
+                        color:
+                          isActive || isCompleted ? palette.text : "#aaa",
+                      }}
+                    >
+                      {cfg.label}
+                    </Text>
+                    <Text
+                      variant="bodySmall"
+                      style={{ color: "#aaa", fontSize: 11 }}
+                    >
+                      {isActive
+                        ? "Estado actual"
+                        : isCompleted
+                          ? "Completado"
+                          : "Pendiente"}
+                    </Text>
+                  </View>
+                  {(isActive || isCompleted) && (
+                    <MaterialCommunityIcons
+                      name="check-circle"
+                      size={18}
+                      color={status.color}
+                    />
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </Surface>
+      )}
+
+      {/* ── Cancelado ── */}
+      {isCancelled && (
+        <Surface
+          style={[
+            styles.card,
+            { flexDirection: "row", alignItems: "center", gap: 12 },
+          ]}
+          elevation={1}
+        >
+          <MaterialCommunityIcons name="close-circle" size={32} color="#ef4444" />
+          <View>
+            <Text
+              variant="titleMedium"
+              style={{ fontWeight: "700", color: "#ef4444" }}
+            >
+              Compra Cancelada
+            </Text>
+            <Text variant="bodySmall" style={{ color: "#aaa" }}>
+              Esta compra fue cancelada
+            </Text>
+          </View>
+        </Surface>
+      )}
+
+      {/* ── Productos ── */}
+      <Surface style={styles.card} elevation={1}>
+        <View style={styles.sectionHeader}>
+          <Text variant="titleMedium" style={styles.sectionTitle}>
+            Productos
+          </Text>
+          <Chip
+            compact
+            style={{ backgroundColor: palette.primary + "18" }}
+            textStyle={{ color: palette.primary, fontSize: 12, fontWeight: "700" }}
+          >
+            {purchase.details?.length || 0}
+          </Chip>
+        </View>
+
+        <View style={{ gap: 10, marginTop: 8 }}>
+          {purchase.details?.map((detail: any) => {
+            const imgUri =
+              typeof detail.product_image === "string"
+                ? detail.product_image
+                : detail.product_image?.uri;
+
+            return (
+              <View key={detail.id} style={styles.productItem}>
+                {imgUri ? (
+                  <Image
+                    source={{ uri: imgUri }}
+                    style={styles.productImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View
+                    style={[styles.productImage, styles.productImagePlaceholder]}
+                  >
+                    <MaterialCommunityIcons
+                      name="package-variant"
+                      size={24}
+                      color="#aaa"
+                    />
+                  </View>
+                )}
+
+                <View style={{ flex: 1 }}>
+                  <Text
+                    variant="bodyLarge"
+                    style={{ fontWeight: "600" }}
+                    numberOfLines={1}
+                  >
+                    {detail.product_name}
+                  </Text>
+                  <Text variant="bodySmall" style={{ color: "#999" }}>
+                    {detail.product_code}
+                  </Text>
+                  {detail.package_name && (
+                    <View style={[styles.row, { marginTop: 2 }]}>
+                      <MaterialCommunityIcons
+                        name="package-variant-closed"
+                        size={12}
+                        color="#aaa"
+                      />
+                      <Text variant="bodySmall" style={{ color: "#999" }}>
+                        {detail.package_name}
+                      </Text>
+                    </View>
+                  )}
+                  <Text variant="bodySmall" style={{ color: "#aaa", marginTop: 2 }}>
+                    {detail.unit_name} ({detail.unit_abbreviation})
+                  </Text>
+
+                  <View
+                    style={[
+                      styles.row,
+                      { justifyContent: "space-between", marginTop: 8 },
+                    ]}
+                  >
+                    <View style={styles.qtyBadge}>
+                      <Text
+                        variant="bodySmall"
+                        style={{ color: palette.primary, fontWeight: "700" }}
+                      >
+                        {toNum(detail.quantity)} × {fmt(toNum(detail.unit_price))}
+                      </Text>
+                    </View>
+                    <Text
+                      variant="titleSmall"
+                      style={{ fontWeight: "bold", color: palette.primary }}
+                    >
+                      {fmt(toNum(detail.subtotal))}
+                    </Text>
+                  </View>
+
+                  {purchase.status === "received" && detail.quantity_received && (
+                    <View style={[styles.row, { marginTop: 4 }]}>
+                      <MaterialCommunityIcons
+                        name="check-circle-outline"
+                        size={13}
+                        color="#10b981"
+                      />
+                      <Text
+                        variant="bodySmall"
+                        style={{ color: "#10b981", fontWeight: "600" }}
+                      >
+                        Recibido: {toNum(detail.quantity_received)}{" "}
+                        {detail.unit_abbreviation}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+
+        <Divider style={{ marginVertical: 16 }} />
+        <View style={[styles.row, { justifyContent: "space-between" }]}>
+          <Text variant="titleMedium" style={{ fontWeight: "700" }}>
+            Total
+          </Text>
+          <Text
+            variant="titleLarge"
+            style={{ fontWeight: "bold", color: palette.primary }}
+          >
+            {fmt(total)}
+          </Text>
+        </View>
+      </Surface>
+
+      {/* ── Notas ── */}
+      {purchase.notes && (
+        <Surface style={styles.card} elevation={1}>
+          <View style={[styles.row, { marginBottom: 8 }]}>
+            <MaterialCommunityIcons
+              name="note-text-outline"
+              size={18}
+              color={palette.primary}
+            />
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Notas
+            </Text>
+          </View>
+          <Text variant="bodyMedium" style={{ color: "#555", lineHeight: 20 }}>
+            {purchase.notes}
+          </Text>
+        </Surface>
+      )}
+
+      {/* ── Acciones ── */}
+      <View style={{ gap: 10 }}>
+        {purchase.status === "draft" && (
+          <Button
+            mode="contained"
+            onPress={handleConfirmOrder}
+            loading={busy}
+            disabled={busy}
+            icon="cart-check"
+            buttonColor="#3b82f6"
+            style={styles.actionBtn}
+          >
+            Confirmar Pedido
+          </Button>
+        )}
+
+        {purchase.status === "ordered" && (
+          <Button
+            mode="contained"
+            onPress={handleMarkInTransit}
+            loading={busy}
+            disabled={busy}
+            icon="truck-delivery"
+            buttonColor="#8b5cf6"
+            style={styles.actionBtn}
+          >
+            Marcar en Tránsito
+          </Button>
+        )}
+
+        {purchase.status === "in_transit" && (
+          <Button
+            mode="contained"
+            onPress={handleReceivePurchase}
+            loading={busy}
+            disabled={busy}
+            icon="package-variant-closed-check"
+            buttonColor="#10b981"
+            style={styles.actionBtn}
+          >
+            Confirmar Recepción
+          </Button>
+        )}
+
+        {purchase.status !== "received" && purchase.status !== "cancelled" && (
+          <Button
+            mode="outlined"
+            onPress={handleCancelPurchase}
+            loading={busy}
+            disabled={busy}
+            icon="close-circle-outline"
+            textColor="#ef4444"
+            style={[styles.actionBtn, { borderColor: "#ef4444" }]}
+          >
+            Cancelar Compra
+          </Button>
+        )}
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: palette.background,
-  },
-  section: {
-    padding: 16,
-    backgroundColor: "#fff",
-    marginBottom: 8,
-    borderRadius: 8,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  headerText: {
-    marginLeft: 16,
-    flex: 1,
-  },
-  title: {
-    fontWeight: "bold",
-    color: palette.text,
-  },
-  subtitle: {
-    color: palette.textSecondary,
-    marginTop: 4,
-  },
-  divider: {
-    marginVertical: 16,
-  },
-  statsRow: {
-    gap: 8,
-  },
-  infoContainer: {
-    gap: 12,
-  },
-  infoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  label: {
-    color: palette.textSecondary,
-  },
-  value: {
-    color: palette.text,
-    fontWeight: "600",
-  },
-  sectionTitle: {
-    fontWeight: "bold",
-    color: palette.text,
-    marginBottom: 16,
-  },
-  timelineItem: {
-    flexDirection: "row",
-    paddingBottom: 24,
-  },
-  timelineLeft: {
-    alignItems: "center",
-    marginRight: 16,
-  },
-  timelineDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  timelineLine: {
-    width: 2,
-    flex: 1,
-    marginTop: 4,
-  },
-  timelineContent: {
-    flex: 1,
-    paddingTop: 4,
-  },
-  timelineTitle: {
-    fontWeight: "600",
-  },
-  timelineSubtitle: {
-    color: palette.textSecondary,
-    marginTop: 2,
-  },
-  timelineCheck: {
-    marginTop: 4,
-  },
-  productRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-  },
-  productImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 12,
-    backgroundColor: palette.skeleton,
-  },
-  productImagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    marginRight: 12,
-    backgroundColor: palette.skeleton,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  productInfo: {
-    flex: 1,
-  },
-  productName: {
-    fontWeight: "600",
-    color: palette.text,
-  },
-  productCode: {
-    color: palette.textSecondary,
-    marginTop: 4,
-  },
-  productUnit: {
-    color: palette.textSecondary,
-    marginTop: 2,
-    fontSize: 12,
-  },
-  receivedQuantity: {
-    color: palette.success,
-    marginTop: 2,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  productDetails: {
-    alignItems: "flex-end",
-  },
-  quantity: {
-    color: palette.textSecondary,
-  },
-  productTotal: {
-    fontWeight: "bold",
-    color: palette.primary,
-    marginTop: 4,
-  },
-  productDivider: {
-    marginVertical: 4,
-  },
-  actions: {
-    padding: 16,
-    gap: 12,
-  },
-  button: {
-    borderRadius: 8,
-  },
-  completedMessage: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 16,
-    backgroundColor: palette.background,
-    borderRadius: 8,
-  },
-  totalRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingTop: 16,
-  },
-  totalLabel: {
-    fontWeight: "bold",
-    color: palette.text,
-  },
-  totalValue: {
-    fontWeight: "bold",
-    color: palette.primary,
-  },
+  scroll:  { flex: 1, backgroundColor: "#f2f4f7" },
+  content: { padding: 16, gap: 14 },
+  center:  { flex: 1, justifyContent: "center", alignItems: "center" },
+  card:    { backgroundColor: "white", borderRadius: 18, padding: 20 },
+
+  // Header
+  headerTop:      { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
+  purchaseLabel:  { color: "rgba(255,255,255,0.75)", letterSpacing: 2, fontSize: 11 },
+  purchaseNumber: { color: "white", fontWeight: "bold", marginBottom: 10 },
+  headerMeta:     { color: "rgba(255,255,255,0.85)", fontSize: 13 },
+  statusBadge:    { alignItems: "center", gap: 4, paddingLeft: 12 },
+  statusText:     { color: "rgba(255,255,255,0.9)", fontWeight: "700", textAlign: "center" },
+  totalRow:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  totalValue:     { color: "white", fontWeight: "bold" },
+
+  // Common
+  row:           { flexDirection: "row", alignItems: "center", gap: 8 },
+  sectionTitle:  { fontWeight: "700" },
+  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+
+  // Timeline
+  timelineItem:    { flexDirection: "row", alignItems: "flex-start", paddingBottom: 20 },
+  timelineLeft:    { alignItems: "center", marginRight: 14 },
+  timelineDot:     { width: 30, height: 30, borderRadius: 15, borderWidth: 2, justifyContent: "center", alignItems: "center" },
+  timelineLine:    { width: 2, flex: 1, marginTop: 4, minHeight: 24 },
+  timelineContent: { flex: 1, paddingTop: 4 },
+
+  // Products
+  productItem:             { flexDirection: "row", gap: 12, alignItems: "flex-start", backgroundColor: "#f6f7fb", borderRadius: 12, padding: 12 },
+  productImage:            { width: 60, height: 60, borderRadius: 10 },
+  productImagePlaceholder: { backgroundColor: "#e4e7ec", justifyContent: "center", alignItems: "center" },
+  qtyBadge:                { backgroundColor: "#e8f0fe", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+
+  // Actions
+  actionBtn: { borderRadius: 10 },
 });

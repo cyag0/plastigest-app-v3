@@ -25,6 +25,9 @@
     "build": true,
     "android": true
   },
+  "chat.instructionsFilesLocations": {
+        ".vscode/agents/context": true
+    },
   "typescript.tsserver.useSeparateValidationServer": false,
   "typescript.enablePromptUseWorkspaceTsdk": true,
   "files.watcherExclude": {

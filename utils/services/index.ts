@@ -141,6 +141,7 @@ const Services = {
       purchase_id?: number;
       supplier_id?: number;
       notes?: string;
+      payment_method?: string;
       items?: Array<{
         id: string | number;
         product_id: number;
@@ -165,6 +166,7 @@ const Services = {
       data?: {
         expected_delivery_date?: string;
         document_number?: string;
+        payment_method?: string;
       },
     ) {
       const response = await axiosClient.post(
@@ -335,9 +337,36 @@ const Services = {
       );
       return response.data;
     },
-    async createTestNotifications() {
+  },
+  notificationPreferences: {
+    async index() {
+      const response = await axiosClient.get(
+        "/auth/admin/notification-preferences",
+      );
+      return response.data;
+    },
+    async update(
+      eventType: App.Entities.NotificationEventType,
+      data: Partial<
+        Pick<App.Entities.NotificationPreference, "channel_db" | "channel_email" | "channel_push" | "is_active"> &
+        { allowed_user_ids: number[] | null }
+      >,
+    ) {
+      const response = await axiosClient.patch(
+        `/auth/admin/notification-preferences/${eventType}`,
+        data,
+      );
+      return response.data;
+    },
+    async eligibleUsers(eventType: App.Entities.NotificationEventType) {
+      const response = await axiosClient.get(
+        `/auth/admin/notification-preferences/${eventType}/eligible-users`,
+      );
+      return response.data;
+    },
+    async reset() {
       const response = await axiosClient.post(
-        "/auth/admin/notifications/create-test-notifications"
+        "/auth/admin/notification-preferences/reset",
       );
       return response.data;
     },
@@ -437,7 +466,29 @@ const Services = {
       return response;
     },
   },
+  reportsV2: {
+    dashboard: async (params?: any) => {
+      const response = await api.get("/auth/admin/reports-v2/dashboard", {
+        params,
+      });
+      return response;
+    },
+  },
   movements,
+  cashMovements: {
+    ...createCrudService<any>("/auth/admin/cash-movements"),
+    async stats(params?: {
+      start_date?: string;
+      end_date?: string;
+      date?: string;
+    }) {
+      const response = await axiosClient.get("/auth/admin/cash-movements/stats", { params });
+      return response.data;
+    },
+  },
+  cashClosings: {
+    ...createCrudService<any>("/auth/admin/cash-closings"),
+  },
   home: {
     clientes: createCrudService<any>("/auth/admin/customers"),
     proveedores: createCrudService<any>("/api/proveedores"),

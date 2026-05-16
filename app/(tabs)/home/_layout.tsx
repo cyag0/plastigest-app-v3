@@ -36,7 +36,30 @@ export default function _layout() {
           title: "Inicio",
         }}
       />
-      <Stack.Screen name="roles" />
+      <Stack.Screen
+        name="roles/index"
+        options={{
+          title: "Roles",
+        }}
+      />
+      <Stack.Screen
+        name="roles/form"
+        options={{
+          title: "Nuevo Rol",
+        }}
+      />
+      <Stack.Screen
+        name="roles/[id]/index"
+        options={{
+          title: "Ver Rol",
+        }}
+      />
+      <Stack.Screen
+        name="roles/[id]/edit"
+        options={{
+          title: "Editar Rol",
+        }}
+      />
       <Stack.Screen
         name="notifications/index"
         options={{
@@ -50,7 +73,42 @@ export default function _layout() {
         }}
       />
       <Stack.Screen name="locations" />
-      <Stack.Screen name="users" />
+      <Stack.Screen
+        name="users/index"
+        options={{
+          title: "Usuarios",
+        }}
+      />
+      <Stack.Screen
+        name="users/form"
+        options={{
+          title: "Nuevo Usuario",
+        }}
+      />
+      <Stack.Screen
+        name="cash/index"
+        options={{
+          title: "Caja",
+        }}
+      />
+      <Stack.Screen
+        name="cash/form"
+        options={{
+          title: "Nuevo Movimiento",
+        }}
+      />
+      <Stack.Screen
+        name="cash/closing/index"
+        options={{ title: "Cierres de Caja" }}
+      />
+      <Stack.Screen
+        name="cash/closing/form"
+        options={{ title: "Nuevo Cierre" }}
+      />
+      <Stack.Screen
+        name="cash/closing/[id]"
+        options={{ title: "Detalle de Cierre" }}
+      />
       <Stack.Screen name="workers" />
       <Stack.Screen name="categories" />
       <Stack.Screen name="products" />

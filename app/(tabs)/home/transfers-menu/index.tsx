@@ -1,4 +1,5 @@
 import TransferStats from "@/components/Dashboard/TransferStats";
+import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -199,7 +200,8 @@ export default function TransfersMenuScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <PermissionGate permission="transfers_list">
+      <View style={styles.container}>
       {/* Tabs Header */}
       <View style={styles.tabsContainer}>
         <Pressable
@@ -229,6 +231,7 @@ export default function TransfersMenuScreen() {
         renderTabBar={() => null}
       />
     </View>
+    </PermissionGate>
   );
 }
 

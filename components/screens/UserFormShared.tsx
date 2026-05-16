@@ -2,13 +2,11 @@ import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppDependency from "@/components/Form/AppDependency";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
-import { FormProSelect } from "@/components/Form/AppProSelect";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
-  ActivityIndicator,
   Avatar,
   Button,
   Card,
@@ -17,6 +15,7 @@ import {
   Text,
 } from "react-native-paper";
 import * as Yup from "yup";
+import LocationRoleList, { LocationRoleItem } from "../Administration/CompanyAssignmentWidget";
 import { FormUpload } from "../Form/AppUpload";
 
 interface UserFormData {
@@ -24,7 +23,6 @@ interface UserFormData {
   email: string;
   password?: string;
   is_active?: boolean;
-  company_ids?: number[];
   avatar?: any;
 }
 
@@ -35,70 +33,75 @@ interface UserFormSharedProps {
   companyId?: number; // ID de la empresa actual (para mode="company")
 }
 
-const userValidationSchema = Yup.object().shape({
-  name: Yup.string().required("El nombre es requerido"),
-  email: Yup.string().email("Email inválido").required("El email es requerido"),
-  /* password: Yup.string().when("$isEditing", {
-    is: false,
-    then: (schema) =>
-      schema
-        .min(8, "Mínimo 8 caracteres")
-        .required("La contraseña es requerida"),
-    otherwise: (schema) => schema.min(8, "Mínimo 8 caracteres").notRequired(),
-  }), */
-});
-
 export default function UserFormShared(props: UserFormSharedProps) {
   const { id, readonly, mode = "global", companyId } = props;
   const isEditing = !!id;
   const formRef = useRef<AppFormRef<UserFormData>>(null);
   const [showPasswordField, setShowPasswordField] = useState(!isEditing);
-  const [companies, setCompanies] = useState<App.Entities.Company[]>([]);
-  const [loadingCompanies, setLoadingCompanies] = useState(false);
+  const [locationRoles, setLocationRoles] = useState<LocationRoleItem[]>([]);
+
+  // Password validation depends on whether we are creating or editing
+  const validationSchema = useMemo(
+    () =>
+      Yup.object().shape({
+        name: Yup.string().required("El nombre es requerido"),
+        email: Yup.string()
+          .email("Email inválido")
+          .required("El email es requerido"),
+        password: isEditing
+          ? // Editing: optional — but if the user typed something it must be ≥8 chars
+            Yup.string().test(
+              "password-edit",
+              "Mínimo 8 caracteres",
+              (v) => !v || v === "" || v.length >= 8
+            )
+          : // Creating: required and must be ≥8 chars
+            Yup.string()
+              .min(8, "Mínimo 8 caracteres")
+              .required("La contraseña es requerida"),
+      }),
+    [isEditing]
+  );
 
   useEffect(() => {
-    if (mode === "global") {
-      loadCompanies();
-    }
-  }, [mode]);
+    if (isEditing && id) loadLocationRoles(id);
+  }, [id, isEditing]);
 
-  const loadCompanies = async () => {
+  const loadLocationRoles = async (userId: number) => {
     try {
-      setLoadingCompanies(true);
-      const response = await Services.admin.companies.index({ all: true });
-      const companiesData = Array.isArray(response.data)
-        ? response.data
-        : response.data?.data || [];
-      setCompanies(companiesData);
-    } catch (error) {
-      console.error("Error loading companies:", error);
-    } finally {
-      setLoadingCompanies(false);
+      const response = await Services.admin.users.show(userId);
+      const user: any = response?.data?.data ?? response?.data ?? {};
+      const items: any[] = user.location_roles ?? [];
+      if (items.length > 0) {
+        setLocationRoles(
+          items.map((lr: any) => ({
+            location_id: lr.location_id ?? lr.location?.id,
+            role_id: lr.role_id ?? lr.role?.id,
+          }))
+        );
+      }
+    } catch {
+      // silent — user may not have location_roles yet
     }
+  };
+
+  const saveLocationRoles = async (userId: number) => {
+    if (locationRoles.length === 0) return;
+    await (Services.admin.users.update as any)(userId, {
+      location_roles: locationRoles
+        .filter((lr) => lr.location_id)
+        .map((lr) => ({ location_id: lr.location_id, role_id: lr.role_id })),
+    });
   };
 
   // Valores iniciales según el modo
-  const getInitialValues = () => {
-    const base = {
-      name: "",
-      email: "",
-      password: "",
-      is_active: true,
-      avatar: [],
-    };
-
-    if (mode === "company" && companyId) {
-      return {
-        ...base,
-        company_ids: [companyId],
-      };
-    }
-
-    return {
-      ...base,
-      company_ids: [],
-    };
-  };
+  const getInitialValues = () => ({
+    name: "",
+    email: "",
+    password: "",
+    is_active: true,
+    avatar: [],
+  });
 
   return (
     <AppForm
@@ -106,9 +109,15 @@ export default function UserFormShared(props: UserFormSharedProps) {
       api={Services.admin.users}
       id={id}
       readonly={readonly}
-      validationSchema={userValidationSchema}
+      validationSchema={validationSchema}
       initialValues={{
         ...getInitialValues(),
+      }}
+      onSuccess={async (response) => {
+        const savedUserId = response?.data?.id ?? id;
+        if (savedUserId) {
+          try { await saveLocationRoles(savedUserId); } catch (e) { console.error(e); }
+        }
       }}
     >
       {/* Avatar Upload */}
@@ -226,78 +235,31 @@ export default function UserFormShared(props: UserFormSharedProps) {
 
       <FormCheckBox name="is_active" text="Usuario Activo" />
 
-      {/* Solo mostrar empresas en modo global */}
-      {mode === "global" && (
-        <>
-          <Divider style={{ marginVertical: 24 }} />
+      {/* Sucursales y Roles */}
+      <Divider style={{ marginVertical: 24 }} />
 
-          <Text
-            variant="titleMedium"
-            style={{
-              marginBottom: 16,
-              fontWeight: "bold",
-              color: palette.text,
-            }}
-          >
-            Empresas Asignadas
-          </Text>
+      <Text
+        variant="titleMedium"
+        style={{ marginBottom: 8, fontWeight: "bold", color: palette.text }}
+      >
+        Sucursales y Roles
+      </Text>
 
-          <Text
-            variant="bodySmall"
-            style={{ marginBottom: 16, color: palette.textSecondary }}
-          >
-            Selecciona las empresas a las que este usuario tendrá acceso. Podrá
-            crear y gestionar workers en estas empresas.
-          </Text>
+      <Text
+        variant="bodySmall"
+        style={{ marginBottom: 16, color: palette.textSecondary }}
+      >
+        Asigna las sucursales donde operará el usuario y el rol que tendrá en cada una.
+      </Text>
 
-          {loadingCompanies ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color={palette.primary} />
-              <Text style={{ marginLeft: 8, color: palette.textSecondary }}>
-                Cargando empresas...
-              </Text>
-            </View>
-          ) : companies.length > 0 ? (
-            <FormProSelect
-              name="company_ids"
-              label="Empresas"
-              multiple
-              placeholder="Seleccione las empresas"
-              model="admin.companies"
-            />
-          ) : (
-            <Card style={styles.emptyCard}>
-              <Card.Content>
-                <Text
-                  style={{
-                    textAlign: "center",
-                    color: palette.textSecondary,
-                  }}
-                >
-                  No hay empresas disponibles. Crea una empresa primero.
-                </Text>
-              </Card.Content>
-            </Card>
-          )}
-        </>
-      )}
+      <LocationRoleList
+        value={locationRoles}
+        onChange={setLocationRoles}
+        readonly={readonly}
+        companyId={companyId}
+      />
 
-      {/* Mensaje para modo company */}
-      {mode === "company" && (
-        <>
-          <Divider style={{ marginVertical: 24 }} />
-          <Card style={styles.infoCard}>
-            <Card.Content>
-              <Text
-                variant="bodySmall"
-                style={{ color: palette.textSecondary }}
-              >
-                Este usuario será asignado automáticamente a la empresa actual.
-              </Text>
-            </Card.Content>
-          </Card>
-        </>
-      )}
+
 
       <View style={{ height: 40 }} />
     </AppForm>

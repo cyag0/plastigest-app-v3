@@ -1,4 +1,5 @@
 import AppList, { FilterConfig } from "@/components/App/AppList/AppList";
+import PermissionGate from "@/components/App/PermissionGate";
 import AppModal, { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
@@ -81,7 +82,7 @@ export default function InventoryIndex() {
   };
 
   return (
-    <>
+    <PermissionGate permission="inventory_list">
       <AppList
         title="Inventario Semanal"
         service={Services.inventoryCounts}
@@ -267,7 +268,7 @@ export default function InventoryIndex() {
           </AppForm>
         </AlertsProvider>
       </AppModal>
-    </>
+    </PermissionGate>
   );
 }
 

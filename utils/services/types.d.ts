@@ -235,20 +235,47 @@ namespace App {
       }
     }
 
+    type NotificationEventType =
+      | "low_stock"
+      | "inventory_adjustment"
+      | "inventory_count_discrepancy"
+      | "purchase_update"
+      | "task_event";
+
+    type NotificationSeverity = "info" | "success" | "warning" | "error" | "alert";
+
     interface Notification {
       id: number;
       user_id: number;
       company_id: number;
+      event_type: NotificationEventType;
       title: string;
       message: string;
-      type: "info" | "success" | "warning" | "error" | "alert";
+      severity: NotificationSeverity;
       is_read: boolean;
       read_at?: string | null;
-      data?: any;
+      data?: Record<string, any>;
       created_at: string;
       updated_at: string;
       user?: User;
       company?: Company;
+    }
+
+    interface NotificationPreference {
+      event_type: NotificationEventType;
+      permission_name: string;
+      channel_db: boolean;
+      channel_email: boolean;
+      channel_push: boolean;
+      is_active: boolean;
+      is_customized: boolean;
+      allowed_user_ids: number[] | null;
+    }
+
+    interface NotificationEligibleUser {
+      id: number;
+      name: string;
+      email: string;
     }
 
     type TaskType =

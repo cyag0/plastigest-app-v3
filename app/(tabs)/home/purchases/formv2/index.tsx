@@ -2,6 +2,7 @@ import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppDependency from "@/components/Form/AppDependency";
 import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormProSelect } from "@/components/Form/AppProSelect";
+import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
@@ -55,6 +56,7 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
       // Confirmar la compra usando el contexto
       await purchaseContext.confirmPurchase({
         document_number: values.get("document_number")?.toString(),
+        payment_method: values.get("payment_method")?.toString(),
       });
 
       router.replace(`/(tabs)/home/purchases` as any);
@@ -88,6 +90,7 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
         purchase_date: new Date().toISOString().split("T")[0],
         notes: "",
         document_number: "",
+        payment_method: "other",
       }}
       onSubmit={async (values: any) => {
         const res = await alerts.confirm("¿Deseas confirmar esta compra?", {
@@ -150,6 +153,17 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
         label="Proveedor"
         model="suppliers"
         placeholder="Seleccionar proveedor"
+      />
+
+      <FormSelectSimple
+        name="payment_method"
+        label="Método de pago"
+        data={[
+          { value: "cash",     label: "Efectivo" },
+          { value: "card",     label: "Tarjeta" },
+          { value: "transfer", label: "Transferencia" },
+          { value: "other",    label: "Otro" },
+        ]}
       />
 
       <AppDependency name="supplier_id">

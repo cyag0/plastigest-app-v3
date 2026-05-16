@@ -1,4 +1,5 @@
 import AppList from "@/components/App/AppList";
+import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -58,7 +59,8 @@ export default function RemindersIndex() {
   };
 
   return (
-    <AppList
+    <PermissionGate permission="reminders_list">
+      <AppList
       title="Recordatorios"
       service={Services.reminders}
       filters={[
@@ -225,5 +227,6 @@ export default function RemindersIndex() {
       searchPlaceholder="Buscar recordatorios..."
       emptyMessage="No hay recordatorios registrados"
     />
+    </PermissionGate>
   );
 }

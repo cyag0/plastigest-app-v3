@@ -1,14 +1,20 @@
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router, usePathname } from "expo-router";
-import React from "react";
+import { router, useFocusEffect, usePathname } from "expo-router";
+import React, { useCallback } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { Avatar, Badge, Divider, Drawer, Text } from "react-native-paper";
 
 export default function NavigationSidebar() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, unreadNotificationsCount, loadUnreadNotificationsCount } = useAuth();
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUnreadNotificationsCount();
+    }, [loadUnreadNotificationsCount])
+  );
 
   const navigationItems = [
     {
@@ -50,8 +56,7 @@ export default function NavigationSidebar() {
   };
 
   const handleNotifications = () => {
-    console.log("Notifications pressed");
-    // TODO: Implement notifications
+    router.push("/(stacks)/notifications" as any);
   };
 
   return (
@@ -108,9 +113,11 @@ export default function NavigationSidebar() {
             <Text variant="bodyMedium" style={styles.actionLabel}>
               Notificaciones
             </Text>
-            <Badge size={20} style={styles.badge}>
-              3
-            </Badge>
+            {unreadNotificationsCount > 0 && (
+              <Badge size={20} style={styles.badge}>
+                {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
+              </Badge>
+            )}
           </View>
         </TouchableOpacity>
       </View>

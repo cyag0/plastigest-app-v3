@@ -8,10 +8,12 @@ import { SelectDataProvider } from "@/components/Form/AppProSelect";
 import NavigationHandler from "@/components/NavigationHandler";
 import palette from "@/constants/palette";
 import { AuthProvider } from "@/contexts/AuthContext";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { AlertsProvider } from "@/hooks/useAlerts";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { MD3LightTheme, PaperProvider } from "react-native-paper";
 import { es, registerTranslation } from "react-native-paper-dates";
+import PermissionsOverlay from "@/components/Debug/PermissionsOverlay";
 
 registerTranslation("es", es);
 
@@ -47,17 +49,20 @@ export default function RootLayout() {
   }
 
   return (
-    <PaperProvider theme={theme}>
-      <AuthProvider>
-        <SelectDataProvider>
-          <AlertsProvider>
-            <NavigationHandler>
-              <App />
-            </NavigationHandler>
-          </AlertsProvider>
-        </SelectDataProvider>
-      </AuthProvider>
-    </PaperProvider>
+    <ErrorBoundary>
+      <PaperProvider theme={theme}>
+        <AuthProvider>
+          <SelectDataProvider>
+            <AlertsProvider>
+              <NavigationHandler>
+                <App />
+              </NavigationHandler>
+              <PermissionsOverlay />
+            </AlertsProvider>
+          </SelectDataProvider>
+        </AuthProvider>
+      </PaperProvider>
+    </ErrorBoundary>
   );
 }
 

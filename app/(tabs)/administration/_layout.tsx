@@ -133,57 +133,9 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
-        name="workers/index"
-        options={{
-          title: "Trabajadores",
-        }}
-      />
-      <Stack.Screen
-        name="workers/form"
-        options={{
-          title: "Nuevo Trabajador",
-        }}
-      />
-      <Stack.Screen
-        name="workers/[id]/index"
-        options={{
-          title: "Ver Trabajador",
-        }}
-      />
-      <Stack.Screen
-        name="workers/[id]/edit"
-        options={{
-          title: "Editar Trabajador",
-        }}
-      />
-      <Stack.Screen
         name="current-location/index"
         options={{
           title: "Mi Sucursal",
-        }}
-      />
-      <Stack.Screen
-        name="current-workers/index"
-        options={{
-          title: "Personal de mi Sucursal",
-        }}
-      />
-      <Stack.Screen
-        name="current-workers/form"
-        options={{
-          title: "Nuevo Trabajador",
-        }}
-      />
-      <Stack.Screen
-        name="current-workers/[id]/index"
-        options={{
-          title: "Ver Trabajador",
-        }}
-      />
-      <Stack.Screen
-        name="current-workers/[id]/edit"
-        options={{
-          title: "Editar Trabajador",
         }}
       />
       {/* Categorias */}
@@ -325,6 +277,38 @@ export default function _layout() {
         name="suppliers/[id]/edit"
         options={{
           title: "Editar Proveedor",
+        }}
+      />
+      {/* Clientes */}
+      <Stack.Screen
+        name="clientes/index"
+        options={{
+          title: "Clientes",
+        }}
+      />
+      <Stack.Screen
+        name="clientes/form"
+        options={{
+          title: "Nuevo Cliente",
+        }}
+      />
+      <Stack.Screen
+        name="clientes/[id]/index"
+        options={{
+          title: "Ver Cliente",
+        }}
+      />
+      <Stack.Screen
+        name="clientes/[id]/edit"
+        options={{
+          title: "Editar Cliente",
+        }}
+      />
+      {/* Trabajadores actuales */}
+      <Stack.Screen
+        name="current-workers/form"
+        options={{
+          title: "Asignar Trabajador",
         }}
       />
     </Stack>

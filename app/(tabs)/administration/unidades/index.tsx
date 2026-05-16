@@ -1,4 +1,5 @@
 import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
@@ -30,11 +31,18 @@ export default function UnidadesScreen() {
     );
   }
 
+  const columns: AppListColumn<any>[] = [
+    { title: "Nombre", dataIndex: "name", key: "name", width: 200 },
+    { title: "Abreviación", dataIndex: "abbreviation", key: "abbreviation", width: 120, align: "center" },
+    { title: "Descripción", dataIndex: "description", key: "description", width: 260 },
+  ];
+
   return (
     <View style={{ flex: 1 }}>
       <AppList
         title="Unidades"
         service={Services.home.unidades}
+        columns={columns}
         renderCard={({ item }) => ({
           title: `${item.name} (${item.abbreviation})`,
           description: item.description,

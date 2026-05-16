@@ -1,6 +1,7 @@
 import AppList from "@/components/App/AppList/AppList";
 import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import FilterModal from "@/components/Feedback/Modal/FilterModal";
+import PermissionGate from "@/components/App/PermissionGate";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import * as React from "react";
@@ -10,7 +11,7 @@ export default function WorkerIndexScreen() {
   const modalRef = React.useRef<AppModalRef>(null);
 
   return (
-    <>
+    <PermissionGate permission="workers_list">
       <AppList
         title="Trabajadores"
         service={Services.admin.workers}
@@ -40,6 +41,6 @@ export default function WorkerIndexScreen() {
       />
 
       <FilterModal ref={modalRef} />
-    </>
+    </PermissionGate>
   );
 }

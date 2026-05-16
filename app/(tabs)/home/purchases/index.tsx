@@ -1,5 +1,6 @@
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import PermissionGate from "@/components/App/PermissionGate";
 import PurchaseStats from "@/components/Dashboard/PurchaseStats";
 import CreatePurchaseModal, {
   CreatePurchaseModalRef,
@@ -11,6 +12,13 @@ import React, { useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Text } from "react-native-paper";
 import { SceneMap, TabView } from "react-native-tab-view";
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash:     "Efectivo",
+  card:     "Tarjeta",
+  transfer: "Transferencia",
+  other:    "Otro",
+};
 
 // Helper function to get status configuration
 const getStatusConfig = (status: string) => {
@@ -103,6 +111,13 @@ export default function PurchasesIndex() {
         },
       },
       {
+        title: "Método",
+        key: "payment_method",
+        width: 130,
+        render: (_, item) =>
+          PAYMENT_METHOD_LABELS[item.payment_method] ?? item.payment_method ?? "—",
+      },
+      {
         title: "Productos",
         key: "products_count",
         width: 110,
@@ -171,6 +186,10 @@ export default function PurchasesIndex() {
                 label: "Productos",
                 value: `${item.products_count || 0} items`,
               },
+              {
+                label: "Método",
+                value: PAYMENT_METHOD_LABELS[item.payment_method] ?? "—",
+              },
             ],
           };
         }}
@@ -213,7 +232,8 @@ export default function PurchasesIndex() {
   );
 
   return (
-    <View style={styles.container}>
+    <PermissionGate permission="purchases_list">
+      <View style={styles.container}>
       {/* Tabs Header */}
       <View style={styles.tabsContainer}>
         <Pressable
@@ -251,6 +271,7 @@ export default function PurchasesIndex() {
         }}
       />
     </View>
+    </PermissionGate>
   );
 }
 

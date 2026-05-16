@@ -1,4 +1,5 @@
 import AppList from "@/components/App/AppList/AppList";
+import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
@@ -13,7 +14,7 @@ export default function ProductionIndex() {
   const router = useRouter();
 
   return (
-    <>
+    <PermissionGate permission="production_list">
       <Animated.Image
         source={require("../../../../assets/images/dashboard/categories.png")}
         sharedTransitionTag="production"
@@ -111,7 +112,7 @@ export default function ProductionIndex() {
         }}
         fabLabel="Nueva Producción"
       />
-    </>
+    </PermissionGate>
   );
 }
 

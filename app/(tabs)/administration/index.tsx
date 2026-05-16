@@ -92,6 +92,16 @@ export default function AdministrationScreen() {
       category: "company",
       requiredPermission: "roles_list",
     },
+    {
+      id: "notification-preferences",
+      title: "Preferencias de Notificaciones",
+      description: "Configura qué eventos generan notificaciones y a quién",
+      icon: "bell-cog-outline",
+      route: "/(stacks)/notification-preferences",
+      color: palette.warning,
+      category: "company",
+      requiredPermission: "companies_update",
+    },
 
     // === MI SUCURSAL ===
     {

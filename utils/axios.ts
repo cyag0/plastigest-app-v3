@@ -207,6 +207,8 @@ export const authAPI = {
 
   me: () => axiosClient.get("/auth/me"),
 
+  myPermissions: () => axiosClient.get("/auth/my-permissions"),
+
   changePassword: (passwordData: {
     current_password: string;
     password: string;

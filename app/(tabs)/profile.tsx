@@ -492,14 +492,36 @@ export default function ProfileScreen() {
               <Card
                 style={[
                   styles.actionItem,
+                  { backgroundColor: palette.primary + "15" },
+                ]}
+                onPress={() => router.push("/(stacks)/notification-preferences" as any)}
+              >
+                <Card.Content style={styles.actionItemContent}>
+                  <MaterialCommunityIcons
+                    name="bell-cog-outline"
+                    size={32}
+                    color={palette.primary}
+                  />
+                  <Text
+                    variant="labelLarge"
+                    style={{
+                      color: palette.primary,
+                      fontWeight: "bold",
+                      marginTop: 8,
+                      textAlign: "center",
+                    }}
+                  >
+                    Preferencias de Notificaciones
+                  </Text>
+                </Card.Content>
+              </Card>
+
+              <Card
+                style={[
+                  styles.actionItem,
                   { backgroundColor: palette.warning + "15" },
                 ]}
-                onPress={() => {
-                  Alert.alert(
-                    "Función no disponible",
-                    "Esta función se implementará próximamente"
-                  );
-                }}
+                onPress={() => router.push("/(stacks)/change-password" as any)}
               >
                 <Card.Content style={styles.actionItemContent}>
                   <MaterialCommunityIcons

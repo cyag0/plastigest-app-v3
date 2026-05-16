@@ -325,6 +325,7 @@ function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
 
       if (countedQty === systemQty && currentDetail.id) {
         setIsCorrect(true);
+        setCountedQuantity(countedQty);
       } else if (
         currentDetail.counted_quantity !== undefined &&
         currentDetail.counted_quantity !== 0 &&

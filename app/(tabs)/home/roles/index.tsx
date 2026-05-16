@@ -1,7 +1,9 @@
 import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import FilterModal from "@/components/Feedback/Modal/FilterModal";
 import palette from "@/constants/palette";
+import PermissionGate from "@/components/App/PermissionGate";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import * as React from "react";
@@ -12,11 +14,40 @@ export default function RolesListScreen() {
   const navigation = useRouter();
   const modalRef = React.useRef<AppModalRef>(null);
 
+  const columns: AppListColumn<any>[] = [
+    { title: "Nombre", dataIndex: "name", key: "name", width: 200 },
+    {
+      title: "Permisos",
+      key: "permissions",
+      width: 100,
+      align: "center",
+      render: (_, item) => item.permissions?.length ?? 0,
+    },
+    {
+      title: "Estado",
+      key: "is_active",
+      width: 100,
+      align: "center",
+      render: (_, item) => (
+        <Chip
+          style={{
+            backgroundColor: item.is_active ? palette.primary : palette.red,
+          }}
+          textStyle={{ color: "white" }}
+          compact
+        >
+          {item.is_active ? "Activo" : "Inactivo"}
+        </Chip>
+      ),
+    },
+  ];
+
   return (
-    <>
+    <PermissionGate permission="roles_list">
       <AppList
         title="Roles"
         service={Services.admin.roles}
+        columns={columns}
         renderCard={({ item }) => ({
           title: item.name,
           description: (
@@ -99,6 +130,6 @@ export default function RolesListScreen() {
       />
 
       <FilterModal ref={modalRef} />
-    </>
+    </PermissionGate>
   );
 }

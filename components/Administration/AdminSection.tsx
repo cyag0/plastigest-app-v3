@@ -60,7 +60,6 @@ export default function AdminSection({
                   ]}
                 >
                   <List.Icon
-                    {...props}
                     icon={option.icon}
                     color={option.color}
                   />

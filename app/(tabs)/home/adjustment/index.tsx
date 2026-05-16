@@ -1,5 +1,6 @@
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
@@ -141,7 +142,8 @@ export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
   }
 
   return (
-    <AppList<InventoryAdjustmentItem>
+    <PermissionGate permission="inventory_manage">
+      <AppList<InventoryAdjustmentItem>
       title="Ajustes de Inventario"
       service={Services.inventoryAdjustments}
       defaultFilters={{
@@ -218,6 +220,7 @@ export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
         showDelete: false,
       }}
     />
+    </PermissionGate>
   );
 }
 

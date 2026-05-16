@@ -55,6 +55,8 @@ interface AuthContextType {
   hasCompanySelected: boolean;
   isLoadingCompanies: boolean;
   unreadNotificationsCount: number;
+  permissions: string[];
+  hasPermission: (permission: string) => boolean;
   loadUnreadNotificationsCount: () => Promise<void>;
   login: (
     email: string,
@@ -83,6 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [permissions, setPermissions] = useState<string[]>([]);
 
   // Registrar notificaciones push cuando el usuario está autenticado
   const { expoPushToken } = useExpoPushNotifications();
@@ -103,6 +106,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const LOCATION_DATA_KEY = "selected_location";
   const COMPANIES_DATA_KEY =
     process.env.EXPO_PUBLIC_COMPANIES_DATA_KEY || "companies_list";
+  const PERMISSIONS_KEY = "user_permissions";
+
+  // Función para verificar si el usuario tiene un permiso
+  const hasPermission = (permission: string): boolean => {
+    return permissions.includes(permission);
+  };
+
+  // Cargar permisos desde el servidor y guardarlos en AsyncStorage
+  const loadPermissions = async () => {
+    try {
+      const response = await authAPI.myPermissions();
+      const perms: string[] = response.data.permissions ?? [];
+      setPermissions(perms);
+      await AsyncStorage.setItem(PERMISSIONS_KEY, JSON.stringify(perms));
+    } catch (error) {
+      console.error("Error loading permissions:", error);
+      // Intentar restaurar desde caché
+      try {
+        const cached = await AsyncStorage.getItem(PERMISSIONS_KEY);
+        if (cached) setPermissions(JSON.parse(cached));
+      } catch {}
+    }
+  };
 
   // Cargar contador de notificaciones no leídas
   const loadUnreadNotificationsCount = async () => {
@@ -162,6 +188,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       setSelectedCompany(company);
       await AsyncStorage.setItem(COMPANY_DATA_KEY, JSON.stringify(company));
+      // Cargar permisos para esta empresa (el header X-Company-ID se inyecta
+      // automáticamente desde AsyncStorage en el interceptor de axios)
+      await loadPermissions();
     } catch (error) {
       console.error("Error selecting company:", error);
     }
@@ -188,7 +217,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const clearCompanySelection = async () => {
     try {
       setSelectedCompany(null);
+      setPermissions([]);
       await AsyncStorage.removeItem(COMPANY_DATA_KEY);
+      await AsyncStorage.removeItem(PERMISSIONS_KEY);
     } catch (error) {
       console.error("Error clearing company selection:", error);
     }
@@ -224,9 +255,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         const cachedCompany = await AsyncStorage.getItem(COMPANY_DATA_KEY);
         const cachedLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
+        const cachedPermissions = await AsyncStorage.getItem(PERMISSIONS_KEY);
 
         if (cachedCompany) {
           setSelectedCompany(JSON.parse(cachedCompany));
+          // Restaurar caché inmediatamente para que la UI no espere
+          if (cachedPermissions) {
+            setPermissions(JSON.parse(cachedPermissions));
+          }
+          // Refrescar permisos desde servidor (empresa ya está en AsyncStorage
+          // así que el interceptor de axios inyectará X-Company-ID correctamente)
+          await loadPermissions();
         } else {
           setSelectedCompany(null);
         }
@@ -348,11 +387,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       await AsyncStorage.removeItem(COMPANY_DATA_KEY);
       await AsyncStorage.removeItem(LOCATION_DATA_KEY);
       await AsyncStorage.removeItem(COMPANIES_DATA_KEY);
+      await AsyncStorage.removeItem(PERMISSIONS_KEY);
 
       setUser(null);
       setSelectedCompany(null);
       setLocation(null);
       setCompanies([]);
+      setPermissions([]);
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
@@ -374,6 +415,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     hasCompanySelected: !!selectedCompany,
     isLoadingCompanies,
     unreadNotificationsCount,
+    permissions,
+    hasPermission,
     loadUnreadNotificationsCount,
     login,
     logout,

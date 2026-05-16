@@ -1,4 +1,5 @@
 import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import FilterModal from "@/components/Feedback/Modal/FilterModal";
 import palette from "@/constants/palette";
@@ -11,7 +12,37 @@ import { Avatar, Chip } from "react-native-paper";
 export default function CompanyUsersIndexScreen() {
   const navigation = useRouter();
   const modalRef = React.useRef<AppModalRef>(null);
-  const { selectedCompany } = useAuth();
+  const columns: AppListColumn<any>[] = [
+    {
+      title: "Nombre",
+      dataIndex: "name",
+      key: "name",
+      width: 200,
+    },
+    {
+      title: "Email",
+      dataIndex: "email",
+      key: "email",
+      width: 220,
+    },
+    {
+      title: "Estado",
+      key: "is_active",
+      width: 100,
+      align: "center",
+      render: (_, item) => (
+        <Chip
+          style={{
+            backgroundColor: item.is_active ? palette.success : palette.error,
+          }}
+          textStyle={{ color: "white" }}
+          compact
+        >
+          {item.is_active ? "Activo" : "Inactivo"}
+        </Chip>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -21,6 +52,7 @@ export default function CompanyUsersIndexScreen() {
         defaultFilters={{
           by_company: true,
         }}
+        columns={columns}
         renderCard={({ item }) => ({
           title: item.name,
           description: item.email,
@@ -50,6 +82,7 @@ export default function CompanyUsersIndexScreen() {
               }}
               textStyle={{ color: "white" }}
               compact
+              
             >
               {item.is_active ? "Activo" : "Inactivo"}
             </Chip>

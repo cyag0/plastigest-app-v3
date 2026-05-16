@@ -1,4 +1,5 @@
 import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import palette from "@/constants/palette";
 import { generateCrudMenu } from "@/utils/routes";
 import Services from "@/utils/services";
@@ -9,10 +10,38 @@ import { Avatar, Chip } from "react-native-paper";
 export default function UsersIndexScreen() {
   const route = "/(tabs)/administration/users";
 
+  const columns: AppListColumn<any>[] = [
+    { title: "Nombre", dataIndex: "name", key: "name", width: 200 },
+    { title: "Email", dataIndex: "email", key: "email", width: 220 },
+    {
+      title: "Empresas",
+      key: "companies",
+      width: 100,
+      align: "center",
+      render: (_, item) => item.companies?.length || 0,
+    },
+    {
+      title: "Estado",
+      key: "is_active",
+      width: 100,
+      align: "center",
+      render: (_, item) => (
+        <Chip
+          style={{ backgroundColor: item.is_active ? palette.success : palette.error }}
+          textStyle={{ color: "white" }}
+          compact
+        >
+          {item.is_active ? "Activo" : "Inactivo"}
+        </Chip>
+      ),
+    },
+  ];
+
   return (
     <AppList
       title="Usuarios del Sistema"
       service={Services.admin.users}
+      columns={columns}
       renderCard={({ item }) => ({
         title: item.name,
         description: item.email,

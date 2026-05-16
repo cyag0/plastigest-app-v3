@@ -1,4 +1,5 @@
 import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PrintLabelsModal from "@/components/Products/PrintLabelsModal";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -76,11 +77,59 @@ export default function PackagesIndex() {
     );
   }
 
+  const columns: AppListColumn<any>[] = [
+    { title: "Nombre", dataIndex: "package_name", key: "package_name", width: 200 },
+    {
+      title: "Producto",
+      key: "product",
+      width: 200,
+      render: (_, item) => item.product?.name || "—",
+    },
+    {
+      title: "Cant. por paquete",
+      key: "quantity_per_package",
+      width: 150,
+      align: "center",
+      render: (_, item) =>
+        `${item.quantity_per_package} ${item.unit?.abbreviation || "uds"}`,
+    },
+    {
+      title: "Precio venta",
+      key: "sale_price",
+      width: 130,
+      align: "right",
+      render: (_, item) =>
+        item.sale_price ? `$${parseFloat(item.sale_price).toFixed(2)}` : "—",
+    },
+    {
+      title: "Precio compra",
+      key: "purchase_price",
+      width: 140,
+      align: "right",
+      render: (_, item) =>
+        item.purchase_price ? `$${parseFloat(item.purchase_price).toFixed(2)}` : "—",
+    },
+    {
+      title: "Estado",
+      key: "is_active",
+      width: 100,
+      align: "center",
+      render: (_, item) => (
+        <Text
+          style={{ fontWeight: "bold", color: item.is_active ? palette.success : palette.red }}
+        >
+          {item.is_active ? "Activo" : "Inactivo"}
+        </Text>
+      ),
+    },
+  ];
+
   return (
     <>
       <AppList
         title="Paquetes de Producto"
         service={Services.productPackages}
+        columns={columns}
         renderCard={({ item }: { item: any }) => ({
           title: item.package_name,
           description: (
