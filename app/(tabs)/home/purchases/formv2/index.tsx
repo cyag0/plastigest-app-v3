@@ -9,7 +9,7 @@ import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFormikContext } from "formik";
-import React from "react";
+import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button, Text } from "react-native-paper";
 import { usePurchase } from "./PurchaseContext";
@@ -28,6 +28,14 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
   const id = useLocalSearchParams().id
     ? parseInt(useLocalSearchParams().id as string)
     : undefined;
+
+  const initialFormValues = useMemo(() => ({
+    supplier_id: "",
+    purchase_date: new Date().toISOString().split("T")[0],
+    notes: "",
+    document_number: "",
+    payment_method: "other",
+  }), []);
 
   const handleSubmit = async (values: FormData) => {
     try {
@@ -85,13 +93,7 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
       api={Services.purchasesV2}
       id={id}
       submitButtonText="Confirmar Compra"
-      initialValues={{
-        supplier_id: "",
-        purchase_date: new Date().toISOString().split("T")[0],
-        notes: "",
-        document_number: "",
-        payment_method: "other",
-      }}
+      initialValues={initialFormValues}
       onSubmit={async (values: any) => {
         const res = await alerts.confirm("¿Deseas confirmar esta compra?", {
           title: "Confirmar Compra",
@@ -151,6 +153,9 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
       <FormProSelect
         name="supplier_id"
         label="Proveedor"
+        onChange={(value) => {
+          purchaseContext.loadData(value);
+        }}
         model="suppliers"
         placeholder="Seleccionar proveedor"
       />
@@ -168,6 +173,21 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
 
       <AppDependency name="supplier_id">
         {(value) => {
+          if (!value) { 
+            return (
+              <View style={styles.emptyMessage}>
+                <MaterialCommunityIcons
+                  name="information"
+                  size={20}
+                  color={palette.textSecondary}
+                />
+                <Text variant="bodySmall" style={styles.emptyText}>
+                  Selecciona un proveedor para agregar productos
+                </Text>
+              </View>
+            );
+          }
+
           return <PurchasesContent supplier_id={value} />;
         }}
       </AppDependency>

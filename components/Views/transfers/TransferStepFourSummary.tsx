@@ -281,7 +281,10 @@ export default function TransferStepFourSummary({
   };
 
   return (
-    <Card style={styles.card}>
+    <View style={{
+      gap: 0
+    }}>
+        <Card style={styles.card}>
       <Card.Content>
         <View style={styles.sectionHeader}>
           <MaterialCommunityIcons
@@ -337,6 +340,10 @@ export default function TransferStepFourSummary({
           <Text style={styles.label}>Destino:</Text>
           <Text style={styles.value}>{transfer.to_location?.name || "N/A"}</Text>
         </View>
+
+        </Card.Content>
+        </Card> 
+
 
         <View style={styles.timelineBlock}>
           <Text style={styles.timelineTitle}>Linea de tiempo</Text>
@@ -553,9 +560,8 @@ export default function TransferStepFourSummary({
             noReachedText:
               "El procedimiento ya no llego a este paso. Se cerró en un paso anterior.",
           })}
-        
-      </Card.Content>
-    </Card>
+
+      </View>
   );
 }
 
@@ -627,6 +633,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#EFE8DE",
     borderRadius: 12,
+    backgroundColor: "#FFFFFF",
     padding: 10,
   },
   timelineTitle: {
@@ -648,6 +655,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#EFE8DE",
     borderRadius: 12,
+    backgroundColor: "#FFFFFF",
     padding: 10,
   },
   resumeTitle: {

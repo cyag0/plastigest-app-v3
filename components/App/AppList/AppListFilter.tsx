@@ -506,6 +506,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     maxHeight: "70%",
     minWidth: 300,
+    maxWidth: 600,
+    width: "100%",
+    alignSelf: "center"
   },
   popoverHeader: {
     flexDirection: "row",

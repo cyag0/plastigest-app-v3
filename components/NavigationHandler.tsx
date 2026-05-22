@@ -22,6 +22,7 @@ export default function NavigationHandler({
   const {
     user,
     isLoading,
+    isSwitchingLocation,
     hasCompanySelected,
     companies,
     isLoadingCompanies,
@@ -32,7 +33,7 @@ export default function NavigationHandler({
   const segments = useSegments();
 
   useEffect(() => {
-    if (isLoading) return; // No hacer nada mientras carga autenticación
+    if (isLoading || isSwitchingLocation) return; // No hacer nada mientras carga autenticación o cambia sucursal
 
     const inAuthGroup = segments[0] === "(tabs)" || segments[0] === "(stacks)";
     const inLogin = segments[0] === "login" || !segments[0];
@@ -70,6 +71,7 @@ export default function NavigationHandler({
   }, [
     user,
     isLoading,
+    isSwitchingLocation,
     isLoadingCompanies,
     hasCompanySelected,
     companies.length,
@@ -77,8 +79,12 @@ export default function NavigationHandler({
   ]);
 
   // Mostrar loading mientras se verifica autenticación
-  if (isLoading) {
-    return <LoaderWithLogo />;
+  if (isLoading || isSwitchingLocation) {
+    return (
+      <LoaderWithLogo
+        message={isSwitchingLocation ? "Cambiando sucursal..." : "Cargando..."}
+      />
+    );
   }
 
   // Si no hay usuario, mostrar children (login)
@@ -104,7 +110,7 @@ export default function NavigationHandler({
   return <>{children}</>;
 }
 
-function LoaderWithLogo() {
+function LoaderWithLogo({ message }: { message: string }) {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
@@ -159,6 +165,10 @@ function LoaderWithLogo() {
           }}
         >
           PlastiGest
+        </Text>
+
+        <Text variant="bodyLarge" style={styles.loadingText}>
+          {message}
         </Text>
       </Animated.View>
     </View>

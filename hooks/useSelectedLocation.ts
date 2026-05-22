@@ -1,4 +1,5 @@
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
+import { useAuth } from "@/contexts/AuthContext";
 import Services from "@/utils/services";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useEffect, useState } from "react";
@@ -18,24 +19,21 @@ interface Location {
 }
 
 interface UseSelectedLocationReturn {
-  selectedLocation: Location | null;
-  locations: Location[];
+  selectedLocation: App.Entities.Location | null;
+  locations: App.Entities.Location[];
   isLoadingLocations: boolean;
   hasLocationSelected: boolean;
   loadLocations: () => Promise<void>;
-  selectLocation: (location: Location) => Promise<void>;
+  selectLocation: (location: App.Entities.Location | null) => Promise<void>;
   clearLocationSelection: () => Promise<void>;
 }
 
-const SELECTED_LOCATION_KEY = "selected_location";
 const LOCATIONS_LIST_KEY = "locations_list";
 
 export function useSelectedLocation(): UseSelectedLocationReturn {
   const { company } = useSelectedCompany();
-  const [selectedLocation, setSelectedLocation] = useState<Location | null>(
-    null
-  );
-  const [locations, setLocations] = useState<Location[]>([]);
+  const { location: selectedLocation, selectLocation } = useAuth();
+  const [locations, setLocations] = useState<App.Entities.Location[]>([]);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
 
   // Cargar ubicaciones de la compañía actual
@@ -65,7 +63,7 @@ export function useSelectedLocation(): UseSelectedLocationReturn {
       }
 
       if (Array.isArray(locationsData)) {
-        setLocations(locationsData as Location[]);
+        setLocations(locationsData as App.Entities.Location[]);
         await AsyncStorage.setItem(
           `${LOCATIONS_LIST_KEY}_${company.id}`,
           JSON.stringify(locationsData)
@@ -89,59 +87,14 @@ export function useSelectedLocation(): UseSelectedLocationReturn {
     }
   }, [company?.id]);
 
-  // Seleccionar ubicación
-  const selectLocation = useCallback(
-    async (location: Location) => {
-      try {
-        setSelectedLocation(location);
-        await AsyncStorage.setItem(
-          `${SELECTED_LOCATION_KEY}_${company?.id}`,
-          JSON.stringify(location)
-        );
-      } catch (error) {
-        console.error("Error selecting location:", error);
-      }
-    },
-    [company?.id]
-  );
-
   // Limpiar selección de ubicación
   const clearLocationSelection = useCallback(async () => {
     try {
-      setSelectedLocation(null);
-      if (company?.id) {
-        await AsyncStorage.removeItem(`${SELECTED_LOCATION_KEY}_${company.id}`);
-      }
+      await selectLocation(null);
     } catch (error) {
       console.error("Error clearing location selection:", error);
     }
-  }, [company?.id]);
-
-  // Cargar ubicación seleccionada desde caché al cambiar de compañía
-  useEffect(() => {
-    const loadSelectedLocation = async () => {
-      if (!company?.id) {
-        setSelectedLocation(null);
-        return;
-      }
-
-      try {
-        const cachedLocation = await AsyncStorage.getItem(
-          `${SELECTED_LOCATION_KEY}_${company.id}`
-        );
-        if (cachedLocation) {
-          setSelectedLocation(JSON.parse(cachedLocation));
-        } else {
-          setSelectedLocation(null);
-        }
-      } catch (error) {
-        console.error("Error loading selected location from cache:", error);
-        setSelectedLocation(null);
-      }
-    };
-
-    loadSelectedLocation();
-  }, [company?.id]);
+  }, [selectLocation]);
 
 
   return {

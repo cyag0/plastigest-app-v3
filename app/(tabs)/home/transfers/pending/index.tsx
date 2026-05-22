@@ -100,6 +100,8 @@ export default function PendingTransfersScreen() {
     info: "in_transit",
   };
 
+  console.log("Current location:", location);
+
   const columns: AppListColumn<InventoryTransfer>[] = [
     {
       title: "Folio",
@@ -112,9 +114,8 @@ export default function PendingTransfersScreen() {
       key: "direction",
       width: 200,
       render: (_, item) => {
-        const requesterId = item.requested_by_user_id ?? item.requested_by;
-        const isRequestedByMe = requesterId === auth.user?.id;
-        return <DirectionBadge isSent={isRequestedByMe} />;
+        const isSent = item.to_location_id === location.id;
+        return <DirectionBadge isSent={isSent} />;
       },
     },
     {
@@ -125,6 +126,12 @@ export default function PendingTransfersScreen() {
         item.from_location_id === location.id
           ? item.to_location?.name || "N/A"
           : item.from_location?.name || "N/A",
+    },
+    {
+      title: "Solicitante",
+      key: "requester_name",
+      width: 200,
+      render: (_, item) => item.requested_by_user?.name || "N/A",
     },
     {
       title: "Estado",

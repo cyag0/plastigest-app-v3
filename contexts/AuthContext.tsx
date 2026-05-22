@@ -51,6 +51,7 @@ interface AuthContextType {
   selectedCompany: Company | null;
   companies: Company[];
   isLoading: boolean;
+  isSwitchingLocation: boolean;
   isAuthenticated: boolean;
   hasCompanySelected: boolean;
   isLoadingCompanies: boolean;
@@ -83,6 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [location, setLocation] = useState<App.Entities.Location | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSwitchingLocation, setIsSwitchingLocation] = useState(false);
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -106,7 +108,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const LOCATION_DATA_KEY = "selected_location";
   const COMPANIES_DATA_KEY =
     process.env.EXPO_PUBLIC_COMPANIES_DATA_KEY || "companies_list";
-  const PERMISSIONS_KEY = "user_permissions";
+  const PERMISSIONS_KEY_PREFIX = "user_permissions";
+
+  const getPermissionsStorageKey = (
+    companyId?: number | null,
+    locationId?: number | null,
+  ) => {
+    return [PERMISSIONS_KEY_PREFIX, companyId ?? "none", locationId ?? "none"].join("_");
+  };
+
+  const clearPermissionsCache = async () => {
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const permissionKeys = keys.filter((key) =>
+        key.startsWith(PERMISSIONS_KEY_PREFIX),
+      );
+
+      if (permissionKeys.length > 0) {
+        await AsyncStorage.multiRemove(permissionKeys);
+      }
+    } catch (error) {
+      console.error("Error clearing permissions cache:", error);
+    }
+  };
 
   // Función para verificar si el usuario tiene un permiso
   const hasPermission = (permission: string): boolean => {
@@ -114,19 +138,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   // Cargar permisos desde el servidor y guardarlos en AsyncStorage
-  const loadPermissions = async () => {
+  const loadPermissions = async (options?: {
+    companyId?: number | null;
+    locationId?: number | null;
+  }) => {
+    const companyId = options?.companyId ?? selectedCompany?.id ?? null;
+    const locationId = options?.locationId ?? location?.id ?? null;
+    const permissionsKey = getPermissionsStorageKey(companyId, locationId);
+
     try {
       const response = await authAPI.myPermissions();
       const perms: string[] = response.data.permissions ?? [];
       setPermissions(perms);
-      await AsyncStorage.setItem(PERMISSIONS_KEY, JSON.stringify(perms));
+      await AsyncStorage.setItem(permissionsKey, JSON.stringify(perms));
     } catch (error) {
       console.error("Error loading permissions:", error);
       // Intentar restaurar desde caché
       try {
-        const cached = await AsyncStorage.getItem(PERMISSIONS_KEY);
-        if (cached) setPermissions(JSON.parse(cached));
+        const cached = await AsyncStorage.getItem(permissionsKey);
+        if (cached) {
+          setPermissions(JSON.parse(cached));
+          return;
+        }
       } catch {}
+
+      setPermissions([]);
     }
   };
 
@@ -190,7 +226,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       await AsyncStorage.setItem(COMPANY_DATA_KEY, JSON.stringify(company));
       // Cargar permisos para esta empresa (el header X-Company-ID se inyecta
       // automáticamente desde AsyncStorage en el interceptor de axios)
-      await loadPermissions();
+      await loadPermissions({ companyId: company.id, locationId: null });
     } catch (error) {
       console.error("Error selecting company:", error);
     }
@@ -199,17 +235,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Seleccionar ubicación
   const selectLocation = async (location: App.Entities.Location | null) => {
     try {
-      setLocation(location);
+      setIsSwitchingLocation(true);
+
       if (location) {
-        return await AsyncStorage.setItem(
+        await AsyncStorage.setItem(
           LOCATION_DATA_KEY,
           JSON.stringify(location)
         );
+      } else {
+        await AsyncStorage.removeItem(LOCATION_DATA_KEY);
       }
 
-      return await AsyncStorage.removeItem(LOCATION_DATA_KEY);
+      setLocation(location);
+
+      if (selectedCompany?.id) {
+        await loadPermissions({
+          companyId: selectedCompany.id,
+          locationId: location?.id ?? null,
+        });
+      } else {
+        setPermissions([]);
+      }
     } catch (error) {
       console.error("Error selecting location:", error);
+    } finally {
+      setIsSwitchingLocation(false);
     }
   };
 
@@ -217,9 +267,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const clearCompanySelection = async () => {
     try {
       setSelectedCompany(null);
+      setLocation(null);
       setPermissions([]);
       await AsyncStorage.removeItem(COMPANY_DATA_KEY);
-      await AsyncStorage.removeItem(PERMISSIONS_KEY);
+      await AsyncStorage.removeItem(LOCATION_DATA_KEY);
+      await clearPermissionsCache();
     } catch (error) {
       console.error("Error clearing company selection:", error);
     }
@@ -255,23 +307,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         const cachedCompany = await AsyncStorage.getItem(COMPANY_DATA_KEY);
         const cachedLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
-        const cachedPermissions = await AsyncStorage.getItem(PERMISSIONS_KEY);
+        const parsedCompany = cachedCompany ? JSON.parse(cachedCompany) : null;
+        const parsedLocation = cachedLocation ? JSON.parse(cachedLocation) : null;
+        const permissionsKey = getPermissionsStorageKey(
+          parsedCompany?.id,
+          parsedLocation?.id,
+        );
+        const cachedPermissions = await AsyncStorage.getItem(permissionsKey);
 
-        if (cachedCompany) {
-          setSelectedCompany(JSON.parse(cachedCompany));
+        if (parsedCompany) {
+          setSelectedCompany(parsedCompany);
           // Restaurar caché inmediatamente para que la UI no espere
           if (cachedPermissions) {
             setPermissions(JSON.parse(cachedPermissions));
           }
           // Refrescar permisos desde servidor (empresa ya está en AsyncStorage
           // así que el interceptor de axios inyectará X-Company-ID correctamente)
-          await loadPermissions();
+          await loadPermissions({
+            companyId: parsedCompany.id,
+            locationId: parsedLocation?.id ?? null,
+          });
         } else {
           setSelectedCompany(null);
+          setPermissions([]);
         }
 
-        if (cachedLocation) {
-          setLocation(JSON.parse(cachedLocation));
+        if (parsedLocation) {
+          setLocation(parsedLocation);
         } else {
           setLocation(null);
         }
@@ -296,10 +358,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       await AsyncStorage.removeItem(USER_DATA_KEY);
       await AsyncStorage.removeItem(COMPANY_DATA_KEY);
       await AsyncStorage.removeItem(COMPANIES_DATA_KEY);
+      await AsyncStorage.removeItem(LOCATION_DATA_KEY);
+      await clearPermissionsCache();
       setUser(null);
       setSelectedCompany(null);
       setCompanies([]);
       setLocation(null);
+      setPermissions([]);
     } finally {
       setIsLoading(false);
     }
@@ -326,13 +391,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         const cachedCompany = await AsyncStorage.getItem(COMPANY_DATA_KEY);
         const cachedLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
+        const parsedCompany = cachedCompany ? JSON.parse(cachedCompany) : null;
+        const parsedLocation = cachedLocation ? JSON.parse(cachedLocation) : null;
+        const permissionsKey = getPermissionsStorageKey(
+          parsedCompany?.id,
+          parsedLocation?.id,
+        );
+        const cachedPermissions = await AsyncStorage.getItem(permissionsKey);
 
-        if (cachedCompany) {
-          setSelectedCompany(JSON.parse(cachedCompany));
+        if (parsedCompany) {
+          setSelectedCompany(parsedCompany);
         }
 
-        if (cachedLocation) {
-          setLocation(JSON.parse(cachedLocation));
+        if (parsedLocation) {
+          setLocation(parsedLocation);
+        }
+
+        if (cachedPermissions) {
+          setPermissions(JSON.parse(cachedPermissions));
+        }
+
+        if (parsedCompany) {
+          await loadPermissions({
+            companyId: parsedCompany.id,
+            locationId: parsedLocation?.id ?? null,
+          });
         }
       } catch (error) {
         console.error("Error loading cached data:", error);
@@ -387,7 +470,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       await AsyncStorage.removeItem(COMPANY_DATA_KEY);
       await AsyncStorage.removeItem(LOCATION_DATA_KEY);
       await AsyncStorage.removeItem(COMPANIES_DATA_KEY);
-      await AsyncStorage.removeItem(PERMISSIONS_KEY);
+      await clearPermissionsCache();
 
       setUser(null);
       setSelectedCompany(null);
@@ -411,6 +494,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     selectedCompany,
     companies,
     isLoading,
+    isSwitchingLocation,
     isAuthenticated: !!user,
     hasCompanySelected: !!selectedCompany,
     isLoadingCompanies,

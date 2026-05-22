@@ -71,8 +71,17 @@ const ProductCard = React.memo(
     React.useEffect(() => {
       if (selectedProduct?.unit_id) {
         setSelectedUnitId(selectedProduct.unit_id);
+        return;
       }
-    }, [selectedProduct?.unit_id]);
+
+      const availableUnitIds = item.available_units?.map((unit) => unit.id) || [];
+      const hasCurrentUnit = availableUnitIds.includes(selectedUnitId);
+      const fallbackUnitId = item.available_units?.[0]?.id || 0;
+
+      if (!hasCurrentUnit && fallbackUnitId !== selectedUnitId) {
+        setSelectedUnitId(fallbackUnitId);
+      }
+    }, [selectedProduct?.unit_id, item.id, item.available_units, selectedUnitId]);
 
     const selectedUnit = item.available_units?.find(
       (u) => u.id === selectedUnitId,
@@ -237,7 +246,12 @@ const ProductCard = React.memo(
             <Button
               icon="cart-plus"
               mode="contained"
-              onPress={() => onAddProduct(item, selectedUnitId)}
+              onPress={() =>
+                onAddProduct(
+                  item,
+                  selectedUnit?.id || item.available_units?.[0]?.id || 0,
+                )
+              }
               style={styles.addButton}
             >
               Agregar

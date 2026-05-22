@@ -47,14 +47,11 @@ export default function CarritoScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
       <Cart
-        cartItems={saleContext.cartItems}
+        items={saleContext.cartItems}
         onItemChange={saleContext.handleItemChange}
         onRemoveItem={saleContext.handleRemoveProduct}
         onClearCart={saleContext.clearCart}
         onFinish={handleFinish}
-        groupedUnits={saleContext.groupedUnits}
-        showFinishButton={true}
-        finishButtonText="Ir a Pago"
       />
     </View>
   );

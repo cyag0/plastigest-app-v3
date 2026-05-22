@@ -12,7 +12,7 @@ import {
 } from "react-native-paper";
 
 export interface CartItemData {
-  id: number;
+  id: number | string;
   product_id: number;
   code: string;
   name: string;
@@ -22,6 +22,7 @@ export interface CartItemData {
   unit_id?: number;
   unit_name?: string;
   unit_abbreviation?: string;
+  unit?: string;
   main_image?: {
     uri: string;
   };
@@ -35,9 +36,9 @@ export interface CartItemData {
 
 interface CartProps {
   items: CartItemData[];
-  onRemoveItem?: (itemId: number) => void;
+  onRemoveItem?: (itemId: number | string) => void;
   onItemChange?: (
-    itemId: number,
+    itemId: number | string,
     action: "increment" | "decrement" | "unit",
     data?: any,
   ) => void;
@@ -50,9 +51,9 @@ interface CartProps {
 
 interface CartItemComponentProps {
   item: CartItemData;
-  onRemove: (itemId: number) => void;
+  onRemove: (itemId: number | string) => void;
   onItemChange: (
-    itemId: number,
+    itemId: number | string,
     action: "increment" | "decrement" | "unit",
     data?: any,
   ) => void;
@@ -74,7 +75,7 @@ function CartItemComponent({
   };
 
   const handleUnitChange = (unitId: number) => {
-    onItemChange(item.id, "unit", { unit_id: unitId });
+    onItemChange(item.id, "unit", unitId);
     setUnitMenuVisible(false);
   };
 
@@ -125,7 +126,7 @@ function CartItemComponent({
                     compact
                     onPress={() => setUnitMenuVisible(true)}
                   >
-                    {item.unit_abbreviation || item.unit_name || "Unidad"}
+                    {item.unit_abbreviation || item.unit_name || item.unit || "Unidad"}
                     <MaterialCommunityIcons name="chevron-down" size={16} />
                   </Button>
                 }

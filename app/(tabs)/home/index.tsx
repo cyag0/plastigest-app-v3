@@ -134,16 +134,8 @@ export default function OperationsScreen() {
               <Text variant="headlineMedium" style={{ fontWeight: "bold" }}>
                 Hola, {auth.user?.name?.split(" ")[0] || ""}
               </Text>
-              {/* Company and Location Info */}
               {(auth.selectedCompany || selectedLocation) && (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    gap: 8,
-                    marginTop: 12,
-                    width: "100%",
-                  }}
-                >
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
                   {auth.selectedCompany && (
                     <View style={styles.compactInfo}>
                       <MaterialCommunityIcons
@@ -173,86 +165,87 @@ export default function OperationsScreen() {
             </View>
           </View>
 
-          {/* Quick Actions Grid */}
-          <View style={{ paddingHorizontal: 16, marginBottom: 20 }}>
-            <Text
-              variant="titleLarge"
-              style={{ fontWeight: "bold", marginBottom: 16 }}
-            >
-              Accesos Rápidos
-            </Text>
-            <View style={styles.operationsGrid}>
-              {operations.map((operation) => (
-                <TouchableRipple
-                  key={operation.key}
-                  onPress={() => router.push(operation.link as any)}
-                  style={[
-                    styles.operationCardWeb,
-                    { backgroundColor: operation.backgroundColor },
-                  ]}
-                >
-                  <View style={{ alignItems: "center", gap: 12 }}>
-                    <View
-                      style={{
-                        width: 64,
-                        height: 64,
-                        borderRadius: 32,
-                        backgroundColor: "rgba(255,255,255,0.25)",
-                        justifyContent: "center",
-                        alignItems: "center",
-                      }}
-                    >
-                      <MaterialCommunityIcons
-                        name={operation.iconName as any}
-                        size={32}
-                        color={operation.color}
-                      />
-                    </View>
-                    <View style={{ alignItems: "center" }}>
-                      <Text
-                        variant="titleSmall"
+          {/* Two-column layout: grid left, tasks right */}
+          <View style={styles.webTwoColumns}>
+            {/* Left: Quick Actions CSS Grid */}
+            <View style={{ flex: 3 }}>
+              <Text
+                variant="titleLarge"
+                style={{ fontWeight: "bold", marginBottom: 16 }}
+              >
+                Accesos Rápidos
+              </Text>
+              <View style={styles.operationsGridCss}>
+                {operations.map((operation) => (
+                  <TouchableRipple
+                    key={operation.key}
+                    onPress={() => router.push(operation.link as any)}
+                    style={[
+                      styles.operationCardSmall,
+                      { backgroundColor: operation.backgroundColor },
+                    ]}
+                  >
+                    <View style={{ alignItems: "center", gap: 8 }}>
+                      <View
                         style={{
-                          color: operation.color,
-                          fontWeight: "bold",
-                          textAlign: "center",
+                          width: 44,
+                          height: 44,
+                          borderRadius: 22,
+                          backgroundColor: "rgba(255,255,255,0.25)",
+                          justifyContent: "center",
+                          alignItems: "center",
                         }}
                       >
-                        {operation.label}
-                      </Text>
-                      <Text
-                        variant="bodySmall"
-                        style={{
-                          color: operation.color,
-                          opacity: 0.9,
-                          textAlign: "center",
-                          marginTop: 4,
-                        }}
-                      >
-                        {operation.description}
-                      </Text>
+                        <MaterialCommunityIcons
+                          name={operation.iconName as any}
+                          size={22}
+                          color={operation.color}
+                        />
+                      </View>
+                      <View style={{ alignItems: "center" }}>
+                        <Text
+                          variant="labelLarge"
+                          style={{
+                            color: operation.color,
+                            fontWeight: "bold",
+                            textAlign: "center",
+                          }}
+                        >
+                          {operation.label}
+                        </Text>
+                        <Text
+                          variant="bodySmall"
+                          style={{
+                            color: operation.color,
+                            opacity: 0.85,
+                            textAlign: "center",
+                            marginTop: 2,
+                          }}
+                        >
+                          {operation.description}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                </TouchableRipple>
-              ))}
+                  </TouchableRipple>
+                ))}
+              </View>
+            </View>
+
+            {/* Right: Tasks */}
+            <View style={{ flex: 2 }}>
+              <Text
+                variant="titleLarge"
+                style={{ fontWeight: "bold", marginBottom: 16 }}
+              >
+                Tareas Pendientes
+              </Text>
+              <TaskList limit={10} />
             </View>
           </View>
-
-          {/*  <Divider style={{ marginVertical: 8, marginHorizontal: 16 }} /> */}
-
-          {/* Tasks Section */}
-          <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-            <Text
-              variant="titleLarge"
-              style={{ fontWeight: "bold", marginBottom: 16 }}
-            >
-              Tareas Pendientes
-            </Text>
-          </View>
-          <TaskList limit={10} />
         </ScrollView>
       </View>
     );
-  } 
+  }
 
   // Vista mobile original
   return (
@@ -428,6 +421,24 @@ const styles = StyleSheet.create({
     width: "48%",
     padding: 20,
     borderRadius: 16,
+    elevation: 2,
+    shadowColor: "transparent",
+  },
+  webTwoColumns: {
+    flexDirection: "row",
+    gap: 24,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+    alignItems: "flex-start",
+  },
+  operationsGridCss: {
+    display: "grid" as any,
+    gridTemplateColumns: "repeat(4, 1fr)",
+    gap: 10,
+  },
+  operationCardSmall: {
+    padding: 14,
+    borderRadius: 12,
     elevation: 2,
     shadowColor: "transparent",
   },

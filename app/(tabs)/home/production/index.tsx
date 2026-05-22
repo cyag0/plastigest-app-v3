@@ -15,17 +15,7 @@ export default function ProductionIndex() {
 
   return (
     <PermissionGate permission="production_list">
-      <Animated.Image
-        source={require("../../../../assets/images/dashboard/categories.png")}
-        sharedTransitionTag="production"
-        sharedTransitionStyle={customTransition}
-        style={{
-          width: 300,
-          height: 300,
-          marginBottom: 10,
-          backgroundColor: "#333",
-        }}
-      />
+
 
       <AppList
         title="Producción"

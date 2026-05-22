@@ -44,7 +44,7 @@ interface PurchaseContextType {
   supplierId: number | null;
 
   // Actions
-  loadData: () => Promise<void>;
+  loadData: (supplierId?: number | null) => Promise<void>;
   handleAddProduct: (product: ProductListItem, unitId: number) => void;
   handleRemoveProduct: (productId: number | string) => void;
   handleItemChange: (
@@ -103,18 +103,78 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
     try {
       setLoading(true);
 
-      // Cargar productos excluyendo los de tipo 'processed' (producción)
-      // y trayendo sus paquetes disponibles
-      const productsResponse = await Services.products.index({
-        product_type: ["raw_material", "commercial"],
-        is_active: "1",
-        supplier_id: supplier_id || 0,
-      });
+      // Cargar unidades y categorías siempre (no dependen del proveedor)
+      const [unitsResponse, categoriesResponse] = await Promise.all([
+        Services.home.unidades.getGroupedByType(),
+        Services.categories.index(),
+      ]);
 
-      // Cargar unidades y organizarlas por tipo
-      const unitsResponse = await Services.home.unidades.getGroupedByType();
+      // Solo cargar productos si hay un proveedor seleccionado
+      if (supplier_id) {
+        const productsResponse = await Services.products.index({
+          product_type: ["raw_material", "commercial"],
+          is_active: "1",
+          supplier_id: supplier_id,
+        });
 
-      const categoriesResponse = await Services.categories.index();
+        if (
+          productsResponse &&
+          "data" in productsResponse &&
+          productsResponse.data
+        ) {
+          const productsData = Array.isArray(productsResponse.data)
+            ? productsResponse.data
+            : (productsResponse.data as any).data || [];
+
+          const products = productsData as App.Entities.Product[];
+          const expandedProducts: ProductListItem[] = [];
+
+          products.forEach((product: App.Entities.Product) => {
+            const availableUnits = product.unit?.unit_type
+              ? unitsResponse.data[product.unit.unit_type as unitType] || []
+              : [];
+
+            expandedProducts.push({
+              price: parseFloat(product.purchase_price || "0").toFixed(2),
+              unit_id: product.unit_id || 0,
+              unit_type: product.unit?.unit_type || null,
+              code: product.code || "",
+              id: `product_${product.id}`,
+              name: product.name,
+              current_stock: product.current_stock || undefined,
+              category_id: product.category_id || undefined,
+              main_image: product.main_image,
+              available_units: availableUnits,
+              is_package: false,
+            });
+
+            product.active_packages?.forEach((pkg) => {
+              expandedProducts.push({
+                price: parseFloat(pkg.purchase_price || "0").toFixed(2),
+                unit_id: product.unit?.id || 0,
+                unit_type: product.unit?.unit_type || null,
+                code: pkg.barcode,
+                id: `package_${pkg.id}`,
+                name: `${product.name} - ${pkg.package_name}`,
+                current_stock: product.current_stock
+                  ? Math.floor(product.current_stock / pkg.quantity_per_package)
+                  : 0,
+                category_id: product.category_id || undefined,
+                main_image: product.main_image,
+                package_id: pkg.id,
+                base_product_id: product.id,
+                quantity_per_package: pkg.quantity_per_package,
+                is_package: true,
+                available_units: [],
+              });
+            });
+          });
+
+          setProducts(expandedProducts);
+        }
+      } else {
+        setProducts([]);
+      }
 
       if (
         categoriesResponse &&
@@ -125,79 +185,14 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
           ? categoriesResponse.data
           : (categoriesResponse.data as any).data || [];
 
-        const categories: ProductCategory[] = categoriesData.map(
-          (cat: any) => ({
-            id: cat.id,
-            name: cat.name,
-          }),
+        setCategories(
+          categoriesData.map((cat: any) => ({ id: cat.id, name: cat.name })),
         );
-
-        setCategories(categories);
-      }
-
-      if (
-        productsResponse &&
-        "data" in productsResponse &&
-        productsResponse.data
-      ) {
-        const productsData = Array.isArray(productsResponse.data)
-          ? productsResponse.data
-          : (productsResponse.data as any).data || [];
-
-        const products = productsData as App.Entities.Product[];
-        const expandedProducts: ProductListItem[] = [];
-
-        products.forEach((product: App.Entities.Product) => {
-          // Obtener unidades disponibles para este producto
-          const availableUnits = product.unit?.unit_type
-            ? unitsResponse.data[product.unit.unit_type as unitType] || []
-            : [];
-
-          // Agregar el producto base
-          expandedProducts.push({
-            price: parseFloat(product.purchase_price || "0").toFixed(2),
-            unit_id: product.unit_id || 0,
-            unit_type: product.unit?.unit_type || null,
-            code: product.code || "",
-            id: `product_${product.id}`,
-            name: product.name,
-            current_stock: product.current_stock || undefined,
-            category_id: product.category_id || undefined,
-            main_image: product.main_image,
-            available_units: availableUnits,
-            is_package: false,
-          });
-
-          // Agregar cada paquete como un producto separado
-          product.active_packages?.forEach((pkg) => {
-            expandedProducts.push({
-              price: parseFloat(pkg.purchase_price || "0").toFixed(2),
-              unit_id: product.unit?.id || 0,
-              unit_type: product.unit?.unit_type || null,
-              code: pkg.barcode,
-              id: `package_${pkg.id}`,
-              name: `${product.name} - ${pkg.package_name}`,
-              current_stock: product.current_stock
-                ? Math.floor(product.current_stock / pkg.quantity_per_package)
-                : 0,
-              category_id: product.category_id || undefined,
-              main_image: product.main_image,
-              package_id: pkg.id,
-              base_product_id: product.id,
-              quantity_per_package: pkg.quantity_per_package,
-              is_package: true,
-              available_units: [],
-            });
-          });
-        });
-
-        setProducts(expandedProducts);
       }
 
       if (unitsResponse.data) {
         setGroupedUnits(unitsResponse.data);
-        const allUnits = Object.values(unitsResponse.data).flat();
-        setUnits(allUnits as Unit[]);
+        setUnits(Object.values(unitsResponse.data).flat() as Unit[]);
       }
     } catch (error) {
       console.error("Error cargando datos:", error);

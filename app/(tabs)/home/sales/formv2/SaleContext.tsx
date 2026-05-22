@@ -216,6 +216,8 @@ export function SaleProvider({ children }: SaleProviderProps) {
 
   const handleAddProduct = (product: ProductListItem, unitId: number) => {
     const productId = product.id;
+    const defaultUnit = product.available_units?.[0];
+    const basePrice = parseFloat(product.price.toString());
 
     // Determinar el product_id correcto
     const numericProductId = product.is_package
@@ -231,7 +233,16 @@ export function SaleProvider({ children }: SaleProviderProps) {
     // Para paquetes, usar el unit_id del producto base
     const finalUnitId = product.is_package 
       ? (baseProduct?.unit_id || 0)
-      : unitId;
+      : unitId || defaultUnit?.id || 0;
+
+    const selectedUnit = product.available_units?.find(
+      (unit) => unit.id === finalUnitId,
+    ) || defaultUnit;
+
+    const calculatedPrice =
+      product.is_package || selectedUnit?.is_base_unit || !selectedUnit?.factor_to_base
+        ? basePrice
+        : basePrice * Number(selectedUnit.factor_to_base);
 
     // Calcular cuánto stock ya está siendo usado en el carrito
     const usedStock = calculateUsedStock(numericProductId);
@@ -283,7 +294,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
       package_id: product.package_id,
       quantity: 1,
       unit_id: finalUnitId,
-      price: parseFloat(product.price),
+      price: calculatedPrice,
       detail_id: undefined,
     };
 
@@ -377,7 +388,14 @@ export function SaleProvider({ children }: SaleProviderProps) {
           alerts.success("Producto eliminado del carrito");
         }
       } else if (action === "unit" && data) {
-        const unitId = data;
+        const unitId =
+          typeof data === "object" && data !== null
+            ? Number(data.unit_id ?? data.id)
+            : Number(data);
+
+        if (!unitId) {
+          return prev;
+        }
 
         console.log("Cambiando unidad para producto:", productId, unitId);
 
@@ -495,22 +513,36 @@ export function SaleProvider({ children }: SaleProviderProps) {
   };
 
   const cartItems = useMemo(() => {
-    return Object.values(selectedProducts).map((item) => {
-      const product = products.find((p) => p.id === item.id);
-      const unit = units.find((u) => u.id === item.unit_id);
+    const productsMap = new Map(products.map((product) => [product.id.toString(), product]));
+
+    return Object.entries(selectedProducts).map(([productId, item]) => {
+      const product = productsMap.get(productId);
+      const selectedUnit = product?.available_units?.find(
+        (unit) => unit.id === item.unit_id,
+      );
 
       return {
         id: item.id,
-        name: product?.name || "Producto desconocido",
+        product_id: item.product_id,
         code: product?.code || "",
-        image: product?.main_image,
-        quantity: item.quantity,
-        unit: unit?.abbreviation || "",
-        unit_id: item.unit_id,
+        name: product?.name || "Producto desconocido",
         price: item.price,
+        quantity: item.quantity,
+        total: item.quantity * item.price,
+        unit: selectedUnit?.abbreviation || "",
+        unit_id: item.unit_id,
+        unit_name: selectedUnit?.name,
+        unit_abbreviation: selectedUnit?.abbreviation,
+        main_image: product?.main_image,
+        available_units: product?.available_units?.map((unit) => ({
+          id: unit.id,
+          name: unit.name,
+          abbreviation: unit.abbreviation,
+          price: item.price,
+        })),
       };
     });
-  }, [selectedProducts, products, units]);
+  }, [selectedProducts, products]);
 
   const value = useMemo(
     () => ({

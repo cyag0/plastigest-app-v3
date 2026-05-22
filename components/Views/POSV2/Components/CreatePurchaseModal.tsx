@@ -2,6 +2,7 @@ import AppModal, { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
+import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import {
   FormProSelect,
   SelectDataProvider,
@@ -17,6 +18,7 @@ const purchaseValidationSchema = Yup.object().shape({
   supplier_id: Yup.number().nullable().required("El proveedor es requerido"),
   document_number: Yup.string(),
   notes: Yup.string(),
+  payment_method: Yup.string(),
 });
 
 export interface CreatePurchaseModalRef {
@@ -54,7 +56,7 @@ const CreatePurchaseModal = forwardRef<
   const handleCreatePurchase = async (values: FormData) => {
     try {
       // El servicio upsertDraft creará un nuevo borrador automáticamente
-      const response = await Services.purchasesV2.upsertDraft(values);
+      const response = await Services.purchasesV2.upsertDraft(values as any);
 
       const purchase = response.data?.data || response.data;
 
@@ -82,6 +84,7 @@ const CreatePurchaseModal = forwardRef<
               supplier_id: null,
               document_number: "",
               notes: "",
+              payment_method: "other",
             }}
             onSubmit={handleCreatePurchase}
           >
@@ -97,6 +100,17 @@ const CreatePurchaseModal = forwardRef<
               name="purchase_date"
               label="Fecha de Compra"
               required
+            />
+
+            <FormSelectSimple
+              name="payment_method"
+              label="Método de pago"
+              data={[
+                { value: "cash", label: "Efectivo" },
+                { value: "card", label: "Tarjeta" },
+                { value: "transfer", label: "Transferencia" },
+                { value: "other", label: "Otro" },
+              ]}
             />
 
             {/*             <FormInput

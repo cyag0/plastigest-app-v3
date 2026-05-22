@@ -66,6 +66,10 @@ function getReasonBadgeStyle(reason?: string) {
   };
 }
 
+function rowHasDifference(row: ReceiveRow) {
+  return Number(row.quantity_received) < Number(row.expected);
+}
+
 export default function TransferStepThreeReceive({
   transfer,
   canContinueReceiveInStep3,
@@ -180,7 +184,7 @@ export default function TransferStepThreeReceive({
   }, [transfer.id, transfer.updated_at, isHistoricalStep3]);
 
   const hasAnyProductNotArrived = useMemo(
-    () => rows.some((row) => !row.arrived_ok),
+    () => rows.some((row) => rowHasDifference(row)),
     [rows],
   );
 
@@ -188,7 +192,7 @@ export default function TransferStepThreeReceive({
     if (!rows.length) return false;
 
     return rows.every((row) => {
-      if (row.arrived_ok) return true;
+      if (!rowHasDifference(row)) return true;
 
       return (
         row.quantity_received >= 0 &&
@@ -210,7 +214,7 @@ export default function TransferStepThreeReceive({
 
   const handleSubmit = async () => {
     for (const row of rows) {
-      if (row.arrived_ok) {
+      if (!rowHasDifference(row)) {
         continue;
       }
 
@@ -240,34 +244,40 @@ export default function TransferStepThreeReceive({
         alerts.error(`Debes subir evidencia para ${row.product_name}`);
         return;
       }
+    }
 
-      if (row.quantity_received >= row.expected) {
-        alerts.error(
-          `Si marcas NO para ${row.product_name}, la cantidad recibida debe ser menor a la esperada`,
-        );
-        return;
-      }
+    const confirmed = await alerts.confirm(
+      "¿Deseas confirmar la recepcion de esta transferencia?",
+      {
+        title: "Confirmar recepcion",
+        okText: "Confirmar",
+        cancelText: "Cancelar",
+      },
+    );
+
+    if (!confirmed) {
+      return;
     }
 
     const payloadItems: TransferReceiveStepItem[] = rows.map((row) => ({
       detail_id: row.detail_id,
       quantity_received: Number(
-        row.arrived_ok ? row.expected : row.quantity_received,
+        rowHasDifference(row) ? row.quantity_received : row.expected,
       ),
       adjustment_reason:
-        !row.arrived_ok && row.quantity_received < row.expected
+        rowHasDifference(row)
           ? row.adjustment_reason
           : undefined,
       adjustment_comment:
-        !row.arrived_ok && row.quantity_received < row.expected
+        rowHasDifference(row)
           ? row.adjustment_comment
           : undefined,
       adjustment_notes:
-        !row.arrived_ok && row.quantity_received < row.expected
+        rowHasDifference(row)
           ? row.adjustment_notes
           : undefined,
       adjustment_evidence:
-        !row.arrived_ok && row.quantity_received < row.expected
+        rowHasDifference(row)
           ? row.adjustment_evidence
           : undefined,
     }));
@@ -326,7 +336,7 @@ export default function TransferStepThreeReceive({
         )}
 
         {rows.map((row) => {
-          const hasDifference = !row.arrived_ok;
+          const hasDifference = rowHasDifference(row);
           const differenceQty = Math.max(row.expected - row.quantity_received, 0);
           const generatedAdjustment = row.adjustment_id
             ? generatedAdjustmentById.get(Number(row.adjustment_id))
@@ -373,13 +383,15 @@ export default function TransferStepThreeReceive({
                     </Text>
                     <View style={styles.checklistRow}>
                       <Button
-                        mode={row.arrived_ok ? "contained" : "outlined"}
+                        mode={!hasDifference ? "contained" : "outlined"}
                         onPress={() =>
                           updateRow(row.detail_id, {
                             arrived_ok: true,
                             quantity_received: row.expected,
                             adjustment_reason: undefined,
+                            adjustment_comment: "",
                             adjustment_notes: "",
+                            adjustment_evidence: [],
                           })
                         }
                         style={styles.checklistButton}
@@ -387,7 +399,7 @@ export default function TransferStepThreeReceive({
                         Si
                       </Button>
                       <Button
-                        mode={!row.arrived_ok ? "contained" : "outlined"}
+                        mode={hasDifference ? "contained" : "outlined"}
                         onPress={() =>
                           updateRow(row.detail_id, {
                             arrived_ok: false,
@@ -404,17 +416,20 @@ export default function TransferStepThreeReceive({
                     </View>
                   </View>
 
-                  {!row.arrived_ok ? (
+                  {hasDifference ? (
                     <TextInput
                       label="Cantidad recibida"
                       mode="outlined"
                       keyboardType="numeric"
                       value={String(row.quantity_received)}
-                      onChangeText={(value) =>
+                      onChangeText={(value) => {
+                        const nextQuantity = Number(value || 0);
+
                         updateRow(row.detail_id, {
-                          quantity_received: Number(value || 0),
-                        })
-                      }
+                          quantity_received: nextQuantity,
+                          arrived_ok: nextQuantity >= row.expected,
+                        });
+                      }}
                       style={styles.input}
                     />
                   ) : (

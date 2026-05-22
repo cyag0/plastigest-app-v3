@@ -8,7 +8,12 @@ import { Avatar, Badge, Divider, Drawer, Text } from "react-native-paper";
 
 export default function NavigationSidebar() {
   const pathname = usePathname();
-  const { user, unreadNotificationsCount, loadUnreadNotificationsCount } = useAuth();
+  const {
+    user,
+    location,
+    unreadNotificationsCount,
+    loadUnreadNotificationsCount,
+  } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
@@ -59,6 +64,10 @@ export default function NavigationSidebar() {
     router.push("/(stacks)/notifications" as any);
   };
 
+  const handleChangeLocation = () => {
+    router.push("/(stacks)/selectLocation" as any);
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -88,10 +97,6 @@ export default function NavigationSidebar() {
               styles.navItem,
               isActive(item.segment) && styles.navItemActive,
             ]}
-            labelStyle={[
-              styles.navLabel,
-              isActive(item.segment) && styles.navLabelActive,
-            ]}
           />
         ))}
       </View>
@@ -100,6 +105,8 @@ export default function NavigationSidebar() {
 
       {/* Actions */}
       <View style={styles.actions}>
+        
+
         <TouchableOpacity
           style={styles.actionButton}
           onPress={handleNotifications}
@@ -120,6 +127,26 @@ export default function NavigationSidebar() {
             )}
           </View>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={handleChangeLocation}
+        >
+          <View style={styles.actionContent}>
+            <MaterialCommunityIcons
+              name="map-marker-outline"
+              size={24}
+              color={palette.textSecondary}
+            />
+            <View style={styles.actionTextContainer}>
+              <Text variant="bodyMedium" style={styles.actionLabel}>
+                Cambiar sucursal
+              </Text>
+              <Text variant="bodySmall" style={styles.actionSubLabel}>
+                {location?.name || "Sin sucursal seleccionada"}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
       </View>
 
       <Divider style={styles.divider} />
@@ -134,7 +161,7 @@ export default function NavigationSidebar() {
           size={40}
           label={user?.name?.charAt(0).toUpperCase() || "U"}
           style={styles.avatar}
-          color={palette.white}
+          color="#fff"
           labelStyle={styles.avatarLabel}
         />
         <View style={styles.profileInfo}>
@@ -216,10 +243,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
-  actionLabel: {
+  actionTextContainer: {
     flex: 1,
+  },
+  actionLabel: {
     color: palette.textSecondary,
     fontWeight: "500",
+  },
+  actionSubLabel: {
+    color: palette.textSecondary,
+    opacity: 0.75,
+    marginTop: 2,
   },
   badge: {
     backgroundColor: palette.error,

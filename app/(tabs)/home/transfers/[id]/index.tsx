@@ -97,6 +97,7 @@ export default function TransferDetailWizardScreen() {
 
   const currentStep = getCurrentStepFromTransfer(transfer);
   const isSourceLocationUser = currentLocationId === transfer.from_location_id;
+
   const isTargetLocationUser = currentLocationId === transfer.to_location_id;
   const requesterId =
     (transfer as any).requested_by_user_id ??

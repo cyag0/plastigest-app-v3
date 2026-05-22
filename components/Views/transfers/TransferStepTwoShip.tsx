@@ -113,6 +113,19 @@ export default function TransferStepTwoShip({
       return;
     }
 
+    const confirmed = await alerts.confirm(
+      "¿Deseas confirmar el envio y transferir estos productos?",
+      {
+        title: "Confirmar envio",
+        okText: "Transferir",
+        cancelText: "Cancelar",
+      },
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
     const payloadItems: TransferShipStepItem[] = rows.map((row) => ({
       detail_id: row.detail_id,
       quantity_shipped: Number(row.quantity_shipped),
