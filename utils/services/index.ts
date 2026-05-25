@@ -257,6 +257,53 @@ const Services = {
   salesReports: {
     ...createCrudService<any>("/auth/admin/sales-reports"),
   },
+  salesOrders: {
+    ...createCrudService<any>("/auth/admin/sales-orders"),
+    async getInitialData() {
+      const response = await axiosClient.get(
+        "/auth/admin/sales-orders/initial-data",
+      );
+      return response.data;
+    },
+    async prepare(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/sales-orders/${id}/prepare`,
+      );
+      return response.data;
+    },
+    async ship(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/sales-orders/${id}/ship`,
+      );
+      return response.data;
+    },
+    async deliver(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/sales-orders/${id}/deliver`,
+      );
+      return response.data;
+    },
+    async cancel(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/sales-orders/${id}/cancel`,
+      );
+      return response.data;
+    },
+    async checkout(
+      id: number,
+      data?: {
+        payment_method?: "cash" | "card" | "transfer" | "credit";
+        paid_amount?: number;
+        notes?: string;
+      },
+    ) {
+      const response = await axiosClient.post(
+        `/auth/admin/sales-orders/${id}/checkout`,
+        data ?? {},
+      );
+      return response.data;
+    },
+  },
   expenses: {
     ...createCrudService<App.Entities.Expense>("/auth/admin/expenses"),
     async getCategories() {

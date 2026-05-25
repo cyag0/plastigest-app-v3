@@ -172,6 +172,24 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
+        name="sales-orders/index"
+        options={{
+          title: "Pedidos",
+        }}
+      />
+      <Stack.Screen
+        name="sales-orders/[id]"
+        options={{
+          title: "Detalle de Pedido",
+        }}
+      />
+      <Stack.Screen
+        name="sales-orders/kiosk"
+        options={{
+          title: "Modo Quiosco",
+        }}
+      />
+      <Stack.Screen
         name="sales/form"
         options={{
           title: "Nueva Venta",

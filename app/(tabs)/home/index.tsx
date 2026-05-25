@@ -60,6 +60,16 @@ const operations: Operation[] = [
     iconName: "cash-register",
   },
   {
+    key: "pedidos",
+    label: "Pedidos",
+    description: "Órdenes de venta",
+    color: "#fff",
+    backgroundColor: "#7c5cbf",
+    icon: require("../../../assets/images/dashboard/categories.png"),
+    link: "/(tabs)/home/sales-orders",
+    iconName: "clipboard-list",
+  },
+  {
     key: "transferencias",
     label: "Transferencias",
     description: "Entre sucursales",
@@ -294,8 +304,6 @@ export default function OperationsScreen() {
           )}
         </View>
       </View>
-    );
-  }
 
       {/* Quick Actions - Horizontal Scroll */}
       <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
