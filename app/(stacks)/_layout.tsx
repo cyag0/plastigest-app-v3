@@ -48,6 +48,12 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
+        name="task-notification-guide"
+        options={{
+          title: "Tareas y Notificaciones",
+        }}
+      />
+      <Stack.Screen
         name="tasks/index"
         options={{
           title: "Tareas",

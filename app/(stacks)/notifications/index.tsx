@@ -1,18 +1,28 @@
 "use client";
 
+import NotificationDetailContent from "@/components/Notifications/NotificationDetailContent";
+import {
+  formatNotificationDate,
+  getNotificationEventConfig,
+  getNotificationSeverityConfig,
+  notificationEventOptions,
+} from "@/components/Notifications/notificationPresentation";
 import SkeletonLoader from "@/components/SkeletonLoader";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
-import Services from "@/utils/services";
+import services from "@/utils/services";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
+  Platform,
   RefreshControl,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import {
@@ -22,69 +32,33 @@ import {
   FAB,
   Icon,
   IconButton,
+  Modal,
+  Portal,
   Searchbar,
   SegmentedButtons,
   Text,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-type FilterType = "all" | "unread" | "read";
+type ReadFilter = "all" | "unread" | "read";
+type EventFilter = "all" | App.Entities.NotificationEventType;
 
-// ─── Config per severity ───────────────────────────────────────────────────────
-function getSeverityConfig(severity: App.Entities.NotificationSeverity) {
-  switch (severity) {
-    case "success":
-      return { color: palette.success, icon: "check-circle",  bg: palette.success + "20", label: "Éxito"   };
-    case "error":
-      return { color: palette.error,   icon: "alert-circle",  bg: palette.error   + "20", label: "Error"   };
-    case "warning":
-      return { color: palette.warning, icon: "alert",         bg: palette.warning + "20", label: "Aviso"   };
-    case "alert":
-      return { color: palette.red,     icon: "bell-alert",    bg: palette.red     + "20", label: "Alerta"  };
-    case "info":
-    default:
-      return { color: palette.info,    icon: "information",   bg: palette.info    + "20", label: "Info"    };
-  }
-}
-
-// ─── Config per event_type ─────────────────────────────────────────────────────
-function getEventConfig(eventType: App.Entities.NotificationEventType) {
-  switch (eventType) {
-    case "low_stock":
-      return { icon: "package-variant-remove", label: "Stock Bajo" };
-    case "inventory_adjustment":
-      return { icon: "tune-variant",           label: "Ajuste Inventario" };
-    case "inventory_count_discrepancy":
-      return { icon: "clipboard-alert-outline", label: "Discrepancia" };
-    case "purchase_update":
-      return { icon: "truck-delivery-outline", label: "Compra" };
-    case "task_event":
-      return { icon: "clipboard-check-outline", label: "Tarea" };
-    default:
-      return { icon: "bell-outline",            label: "Notificación" };
-  }
-}
-
-// ─── Skeleton ──────────────────────────────────────────────────────────────────
 function NotificationSkeleton() {
   return (
-    <Card style={styles.skeletonCard}>
+    <Card style={styles.skeletonCard} mode="elevated">
       <Card.Content style={styles.cardContent}>
-        <View>
-          <SkeletonLoader width={52} height={52} borderRadius={14} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <SkeletonLoader width="60%" height={14} style={{ marginBottom: 6 }} />
-          <SkeletonLoader width="100%" height={18} style={{ marginBottom: 6 }} />
-          <SkeletonLoader width="80%" height={14} style={{ marginBottom: 8 }} />
-          <SkeletonLoader width="35%" height={12} />
+        <SkeletonLoader width={52} height={52} borderRadius={8} />
+        <View style={styles.skeletonTextBlock}>
+          <SkeletonLoader width="55%" height={13} style={styles.skeletonLine} />
+          <SkeletonLoader width="92%" height={18} style={styles.skeletonLine} />
+          <SkeletonLoader width="76%" height={13} style={styles.skeletonLine} />
+          <SkeletonLoader width="38%" height={12} />
         </View>
       </Card.Content>
     </Card>
   );
 }
 
-// ─── Item ──────────────────────────────────────────────────────────────────────
 function NotificationItem({
   item,
   onPress,
@@ -93,97 +67,126 @@ function NotificationItem({
   index,
 }: {
   item: App.Entities.Notification;
-  onPress: (id: number) => void;
+  onPress: (notification: App.Entities.Notification) => void;
   handleMarkAsRead: (id: number, isRead: boolean) => Promise<void>;
   handleDelete: (id: number) => Promise<void>;
   index: number;
 }) {
-  const scaleAnim   = useRef(new Animated.Value(0.95)).current;
+  const scaleAnim = useRef(new Animated.Value(0.97)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(scaleAnim,   { toValue: 1, useNativeDriver: true, delay: index * 50 }),
-      Animated.timing(opacityAnim, { toValue: 1, duration: 300, useNativeDriver: true, delay: index * 50 }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        useNativeDriver: true,
+        delay: Math.min(index * 35, 180),
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 240,
+        useNativeDriver: true,
+        delay: Math.min(index * 35, 180),
+      }),
     ]).start();
-  }, []);
+  }, [index, opacityAnim, scaleAnim]);
 
-  const severityConfig = getSeverityConfig(item.severity);
-  const eventConfig    = getEventConfig(item.event_type);
+  const severityConfig = getNotificationSeverityConfig(item.severity);
+  const eventConfig = getNotificationEventConfig(item.event_type);
 
   return (
-    <Animated.View style={[{ opacity: opacityAnim, transform: [{ scale: scaleAnim }] }, styles.animatedContainer]}>
-      <TouchableOpacity onPress={() => onPress(item.id)} activeOpacity={0.6} style={styles.touchable}>
+    <Animated.View
+      style={[
+        styles.animatedContainer,
+        { opacity: opacityAnim, transform: [{ scale: scaleAnim }] },
+      ]}
+    >
+      <TouchableOpacity
+        onPress={() => onPress(item)}
+        activeOpacity={0.7}
+        style={styles.touchable}
+      >
         <Card
+          mode="elevated"
           style={[
             styles.card,
-            { shadowColor: "transparent" },
-            !item.is_read && { backgroundColor: palette.primary + "12", borderLeftWidth: 4, borderLeftColor: palette.primary },
+            !item.is_read && styles.cardUnread,
           ]}
         >
           <Card.Content style={styles.cardContent}>
-            {/* Icon Badge */}
-            <View style={[styles.iconBadge, { backgroundColor: severityConfig.bg }]}>
-              <Icon source={eventConfig.icon} size={26} color={severityConfig.color} />
+            <View style={[styles.iconBadge, { backgroundColor: eventConfig.softBg }]}>
+              <Icon source={eventConfig.icon} size={27} color={eventConfig.color} />
             </View>
 
-            {/* Main Content */}
             <View style={styles.mainContent}>
-              {/* Chips row */}
-              <View style={styles.headerRow}>
+              <View style={styles.cardTopRow}>
                 <View style={styles.badgesContainer}>
                   {!item.is_read && (
                     <View style={styles.unreadBadge}>
                       <View style={styles.unreadDot} />
-                      <Text style={styles.unreadBadgeText}>NUEVO</Text>
+                      <Text style={styles.unreadBadgeText}>NUEVA</Text>
                     </View>
                   )}
                   <Chip
                     mode="flat"
                     compact
-                    textStyle={[styles.typeChipText, { color: severityConfig.color }]}
-                    style={[styles.typeChip, { backgroundColor: severityConfig.bg }]}
+                    icon={eventConfig.icon}
+                    textStyle={[styles.typeChipText, { color: eventConfig.color }]}
+                    style={[styles.typeChip, { backgroundColor: eventConfig.softBg }]}
                   >
                     {eventConfig.label}
+                  </Chip>
+                  <Chip
+                    mode="flat"
+                    compact
+                    textStyle={[styles.typeChipText, { color: severityConfig.color }]}
+                    style={[styles.typeChip, { backgroundColor: severityConfig.softBg }]}
+                  >
+                    {severityConfig.label}
                   </Chip>
                 </View>
               </View>
 
-              {/* Title */}
-              <Text variant="titleMedium" style={[styles.title, !item.is_read && { fontWeight: "700" }]} numberOfLines={2}>
+              <Text
+                variant="titleMedium"
+                style={[styles.title, !item.is_read && styles.titleUnread]}
+                numberOfLines={2}
+              >
                 {item.title}
               </Text>
 
-              {/* Message */}
               <Text variant="bodyMedium" style={styles.message} numberOfLines={2}>
                 {item.message}
               </Text>
 
               <Divider style={styles.divider} />
 
-              {/* Footer */}
               <View style={styles.footerRow}>
                 <View style={styles.dateContainer}>
                   <Icon source="clock-outline" size={13} color={palette.textSecondary} />
                   <Text variant="bodySmall" style={styles.date}>
-                    {new Date(item.created_at).toLocaleDateString("es-MX", {
-                      day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
-                    })}
+                    {formatNotificationDate(item.created_at)}
                   </Text>
                 </View>
                 <View style={styles.actionButtons}>
                   <IconButton
-                    icon={item.is_read ? "email-outline" : "email-open"}
-                    size={16}
+                    icon={item.is_read ? "email-outline" : "email-open-outline"}
+                    size={17}
                     iconColor={item.is_read ? palette.textSecondary : palette.primary}
-                    onPress={() => handleMarkAsRead(item.id, item.is_read)}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      void handleMarkAsRead(item.id, item.is_read);
+                    }}
                     style={styles.iconButton}
                   />
                   <IconButton
                     icon="delete-outline"
-                    size={16}
+                    size={17}
                     iconColor={palette.error}
-                    onPress={() => handleDelete(item.id)}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      void handleDelete(item.id);
+                    }}
                     style={styles.iconButton}
                   />
                 </View>
@@ -196,26 +199,53 @@ function NotificationItem({
   );
 }
 
-// ─── Screen ────────────────────────────────────────────────────────────────────
+function matchesSearch(notification: App.Entities.Notification, rawSearch: string) {
+  const search = rawSearch.trim().toLowerCase();
+
+  if (!search) {
+    return true;
+  }
+
+  const eventLabel = getNotificationEventConfig(notification.event_type).label;
+  const dataText = notification.data ? JSON.stringify(notification.data) : "";
+
+  return [
+    notification.title,
+    notification.message,
+    notification.event_type,
+    notification.severity,
+    eventLabel,
+    dataText,
+  ]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(search));
+}
+
 export default function NotificationsScreen() {
-  const router  = useRouter();
-  const alerts  = useAlerts();
+  const router = useRouter();
+  const alerts = useAlerts();
   const { loadUnreadNotificationsCount } = useAuth();
+  const { width, height } = useWindowDimensions();
+  const isDesktop = Platform.OS === "web" && width >= 900;
 
   const [notifications, setNotifications] = useState<App.Entities.Notification[]>([]);
-  const [loading,       setLoading]        = useState(true);
-  const [refreshing,    setRefreshing]     = useState(false);
-  const [filter,        setFilter]         = useState<FilterType>("all");
-  const [search,        setSearch]         = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [readFilter, setReadFilter] = useState<ReadFilter>("all");
+  const [eventFilter, setEventFilter] = useState<EventFilter>("all");
+  const [search, setSearch] = useState("");
+  const [selectedNotification, setSelectedNotification] = useState<App.Entities.Notification | null>(null);
+  const [detailVisible, setDetailVisible] = useState(false);
 
-  const loadNotifications = async () => {
+  const loadNotifications = useCallback(async () => {
     try {
-      const params: any = { all: true };
-      if (filter === "unread") params.read = "false";
-      if (filter === "read")   params.read = "true";
-      if (search)              params.search = search;
+      const params: Record<string, string | boolean> = { all: true };
 
-      const response = await Services.notifications.index(params);
+      if (readFilter === "unread") params.read = "false";
+      if (readFilter === "read") params.read = "true";
+      if (eventFilter !== "all") params.event_type = eventFilter;
+
+      const response = await services.notifications.index(params);
       const data = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
@@ -226,164 +256,639 @@ export default function NotificationsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
+  }, [alerts, eventFilter, readFilter]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadNotifications();
+    }, [loadNotifications]),
+  );
+
+  const visibleNotifications = useMemo(
+    () => notifications.filter((notification) => matchesSearch(notification, search)),
+    [notifications, search],
+  );
+
+  const unreadCount = useMemo(
+    () => notifications.filter((notification) => !notification.is_read).length,
+    [notifications],
+  );
+
+  const setNotificationReadState = useCallback(
+    (id: number, isRead: boolean) => {
+      const readAt = isRead ? new Date().toISOString() : null;
+      setNotifications((current) =>
+        current.map((notification) =>
+          notification.id === id
+            ? { ...notification, is_read: isRead, read_at: readAt }
+            : notification,
+        ),
+      );
+      setSelectedNotification((current) =>
+        current?.id === id ? { ...current, is_read: isRead, read_at: readAt } : current,
+      );
+    },
+    [],
+  );
+
+  const markAsReadSilently = useCallback(
+    async (notification: App.Entities.Notification) => {
+      if (notification.is_read) {
+        return;
+      }
+
+      try {
+        await services.notifications.markAsRead(notification.id);
+        setNotificationReadState(notification.id, true);
+        loadUnreadNotificationsCount();
+        void loadNotifications();
+      } catch {
+        alerts.error("Error al marcar la notificacion como leida");
+      }
+    },
+    [alerts, loadNotifications, loadUnreadNotificationsCount, setNotificationReadState],
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    void loadNotifications();
   };
 
-  useFocusEffect(useCallback(() => { loadNotifications(); }, [filter, search]));
+  const handleOpenNotification = (notification: App.Entities.Notification) => {
+    if (isDesktop) {
+      setSelectedNotification(notification);
+      setDetailVisible(true);
+      void markAsReadSilently(notification);
+      return;
+    }
 
-  const onRefresh = () => { setRefreshing(true); loadNotifications(); };
+    router.push(`/(stacks)/notifications/${notification.id}` as any);
+  };
 
   const handleMarkAsRead = async (id: number, isRead: boolean) => {
     try {
       if (isRead) {
-        await Services.notifications.markAsUnread(id);
-        alerts.success("Marcada como no leída");
+        await services.notifications.markAsUnread(id);
+        alerts.success("Marcada como no leida");
+        setNotificationReadState(id, false);
       } else {
-        await Services.notifications.markAsRead(id);
-        alerts.success("Marcada como leída");
+        await services.notifications.markAsRead(id);
+        alerts.success("Marcada como leida");
+        setNotificationReadState(id, true);
       }
-      loadNotifications();
+
       loadUnreadNotificationsCount();
+      void loadNotifications();
     } catch {
-      alerts.error("Error al actualizar la notificación");
+      alerts.error("Error al actualizar la notificacion");
     }
   };
 
   const handleMarkAllAsRead = async () => {
-    const confirmed = await alerts.confirm("¿Marcar todas las notificaciones como leídas?", {
-      title: "Confirmar", okText: "Sí", cancelText: "Cancelar",
+    const confirmed = await alerts.confirm("Marcar todas las notificaciones como leidas?", {
+      title: "Confirmar",
+      okText: "Si",
+      cancelText: "Cancelar",
     });
-    if (!confirmed) return;
+
+    if (!confirmed) {
+      return;
+    }
+
     try {
-      await Services.notifications.markAllAsRead();
-      alerts.success("Todas las notificaciones marcadas como leídas");
-      loadNotifications();
+      await services.notifications.markAllAsRead();
+      alerts.success("Todas las notificaciones marcadas como leidas");
       loadUnreadNotificationsCount();
+      void loadNotifications();
     } catch {
-      alerts.error("Error al marcar todas como leídas");
+      alerts.error("Error al marcar todas como leidas");
     }
   };
 
   const handleDelete = async (id: number) => {
-    const confirmed = await alerts.confirm("¿Eliminar esta notificación?", {
-      title: "Confirmar eliminación", okText: "Eliminar", cancelText: "Cancelar",
+    const confirmed = await alerts.confirm("Eliminar esta notificacion?", {
+      title: "Confirmar eliminacion",
+      okText: "Eliminar",
+      cancelText: "Cancelar",
     });
-    if (!confirmed) return;
+
+    if (!confirmed) {
+      return;
+    }
+
     try {
-      await Services.notifications.destroy(id);
-      alerts.success("Notificación eliminada");
-      loadNotifications();
+      await services.notifications.destroy(id);
+      alerts.success("Notificacion eliminada");
+      setNotifications((current) => current.filter((notification) => notification.id !== id));
+      if (selectedNotification?.id === id) {
+        setDetailVisible(false);
+        setSelectedNotification(null);
+      }
       loadUnreadNotificationsCount();
+      void loadNotifications();
     } catch {
-      alerts.error("Error al eliminar la notificación");
+      alerts.error("Error al eliminar la notificacion");
     }
   };
 
-  return (
-    <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
-      <View style={styles.container}>
-        <Searchbar
-          placeholder="Buscar notificaciones..."
-          onChangeText={setSearch}
-          value={search}
-          style={styles.searchbar}
-          mode="bar"
-          icon="magnify"
-        />
+  const emptyMessage = useMemo(() => {
+    if (search.trim()) {
+      return "No hay resultados para esa busqueda.";
+    }
 
-        <SegmentedButtons
-          value={filter}
-          onValueChange={(v) => setFilter(v as FilterType)}
-          buttons={[
-            { value: "all",    label: "Todas",      icon: "bell"       },
-            { value: "unread", label: "No leídas",  icon: "email"      },
-            { value: "read",   label: "Leídas",     icon: "email-open" },
-          ]}
-          style={styles.segmentedButtons}
-        />
+    if (eventFilter !== "all") {
+      const label = getNotificationEventConfig(eventFilter).label.toLowerCase();
+      return `No hay notificaciones de ${label} con estos filtros.`;
+    }
+
+    if (readFilter === "unread") {
+      return "No tienes notificaciones sin leer.";
+    }
+
+    if (readFilter === "read") {
+      return "No tienes notificaciones leidas.";
+    }
+
+    return "Las notificaciones apareceran aqui cuando el sistema genere eventos.";
+  }, [eventFilter, readFilter, search]);
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
+      <View style={styles.container}>
+        <View style={styles.headerPanel}>
+          <View style={styles.headerTopRow}>
+            <View style={styles.headerIcon}>
+              <Icon source="bell-badge-outline" size={28} color={palette.primary} />
+            </View>
+            <View style={styles.headerTextBlock}>
+              <Text variant="headlineSmall" style={styles.headerTitle}>
+                Notificaciones
+              </Text>
+              <Text variant="bodyMedium" style={styles.headerSubtitle}>
+                {visibleNotifications.length} visibles / {notifications.length} cargadas
+              </Text>
+            </View>
+            <View style={styles.unreadSummary}>
+              <Text style={styles.unreadSummaryNumber}>{unreadCount}</Text>
+              <Text style={styles.unreadSummaryLabel}>sin leer</Text>
+            </View>
+          </View>
+
+          <Searchbar
+            placeholder="Buscar por titulo, mensaje o tipo"
+            onChangeText={setSearch}
+            value={search}
+            style={styles.searchbar}
+            inputStyle={styles.searchInput}
+            mode="bar"
+            icon="magnify"
+            clearIcon="close-circle-outline"
+          />
+
+          <SegmentedButtons
+            value={readFilter}
+            onValueChange={(value) => setReadFilter(value as ReadFilter)}
+            buttons={[
+              { value: "all", label: "Todas", icon: "bell-outline" },
+              { value: "unread", label: "No leidas", icon: "email-outline" },
+              { value: "read", label: "Leidas", icon: "email-open-outline" },
+            ]}
+            style={styles.segmentedButtons}
+          />
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.eventFilters}
+          >
+            {notificationEventOptions.map((option) => {
+              const selected = eventFilter === option.value;
+              const eventColor =
+                option.value === "all"
+                  ? palette.primary
+                  : getNotificationEventConfig(option.value).color;
+
+              return (
+                <Chip
+                  key={option.value}
+                  icon={option.icon}
+                  selected={selected}
+                  showSelectedCheck={false}
+                  onPress={() => setEventFilter(option.value)}
+                  style={[
+                    styles.eventChip,
+                    selected && {
+                      backgroundColor: eventColor + "22",
+                      borderColor: eventColor,
+                    },
+                  ]}
+                  textStyle={[
+                    styles.eventChipText,
+                    selected && { color: eventColor },
+                  ]}
+                >
+                  {option.label}
+                </Chip>
+              );
+            })}
+          </ScrollView>
+        </View>
 
         {loading ? (
           <View style={styles.listContent}>
-            {[1, 2, 3, 4, 5].map((i) => <NotificationSkeleton key={i} />)}
+            {[1, 2, 3, 4, 5].map((item) => (
+              <NotificationSkeleton key={item} />
+            ))}
           </View>
         ) : (
           <FlatList
-            data={notifications}
+            data={visibleNotifications}
             renderItem={({ item, index }) => (
               <NotificationItem
                 item={item}
                 index={index}
-                onPress={(id) => router.push(`/(stacks)/notifications/${id}` as any)}
+                onPress={handleOpenNotification}
                 handleMarkAsRead={handleMarkAsRead}
                 handleDelete={handleDelete}
               />
             )}
             keyExtractor={(item) => item.id.toString()}
             contentContainerStyle={styles.listContent}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={palette.primary}
+                colors={[palette.primary]}
+              />
+            }
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconContainer}>
-                  <Icon source="bell-off-outline" size={64} color={palette.primary} />
+                  <Icon source="bell-off-outline" size={62} color={palette.primary} />
                 </View>
-                <Text variant="titleLarge" style={styles.emptyTitle}>No hay notificaciones</Text>
+                <Text variant="titleLarge" style={styles.emptyTitle}>
+                  No hay notificaciones
+                </Text>
                 <Text variant="bodyMedium" style={styles.emptyText}>
-                  {filter === "unread"
-                    ? "No tienes notificaciones sin leer"
-                    : filter === "read"
-                    ? "No tienes notificaciones leídas"
-                    : "Las notificaciones aparecerán aquí cuando el sistema genere eventos"}
+                  {emptyMessage}
                 </Text>
               </View>
             }
           />
         )}
 
-        {!loading && notifications.some((n) => !n.is_read) && (
+        {!loading && unreadCount > 0 && (
           <FAB
-            icon="email-open-multiple"
-            label="Marcar todas leídas"
+            icon="email-open-multiple-outline"
+            label="Marcar leidas"
             style={styles.fab}
             color="#fff"
             onPress={handleMarkAllAsRead}
             uppercase={false}
           />
         )}
+
+        <Portal>
+          <Modal
+            visible={detailVisible && isDesktop}
+            onDismiss={() => setDetailVisible(false)}
+            contentContainerStyle={styles.detailModal}
+          >
+            <View style={styles.detailModalHeader}>
+              <View>
+                <Text variant="titleMedium" style={styles.detailModalTitle}>
+                  Detalle de notificacion
+                </Text>
+                <Text variant="bodySmall" style={styles.detailModalSubtitle}>
+                  Vista rapida para escritorio
+                </Text>
+              </View>
+              <IconButton
+                icon="close"
+                size={20}
+                iconColor={palette.textSecondary}
+                onPress={() => setDetailVisible(false)}
+                style={styles.closeButton}
+              />
+            </View>
+            {selectedNotification && (
+              <View style={[styles.detailModalBody, { height: Math.min(height - 150, 720) }]}>
+                <NotificationDetailContent
+                  notification={selectedNotification}
+                  compact
+                  onDelete={() => handleDelete(selectedNotification.id)}
+                />
+              </View>
+            )}
+          </Modal>
+        </Portal>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container:          { flex: 1, backgroundColor: palette.background },
-  searchbar:          { marginHorizontal: 16, marginVertical: 12, backgroundColor: palette.card, elevation: 0, borderRadius: 12 },
-  segmentedButtons:   { marginHorizontal: 16, marginBottom: 16, elevation: 0 },
-  listContent:        { padding: 12, paddingTop: 0, paddingBottom: 100 },
-  animatedContainer:  { marginHorizontal: 4, marginVertical: 6 },
-  touchable:          { borderRadius: 16 },
-  card:               { borderRadius: 16, elevation: 2, backgroundColor: palette.card, overflow: "hidden" },
-  skeletonCard:       { borderRadius: 16, elevation: 2, backgroundColor: palette.card, marginHorizontal: 4, marginVertical: 6 },
-  cardContent:        { flexDirection: "row", gap: 14, paddingVertical: 14, paddingHorizontal: 16 },
-  iconBadge:          { width: 52, height: 52, borderRadius: 14, justifyContent: "center", alignItems: "center", marginTop: 2 },
-  mainContent:        { flex: 1, gap: 8 },
-  headerRow:          { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  badgesContainer:    { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
-  unreadBadge:        { backgroundColor: palette.primary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, flexDirection: "row", alignItems: "center", gap: 4 },
-  unreadDot:          { width: 6, height: 6, borderRadius: 3, backgroundColor: "#fff" },
-  unreadBadgeText:    { color: "#fff", fontSize: 8, fontWeight: "800", letterSpacing: 0.8 },
-  typeChip:           { height: 32, borderRadius: 8, marginHorizontal: 0 },
-  typeChipText:       { fontSize: 12, fontWeight: "600" },
-  title:              { color: palette.text, lineHeight: 22, fontWeight: "600" },
-  message:            { color: palette.textSecondary, lineHeight: 20, fontSize: 13 },
-  divider:            { marginVertical: 8, backgroundColor: palette.border, height: 0.8 },
-  footerRow:          { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  dateContainer:      { flexDirection: "row", alignItems: "center", gap: 5 },
-  date:               { color: palette.textSecondary, fontSize: 11, fontWeight: "500" },
-  actionButtons:      { flexDirection: "row", gap: 0, marginRight: -8 },
-  iconButton:         { margin: 0, width: 32, height: 32 },
-  emptyContainer:     { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 100, gap: 16 },
-  emptyIconContainer: { width: 140, height: 140, borderRadius: 70, backgroundColor: palette.primary + "18", justifyContent: "center", alignItems: "center", marginBottom: 12 },
-  emptyTitle:         { color: palette.text, fontWeight: "700" },
-  emptyText:          { color: palette.textSecondary, textAlign: "center", paddingHorizontal: 32, fontSize: 14, lineHeight: 20 },
-  fab:                { position: "absolute", right: 16, bottom: 16, backgroundColor: palette.primary, borderRadius: 28 },
+  safeArea: {
+    flex: 1,
+    backgroundColor: palette.background,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: palette.background,
+  },
+  headerPanel: {
+    margin: 14,
+    marginBottom: 8,
+    padding: 14,
+    borderRadius: 8,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+    gap: 12,
+  },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  headerIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: palette.primary + "1F",
+  },
+  headerTextBlock: {
+    flex: 1,
+  },
+  headerTitle: {
+    color: palette.text,
+    fontWeight: "800",
+  },
+  headerSubtitle: {
+    color: palette.textSecondary,
+    marginTop: 2,
+  },
+  unreadSummary: {
+    minWidth: 76,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: palette.background,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  unreadSummaryNumber: {
+    color: palette.primary,
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  unreadSummaryLabel: {
+    color: palette.textSecondary,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  searchbar: {
+    backgroundColor: palette.background,
+    elevation: 0,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  searchInput: {
+    minHeight: 0,
+    color: palette.text,
+  },
+  segmentedButtons: {
+    elevation: 0,
+  },
+  eventFilters: {
+    gap: 8,
+    paddingRight: 4,
+  },
+  eventChip: {
+    borderRadius: 8,
+    backgroundColor: palette.background,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  eventChipText: {
+    color: palette.textSecondary,
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  listContent: {
+    flexGrow: 1,
+    paddingHorizontal: 12,
+    paddingTop: 0,
+    paddingBottom: 104,
+  },
+  animatedContainer: {
+    marginHorizontal: 2,
+    marginVertical: 6,
+  },
+  touchable: {
+    borderRadius: 8,
+  },
+  card: {
+    borderRadius: 8,
+    backgroundColor: palette.surface,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  cardUnread: {
+    backgroundColor: palette.background,
+    borderLeftWidth: 4,
+    borderLeftColor: palette.primary,
+  },
+  skeletonCard: {
+    borderRadius: 8,
+    backgroundColor: palette.surface,
+    marginHorizontal: 2,
+    marginVertical: 6,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  cardContent: {
+    flexDirection: "row",
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+  },
+  skeletonTextBlock: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  skeletonLine: {
+    marginBottom: 7,
+  },
+  iconBadge: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  mainContent: {
+    flex: 1,
+    gap: 8,
+  },
+  cardTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  badgesContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 7,
+    flex: 1,
+  },
+  unreadBadge: {
+    backgroundColor: palette.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  unreadDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#fff",
+  },
+  unreadBadgeText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "900",
+  },
+  typeChip: {
+    minHeight: 28,
+    borderRadius: 8,
+    marginHorizontal: 0,
+  },
+  typeChipText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  title: {
+    color: palette.text,
+    lineHeight: 22,
+    fontWeight: "700",
+  },
+  titleUnread: {
+    fontWeight: "900",
+  },
+  message: {
+    color: palette.textSecondary,
+    lineHeight: 20,
+    fontSize: 13,
+  },
+  divider: {
+    marginVertical: 6,
+    backgroundColor: palette.border,
+  },
+  footerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 10,
+  },
+  dateContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    flex: 1,
+  },
+  date: {
+    color: palette.textSecondary,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 0,
+    marginRight: -6,
+  },
+  iconButton: {
+    margin: 0,
+    width: 32,
+    height: 32,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 80,
+    gap: 12,
+  },
+  emptyIconContainer: {
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    backgroundColor: palette.primary + "18",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  emptyTitle: {
+    color: palette.text,
+    fontWeight: "800",
+  },
+  emptyText: {
+    color: palette.textSecondary,
+    textAlign: "center",
+    paddingHorizontal: 32,
+    fontSize: 14,
+    lineHeight: 20,
+    maxWidth: 440,
+  },
+  fab: {
+    position: "absolute",
+    right: 16,
+    bottom: 16,
+    backgroundColor: palette.primary,
+    borderRadius: 8,
+  },
+  detailModal: {
+    alignSelf: "center",
+    width: "92%",
+    maxWidth: 760,
+    borderRadius: 8,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: 12,
+  },
+  detailModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    paddingBottom: 10,
+  },
+  detailModalTitle: {
+    color: palette.text,
+    fontWeight: "800",
+  },
+  detailModalSubtitle: {
+    color: palette.textSecondary,
+    marginTop: 2,
+  },
+  closeButton: {
+    margin: 0,
+    backgroundColor: palette.background,
+  },
+  detailModalBody: {
+    borderRadius: 8,
+    overflow: "hidden",
+  },
 });
-

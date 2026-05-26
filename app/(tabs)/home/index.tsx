@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React from "react";
 import {
   Dimensions,
   Platform,
@@ -100,6 +100,16 @@ const operations: Operation[] = [
     iconName: "bell-ring",
   },
   {
+    key: "tareas_notificaciones",
+    label: "Tareas y avisos",
+    description: "Guía y pruebas",
+    color: "#fff",
+    backgroundColor: palette.blue,
+    icon: require("../../../assets/images/dashboard/categories.png"),
+    link: "/(stacks)/task-notification-guide",
+    iconName: "bell-check",
+  },
+  {
     key: "caja",
     label: "Caja",
     description: "Movimientos de dinero",
@@ -121,11 +131,8 @@ const operations: Operation[] = [
   },
 ];
 
-type FilterType = "all" | "entry" | "exit" | "production" | "adjustment";
-
 export default function OperationsScreen() {
   const router = useRouter();
-  const [filter, setFilter] = useState<FilterType>("all");
   const isWeb = Platform.OS === "web";
   const screenWidth = Dimensions.get("window").width;
   const isWideScreen = screenWidth >= 1024;

@@ -269,6 +269,32 @@ Actualiza la configuración de canales para un tipo de evento específico. Crea 
 
 ---
 
+### `GET /notification-preferences/{eventType}/eligible-users`
+
+Devuelve usuarios activos elegibles para recibir un tipo de notificacion. Si se envia `location_id`, filtra por trabajadores activos de esa sucursal.
+
+**Query params opcionales:**
+
+| Param | Tipo | Descripción | Ejemplo |
+|---|---|---|---|
+| `location_id` | int | Filtrar por sucursal actual | `3` |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 7,
+      "name": "Usuario Demo",
+      "email": "demo@plastigest.local"
+    }
+  ]
+}
+```
+
+---
+
 ### `POST /notification-preferences/reset`
 
 Elimina todas las preferencias personalizadas de la empresa. Todos los eventos vuelven a los valores por defecto del sistema.

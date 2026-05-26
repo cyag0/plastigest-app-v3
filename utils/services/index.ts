@@ -142,14 +142,14 @@ const Services = {
       supplier_id?: number;
       notes?: string;
       payment_method?: string;
-      items?: Array<{
+      items?: {
         id: string | number;
         product_id: number;
         package_id?: number;
         quantity: number;
         unit_id: number;
         price: number;
-      }>;
+      }[];
     }) {
       const response = await axiosClient.post(
         "/auth/admin/purchases-v2/upsert-draft",
@@ -183,10 +183,10 @@ const Services = {
     },
     async receive(
       id: number,
-      details: Array<{
+      details: {
         id: number;
         quantity_received: number;
-      }>,
+      }[],
     ) {
       const response = await axiosClient.post(
         `/auth/admin/purchases-v2/${id}/receive`,
@@ -405,9 +405,13 @@ const Services = {
       );
       return response.data;
     },
-    async eligibleUsers(eventType: App.Entities.NotificationEventType) {
+    async eligibleUsers(
+      eventType: App.Entities.NotificationEventType,
+      params?: { location_id?: number },
+    ) {
       const response = await axiosClient.get(
         `/auth/admin/notification-preferences/${eventType}/eligible-users`,
+        { params },
       );
       return response.data;
     },
@@ -420,6 +424,12 @@ const Services = {
   },
   tasks: {
     ...createCrudService<App.Entities.Task>("/auth/admin/tasks"),
+    async eligibleUsers(params: { location_id: number; type?: App.Entities.TaskType }) {
+      const response = await axiosClient.get("/auth/admin/tasks/eligible-users", {
+        params,
+      });
+      return response.data;
+    },
     async getStatistics(params?: { location_id?: number }) {
       const response = await axiosClient.get("/auth/admin/tasks/statistics", {
         params,

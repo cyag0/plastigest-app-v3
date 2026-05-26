@@ -1,9 +1,9 @@
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
-import Services from "@/utils/services";
+import services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ScrollView, StyleSheet, TextInput, View } from "react-native";
 import {
   ActivityIndicator,
@@ -58,14 +58,10 @@ export default function SalesOrderDetail() {
   const [paidAmount, setPaidAmount] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
 
-  useEffect(() => {
-    load();
-  }, [id]);
-
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await Services.salesOrders.show(id);
+      const res = await services.salesOrders.show(id);
       const data = (res as any).data?.data ?? (res as any).data;
       setOrder(data);
     } catch (e: any) {
@@ -75,7 +71,11 @@ export default function SalesOrderDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [alerts, id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const runAction = async (
     label: string,
@@ -118,7 +118,7 @@ export default function SalesOrderDetail() {
     await runAction(
       "Cobrar pedido",
       () =>
-        Services.salesOrders.checkout(Number(id), {
+        services.salesOrders.checkout(Number(id), {
           payment_method: paymentMethod,
           paid_amount: paidAmount ? toNum(paidAmount) : undefined,
           notes: paymentNotes || undefined,
@@ -136,11 +136,13 @@ export default function SalesOrderDetail() {
     if (!ok) return;
     try {
       setActionLoading(true);
-      const res = await Services.salesOrders.prepare(Number(id));
+      const res = await services.salesOrders.prepare(Number(id));
       alerts.success((res as any)?.message || "Preparando aplicado");
-      Services.tasks
+      services.tasks
         .store({
           title: `Preparar pedido #${order.order_number}`,
+          description: `Preparar productos del pedido ${order.order_number} para despacho o entrega.`,
+          type: "custom",
           priority: "high",
           location_id: order.location?.id ?? undefined,
           due_date: order.promised_at ?? undefined,
@@ -539,7 +541,7 @@ export default function SalesOrderDetail() {
                 icon="truck-fast"
                 loading={actionLoading}
                 disabled={actionLoading}
-                onPress={() => runAction("Enviar a ruta", () => Services.salesOrders.ship(Number(id)))}
+                onPress={() => runAction("Enviar a ruta", () => services.salesOrders.ship(Number(id)))}
                 buttonColor="#2563EB"
                 style={{ borderRadius: 10 }}
               >
@@ -568,7 +570,7 @@ export default function SalesOrderDetail() {
                 icon="check-circle"
                 loading={actionLoading}
                 disabled={actionLoading}
-                onPress={() => runAction("Marcar como entregado", () => Services.salesOrders.deliver(Number(id)))}
+                onPress={() => runAction("Marcar como entregado", () => services.salesOrders.deliver(Number(id)))}
                 buttonColor="#16A34A"
                 style={{ borderRadius: 10 }}
               >
@@ -581,7 +583,7 @@ export default function SalesOrderDetail() {
                 icon="close-circle"
                 loading={actionLoading}
                 disabled={actionLoading}
-                onPress={() => runAction("Cancelar pedido", () => Services.salesOrders.cancel(Number(id)))}
+                onPress={() => runAction("Cancelar pedido", () => services.salesOrders.cancel(Number(id)))}
                 textColor="#DC2626"
                 style={{ borderRadius: 10, borderColor: "#DC2626" }}
               >

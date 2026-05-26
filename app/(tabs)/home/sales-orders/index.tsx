@@ -40,6 +40,7 @@ export default function SalesOrdersIndex() {
     statuses.find((s) => s.value === value)?.color ?? palette.textSecondary;
   const statusLabel = (value?: string) =>
     statuses.find((s) => s.value === value)?.label ?? value ?? "—";
+  
   return (
     <PermissionGate permission="sales_orders_list">
       <AppList
