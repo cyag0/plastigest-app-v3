@@ -1,52 +1,214 @@
+import TaskDetailContent from "@/components/Tasks/TaskDetailContent";
+import {
+  getTaskDueDateInfo,
+  getTaskPriorityConfig,
+  getTaskStatusConfig,
+  getTaskTypeConfig,
+  isTaskActionable,
+  taskPriorityOptions,
+  TaskPriorityFilter,
+  taskStatusOptions,
+  TaskStatusFilter,
+  taskTypeOptions,
+  TaskTypeFilter,
+} from "@/components/Tasks/taskPresentation";
 import palette from "@/constants/palette";
-import { useAuth } from "@/contexts/AuthContext";
-import Services from "@/utils/services";
+import { useAlerts } from "@/hooks/useAlerts";
+import services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
 import {
   ActivityIndicator,
+  Button,
   Card,
   Chip,
   IconButton,
-  Menu,
+  Modal,
+  Portal,
   Searchbar,
   Text,
-  TouchableRipple,
 } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
 
-type TaskStatus = "all" | "pending" | "in_progress" | "completed" | "overdue";
-type TaskPriority = "all" | "urgent" | "high" | "medium" | "low";
+type TaskAction = "start" | "complete" | "cancel";
+
+function StatCard({
+  label,
+  value,
+  icon,
+  color,
+}: {
+  label: string;
+  value: number;
+  icon: string;
+  color: string;
+}) {
+  return (
+    <View style={styles.statCard}>
+      <View style={[styles.statIcon, { backgroundColor: color + "1F" }]}>
+        <MaterialCommunityIcons name={icon as any} size={20} color={color} />
+      </View>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function FilterChip({
+  selected,
+  label,
+  icon,
+  onPress,
+}: {
+  selected: boolean;
+  label: string;
+  icon: string;
+  onPress: () => void;
+}) {
+  return (
+    <Chip
+      compact
+      mode={selected ? "flat" : "outlined"}
+      icon={icon}
+      selected={selected}
+      onPress={onPress}
+      style={[styles.filterChip, selected && styles.filterChipSelected]}
+      textStyle={[styles.filterChipText, selected && styles.filterChipTextSelected]}
+    >
+      {label}
+    </Chip>
+  );
+}
+
+function TaskCard({
+  task,
+  onPress,
+  onStart,
+  onComplete,
+}: {
+  task: App.Entities.Task;
+  onPress: () => void;
+  onStart: () => void;
+  onComplete: () => void;
+}) {
+  const typeConfig = getTaskTypeConfig(task.type);
+  const statusConfig = getTaskStatusConfig(task.status);
+  const priorityConfig = getTaskPriorityConfig(task.priority);
+  const dueDateInfo = getTaskDueDateInfo(task);
+  const canStart = task.status === "pending";
+  const canComplete = isTaskActionable(task);
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.taskPressable, pressed && styles.taskPressed]}>
+      <Card style={[styles.taskCard, task.is_overdue && styles.taskCardOverdue]} mode="elevated">
+        <Card.Content style={styles.taskCardContent}>
+          <View style={[styles.typeIcon, { backgroundColor: typeConfig.softBg }]}>
+            <MaterialCommunityIcons name={typeConfig.icon as any} size={24} color={typeConfig.color} />
+          </View>
+
+          <View style={styles.taskMain}>
+            <View style={styles.taskTopLine}>
+              <View style={styles.taskTitleBlock}>
+                <Text variant="titleMedium" style={styles.taskTitle} numberOfLines={2}>
+                  {task.title}
+                </Text>
+                <Text style={styles.taskMeta} numberOfLines={1}>
+                  {typeConfig.label} · {task.location?.name || "Sucursal actual"}
+                </Text>
+              </View>
+              <IconButton icon="chevron-right" size={22} iconColor={palette.textSecondary} style={styles.chevron} />
+            </View>
+
+            {task.description && (
+              <Text style={styles.taskDescription} numberOfLines={2}>
+                {task.description}
+              </Text>
+            )}
+
+            <View style={styles.taskChipsRow}>
+              <Chip
+                compact
+                mode="flat"
+                icon={statusConfig.icon}
+                style={[styles.taskChip, { backgroundColor: statusConfig.softBg }]}
+                textStyle={[styles.taskChipText, { color: statusConfig.color }]}
+              >
+                {statusConfig.label}
+              </Chip>
+              <Chip
+                compact
+                mode="flat"
+                icon={priorityConfig.icon}
+                style={[styles.taskChip, { backgroundColor: priorityConfig.softBg }]}
+                textStyle={[styles.taskChipText, { color: priorityConfig.color }]}
+              >
+                {priorityConfig.label}
+              </Chip>
+              {dueDateInfo && (
+                <Chip
+                  compact
+                  mode="flat"
+                  icon={dueDateInfo.icon}
+                  style={[styles.taskChip, { backgroundColor: dueDateInfo.softBg }]}
+                  textStyle={[styles.taskChipText, { color: dueDateInfo.color }]}
+                >
+                  {dueDateInfo.text}
+                </Chip>
+              )}
+            </View>
+
+            {canComplete && (
+              <View style={styles.taskActions}>
+                {canStart && (
+                  <Button
+                    mode="outlined"
+                    icon="play-circle-outline"
+                    onPress={onStart}
+                    compact
+                    style={styles.quickButton}
+                    textColor={palette.blue}
+                  >
+                    Iniciar
+                  </Button>
+                )}
+                <Button
+                  mode="contained"
+                  icon="check-circle-outline"
+                  onPress={onComplete}
+                  compact
+                  buttonColor={palette.success}
+                  style={styles.quickButton}
+                >
+                  Completar
+                </Button>
+              </View>
+            )}
+          </View>
+        </Card.Content>
+      </Card>
+    </Pressable>
+  );
+}
 
 export default function TasksScreen() {
+  const router = useRouter();
+  const alerts = useAlerts();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === "web" && width >= 900;
   const [tasks, setTasks] = useState<App.Entities.Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<TaskStatus>("pending");
-  const [priorityFilter, setPriorityFilter] = useState<TaskPriority>("all");
-  const [statusMenuVisible, setStatusMenuVisible] = useState(false);
-  const [priorityMenuVisible, setPriorityMenuVisible] = useState(false);
-  const { selectedCompany } = useAuth();
-  const router = useRouter();
+  const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>("all");
+  const [priorityFilter, setPriorityFilter] = useState<TaskPriorityFilter>("all");
+  const [typeFilter, setTypeFilter] = useState<TaskTypeFilter>("all");
+  const [selectedTask, setSelectedTask] = useState<App.Entities.Task | null>(null);
+  const [selectedTaskLoading, setSelectedTaskLoading] = useState(false);
 
-  useEffect(() => {
-    loadTasks();
-  }, [selectedCompany, statusFilter, priorityFilter]);
-
-  const loadTasks = async (isRefresh = false) => {
-    if (!selectedCompany) return;
-
+  const loadTasks = useCallback(async () => {
     try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
-      const params: any = {
+      const params: Record<string, string | number> = {
         assigned_to: "me",
         sort_by: "due_date",
         sort_order: "asc",
@@ -61,427 +223,298 @@ export default function TasksScreen() {
         params.priority = priorityFilter;
       }
 
-      if (search) {
-        params.search = search;
+      if (typeFilter !== "all") {
+        params.type = typeFilter;
       }
 
-      const response = await Services.tasks.index(params);
-      const data = Array.isArray(response.data)
-        ? response.data
-        : response.data?.data || [];
-      setTasks(data);
+      const response = await services.tasks.index(params);
+      const data = response.data?.data || response.data;
+      setTasks(Array.isArray(data) ? data : data?.data || []);
     } catch (error) {
       console.error("Error loading tasks:", error);
+      alerts.error("No se pudieron cargar las tareas");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+  }, [alerts, priorityFilter, statusFilter, typeFilter]);
+
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
+  const filteredTasks = tasks.filter((task) => {
+    const query = search.trim().toLowerCase();
+    if (!query) {
+      return true;
+    }
+
+    const statusConfig = getTaskStatusConfig(task.status);
+    const priorityConfig = getTaskPriorityConfig(task.priority);
+    const typeConfig = getTaskTypeConfig(task.type);
+    const haystack = [
+      task.title,
+      task.description,
+      statusConfig.label,
+      priorityConfig.label,
+      typeConfig.label,
+      task.location?.name,
+      task.assignedTo?.name,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(query);
+  });
+
+  const pendingCount = tasks.filter((task) => task.status === "pending").length;
+  const inProgressCount = tasks.filter((task) => task.status === "in_progress").length;
+  const overdueCount = tasks.filter((task) => task.is_overdue || task.status === "overdue").length;
+  const urgentCount = tasks.filter((task) => task.priority === "urgent").length;
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadTasks();
   };
 
-  const handleCompleteTask = async (taskId: number) => {
+  const loadTaskDetail = async (taskId: number) => {
     try {
-      await Services.tasks.update(taskId, { status: "completed" });
-      loadTasks();
+      setSelectedTaskLoading(true);
+      const response = await services.tasks.show(taskId);
+      const data = response.data?.data || response.data;
+      setSelectedTask(data as App.Entities.Task);
     } catch (error) {
-      console.error("Error completing task:", error);
+      console.error("Error loading task detail:", error);
+      alerts.error("No se pudo abrir la tarea");
+    } finally {
+      setSelectedTaskLoading(false);
     }
   };
 
-  const handleStartTask = async (taskId: number) => {
+  const handleOpenTask = (task: App.Entities.Task) => {
+    if (isDesktop) {
+      setSelectedTask(task);
+      loadTaskDetail(task.id);
+      return;
+    }
+
+    router.push({ pathname: "/(stacks)/tasks/[id]", params: { id: String(task.id) } } as any);
+  };
+
+  const handleTaskAction = async (task: App.Entities.Task, action: TaskAction) => {
     try {
-      await Services.tasks.update(taskId, { status: "in_progress" });
-      loadTasks();
+      const response = await services.tasks.changeStatus(task.id, action);
+      const updatedTask = response.data?.task || response.data?.data || response.data;
+      if (updatedTask?.id) {
+        setTasks((currentTasks) => currentTasks.map((item) => (item.id === task.id ? { ...item, ...updatedTask } : item)));
+        if (selectedTask?.id === task.id) {
+          setSelectedTask({ ...selectedTask, ...updatedTask });
+        }
+      } else {
+        await loadTasks();
+        if (selectedTask?.id === task.id) {
+          await loadTaskDetail(task.id);
+        }
+      }
+      alerts.success("Tarea actualizada correctamente");
     } catch (error) {
-      console.error("Error starting task:", error);
+      console.error("Error changing task status:", error);
+      alerts.error("No se pudo actualizar la tarea");
     }
   };
 
-  const getPriorityColor = (priority: App.Entities.TaskPriority) => {
-    switch (priority) {
-      case "urgent":
-        return palette.error;
-      case "high":
-        return palette.warning;
-      case "medium":
-        return palette.blue;
-      case "low":
-        return palette.textSecondary;
-      default:
-        return palette.textSecondary;
+  const handleAddComment = async (comment: string) => {
+    if (!selectedTask) {
+      return;
+    }
+
+    try {
+      await services.tasks.addComment(selectedTask.id, comment);
+      await loadTaskDetail(selectedTask.id);
+      alerts.success("Comentario agregado");
+    } catch (error) {
+      console.error("Error adding task comment:", error);
+      alerts.error("No se pudo agregar el comentario");
     }
   };
 
-  const getPriorityLabel = (priority: App.Entities.TaskPriority) => {
-    switch (priority) {
-      case "urgent":
-        return "Urgente";
-      case "high":
-        return "Alta";
-      case "medium":
-        return "Media";
-      case "low":
-        return "Baja";
-      default:
-        return priority;
-    }
-  };
-
-  const getStatusColor = (status: App.Entities.TaskStatus) => {
-    switch (status) {
-      case "pending":
-        return palette.warning;
-      case "in_progress":
-        return palette.blue;
-      case "completed":
-        return palette.success;
-      case "cancelled":
-        return palette.textSecondary;
-      case "overdue":
-        return palette.error;
-      default:
-        return palette.textSecondary;
-    }
-  };
-
-  const getStatusLabel = (status: App.Entities.TaskStatus) => {
-    switch (status) {
-      case "pending":
-        return "Pendiente";
-      case "in_progress":
-        return "En Proceso";
-      case "completed":
-        return "Completada";
-      case "cancelled":
-        return "Cancelada";
-      case "overdue":
-        return "Vencida";
-      default:
-        return status;
-    }
-  };
-
-  const getTypeIcon = (type: App.Entities.TaskType) => {
-    switch (type) {
-      case "inventory_count":
-        return "clipboard-list";
-      case "receive_purchase":
-        return "package-variant";
-      case "approve_transfer":
-        return "check-circle";
-      case "send_transfer":
-        return "truck-delivery";
-      case "receive_transfer":
-        return "package-down";
-      case "sales_report":
-        return "chart-line";
-      case "stock_check":
-        return "magnify";
-      case "adjustment_review":
-        return "clipboard-edit";
-      case "custom":
-        return "note";
-      default:
-        return "checkbox-marked-circle";
-    }
-  };
-
-  const formatDueDate = (dueDate?: string) => {
-    if (!dueDate) return null;
-    const date = new Date(dueDate);
-    const now = new Date();
-    const diffTime = date.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 0) {
-      return {
-        text: `Vencida hace ${Math.abs(diffDays)} día(s)`,
-        color: palette.error,
-      };
-    } else if (diffDays === 0) {
-      return { text: "Vence hoy", color: palette.warning };
-    } else if (diffDays === 1) {
-      return { text: "Vence mañana", color: palette.warning };
-    } else if (diffDays <= 7) {
-      return { text: `Vence en ${diffDays} días`, color: palette.blue };
-    }
-    return { text: date.toLocaleDateString(), color: palette.textSecondary };
-  };
-
-  const renderTaskActions = (task: App.Entities.Task) => {
-    if (task.status === "completed" || task.status === "cancelled") {
-      return null;
-    }
-
-    return (
-      <View style={styles.taskActions}>
-        {task.status === "pending" && (
-          <IconButton
-            icon="play-circle"
-            size={20}
-            iconColor={palette.blue}
-            onPress={() => handleStartTask(task.id)}
-          />
-        )}
-        <IconButton
-          icon="check-circle"
-          size={20}
-          iconColor={palette.success}
-          onPress={() => handleCompleteTask(task.id)}
-        />
-      </View>
-    );
+  const resetFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setPriorityFilter("all");
+    setTypeFilter("all");
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
-      {/* Header */}
-      <View style={styles.header}>
-        {/* Search */}
-        <Searchbar
-          placeholder="Buscar tareas..."
-          value={search}
-          onChangeText={setSearch}
-          onSubmitEditing={() => loadTasks()}
-          style={styles.searchbar}
-        />
-
-        {/* Filters */}
-        <View style={styles.filters}>
-          <Menu
-            visible={statusMenuVisible}
-            onDismiss={() => setStatusMenuVisible(false)}
-            anchor={
-              <Chip
-                mode="outlined"
-                icon="filter"
-                onPress={() => setStatusMenuVisible(true)}
-                style={styles.filterChip}
-              >
-                {getStatusLabel(statusFilter as any) || "Estado"}
-              </Chip>
-            }
-          >
-            <Menu.Item
-              onPress={() => {
-                setStatusFilter("all");
-                setStatusMenuVisible(false);
-              }}
-              title="Todos"
-            />
-            <Menu.Item
-              onPress={() => {
-                setStatusFilter("pending");
-                setStatusMenuVisible(false);
-              }}
-              title="Pendiente"
-            />
-            <Menu.Item
-              onPress={() => {
-                setStatusFilter("in_progress");
-                setStatusMenuVisible(false);
-              }}
-              title="En Proceso"
-            />
-            <Menu.Item
-              onPress={() => {
-                setStatusFilter("completed");
-                setStatusMenuVisible(false);
-              }}
-              title="Completada"
-            />
-            <Menu.Item
-              onPress={() => {
-                setStatusFilter("overdue");
-                setStatusMenuVisible(false);
-              }}
-              title="Vencida"
-            />
-          </Menu>
-
-          <Menu
-            visible={priorityMenuVisible}
-            onDismiss={() => setPriorityMenuVisible(false)}
-            anchor={
-              <Chip
-                mode="outlined"
-                icon="alert-circle"
-                onPress={() => setPriorityMenuVisible(true)}
-                style={styles.filterChip}
-              >
-                {getPriorityLabel(priorityFilter as any) || "Prioridad"}
-              </Chip>
-            }
-          >
-            <Menu.Item
-              onPress={() => {
-                setPriorityFilter("all");
-                setPriorityMenuVisible(false);
-              }}
-              title="Todas"
-            />
-            <Menu.Item
-              onPress={() => {
-                setPriorityFilter("urgent");
-                setPriorityMenuVisible(false);
-              }}
-              title="Urgente"
-            />
-            <Menu.Item
-              onPress={() => {
-                setPriorityFilter("high");
-                setPriorityMenuVisible(false);
-              }}
-              title="Alta"
-            />
-            <Menu.Item
-              onPress={() => {
-                setPriorityFilter("medium");
-                setPriorityMenuVisible(false);
-              }}
-              title="Media"
-            />
-            <Menu.Item
-              onPress={() => {
-                setPriorityFilter("low");
-                setPriorityMenuVisible(false);
-              }}
-              title="Baja"
-            />
-          </Menu>
+    <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[palette.primary]} />}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerTextBlock}>
+            <Text style={styles.eyebrow}>Mis tareas</Text>
+            <Text variant="headlineMedium" style={styles.headerTitle}>
+              Trabajo pendiente de la sucursal
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              Revisa, inicia y cierra las tareas asignadas a tu usuario.
+            </Text>
+          </View>
+          <Button mode="contained" icon="refresh" onPress={handleRefresh} buttonColor={palette.primary} style={styles.refreshButton}>
+            Actualizar
+          </Button>
         </View>
-      </View>
 
-      {/* Tasks List */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={palette.primary} />
+        <View style={styles.statsGrid}>
+          <StatCard label="Pendientes" value={pendingCount} icon="clock-outline" color={palette.warning} />
+          <StatCard label="En proceso" value={inProgressCount} icon="progress-clock" color={palette.blue} />
+          <StatCard label="Vencidas" value={overdueCount} icon="calendar-alert" color={palette.error} />
+          <StatCard label="Urgentes" value={urgentCount} icon="alert-decagram-outline" color={palette.red} />
         </View>
-      ) : (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => loadTasks(true)}
-              colors={[palette.primary]}
+
+        <Card style={styles.filtersCard} mode="elevated">
+          <Card.Content style={styles.filtersContent}>
+            <Searchbar
+              placeholder="Buscar por titulo, tipo, sucursal o prioridad"
+              value={search}
+              onChangeText={setSearch}
+              style={styles.searchbar}
+              inputStyle={styles.searchInput}
+              iconColor={palette.textSecondary}
+              placeholderTextColor={palette.textSecondary}
             />
-          }
-        >
-          {tasks.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <MaterialCommunityIcons
-                name="checkbox-marked-circle-outline"
-                size={64}
-                color={palette.textSecondary}
-              />
-              <Text variant="titleMedium" style={styles.emptyText}>
-                No se encontraron tareas
-              </Text>
-              <Text variant="bodyMedium" style={styles.emptySubtext}>
-                Intenta ajustar los filtros
-              </Text>
+
+            <View style={styles.filterSection}>
+              <Text style={styles.filterTitle}>Estado</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                {taskStatusOptions.map((option) => (
+                  <FilterChip
+                    key={option.value}
+                    selected={statusFilter === option.value}
+                    label={option.label}
+                    icon={option.icon}
+                    onPress={() => setStatusFilter(option.value)}
+                  />
+                ))}
+              </ScrollView>
             </View>
-          ) : (
-            tasks.map((task) => {
-              const dueDateInfo = formatDueDate(task.due_date);
-              const isOverdue = task.is_overdue || task.status === "overdue";
 
-              return (
-                <TouchableRipple
-                  key={task.id}
-                  onPress={() =>
-                    router.push(`/(stacks)/tasks/${task.id}` as any)
-                  }
-                  style={styles.taskCard}
-                >
-                  <Card style={[styles.card, isOverdue && styles.overdueCard]}>
-                    <Card.Content style={styles.cardContent}>
-                      <View style={styles.taskHeader}>
-                        <View
-                          style={[
-                            styles.iconContainer,
-                            {
-                              backgroundColor:
-                                getPriorityColor(task.priority) + "20",
-                            },
-                          ]}
-                        >
-                          <MaterialCommunityIcons
-                            name={getTypeIcon(task.type) as any}
-                            size={24}
-                            color={getPriorityColor(task.priority)}
-                          />
-                        </View>
-                        <View style={styles.taskInfo}>
-                          <Text
-                            variant="titleSmall"
-                            style={styles.taskTitle}
-                            numberOfLines={2}
-                          >
-                            {task.title}
-                          </Text>
-                          {task.description && (
-                            <Text
-                              variant="bodySmall"
-                              style={styles.taskDescription}
-                              numberOfLines={2}
-                            >
-                              {task.description}
-                            </Text>
-                          )}
-                        </View>
-                        {renderTaskActions(task)}
-                      </View>
+            <View style={styles.filterSection}>
+              <Text style={styles.filterTitle}>Prioridad</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                {taskPriorityOptions.map((option) => (
+                  <FilterChip
+                    key={option.value}
+                    selected={priorityFilter === option.value}
+                    label={option.label}
+                    icon={option.icon}
+                    onPress={() => setPriorityFilter(option.value)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
 
-                      <View style={styles.taskFooter}>
-                        <View style={styles.chips}>
-                          <Chip
-                            mode="flat"
-                            textStyle={{ fontSize: 11 }}
-                            style={{
-                              backgroundColor:
-                                getPriorityColor(task.priority) + "20",
-                            }}
-                          >
-                            {getPriorityLabel(task.priority)}
-                          </Chip>
-                          <Chip
-                            mode="flat"
-                            textStyle={{ fontSize: 11 }}
-                            style={{
-                              backgroundColor:
-                                getStatusColor(task.status) + "20",
-                            }}
-                          >
-                            {getStatusLabel(task.status)}
-                          </Chip>
-                        </View>
-                        {dueDateInfo && (
-                          <View style={styles.dueDate}>
-                            <MaterialCommunityIcons
-                              name="calendar-clock"
-                              size={14}
-                              color={dueDateInfo.color}
-                            />
-                            <Text
-                              variant="bodySmall"
-                              style={{ color: dueDateInfo.color, fontSize: 11 }}
-                            >
-                              {dueDateInfo.text}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    </Card.Content>
-                  </Card>
-                </TouchableRipple>
-              );
-            })
+            <View style={styles.filterSection}>
+              <Text style={styles.filterTitle}>Tipo</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+                {taskTypeOptions.map((option) => (
+                  <FilterChip
+                    key={option.value}
+                    selected={typeFilter === option.value}
+                    label={option.label}
+                    icon={option.icon}
+                    onPress={() => setTypeFilter(option.value)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          </Card.Content>
+        </Card>
+
+        <View style={styles.listHeader}>
+          <View>
+            <Text style={styles.listTitle}>Tareas encontradas</Text>
+            <Text style={styles.listSubtitle}>
+              {filteredTasks.length} de {tasks.length} tareas visibles
+            </Text>
+          </View>
+          {(search || statusFilter !== "all" || priorityFilter !== "all" || typeFilter !== "all") && (
+            <Button mode="text" icon="filter-remove-outline" onPress={resetFilters} textColor={palette.textSecondary}>
+              Limpiar
+            </Button>
           )}
-        </ScrollView>
-      )}
-    </SafeAreaView>
+        </View>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={palette.primary} />
+            <Text style={styles.loadingText}>Cargando tareas...</Text>
+          </View>
+        ) : filteredTasks.length === 0 ? (
+          <Card style={styles.emptyCard} mode="elevated">
+            <Card.Content style={styles.emptyContent}>
+              <MaterialCommunityIcons name="clipboard-check-outline" size={44} color={palette.primary} />
+              <Text style={styles.emptyTitle}>No hay tareas para estos filtros</Text>
+              <Text style={styles.emptyText}>Ajusta la busqueda o cambia los filtros para ver mas resultados.</Text>
+              <Button mode="outlined" icon="filter-remove-outline" onPress={resetFilters} textColor={palette.primary} style={styles.emptyButton}>
+                Limpiar filtros
+              </Button>
+            </Card.Content>
+          </Card>
+        ) : (
+          <View style={styles.tasksList}>
+            {filteredTasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onPress={() => handleOpenTask(task)}
+                onStart={() => handleTaskAction(task, "start")}
+                onComplete={() => handleTaskAction(task, "complete")}
+              />
+            ))}
+          </View>
+        )}
+      </ScrollView>
+
+      <Portal>
+        <Modal
+          visible={!!selectedTask && isDesktop}
+          onDismiss={() => setSelectedTask(null)}
+          contentContainerStyle={styles.modalContainer}
+        >
+          {selectedTask && (
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalEyebrow}>Detalle de tarea</Text>
+                  <Text style={styles.modalTitle} numberOfLines={1}>
+                    {selectedTask.title}
+                  </Text>
+                </View>
+                <IconButton icon="close" size={21} onPress={() => setSelectedTask(null)} iconColor={palette.textSecondary} />
+              </View>
+              {selectedTaskLoading ? (
+                <View style={styles.modalLoading}>
+                  <ActivityIndicator size="large" color={palette.primary} />
+                  <Text style={styles.loadingText}>Cargando detalle...</Text>
+                </View>
+              ) : (
+                <TaskDetailContent
+                  task={selectedTask}
+                  compact
+                  onBack={() => setSelectedTask(null)}
+                  onChangeStatus={(action) => handleTaskAction(selectedTask, action)}
+                  onAddComment={handleAddComment}
+                />
+              )}
+            </View>
+          )}
+        </Modal>
+      </Portal>
+    </View>
   );
 }
 
@@ -490,117 +523,300 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.background,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+  scrollContent: {
+    padding: 18,
+    paddingBottom: 40,
+    gap: 16,
   },
   header: {
-    padding: 16,
-    paddingTop: 8,
-  },
-  headerTop: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
+    alignItems: "flex-start",
+    gap: 14,
+    padding: 18,
+    borderRadius: 8,
+    backgroundColor: "#F8F5EF",
+    borderWidth: 1,
+    borderColor: palette.border,
   },
-  title: {
-    fontWeight: "700",
+  headerTextBlock: {
+    flex: 1,
+    gap: 5,
+  },
+  eyebrow: {
+    color: palette.primary,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  headerTitle: {
     color: palette.text,
+    fontWeight: "900",
+    lineHeight: 34,
   },
-  subtitle: {
+  headerSubtitle: {
     color: palette.textSecondary,
-    marginTop: 4,
+    lineHeight: 20,
+    maxWidth: 620,
+  },
+  refreshButton: {
+    borderRadius: 8,
+  },
+  statsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: 145,
+    padding: 14,
+    borderRadius: 8,
+    backgroundColor: "#F8F5EF",
+    borderWidth: 1,
+    borderColor: palette.border,
+    gap: 7,
+  },
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statValue: {
+    color: palette.text,
+    fontSize: 25,
+    fontWeight: "900",
+  },
+  statLabel: {
+    color: palette.textSecondary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  filtersCard: {
+    borderRadius: 8,
+    backgroundColor: "#F8F5EF",
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  filtersContent: {
+    gap: 14,
   },
   searchbar: {
-    marginBottom: 12,
+    elevation: 0,
+    borderRadius: 8,
     backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
-  filters: {
-    flexDirection: "row",
+  searchInput: {
+    color: palette.text,
+    fontSize: 14,
+  },
+  filterSection: {
     gap: 8,
+  },
+  filterTitle: {
+    color: palette.textSecondary,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  filterRow: {
+    gap: 8,
+    paddingRight: 8,
   },
   filterChip: {
-    backgroundColor: palette.background,
+    borderRadius: 8,
+    borderColor: palette.border,
+    backgroundColor: "transparent",
   },
-  scrollView: {
-    flex: 1,
+  filterChipSelected: {
+    backgroundColor: palette.primary,
   },
-  scrollContent: {
-    padding: 16,
-    gap: 12,
-    paddingBottom: 100,
-  },
-  emptyContainer: {
-    padding: 32,
-    alignItems: "center",
-    gap: 8,
-  },
-  emptyText: {
-    color: palette.text,
-    fontWeight: "600",
-    marginTop: 16,
-  },
-  emptySubtext: {
+  filterChipText: {
     color: palette.textSecondary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  filterChipTextSelected: {
+    color: "#fff",
+  },
+  listHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  listTitle: {
+    color: palette.text,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  listSubtitle: {
+    color: palette.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  tasksList: {
+    gap: 12,
+  },
+  taskPressable: {
+    borderRadius: 8,
+  },
+  taskPressed: {
+    opacity: 0.86,
   },
   taskCard: {
-    borderRadius: 12,
+    borderRadius: 8,
+    backgroundColor: "#F8F5EF",
+    borderWidth: 1,
+    borderColor: palette.border,
   },
-  card: {
-    backgroundColor: palette.surface,
-    elevation: 1,
-    shadowColor: "transparent",
-  },
-  overdueCard: {
+  taskCardOverdue: {
     borderLeftWidth: 4,
     borderLeftColor: palette.error,
   },
-  cardContent: {
-    padding: 12,
-  },
-  taskHeader: {
+  taskCardContent: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 12,
-    gap: 12,
+    gap: 13,
   },
-  iconContainer: {
+  typeIcon: {
     width: 48,
     height: 48,
-    borderRadius: 24,
-    justifyContent: "center",
+    borderRadius: 8,
     alignItems: "center",
+    justifyContent: "center",
   },
-  taskInfo: {
+  taskMain: {
     flex: 1,
+    gap: 10,
+  },
+  taskTopLine: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  taskTitleBlock: {
+    flex: 1,
+    gap: 3,
   },
   taskTitle: {
-    fontWeight: "600",
     color: palette.text,
-    marginBottom: 2,
+    fontWeight: "900",
+    lineHeight: 22,
+  },
+  taskMeta: {
+    color: palette.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  chevron: {
+    margin: 0,
   },
   taskDescription: {
     color: palette.textSecondary,
+    lineHeight: 20,
+  },
+  taskChipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+  },
+  taskChip: {
+    borderRadius: 8,
+  },
+  taskChipText: {
+    fontSize: 11,
+    fontWeight: "800",
   },
   taskActions: {
     flexDirection: "row",
-    gap: 4,
+    justifyContent: "flex-end",
+    flexWrap: "wrap",
+    gap: 8,
   },
-  taskFooter: {
+  quickButton: {
+    borderRadius: 8,
+  },
+  loadingContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+    gap: 10,
+  },
+  loadingText: {
+    color: palette.textSecondary,
+    fontWeight: "700",
+  },
+  emptyCard: {
+    borderRadius: 8,
+    backgroundColor: "#F8F5EF",
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  emptyContent: {
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 30,
+  },
+  emptyTitle: {
+    color: palette.text,
+    fontSize: 18,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  emptyText: {
+    color: palette.textSecondary,
+    textAlign: "center",
+    maxWidth: 360,
+  },
+  emptyButton: {
+    marginTop: 6,
+    borderRadius: 8,
+    borderColor: palette.primary,
+  },
+  modalContainer: {
+    width: "min(880px, 92vw)" as any,
+    maxHeight: "88vh" as any,
+    alignSelf: "center",
+  },
+  modalContent: {
+    overflow: "hidden",
+    borderRadius: 8,
+    backgroundColor: palette.background,
+    borderWidth: 1,
+    borderColor: palette.border,
+    minHeight: 620,
+  },
+  modalHeader: {
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#F8F5EF",
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
   },
-  chips: {
-    flexDirection: "row",
-    gap: 6,
+  modalEyebrow: {
+    color: palette.primary,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  modalTitle: {
+    color: palette.text,
+    fontSize: 18,
+    fontWeight: "900",
+    maxWidth: 680,
+  },
+  modalLoading: {
     flex: 1,
-  },
-  dueDate: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
+    gap: 10,
   },
 });

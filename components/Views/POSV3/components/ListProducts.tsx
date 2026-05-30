@@ -41,6 +41,7 @@ interface SelectedProduct {
 interface ProductCardProps {
   item: ProductListItem;
   selectedProduct?: SelectedProduct;
+  compact?: boolean;
   onAddProduct: (product: ProductListItem, unitId: number) => void;
   onRemoveProduct: (productId: number | string) => void;
   onItemChange: (
@@ -54,13 +55,12 @@ const ProductCard = React.memo(
   ({
     item,
     selectedProduct,
+    compact = false,
     onAddProduct,
     onRemoveProduct,
     onItemChange,
   }: ProductCardProps) => {
     const [showUnitMenu, setShowUnitMenu] = useState(false);
-
-    console.log("Renderring ProductCard for:", item.name);
 
     // Estado local para la unidad seleccionada, usa unit_id si existe en selectedProduct
     const [selectedUnitId, setSelectedUnitId] = useState<number>(
@@ -114,6 +114,147 @@ const ProductCard = React.memo(
     const formattedStock = parseFloat(stockValue.toFixed(2));
     const stockText = `${formattedStock}${baseUnit?.abbreviation ? ` ${baseUnit.abbreviation}` : ""}`;
 
+    const unitSelector = !item.is_package &&
+      item.available_units &&
+      item.available_units.length > 0 && (
+        <View style={styles.unitSelectorContainer}>
+          <Menu
+            visible={showUnitMenu}
+            onDismiss={() => setShowUnitMenu(false)}
+            anchor={
+              <TouchableOpacity
+                style={styles.unitSelector}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  setShowUnitMenu(true);
+                }}
+              >
+                <Text style={styles.unitSelectorText}>
+                  {selectedUnit?.abbreviation ||
+                    item.available_units[0]?.abbreviation ||
+                    "Unidad"}
+                </Text>
+                <MaterialCommunityIcons
+                  name={showUnitMenu ? "chevron-up" : "chevron-down"}
+                  size={20}
+                  color={palette.primary}
+                />
+              </TouchableOpacity>
+            }
+          >
+            {item.available_units.map((unit, index) => (
+              <React.Fragment key={unit.id}>
+                <Menu.Item
+                  onPress={() => {
+                    setSelectedUnitId(unit.id);
+                    onItemChange(item.id, "unit", unit.id);
+                    setShowUnitMenu(false);
+                  }}
+                  title={`${unit.name} (${unit.abbreviation})`}
+                  style={
+                    selectedUnitId === unit.id
+                      ? styles.unitMenuItemSelected
+                      : undefined
+                  }
+                  titleStyle={
+                    selectedUnitId === unit.id
+                      ? styles.unitMenuItemTextSelected
+                      : undefined
+                  }
+                />
+                {index < (item.available_units?.length || 0) - 1 && <Divider />}
+              </React.Fragment>
+            ))}
+          </Menu>
+        </View>
+      );
+
+    const quantityActions = selectedProduct ? (
+      <View style={styles.quantityControls}>
+        <TouchableOpacity
+          style={styles.quantityButton}
+          onPress={(event) => {
+            event.stopPropagation();
+            onItemChange(item.id, "decrement");
+          }}
+        >
+          <MaterialCommunityIcons name="minus" size={20} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.quantityText}>{selectedProduct.quantity}</Text>
+        <TouchableOpacity
+          style={styles.quantityButton}
+          onPress={(event) => {
+            event.stopPropagation();
+            onItemChange(item.id, "increment");
+          }}
+        >
+          <MaterialCommunityIcons name="plus" size={20} color="#fff" />
+        </TouchableOpacity>
+      </View>
+    ) : (
+      <Button
+        icon="cart-plus"
+        mode="contained"
+        onPress={() =>
+          onAddProduct(
+            item,
+            selectedUnit?.id || item.available_units?.[0]?.id || 0,
+          )
+        }
+        style={styles.addButton}
+      >
+        Agregar
+      </Button>
+    );
+
+    if (compact) {
+      return (
+        <Card style={styles.compactCard}>
+          <View style={styles.compactRow}>
+            <View style={styles.compactImageContainer}>
+              {item.main_image?.uri ? (
+                <Image
+                  source={{ uri: item.main_image.uri }}
+                  style={styles.compactImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.compactImagePlaceholder}>
+                  <MaterialCommunityIcons
+                    name="package-variant"
+                    size={24}
+                    color={palette.textSecondary}
+                  />
+                </View>
+              )}
+            </View>
+
+            <View style={styles.compactInfo}>
+              <Text variant="bodySmall" style={styles.code} numberOfLines={1}>
+                {item.code || "Sin codigo"}
+              </Text>
+              <Text variant="titleSmall" style={styles.name} numberOfLines={2}>
+                {item.name}
+              </Text>
+              <View style={styles.compactMetaRow}>
+                <Text variant="titleMedium" style={styles.price}>
+                  ${displayPrice.toFixed(2)}
+                </Text>
+                <View style={[styles.inlineStockBadge, { backgroundColor: stockColor }]}>
+                  <Text style={styles.inlineStockText}>{stockText}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.compactControls}>
+              {unitSelector}
+              {quantityActions}
+            </View>
+          </View>
+        </Card>
+      );
+    }
+
     return (
       <Card style={styles.card}>
         {/* Imagen del producto */}
@@ -158,106 +299,11 @@ const ProductCard = React.memo(
           </View>
 
           {/* Selector de unidades (solo para productos, no paquetes) */}
-          {!item.is_package &&
-            item.available_units &&
-            item.available_units.length > 0 && (
-              <View style={styles.unitSelectorContainer}>
-                <Menu
-                  visible={showUnitMenu}
-                  onDismiss={() => setShowUnitMenu(false)}
-                  anchor={
-                    <TouchableOpacity
-                      style={styles.unitSelector}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        setShowUnitMenu(true);
-                      }}
-                    >
-                      <Text style={styles.unitSelectorText}>
-                        {selectedUnit?.abbreviation ||
-                          item.available_units[0]?.abbreviation ||
-                          "Unidad"}
-                      </Text>
-                      <MaterialCommunityIcons
-                        name={showUnitMenu ? "chevron-up" : "chevron-down"}
-                        size={20}
-                        color={palette.primary}
-                      />
-                    </TouchableOpacity>
-                  }
-                >
-                  {item.available_units.map((unit, index) => (
-                    <React.Fragment key={unit.id}>
-                      <Menu.Item
-                        onPress={(e) => {
-                          setSelectedUnitId(unit.id);
-                          onItemChange(item.id, "unit", unit.id);
-                          setShowUnitMenu(false);
-                        }}
-                        title={`${unit.name} (${unit.abbreviation})`}
-                        style={
-                          selectedUnitId === unit.id
-                            ? styles.unitMenuItemSelected
-                            : undefined
-                        }
-                        titleStyle={
-                          selectedUnitId === unit.id
-                            ? styles.unitMenuItemTextSelected
-                            : undefined
-                        }
-                      />
-                      {index < (item.available_units?.length || 0) - 1 && (
-                        <Divider />
-                      )}
-                    </React.Fragment>
-                  ))}
-                </Menu>
-              </View>
-            )}
+          {unitSelector}
         </Card.Content>
 
         {/* Botón de agregar o controles de cantidad */}
-        <View style={styles.footer}>
-          {selectedProduct ? (
-            <View style={styles.quantityControls}>
-              <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onItemChange(item.id, "decrement");
-                }}
-              >
-                <MaterialCommunityIcons name="minus" size={20} color="#fff" />
-              </TouchableOpacity>
-              <Text style={styles.quantityText}>
-                {selectedProduct.quantity}
-              </Text>
-              <TouchableOpacity
-                style={styles.quantityButton}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  onItemChange(item.id, "increment");
-                }}
-              >
-                <MaterialCommunityIcons name="plus" size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <Button
-              icon="cart-plus"
-              mode="contained"
-              onPress={() =>
-                onAddProduct(
-                  item,
-                  selectedUnit?.id || item.available_units?.[0]?.id || 0,
-                )
-              }
-              style={styles.addButton}
-            >
-              Agregar
-            </Button>
-          )}
-        </View>
+        <View style={styles.footer}>{quantityActions}</View>
       </Card>
     );
   },
@@ -274,6 +320,8 @@ const ProductCard = React.memo(
     );
   },
 );
+
+ProductCard.displayName = "ProductCard";
 
 export interface ProductListItem {
   id: number | string;
@@ -310,9 +358,13 @@ interface ListProductsProps {
   loading?: boolean;
   showSearch?: boolean;
   showCategories?: boolean;
+  showOutOfStockFilter?: boolean;
   numColumns?: number;
   autoAdjustColumns?: boolean;
 }
+
+type StockFilter = "available" | "out_of_stock" | "all";
+type ViewMode = "grid" | "compact";
 
 export default function ListProducts({
   products,
@@ -324,13 +376,17 @@ export default function ListProducts({
   loading = false,
   showSearch = true,
   showCategories = true,
+  showOutOfStockFilter = false,
   numColumns: initialNumColumns = 2,
   autoAdjustColumns = true,
 }: ListProductsProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [stockFilter, setStockFilter] = useState<StockFilter>("available");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [numColumns, setNumColumns] = useState(initialNumColumns);
+  const isCompactMode = viewMode === "compact";
 
   // Debounce para la búsqueda
   const { run: runSearchDebounce } = useDebounce(
@@ -377,15 +433,59 @@ export default function ListProducts({
     const matchesCategory =
       selectedCategory === null || product.category_id === selectedCategory;
 
-    return matchesSearch && matchesCategory;
+    const stockValue = Number(product.current_stock || 0);
+    const matchesStockFilter = !showOutOfStockFilter || stockFilter === "all"
+      ? true
+      : stockFilter === "out_of_stock"
+        ? stockValue <= 0
+        : stockValue > 0;
+
+    return matchesSearch && matchesCategory && matchesStockFilter;
   });
+
+  const availableCount = products.filter(
+    (product) => Number(product.current_stock || 0) > 0,
+  ).length;
+
+  const outOfStockCount = products.filter(
+    (product) => Number(product.current_stock || 0) <= 0,
+  ).length;
+
+  const selectedCount = Object.keys(selectedProducts).length;
+
+  const hasSearchQuery = Boolean(searchQuery || debouncedSearchQuery);
+  const isHidingOutOfStock = showOutOfStockFilter && stockFilter === "available";
+
+  const handleSubmitSearch = () => {
+    const normalizedQuery = normalizeText(searchQuery.trim());
+
+    if (!normalizedQuery) {
+      return;
+    }
+
+    const exactCodeMatch = products.find(
+      (product) => normalizeText(product.code || "") === normalizedQuery,
+    );
+
+    if (!exactCodeMatch || Number(exactCodeMatch.current_stock || 0) <= 0) {
+      return;
+    }
+
+    onAddProduct(
+      exactCodeMatch,
+      exactCodeMatch.available_units?.[0]?.id || exactCodeMatch.unit_id || 0,
+    );
+    setSearchQuery("");
+    setDebouncedSearchQuery("");
+  };
 
   const renderProductCard = ({ item }: { item: ProductListItem }) => {
     return (
-      <View style={{ flex: 1 / numColumns }}>
+      <View style={{ flex: isCompactMode ? 1 : 1 / numColumns }}>
         <ProductCard
           item={item}
           selectedProduct={selectedProducts[item.id]}
+          compact={isCompactMode}
           onAddProduct={onAddProduct}
           onRemoveProduct={onRemoveProduct}
           onItemChange={onItemChange}
@@ -396,64 +496,147 @@ export default function ListProducts({
 
   return (
     <View style={styles.container}>
-      {/* Buscador */}
-      {showSearch && (
-        <Searchbar
-          placeholder="Buscar productos..."
-          onChangeText={(text) => {
-            setSearchQuery(text);
-            runSearchDebounce(text);
-          }}
-          value={searchQuery}
-          style={styles.searchbar}
-          mode="bar"
-        />
-      )}
+      <View style={styles.toolbar}>
+        {/* Buscador */}
+        {showSearch && (
+          <Searchbar
+            placeholder="Buscar productos o escanear codigo"
+            onChangeText={(text) => {
+              setSearchQuery(text);
+              runSearchDebounce(text);
+            }}
+            onSubmitEditing={handleSubmitSearch}
+            value={searchQuery}
+            style={styles.searchbar}
+            mode="bar"
+          />
+        )}
 
-      {/* Categorías */}
-      {showCategories && categories.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.categoriesContainer}
-          contentContainerStyle={styles.categoriesContent}
-        >
-          <Chip
-            mode={selectedCategory === null ? "flat" : "outlined"}
-            selected={selectedCategory === null}
-            onPress={() => setSelectedCategory(null)}
-            style={[
-              styles.categoryChip,
-              selectedCategory === null && styles.categoryChipSelected,
-            ]}
-            textStyle={[
-              styles.categoryChipText,
-              selectedCategory === null && styles.categoryChipTextSelected,
-            ]}
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryText}>
+            {filteredProducts.length} visibles · {availableCount} con stock · {outOfStockCount} sin stock
+          </Text>
+          {selectedCount > 0 && (
+            <Text style={styles.selectedSummaryText}>{selectedCount} seleccionados</Text>
+          )}
+        </View>
+
+        <View style={styles.controlsRow}>
+          {showOutOfStockFilter && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.stockFilterContent}
+            >
+              <Chip
+                icon="package-check"
+                selected={stockFilter === "available"}
+                showSelectedCheck={false}
+                onPress={() => setStockFilter("available")}
+                style={[
+                  styles.filterChip,
+                  stockFilter === "available" && styles.availableChipSelected,
+                ]}
+                textStyle={[
+                  styles.filterChipText,
+                  stockFilter === "available" && styles.filterChipTextSelected,
+                ]}
+              >
+                Disponibles ({availableCount})
+              </Chip>
+              <Chip
+                icon="package-variant-remove"
+                selected={stockFilter === "out_of_stock"}
+                showSelectedCheck={false}
+                onPress={() => setStockFilter("out_of_stock")}
+                style={[
+                  styles.filterChip,
+                  stockFilter === "out_of_stock" && styles.outOfStockChipSelected,
+                ]}
+                textStyle={[
+                  styles.filterChipText,
+                  stockFilter === "out_of_stock" && styles.filterChipTextSelected,
+                ]}
+              >
+                Sin stock ({outOfStockCount})
+              </Chip>
+              <Chip
+                icon="package-variant"
+                selected={stockFilter === "all"}
+                showSelectedCheck={false}
+                onPress={() => setStockFilter("all")}
+                style={[
+                  styles.filterChip,
+                  stockFilter === "all" && styles.allChipSelected,
+                ]}
+                textStyle={[
+                  styles.filterChipText,
+                  stockFilter === "all" && styles.filterChipTextSelected,
+                ]}
+              >
+                Todos ({products.length})
+              </Chip>
+            </ScrollView>
+          )}
+
+          <Button
+            mode={isCompactMode ? "contained" : "outlined"}
+            icon={isCompactMode ? "view-agenda" : "view-grid-outline"}
+            onPress={() => setViewMode((current) => current === "grid" ? "compact" : "grid")}
+            buttonColor={isCompactMode ? palette.primary : undefined}
+            textColor={isCompactMode ? "#fff" : palette.primary}
+            style={styles.viewModeButton}
+            compact
           >
-            Todas
-          </Chip>
-          {categories.map((category) => (
+            {isCompactMode ? "Compacto" : "Tarjetas"}
+          </Button>
+        </View>
+
+        {/* Categorías */}
+        {showCategories && categories.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.categoriesContainer}
+            contentContainerStyle={styles.categoriesContent}
+          >
             <Chip
-              key={category.id}
-              mode={selectedCategory === category.id ? "flat" : "outlined"}
-              selected={selectedCategory === category.id}
-              onPress={() => setSelectedCategory(category.id)}
+              mode={selectedCategory === null ? "flat" : "outlined"}
+              selected={selectedCategory === null}
+              onPress={() => setSelectedCategory(null)}
               style={[
                 styles.categoryChip,
-                selectedCategory === category.id && styles.categoryChipSelected,
+                selectedCategory === null && styles.categoryChipSelected,
               ]}
               textStyle={[
                 styles.categoryChipText,
-                selectedCategory === category.id &&
-                  styles.categoryChipTextSelected,
+                selectedCategory === null && styles.categoryChipTextSelected,
               ]}
             >
-              {category.name}
+              Todas
             </Chip>
-          ))}
-        </ScrollView>
-      )}
+            {categories.map((category) => (
+              <Chip
+                key={category.id}
+                mode={selectedCategory === category.id ? "flat" : "outlined"}
+                selected={selectedCategory === category.id}
+                onPress={() => setSelectedCategory(category.id)}
+                style={[
+                  styles.categoryChip,
+                  selectedCategory === category.id && styles.categoryChipSelected,
+                ]}
+                textStyle={[
+                  styles.categoryChipText,
+                  selectedCategory === category.id &&
+                    styles.categoryChipTextSelected,
+                ]}
+              >
+                {category.name}
+              </Chip>
+            ))}
+          </ScrollView>
+        )}
+      </View>
 
       {/* Grid de productos */}
       <View style={styles.productsContainer}>
@@ -471,7 +654,9 @@ export default function ListProducts({
             <View style={styles.emptyStateIconContainer}>
               <MaterialCommunityIcons
                 name={
-                  searchQuery || debouncedSearchQuery
+                  stockFilter === "out_of_stock"
+                    ? "package-variant-remove"
+                    : hasSearchQuery
                     ? "magnify-close"
                     : "package-variant-closed"
                 }
@@ -480,21 +665,29 @@ export default function ListProducts({
               />
             </View>
             <Text style={styles.emptyStateTitle}>
-              {searchQuery || debouncedSearchQuery
+              {stockFilter === "out_of_stock"
+                ? "No hay productos sin stock"
+                : hasSearchQuery
                 ? "No se encontraron productos"
+                : isHidingOutOfStock
+                ? "No hay productos con stock"
                 : "No hay productos disponibles"}
             </Text>
             <Text style={styles.emptyStateSubtitle}>
-              {searchQuery || debouncedSearchQuery
+              {stockFilter === "out_of_stock"
+                ? "Todos los productos visibles tienen stock disponible"
+                : hasSearchQuery
                 ? "Intenta con otros términos de búsqueda"
+                : isHidingOutOfStock
+                ? "Los productos sin stock están ocultos por defecto"
                 : "Agrega productos para empezar a vender"}
             </Text>
           </View>
         ) : (
           <FlatList
             data={filteredProducts}
-            key={numColumns}
-            numColumns={numColumns}
+            key={`${viewMode}-${numColumns}`}
+            numColumns={isCompactMode ? 1 : numColumns}
             renderItem={renderProductCard}
             keyExtractor={(item) => item.id.toString()}
             showsVerticalScrollIndicator={false}
@@ -510,9 +703,89 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  toolbar: {
+    backgroundColor: palette.background,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+    paddingBottom: 10,
+  },
   searchbar: {
     margin: 16,
     marginBottom: 8,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  summaryText: {
+    color: palette.textSecondary,
+    fontSize: 12,
+    fontWeight: "600",
+    flex: 1,
+  },
+  selectedSummaryText: {
+    color: palette.primary,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  controlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  stockFilterContent: {
+    gap: 8,
+    paddingRight: 4,
+  },
+  filterChip: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: 8,
+  },
+  availableChipSelected: {
+    backgroundColor: palette.primary,
+    borderColor: palette.primary,
+  },
+  outOfStockChipSelected: {
+    backgroundColor: palette.red,
+    borderColor: palette.red,
+  },
+  allChipSelected: {
+    backgroundColor: palette.accent,
+    borderColor: palette.accent,
+  },
+  filterChipText: {
+    color: palette.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  filterChipTextSelected: {
+    color: "#fff",
+  },
+  viewModeButton: {
+    borderColor: palette.primary,
+    borderRadius: 8,
+  },
+  stockFilterContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    alignItems: "flex-start",
+  },
+  stockFilterButton: {
+    borderColor: palette.red,
+    borderRadius: 8,
+  },
+  stockFilterButtonActive: {
+    borderColor: palette.red,
   },
   categoriesContainer: {
     marginBottom: 8,
@@ -576,8 +849,63 @@ const styles = StyleSheet.create({
     margin: 6,
     backgroundColor: "#fff",
     borderRadius: 12,
-    //overflow: "hidden",
     elevation: 2,
+  },
+  compactCard: {
+    marginHorizontal: 6,
+    marginVertical: 4,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  compactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 10,
+  },
+  compactImageContainer: {
+    width: 58,
+    height: 58,
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  compactImage: {
+    width: "100%",
+    height: "100%",
+  },
+  compactImagePlaceholder: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: palette.surface,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  compactInfo: {
+    flex: 1,
+    gap: 3,
+  },
+  compactMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  inlineStockBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  inlineStockText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  compactControls: {
+    width: 164,
+    gap: 8,
   },
   imageContainer: {
     width: "100%",

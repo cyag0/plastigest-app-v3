@@ -5,9 +5,10 @@ import {
 } from "@/components/Views/POSV3/components";
 import { Unit } from "@/components/Views/POSV3/components/ListProducts";
 import { useAlerts } from "@/hooks/useAlerts";
-import Services from "@/utils/services";
+import services from "@/utils/services";
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -78,22 +79,18 @@ export function SaleProvider({ children }: SaleProviderProps) {
     {},
   );
 
-  const formRef = useRef<AppFormRef<{}>>(null);
+  const formRef = useRef<AppFormRef<object>>(null);
 
   const [currentSaleId, setCurrentSaleId] = useState<number | null>(null);
   const [customerId, setCustomerId] = useState<number | null>(null);
   const alerts = useAlerts();
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
 
       // Cargar datos iniciales desde el endpoint
-      const response = await Services.sales.getInitialData();
+      const response = await services.sales.getInitialData();
 
       if (response && "data" in response && response.data) {
         const {
@@ -186,7 +183,11 @@ export function SaleProvider({ children }: SaleProviderProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [alerts]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Calcular stock total usado para un producto base (en unidades base)
   const calculateUsedStock = (baseProductId: number) => {
@@ -260,16 +261,6 @@ export function SaleProvider({ children }: SaleProviderProps) {
       requiredStock = factorToBase;
     }
 
-    console.log("Validación handleAddProduct:", {
-      productName: product.name,
-      isPackage: product.is_package,
-      availableStock,
-      usedStock,
-      requiredStock,
-      sum: usedStock + requiredStock,
-      willFail: usedStock + requiredStock > availableStock,
-    });
-
     // Validar que hay stock suficiente (usedStock ya incluye lo que está en el carrito)
     if (usedStock + requiredStock > availableStock) {
       const productBaseUnit = baseProduct?.available_units?.find(
@@ -321,12 +312,9 @@ export function SaleProvider({ children }: SaleProviderProps) {
     action: "increment" | "decrement" | "unit",
     data?: any,
   ) => {
-    console.log("handleItemChange called:", { productId, action, data });
-
     setSelectedProducts((prev) => {
       const product = prev[productId];
       if (!product) {
-        console.log("Product not found in selectedProducts:", productId);
         return prev;
       }
 
@@ -352,14 +340,6 @@ export function SaleProvider({ children }: SaleProviderProps) {
           const factorToBase = Number(selectedUnit?.factor_to_base || 1);
           requiredStock = factorToBase;
         }
-
-        console.log("Validación de stock increment:", {
-          availableStock,
-          usedStock,
-          requiredStock,
-          sum: usedStock + requiredStock,
-          willFail: usedStock + requiredStock > availableStock,
-        });
 
         if (usedStock + requiredStock > availableStock) {
           const productBaseUnitId = baseProduct?.unit_id;
@@ -396,8 +376,6 @@ export function SaleProvider({ children }: SaleProviderProps) {
         if (!unitId) {
           return prev;
         }
-
-        console.log("Cambiando unidad para producto:", productId, unitId);
 
         // Validar que con la nueva unidad no se exceda el stock
         const productData = products.find((p) => p.id === productId);
@@ -490,10 +468,8 @@ export function SaleProvider({ children }: SaleProviderProps) {
         details,
       };
 
-      console.log("Sale data to be submitted:", saleData);
-
       // Crear la venta
-      const response = await Services.sales.store(saleData);
+      await services.sales.store(saleData);
 
       clearCart();
 
@@ -544,38 +520,25 @@ export function SaleProvider({ children }: SaleProviderProps) {
     });
   }, [selectedProducts, products]);
 
-  const value = useMemo(
-    () => ({
-      products,
-      units,
-      categories,
-      groupedUnits,
-      loading,
-      selectedProducts,
-      cartItems,
-      currentSaleId,
-      customerId,
-      loadData,
-      handleAddProduct,
-      handleRemoveProduct,
-      handleItemChange,
-      clearCart,
-      setCustomer,
-      confirmSale,
-      formRef,
-    }),
-    [
-      products,
-      units,
-      categories,
-      groupedUnits,
-      loading,
-      selectedProducts,
-      cartItems,
-      currentSaleId,
-      customerId,
-    ],
-  );
+  const value = {
+    products,
+    units,
+    categories,
+    groupedUnits,
+    loading,
+    selectedProducts,
+    cartItems,
+    currentSaleId,
+    customerId,
+    loadData,
+    handleAddProduct,
+    handleRemoveProduct,
+    handleItemChange,
+    clearCart,
+    setCustomer,
+    confirmSale,
+    formRef,
+  };
 
   return <SaleContext.Provider value={value}>{children}</SaleContext.Provider>;
 }

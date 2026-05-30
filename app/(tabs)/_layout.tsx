@@ -6,10 +6,8 @@ import { Appbar } from "react-native-paper";
 import AppBar from "@/components/App/AppBar";
 import NavigationSidebar from "@/components/App/NavigationSidebar";
 import palette from "@/constants/palette";
-import { useColorScheme } from "@/hooks/useColorScheme";
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
   const isWeb = Platform.OS === "web";
 
   if (isWeb) {
@@ -26,9 +24,39 @@ export default function TabLayout() {
           >
             <Tabs.Screen name="home" />
             <Tabs.Screen name="inventory" />
-            <Tabs.Screen name="reports" />
+            <Tabs.Screen
+              name="reports"
+              options={{
+                title: "Dashboard",
+                headerShown: true,
+                header: ({ options, route }) => (
+                  <AppBar
+                    title={options.title || route.name}
+                    showBackButton={false}
+                    onSearchPress={() => console.log("Search pressed")}
+                    onNotificationPress={() => console.log("Notifications pressed")}
+                    onProfilePress={() => console.log("Profile pressed")}
+                  />
+                ),
+              }}
+            />
             <Tabs.Screen name="administration" />
-            <Tabs.Screen name="profile" />
+            <Tabs.Screen
+              name="profile"
+              options={{
+                title: "Perfil",
+                headerShown: true,
+                header: ({ options, route }) => (
+                  <AppBar
+                    title={options.title || route.name}
+                    showBackButton={false}
+                    showSearchButton={false}
+                    onNotificationPress={() => console.log("Notifications pressed")}
+                    onProfilePress={() => console.log("Profile pressed")}
+                  />
+                ),
+              }}
+            />
             <Tabs.Screen
               name="(stacks)"
               options={{
@@ -148,5 +176,6 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: "hidden",
     borderRadius: 8,
+    backgroundColor: palette.background,
   },
 });

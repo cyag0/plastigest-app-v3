@@ -1,19 +1,22 @@
-import { Cart, ListProducts } from "@/components/Views/POSV3/components";
+import {
+  Cart,
+  ListProducts,
+  type ProductListItem,
+} from "@/components/Views/POSV3/components";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
-import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, TextInput, View } from "react-native";
 import { Button, RadioButton, Text } from "react-native-paper";
 import { useSale } from "./SaleContext";
 
 export default function SaleFormScreen() {
-  const router = useRouter();
   const alerts = useAlerts();
   const saleContext = useSale();
 
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [saleCompleted, setSaleCompleted] = useState(false);
 
   // Convertir selectedProducts a formato de CartItemData
   const cartItems = useMemo(() => {
@@ -77,8 +80,8 @@ export default function SaleFormScreen() {
 
       // Limpiar formulario
       setPaymentAmount("");
-
-      router.replace("/(tabs)/home/sales" as any);
+      setPaymentMethod("cash");
+      setSaleCompleted(true);
     } catch (error: any) {
       console.error("Error confirming sale:", error);
       const errorMessage =
@@ -87,6 +90,20 @@ export default function SaleFormScreen() {
         "Error al confirmar la venta";
       alerts.error(errorMessage);
     }
+  };
+
+  const handleAddProduct = (product: ProductListItem, unitId: number) => {
+    if (saleCompleted) {
+      setSaleCompleted(false);
+    }
+
+    saleContext.handleAddProduct(product, unitId);
+  };
+
+  const handleStartAnotherSale = () => {
+    setSaleCompleted(false);
+    setPaymentAmount("");
+    setPaymentMethod("cash");
   };
 
   return (
@@ -98,9 +115,10 @@ export default function SaleFormScreen() {
           categories={saleContext.categories}
           products={saleContext.products}
           selectedProducts={saleContext.selectedProducts}
-          onAddProduct={saleContext.handleAddProduct}
+          onAddProduct={handleAddProduct}
           onRemoveProduct={saleContext.handleRemoveProduct}
           onItemChange={saleContext.handleItemChange}
+          showOutOfStockFilter
         />
       </View>
 
@@ -114,9 +132,28 @@ export default function SaleFormScreen() {
           onItemChange={(item, action, data) => {
             saleContext.handleItemChange(item, action, data);
           }}
+          onClearCart={saleContext.clearCart}
         >
           {/* Información de pago dentro del carrito */}
           <View style={styles.paymentSection}>
+            {saleCompleted && (
+              <View style={styles.successPanel}>
+                <Text style={styles.successTitle}>Venta registrada</Text>
+                <Text style={styles.successText}>
+                  Puedes iniciar otra venta sin volver al listado.
+                </Text>
+                <Button
+                  mode="contained"
+                  icon="cart-plus"
+                  onPress={handleStartAnotherSale}
+                  buttonColor={palette.primary}
+                  style={styles.newSaleButton}
+                >
+                  Hacer otra venta
+                </Button>
+              </View>
+            )}
+
             <Text style={styles.paymentTitle}>Información de Pago</Text>
 
             {/* Método de pago */}
@@ -170,7 +207,7 @@ export default function SaleFormScreen() {
             <Button
               mode="contained"
               onPress={handleConfirmSale}
-              disabled={cartItems.length === 0}
+              disabled={cartItems.length === 0 || saleCompleted}
               style={styles.confirmButton}
               buttonColor={palette.primary}
               icon="check"
@@ -201,6 +238,30 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: palette.border,
+  },
+  successPanel: {
+    padding: 14,
+    marginBottom: 16,
+    borderRadius: 8,
+    backgroundColor: palette.primary + "1F",
+    borderWidth: 1,
+    borderColor: palette.primary,
+    gap: 8,
+  },
+  successTitle: {
+    color: palette.primary,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  successText: {
+    color: palette.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  newSaleButton: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    marginTop: 2,
   },
   paymentTitle: {
     fontSize: 18,

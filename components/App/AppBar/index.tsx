@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import { Platform, View } from "react-native";
 import { Appbar, Badge } from "react-native-paper";
+import WebBreadcrumb from "../WebBreadcrumb";
 
 export interface AppBarProps {
   title?: string;
@@ -17,6 +18,7 @@ export interface AppBarProps {
   onProfilePress?: () => void;
   rightActions?: React.ReactNode;
   leftActions?: React.ReactNode;
+  showBreadcrumb?: boolean;
   backgroundColor?: string;
   titleColor?: string;
   iconColor?: string;
@@ -34,6 +36,7 @@ export default function AppBar({
   onProfilePress,
   rightActions,
   leftActions,
+  showBreadcrumb = true,
   backgroundColor = palette.surface,
   titleColor = palette.textSecondary,
   iconColor = palette.textSecondary,
@@ -41,6 +44,7 @@ export default function AppBar({
   const router = useRouter();
   const { unreadNotificationsCount } = useAuth();
   const isWeb = Platform.OS === "web";
+  const useBreadcrumbTitle = showBreadcrumb && isWeb;
 
   const showBackButton = _showBackButton && router.canGoBack();
 
@@ -58,93 +62,95 @@ export default function AppBar({
     router.push("/(stacks)/notifications");
   };
 
-  const handleProfile = () => {
-    onProfilePress?.();
-  };
-
   return (
-    <Appbar.Header
-      style={{
-        backgroundColor,
-        elevation: isWeb ? 0 : 2,
-        shadowColor: palette.textSecondary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-      }}
-    >
-      {/* Botón de retroceso */}
-      {showBackButton && (
-        <Appbar.BackAction onPress={handleBack} iconColor={iconColor} />
-      )}
-
-      {/* Acciones del lado izquierdo */}
-      {leftActions}
-
-      {/* Título y subtítulo */}
-      <Appbar.Content
-        title={title}
-        subtitle={subtitle}
-        titleStyle={{
-          color: titleColor,
-          fontWeight: "bold",
-          fontSize: 18,
+    <View>
+      <Appbar.Header
+        style={{
+          backgroundColor,
+          elevation: isWeb ? 0 : 2,
+          shadowColor: palette.textSecondary,
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
         }}
-        subtitleStyle={{
-          color: iconColor,
-          opacity: 0.7,
-          fontSize: 14,
-        }}
-      />
+      >
+        {/* Botón de retroceso */}
+        {!useBreadcrumbTitle && showBackButton && (
+          <Appbar.BackAction onPress={handleBack} iconColor={iconColor} />
+        )}
 
-      {/* Botón de búsqueda */}
-      {showSearchButton && (
-        <Appbar.Action
-          icon="magnify"
-          onPress={handleSearch}
-          iconColor={iconColor}
-          rippleColor={palette.primary}
-        />
-      )}
+        {/* Acciones del lado izquierdo */}
+        {leftActions}
 
-      {/* Botón de notificaciones */}
-      {showNotificationButton && (
-        <View style={{ position: "relative" }}>
+        {/* Título y subtítulo */}
+        {useBreadcrumbTitle ? (
+          <WebBreadcrumb embedded showSingleItem />
+        ) : (
+          <Appbar.Content
+            title={title}
+            subtitle={subtitle}
+            titleStyle={{
+              color: titleColor,
+              fontWeight: "bold",
+              fontSize: 18,
+            }}
+            subtitleStyle={{
+              color: iconColor,
+              opacity: 0.7,
+              fontSize: 14,
+            }}
+          />
+        )}
+
+        {/* Botón de búsqueda */}
+        {showSearchButton && (
           <Appbar.Action
-            icon="bell-outline"
-            onPress={handleNotifications}
+            icon="magnify"
+            onPress={handleSearch}
             iconColor={iconColor}
             rippleColor={palette.primary}
           />
-          {unreadNotificationsCount > 0 && (
-            <Badge
-              style={{
-                position: "absolute",
-                top: 4,
-                right: 4,
-                backgroundColor: palette.error,
-              }}
-              size={18}
-            >
-              {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
-            </Badge>
-          )}
-        </View>
-      )}
+        )}
 
-      {/* Botón de perfil */}
-      {/*  {showProfileButton && (
-        <Appbar.Action
-          icon="account-circle-outline"
-          onPress={handleProfile}
-          iconColor={iconColor}
-          rippleColor={palette.primary}
-        />
-      )} */}
+        {/* Botón de notificaciones */}
+        {showNotificationButton && (
+          <View style={{ position: "relative" }}>
+            <Appbar.Action
+              icon="bell-outline"
+              onPress={handleNotifications}
+              iconColor={iconColor}
+              rippleColor={palette.primary}
+            />
+            {unreadNotificationsCount > 0 && (
+              <Badge
+                style={{
+                  position: "absolute",
+                  top: 4,
+                  right: 4,
+                  backgroundColor: palette.error,
+                }}
+                size={18}
+              >
+                {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
+              </Badge>
+            )}
+          </View>
+        )}
 
-      {/* Acciones del lado derecho */}
-      {rightActions}
-    </Appbar.Header>
+        {/* Botón de perfil */}
+        {/*  {showProfileButton && (
+          <Appbar.Action
+            icon="account-circle-outline"
+            onPress={handleProfile}
+            iconColor={iconColor}
+            rippleColor={palette.primary}
+          />
+        )} */}
+
+        {/* Acciones del lado derecho */}
+        {rightActions}
+      </Appbar.Header>
+    </View>
   );
 }
 
