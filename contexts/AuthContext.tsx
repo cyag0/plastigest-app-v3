@@ -7,7 +7,7 @@ import {
 import Services from "@/utils/services";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { useExpoPushNotifications } from "@/hooks/useExpoPushNotifications";
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 // Tipos
 interface Role {
@@ -89,18 +89,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [permissions, setPermissions] = useState<string[]>([]);
 
-  // Registrar notificaciones push cuando el usuario está autenticado
-  const { expoPushToken } = useExpoPushNotifications();
+  // Registrar notificaciones push cuando el usuario esta autenticado
+  const { fcmToken } = usePushNotifications({ enabled: Boolean(user) });
   
   // Log del token para debugging
   useEffect(() => {
-    if (user && expoPushToken) {
-      console.log('✅ Usuario autenticado con token push:', {
+    if (user && fcmToken) {
+      console.log('Usuario autenticado con token FCM:', {
         user: user.email,
-        token: expoPushToken.substring(0, 50) + '...'
+        token: fcmToken.substring(0, 50) + '...'
       });
     }
-  }, [user, expoPushToken]);
+  }, [user, fcmToken]);
 
   // Variables de entorno
   const USER_DATA_KEY = process.env.EXPO_PUBLIC_USER_DATA_KEY || "user_data";

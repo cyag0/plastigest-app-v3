@@ -10,8 +10,12 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.alejandrotrejo.plastigest",
       "infoPlist": {
-        "NSUserNotificationsUsageDescription": "Esta aplicación necesita permisos para enviarte notificaciones importantes sobre tu inventario."
+        "NSUserNotificationsUsageDescription": "Esta aplicación necesita permisos para enviarte notificaciones importantes sobre tu inventario.",
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       },
       "googleServicesFile": "./GoogleService-Info.plist"
     },
@@ -39,6 +43,8 @@
     "plugins": [
       "expo-router",
       "expo-dev-client",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
       [
         "expo-splash-screen",
         {

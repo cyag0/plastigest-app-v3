@@ -1,11 +1,19 @@
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
-import Services from "@/utils/services";
+import services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  Button,
+  Card,
+  Divider,
+  Text,
+  TextInput,
+} from "react-native-paper";
 import dayjs from "dayjs";
 import "dayjs/locale/es";
 import localizedFormat from "dayjs/plugin/localizedFormat";
@@ -17,14 +25,6 @@ dayjs.extend(timezone);
 dayjs.extend(utc);
 dayjs.locale("es");
 dayjs.tz.setDefault("America/Mexico_City");
-import {
-  ActivityIndicator,
-  Button,
-  Card,
-  Divider,
-  Text,
-  TextInput,
-} from "react-native-paper";
 
 interface SalesReportsFormProps {
   id?: number;
@@ -42,18 +42,38 @@ interface DailyStats {
   transactions_count: number;
 }
 
+type EditableField =
+  | "totalSales"
+  | "totalCash"
+  | "totalCard"
+  | "totalTransfer"
+  | "transactionsCount"
+  | "notes";
+
+type TouchedFields = Record<EditableField, boolean>;
+
+const INITIAL_TOUCHED_FIELDS: TouchedFields = {
+  totalSales: false,
+  totalCash: false,
+  totalCard: false,
+  totalTransfer: false,
+  transactionsCount: false,
+  notes: false,
+};
+
 export default function SalesReportsForm(props: SalesReportsFormProps) {
   const params = useLocalSearchParams();
   const reportId =
     props.id || (params.id ? parseInt(params.id as string) : undefined);
   const alerts = useAlerts();
 
-  const { location, selectedCompany } = useAuth();
+  const { location } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadingStats, setLoadingStats] = useState(false);
   const [dailyStats, setDailyStats] = useState<DailyStats | null>(null);
+  const touchedFieldsRef = useRef<TouchedFields>(INITIAL_TOUCHED_FIELDS);
   const [reportDate, setReportDate] = useState(
     dayjs().tz("America/Mexico_City").format("YYYY-MM-DD")
   );
@@ -66,20 +86,62 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
   const [transactionsCount, setTransactionsCount] = useState("0");
   const [notes, setNotes] = useState("");
 
-  useEffect(() => {
-    if (reportId) {
-      loadReport();
-    } else {
-      loadDailyStats();
-    }
-  }, [reportId, reportDate, location]);
+  const resetTouchedFields = useCallback(() => {
+    touchedFieldsRef.current = INITIAL_TOUCHED_FIELDS;
+  }, []);
 
-  const loadReport = async () => {
+  const markFieldAsTouched = useCallback((field: EditableField) => {
+    const currentTouchedFields = touchedFieldsRef.current;
+    if (currentTouchedFields[field]) {
+      return;
+    }
+
+    touchedFieldsRef.current = {
+      ...currentTouchedFields,
+        [field]: true,
+    };
+  }, []);
+
+  const applySuggestedValues = useCallback(({
+    totalSales: suggestedTotalSales,
+    transactionsCount: suggestedTransactionsCount,
+    totalCash: suggestedTotalCash,
+    totalCard: suggestedTotalCard,
+    totalTransfer: suggestedTotalTransfer,
+  }: {
+    totalSales: string;
+    transactionsCount: string;
+    totalCash: string;
+    totalCard: string;
+    totalTransfer: string;
+  }) => {
+    if (!touchedFieldsRef.current.totalSales) {
+      setTotalSales(suggestedTotalSales);
+    }
+
+    if (!touchedFieldsRef.current.transactionsCount) {
+      setTransactionsCount(suggestedTransactionsCount);
+    }
+
+    if (!touchedFieldsRef.current.totalCash) {
+      setTotalCash(suggestedTotalCash);
+    }
+
+    if (!touchedFieldsRef.current.totalCard) {
+      setTotalCard(suggestedTotalCard);
+    }
+
+    if (!touchedFieldsRef.current.totalTransfer) {
+      setTotalTransfer(suggestedTotalTransfer);
+    }
+  }, []);
+
+  const loadReport = useCallback(async () => {
     if (!reportId) return;
 
     try {
       setLoading(true);
-      const response = await Services.salesReports.show(reportId);
+      const response = await services.salesReports.show(reportId);
       const data = response.data.data;
 
       setReportDate(data.report_date);
@@ -89,29 +151,24 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
       setTotalTransfer(data.total_transfer?.toString() || "0.00");
       setTransactionsCount(data.transactions_count?.toString() || "0");
       setNotes(data.notes || "");
+      resetTouchedFields();
     } catch (error) {
       console.error("Error loading report:", error);
       alerts.error("Error al cargar el reporte");
     } finally {
       setLoading(false);
     }
-  };
+  }, [alerts, reportId, resetTouchedFields]);
 
-  const loadDailyStats = async () => {
+  const loadDailyStats = useCallback(async () => {
     if (!location) return;
 
     try {
       setLoadingStats(true);
-      const response = await Services.sales.cashRegister({
+      const stats = await services.sales.cashRegister({
         date: reportDate,
         location_id: location.id,
       });
-
-      const stats = response.data;
-      
-      // Debug: Ver qué devuelve el backend
-      console.log('Cash Register Stats:', stats);
-      console.log('Summary:', stats.summary);
 
       // Parse payment methods
       let cashTotal = 0;
@@ -146,18 +203,27 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
         transactions_count: stats.summary?.sales_count || 0,
       });
 
-      // Auto-fill form with stats
-      setTotalSales(stats.summary?.total_sales?.toFixed(2) || "0.00");
-      setTransactionsCount(stats.summary?.sales_count?.toString() || "0");
-      setTotalCash(cashTotal.toFixed(2));
-      setTotalCard(cardTotal.toFixed(2));
-      setTotalTransfer(transferTotal.toFixed(2));
+      applySuggestedValues({
+        totalSales: stats.summary?.total_sales?.toFixed(2) || "0.00",
+        transactionsCount: stats.summary?.sales_count?.toString() || "0",
+        totalCash: cashTotal.toFixed(2),
+        totalCard: cardTotal.toFixed(2),
+        totalTransfer: transferTotal.toFixed(2),
+      });
     } catch (error) {
       console.error("Error loading daily stats:", error);
     } finally {
       setLoadingStats(false);
     }
-  };
+  }, [applySuggestedValues, location, reportDate]);
+
+  useEffect(() => {
+    if (reportId) {
+      loadReport();
+    } else {
+      loadDailyStats();
+    }
+  }, [loadDailyStats, loadReport, reportId]);
 
   const handleSave = async () => {
     if (!location) {
@@ -180,10 +246,10 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
       };
 
       if (reportId) {
-        await Services.salesReports.update(reportId, data);
+        await services.salesReports.update(reportId, data);
         alerts.success("Reporte actualizado exitosamente");
       } else {
-        await Services.salesReports.store(data);
+        await services.salesReports.store(data);
         alerts.success("Reporte guardado exitosamente");
       }
 
@@ -379,7 +445,10 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
                 <TextInput
                   label="Total de Ventas"
                   value={totalSales}
-                  onChangeText={setTotalSales}
+                  onChangeText={(value) => {
+                    markFieldAsTouched("totalSales");
+                    setTotalSales(value);
+                  }}
                   keyboardType="numeric"
                   mode="outlined"
                   left={<TextInput.Icon icon="currency-usd" />}
@@ -389,7 +458,10 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
                 <TextInput
                   label="Número de Transacciones"
                   value={transactionsCount}
-                  onChangeText={setTransactionsCount}
+                  onChangeText={(value) => {
+                    markFieldAsTouched("transactionsCount");
+                    setTransactionsCount(value);
+                  }}
                   keyboardType="numeric"
                   mode="outlined"
                   left={<TextInput.Icon icon="receipt" />}
@@ -401,7 +473,10 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
                 <TextInput
                   label="Total en Efectivo"
                   value={totalCash}
-                  onChangeText={setTotalCash}
+                  onChangeText={(value) => {
+                    markFieldAsTouched("totalCash");
+                    setTotalCash(value);
+                  }}
                   keyboardType="numeric"
                   mode="outlined"
                   left={<TextInput.Icon icon="cash" />}
@@ -411,7 +486,10 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
                 <TextInput
                   label="Total con Tarjeta"
                   value={totalCard}
-                  onChangeText={setTotalCard}
+                  onChangeText={(value) => {
+                    markFieldAsTouched("totalCard");
+                    setTotalCard(value);
+                  }}
                   keyboardType="numeric"
                   mode="outlined"
                   left={<TextInput.Icon icon="credit-card" />}
@@ -421,7 +499,10 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
                 <TextInput
                   label="Total por Transferencia"
                   value={totalTransfer}
-                  onChangeText={setTotalTransfer}
+                  onChangeText={(value) => {
+                    markFieldAsTouched("totalTransfer");
+                    setTotalTransfer(value);
+                  }}
                   keyboardType="numeric"
                   mode="outlined"
                   left={<TextInput.Icon icon="bank-transfer" />}
@@ -433,7 +514,10 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
                 <TextInput
                   label="Notas"
                   value={notes}
-                  onChangeText={setNotes}
+                  onChangeText={(value) => {
+                    markFieldAsTouched("notes");
+                    setNotes(value);
+                  }}
                   mode="outlined"
                   multiline
                   numberOfLines={4}

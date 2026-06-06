@@ -1,8 +1,8 @@
 import palette from "@/constants/palette";
-import Services from "@/utils/services";
+import services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -101,17 +101,19 @@ export default function CashClosingForm() {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(isEdit);
+  const physicalCountTouchedRef = useRef(isEdit);
 
   // Load existing record when editing
   useEffect(() => {
     if (!isEdit) return;
-    Services.cashClosings
+    services.cashClosings
       .show(Number(params.id))
       .then((response) => {
         const data = response.data?.data ?? response.data;
         setClosingDate(data.closing_date?.split("T")[0] ?? today());
-        setPhysicalCount(data.physical_count ?? "");
+        setPhysicalCount(data.physical_count?.toString() ?? "");
         setNotes(data.notes ?? "");
+        physicalCountTouchedRef.current = true;
       })
       .catch(console.error)
       .finally(() => setLoadingExisting(false));
@@ -120,9 +122,11 @@ export default function CashClosingForm() {
   // Load stats for the selected date
   const loadStats = useCallback((date: string) => {
     setLoadingStats(true);
-    Services.cashMovements
+    services.cashMovements
       .stats({ date })
-      .then(setStats)
+      .then((data) => {
+        setStats(data);
+      })
       .catch(console.error)
       .finally(() => setLoadingStats(false));
   }, []);
@@ -145,10 +149,19 @@ export default function CashClosingForm() {
   const totalCard     = (byMethod.card?.total_income     ?? 0) - (byMethod.card?.total_expense     ?? 0);
   const totalTransfer = (byMethod.transfer?.total_income ?? 0) - (byMethod.transfer?.total_expense ?? 0);
   const totalOther    = (byMethod.other?.total_income    ?? 0) - (byMethod.other?.total_expense    ?? 0);
+  const suggestedPhysicalCount = totalCash.toFixed(2);
 
   const expectedBalance = openingBalance + dayIncome - dayExpense;
   const physCount = physicalCount !== "" ? parseFloat(physicalCount) || 0 : null;
   const difference = physCount !== null ? physCount - totalCash : null;
+
+  useEffect(() => {
+    if (isEdit || loadingExisting || physicalCountTouchedRef.current) {
+      return;
+    }
+
+    setPhysicalCount(suggestedPhysicalCount);
+  }, [isEdit, loadingExisting, suggestedPhysicalCount]);
 
   // ── Save ───────────────────────────────────────────────────────────────────
 
@@ -173,10 +186,17 @@ export default function CashClosingForm() {
       };
 
       if (isEdit) {
-        await Services.cashClosings.update(Number(params.id), payload);
+        await services.cashClosings.update(Number(params.id), payload);
       } else {
-        const created = await Services.cashClosings.store(payload);
-        router.replace(`/(tabs)/home/cash/closing/${created.id}`);
+        const createdResponse = await services.cashClosings.store(payload);
+        const createdEntity = createdResponse.data?.data as
+          | { id?: number }
+          | undefined;
+        const createdId = createdEntity?.id;
+
+        if (createdId) {
+          router.replace(`/(tabs)/home/cash/closing/${createdId}` as any);
+        }
         return;
       }
       router.back();
@@ -286,7 +306,10 @@ export default function CashClosingForm() {
         <TextInput
           style={styles.amountInput}
           value={physicalCount}
-          onChangeText={setPhysicalCount}
+          onChangeText={(value) => {
+            physicalCountTouchedRef.current = true;
+            setPhysicalCount(value);
+          }}
           keyboardType="decimal-pad"
           placeholder="0.00"
           placeholderTextColor={palette.textSecondary}
