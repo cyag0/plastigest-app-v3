@@ -1,4 +1,4 @@
-import { usePOS } from "@/components/Views/POSV2/Context";
+import { useSale } from "./SaleContext";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
@@ -12,7 +12,7 @@ import { Button, Text } from "react-native-paper";
 export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
-  const { addToCart } = usePOS();
+  const saleContext = useSale();
   const alerts = useAlerts();
   const router = useRouter();
 
@@ -30,15 +30,24 @@ export default function ScannerScreen() {
         search: data,
       });
 
-      if (
-        response.data &&
-        response.data.data &&
-        response.data.data.length > 0
-      ) {
-        const product = response.data.data[0];
+      // Narrowing: el tipo es Product[] | { data: Product[] } | LaravelPaginatedResponse<Product>
+      const respBody = response.data as any;
+      const products: any[] = Array.isArray(respBody)
+        ? respBody
+        : respBody?.data ?? [];
 
-        // Agregar al carrito con cantidad 1
-        addToCart(product, 1);
+      if (products.length > 0) {
+        const product = products[0];
+
+        // Buscar el producto en el listado expandido del contexto (que ya tiene id "product_X")
+        const expandedProduct = saleContext.products.find(p => p.id === `product_${product.id}`);
+        if (expandedProduct) {
+          saleContext.handleAddProduct(expandedProduct, expandedProduct.unit_id);
+        } else {
+          alerts.error("Producto no disponible en este inventario");
+          setTimeout(() => setScanned(false), 1000);
+          return;
+        }
 
         alerts.success(`${product.name} agregado al carrito`);
 

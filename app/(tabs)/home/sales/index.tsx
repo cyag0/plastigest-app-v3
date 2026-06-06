@@ -4,6 +4,8 @@ import PermissionGate from "@/components/App/PermissionGate";
 import CashRegister from "@/components/Dashboard/CashRegister";
 import SaleStats from "@/components/Dashboard/SaleStats";
 import palette from "@/constants/palette";
+import { usePdfDownload } from "@/hooks/usePdfDownload";
+import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -15,6 +17,7 @@ import { SceneMap, TabView } from "react-native-tab-view";
 export default function SalesIndex() {
   const navigation = router;
   const layout = useWindowDimensions();
+  const alerts = useAlerts();
   const [index, setIndex] = useState(0);
   const [routes] = useState([
     { key: "list", title: "Ventas" },
@@ -22,12 +25,27 @@ export default function SalesIndex() {
     { key: "cashRegister", title: "Corte de Caja" },
   ]);
 
+  const { downloadPdfFromApi, isDownloading } = usePdfDownload({
+    onError: (error) => alerts.error(error.message || "Error al descargar el PDF"),
+  });
+
+  const handleDownloadPdf = async (item: any) => {
+    try {
+      const response = await Services.sales.pdfUrl(Number(item.id));
+      if (response?.url) {
+        await downloadPdfFromApi(response.url, {
+          fileName: `venta_${item.sale_number || item.id}.pdf`,
+        });
+      } else {
+        alerts.error("No se pudo obtener la URL del PDF");
+      }
+    } catch (error: any) {
+      alerts.error(error?.message || "Error al obtener la URL del PDF");
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "draft":
-        return palette.warning;
-      case "processed":
-        return palette.info;
       case "closed":
         return palette.primary;
       case "cancelled":
@@ -39,10 +57,6 @@ export default function SalesIndex() {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "draft":
-        return "file-document-edit-outline";
-      case "processed":
-        return "progress-clock";
       case "closed":
         return "check-circle";
       case "cancelled":
@@ -54,10 +68,6 @@ export default function SalesIndex() {
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case "draft":
-        return "Borrador";
-      case "processed":
-        return "Procesada";
       case "closed":
         return "Cerrada";
       case "cancelled":
@@ -69,12 +79,14 @@ export default function SalesIndex() {
 
   const getPaymentMethodIcon = (method: string) => {
     switch (method) {
-      case "efectivo":
+      case "cash":
         return "cash";
-      case "tarjeta":
+      case "card":
         return "credit-card";
-      case "transferencia":
+      case "transfer":
         return "bank-transfer";
+      case "credit":
+        return "account-clock";
       default:
         return "cash";
     }
@@ -82,12 +94,14 @@ export default function SalesIndex() {
 
   const getPaymentMethodLabel = (method: string) => {
     switch (method) {
-      case "efectivo":
+      case "cash":
         return "Efectivo";
-      case "tarjeta":
+      case "card":
         return "Tarjeta";
-      case "transferencia":
+      case "transfer":
         return "Transferencia";
+      case "credit":
+        return "Crédito";
       default:
         return method || "-";
     }
@@ -95,12 +109,14 @@ export default function SalesIndex() {
 
   const getPaymentMethodColor = (method: string) => {
     switch (method) {
-      case "efectivo":
+      case "cash":
         return "#2E7D32";
-      case "tarjeta":
+      case "card":
         return "#1565C0";
-      case "transferencia":
+      case "transfer":
         return "#6D4C41";
+      case "credit":
+        return "#7B1FA2";
       default:
         return "#607D8B";
     }
@@ -221,14 +237,14 @@ export default function SalesIndex() {
       },
       {
         title: "Total",
-        key: "total_cost",
+        key: "total",
         width: 120,
         align: "right",
         render: (_, sale) =>
           new Intl.NumberFormat("es-MX", {
             style: "currency",
             currency: "MXN",
-          }).format(sale.total_cost || 0),
+          }).format(sale.total || 0),
       },
     ],
     [],
@@ -265,12 +281,7 @@ export default function SalesIndex() {
             },
             {
               label: "Método de pago",
-              value:
-                sale.payment_method === "efectivo"
-                  ? "Efectivo"
-                  : sale.payment_method === "tarjeta"
-                    ? "Tarjeta"
-                    : "Transferencia",
+              value: getPaymentMethodLabel(sale.payment_method),
             },
           ],
           description: (
@@ -311,7 +322,7 @@ export default function SalesIndex() {
                   {new Intl.NumberFormat("es-MX", {
                     style: "currency",
                     currency: "MXN",
-                  }).format(sale.total_cost)}
+                  }).format(sale.total)}
                 </Text>
               </View>
 
@@ -356,11 +367,20 @@ export default function SalesIndex() {
         })}
         menu={{
           showDelete(item) {
-            return item.status !== "closed";
+            return item.status === "cancelled";
           },
-          showEdit(item) {
-            return item.status !== "closed";
+          showEdit() {
+            return false;
           },
+          customActions: [
+            {
+              title: isDownloading ? "Descargando..." : "Imprimir PDF",
+              icon: "file-pdf-box",
+              color: palette.error,
+              show: () => true,
+              onPress: handleDownloadPdf,
+            },
+          ],
         }}
         searchPlaceholder="Buscar ventas..."
         columns={columns}

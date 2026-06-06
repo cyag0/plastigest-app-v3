@@ -30,26 +30,16 @@ const fmt = (value: number) =>
 
 const toNum = (v: any) => parseFloat(v ?? 0) || 0;
 
-const STATUS_CONFIG: Record<
-  string,
-  { color: string; icon: string; label: string }
-> = {
-  draft:     { color: "#6c757d", icon: "file-document-edit-outline", label: "Borrador" },
-  open:      { color: "#0d6efd", icon: "progress-clock",             label: "Abierta" },
-  processed: { color: "#0dcaf0", icon: "progress-check",             label: "Procesada" },
-  completed: { color: "#198754", icon: "check-circle",               label: "Completada" },
-  closed:    { color: "#198754", icon: "check-circle",               label: "Cerrada" },
-  cancelled: { color: "#dc3545", icon: "close-circle",               label: "Cancelada" },
+const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
+  closed:    { color: "#198754", icon: "check-circle", label: "Cerrada" },
+  cancelled: { color: "#dc3545", icon: "close-circle", label: "Cancelada" },
 };
 
 const PM_CONFIG: Record<string, { icon: string; label: string }> = {
-  efectivo:      { icon: "cash",          label: "Efectivo" },
-  cash:          { icon: "cash",          label: "Efectivo" },
-  tarjeta:       { icon: "credit-card",   label: "Tarjeta" },
-  card:          { icon: "credit-card",   label: "Tarjeta" },
-  transferencia: { icon: "bank-transfer", label: "Transferencia" },
-  transfer:      { icon: "bank-transfer", label: "Transferencia" },
-  credit:        { icon: "account-clock", label: "Crédito" },
+  cash:     { icon: "cash",          label: "Efectivo" },
+  card:     { icon: "credit-card",   label: "Tarjeta" },
+  transfer: { icon: "bank-transfer", label: "Transferencia" },
+  credit:   { icon: "account-clock", label: "Crédito" },
 };
 
 const PS_CONFIG: Record<string, { color: string; label: string }> = {
@@ -86,44 +76,6 @@ export default function SaleDetail() {
       );
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleAdvanceStatus = async () => {
-    if (
-      !await alerts.confirm("¿Deseas avanzar el estado de esta venta?", {
-        title: "Avanzar Estado",
-        okText: "Avanzar",
-        cancelText: "Cancelar",
-      })
-    )
-      return;
-    try {
-      await (Services.sales as any).advanceStatus(id);
-      alerts.success("Estado avanzado correctamente");
-      loadSale();
-    } catch (e: any) {
-      alerts.error(e.response?.data?.message || "Error al avanzar el estado");
-    }
-  };
-
-  const handleRevertStatus = async () => {
-    if (
-      !await alerts.confirm("¿Deseas retroceder el estado de esta venta?", {
-        title: "Retroceder Estado",
-        okText: "Retroceder",
-        cancelText: "Cancelar",
-      })
-    )
-      return;
-    try {
-      await (Services.sales as any).revertStatus(id);
-      alerts.success("Estado retrocedido correctamente");
-      loadSale();
-    } catch (e: any) {
-      alerts.error(
-        e.response?.data?.message || "Error al retroceder el estado",
-      );
     }
   };
 
@@ -611,28 +563,6 @@ export default function SaleDetail() {
 
       {/* ── Acciones ── */}
       <View style={{ gap: 10, marginBottom: 32 }}>
-        {sale.can_advance && (
-          <Button
-            mode="contained"
-            onPress={handleAdvanceStatus}
-            icon="arrow-right-circle"
-            buttonColor={palette.primary}
-            style={styles.actionBtn}
-          >
-            Avanzar Estado
-          </Button>
-        )}
-        {sale.can_revert && (
-          <Button
-            mode="outlined"
-            onPress={handleRevertStatus}
-            icon="arrow-left-circle"
-            style={[styles.actionBtn, { borderColor: palette.primary }]}
-            textColor={palette.primary}
-          >
-            Retroceder Estado
-          </Button>
-        )}
         {sale.can_cancel && (
           <Button
             mode="outlined"

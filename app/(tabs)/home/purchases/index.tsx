@@ -6,6 +6,8 @@ import CreatePurchaseModal, {
   CreatePurchaseModalRef,
 } from "@/components/Views/POSV2/Components/CreatePurchaseModal";
 import palette from "@/constants/palette";
+import { usePdfDownload } from "@/hooks/usePdfDownload";
+import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
@@ -64,6 +66,7 @@ const getStatusConfig = (status: string) => {
 export default function PurchasesIndex() {
   const router = useRouter();
   const layout = useWindowDimensions();
+  const alerts = useAlerts();
   const [index, setIndex] = useState(0);
   const [routes] = useState([
     { key: "list", title: "Lista de Compras" },
@@ -71,6 +74,25 @@ export default function PurchasesIndex() {
   ]);
 
   const modalRef = useRef<CreatePurchaseModalRef>(null);
+
+  const { downloadPdfFromApi, isDownloading } = usePdfDownload({
+    onError: (error) => alerts.error(error.message || "Error al descargar el PDF"),
+  });
+
+  const handleDownloadPdf = async (item: any) => {
+    try {
+      const response = await Services.purchasesV2.pdfUrl(Number(item.id));
+      if (response?.url) {
+        await downloadPdfFromApi(response.url, {
+          fileName: `compra_${item.purchase_number || item.id}.pdf`,
+        });
+      } else {
+        alerts.error("No se pudo obtener la URL del PDF");
+      }
+    } catch (error: any) {
+      alerts.error(error?.message || "Error al obtener la URL del PDF");
+    }
+  };
 
   const columns = useMemo<AppListColumn<any>[]>(
     () => [
@@ -209,6 +231,15 @@ export default function PurchasesIndex() {
           showDelete(item) {
             return item.status === "draft";
           },
+          customActions: [
+            {
+              title: isDownloading ? "Descargando..." : "Imprimir PDF",
+              icon: "file-pdf-box",
+              color: palette.error,
+              show: () => true,
+              onPress: handleDownloadPdf,
+            },
+          ],
         }}
         onPressCreate={() => {
           modalRef.current?.show();

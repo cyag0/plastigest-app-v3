@@ -7,7 +7,7 @@ import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Chip, Text } from "react-native-paper";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -111,55 +111,41 @@ function CashStatsBanner() {
         </View>
       </View>
 
-      {/* Por método de pago */}
+      {/* Por método de pago + acceso directo a cierres de caja */}
       {paymentEntries.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.methodScroll}>
-          {paymentEntries.map(([method, data]) => {
-            const meta = PAYMENT_META[method] ?? { icon: "cash", label: data.label };
-            const color = data.balance >= 0 ? palette.success : palette.red;
-            return (
-              <View key={method} style={styles.methodChip}>
-                <View style={styles.methodChipHeader}>
-                  <MaterialCommunityIcons name={meta.icon as any} size={14} color={color} />
-                  <Text style={[styles.methodChipLabel, { color }]}>{data.label || meta.label}</Text>
+        <View style={styles.methodRow}>
+          <View style={styles.methodChips}>
+            {paymentEntries.map(([method, data]) => {
+              const meta = PAYMENT_META[method] ?? { icon: "cash", label: data.label };
+              const color = data.balance >= 0 ? palette.success : palette.red;
+              return (
+                <View key={method} style={styles.methodChip}>
+                  <View style={styles.methodChipHeader}>
+                    <MaterialCommunityIcons name={meta.icon as any} size={14} color={color} />
+                    <Text style={[styles.methodChipLabel, { color }]} numberOfLines={1}>
+                      {data.label || meta.label}
+                    </Text>
+                  </View>
+                  <Text style={[styles.methodChipValue, { color }]} numberOfLines={1}>
+                    {formatCurrency(data.balance)}
+                  </Text>
                 </View>
-                <Text style={[styles.methodChipValue, { color }]}>
-                  {formatCurrency(data.balance)}
-                </Text>
-              </View>
-            );
-          })}
-        </ScrollView>
-      )}
+              );
+            })}
+          </View>
 
-      {/* Acceso directo a cierres de caja */}
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "flex-end",
-          paddingHorizontal: 4,
-          paddingBottom: 4,
-        }}
-      >
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 6,
-            paddingHorizontal: 12,
-            paddingVertical: 7,
-            borderRadius: 20,
-            backgroundColor: `${palette.primary}15`,
-          }}
-          onTouchEnd={() => router.push("/(tabs)/home/cash/closing/index")}
-        >
-          <MaterialCommunityIcons name="cash-register" size={14} color={palette.primary} />
-          <Text style={{ fontSize: 12, color: palette.primary, fontWeight: "600" }}>
-            Cierres de Caja
-          </Text>
-          <MaterialCommunityIcons name="chevron-right" size={14} color={palette.primary} />
+          <View
+            style={styles.closingButton}
+            onTouchEnd={() => router.push("/(tabs)/home/cash/closing/index")}
+          >
+            <MaterialCommunityIcons name="cash-register" size={14} color={palette.primary} />
+            <Text style={styles.closingButtonText} numberOfLines={1}>
+              Cierres de Caja
+            </Text>
+            <MaterialCommunityIcons name="chevron-right" size={14} color={palette.primary} />
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 }
@@ -365,17 +351,43 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: palette.textSecondary,
   },
-  methodScroll: {
+  methodRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
     marginTop: 2,
   },
+  methodChips: {
+    flex: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
   methodChip: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 100,
     backgroundColor: "#fff",
     borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    elevation: 1,
+  },
+  closingButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    marginRight: 8,
-    elevation: 1,
-    minWidth: 120,
+    borderRadius: 20,
+    backgroundColor: `${palette.primary}15`,
+    alignSelf: "center",
+  },
+  closingButtonText: {
+    fontSize: 12,
+    color: palette.primary,
+    fontWeight: "600",
   },
   methodChipHeader: {
     flexDirection: "row",

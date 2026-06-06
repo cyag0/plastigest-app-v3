@@ -1,7 +1,6 @@
 import { default as api, default as axiosClient } from "../axios";
 import admin from "./admin/admin";
 import { createCrudService } from "./crudService";
-import saleService from "./saleService";
 
 const movements = {
   adjustments: createCrudService<App.Entities.Adjustment.Adjustment>(
@@ -214,10 +213,19 @@ const Services = {
       const response = await axiosClient.get(`/auth/admin/purchases-v2/${id}`);
       return response.data;
     },
+    async pdfUrl(id: number) {
+      const response = await axiosClient.get(
+        `/auth/admin/purchases-v2/${id}/pdf-url`,
+      );
+      return response.data as { url: string; expires_at: string };
+    },
   },
   sales: {
     ...createCrudService<App.Entities.Sale>("/auth/admin/sales"),
-    ...saleService,
+    async cancel(id: number) {
+      const response = await axiosClient.post(`/auth/admin/sales/${id}/cancel`);
+      return response.data;
+    },
     async getInitialData(params?: { location_id?: number }) {
       const response = await axiosClient.get("/auth/admin/sales/initial-data", {
         params,
@@ -252,6 +260,12 @@ const Services = {
         },
       );
       return response.data;
+    },
+    async pdfUrl(id: number) {
+      const response = await axiosClient.get(
+        `/auth/admin/sales/${id}/pdf-url`,
+      );
+      return response.data as { url: string; expires_at: string };
     },
   },
   salesReports: {
