@@ -385,6 +385,37 @@ const Services = {
       return response.data;
     },
   },
+  deviceTokens: {
+    async register(payload: {
+      token: string;
+      device_type?: "ios" | "android" | "web";
+      device_name?: string;
+      app_version?: string;
+    }) {
+      const response = await axiosClient.post(
+        "/auth/admin/device-tokens/register",
+        payload,
+      );
+      return response.data;
+    },
+    async deactivate(payload: { token: string }) {
+      const response = await axiosClient.post(
+        "/auth/admin/device-tokens/deactivate",
+        payload,
+      );
+      return response.data;
+    },
+    async index() {
+      const response = await axiosClient.get("/auth/admin/device-tokens");
+      return response.data;
+    },
+    async destroy(id: number) {
+      const response = await axiosClient.delete(
+        `/auth/admin/device-tokens/${id}`,
+      );
+      return response.data;
+    },
+  },
   notificationPreferences: {
     async index() {
       const response = await axiosClient.get(

@@ -20,9 +20,6 @@ export default function _layout() {
             <AppBar
               title={options.title || route.name}
               showSearchButton={false}
-              onNotificationPress={() =>
-                router.push("/(tabs)/home/notifications" as any)
-              }
               onProfilePress={() => console.log("Profile pressed")}
               rightActions={rightActions()}
             />

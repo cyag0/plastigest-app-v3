@@ -1,4 +1,5 @@
 import TaskList from "@/components/Dashboard/TaskList";
+import NotificationPermissionBanner from "@/components/Notifications/NotificationPermissionBanner";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
@@ -145,6 +146,7 @@ export default function OperationsScreen() {
     return (
       <View style={styles.container}>
         <ScrollView showsVerticalScrollIndicator={false}>
+          <NotificationPermissionBanner />
           {/* Header */}
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
@@ -267,6 +269,7 @@ export default function OperationsScreen() {
   // Vista mobile original
   return (
     <View style={styles.container}>
+      <NotificationPermissionBanner />
       {/* Header */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>

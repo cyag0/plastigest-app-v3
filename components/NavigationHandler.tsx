@@ -1,6 +1,7 @@
 import LocationSelector from "@/components/LocationSelector";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { notificationOpenedBus } from "@/utils/notificationEvents";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useSegments } from "expo-router";
 import React, { useEffect } from "react";
@@ -77,6 +78,27 @@ export default function NavigationHandler({
     companies.length,
     segments,
   ]);
+
+  // Deep-linking de notificaciones push: cuando el usuario toca un push
+  // (background, quit o web desde service worker), usePushNotifications
+  // emite a este bus. Mapeamos event_type → ruta de la app.
+  useEffect(() => {
+    return notificationOpenedBus.subscribe((payload) => {
+      // Si el usuario no esta autenticado todavia, dejamos que el guard
+      // de arriba lo mande a login y luego la app podra re-navegar
+      // cuando llegue un segundo tap, asi evitamos errores de router.
+      if (!user) {
+        console.log("Push recibido sin sesion activa, se ignora deep-link");
+        return;
+      }
+
+      const target = resolveDeepLink(payload.eventType, payload.entityId);
+      console.log("Deep-link a:", target, "desde evento:", payload.eventType);
+      router.push(target as any);
+    });
+    // El router es estable segun expo-router, no es necesario re-suscribir.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Mostrar loading mientras se verifica autenticación
   if (isLoading || isSwitchingLocation) {
@@ -192,3 +214,29 @@ const styles = StyleSheet.create({
     backgroundColor: palette.background,
   },
 });
+
+// Mapea los event_type emitidos por los templates del backend a rutas de
+// la app. Si no reconocemos el evento o falta el entityId, caemos a la
+// lista de notificaciones para que el usuario tenga contexto.
+function resolveDeepLink(
+  eventType: string | undefined,
+  entityId: string | undefined,
+): string {
+  const fallback = "/(stacks)/notifications";
+
+  if (!eventType || !entityId) return fallback;
+
+  switch (eventType) {
+    case "task_event":
+      return `/(stacks)/tasks/${entityId}`;
+    case "purchase_update":
+      return `/(tabs)/home/purchases/${entityId}`;
+    case "low_stock":
+    case "inventory_adjustment":
+      return `/(tabs)/inventory/products/${entityId}`;
+    case "inventory_count_discrepancy":
+      return `/(tabs)/inventory/weekly-inventory/${entityId}`;
+    default:
+      return fallback;
+  }
+}

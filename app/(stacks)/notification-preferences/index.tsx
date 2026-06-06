@@ -1,5 +1,6 @@
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
+import NotificationPermissionBanner from "@/components/Notifications/NotificationPermissionBanner";
 import Services from "@/utils/services";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
@@ -521,6 +522,7 @@ export default function NotificationPreferencesScreen() {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        <NotificationPermissionBanner />
         <Text variant="bodyMedium" style={styles.intro}>
           Activa o desactiva cada tipo de notificación y selecciona qué usuarios deben recibirla.
         </Text>

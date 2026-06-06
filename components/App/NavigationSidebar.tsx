@@ -1,19 +1,15 @@
+import NotificationBell from "@/components/Notifications/NotificationBell";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useFocusEffect, usePathname } from "expo-router";
 import React, { useCallback } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
-import { Avatar, Badge, Divider, Drawer, Text } from "react-native-paper";
+import { Avatar, Divider, Drawer, Text } from "react-native-paper";
 
 export default function NavigationSidebar() {
   const pathname = usePathname();
-  const {
-    user,
-    location,
-    unreadNotificationsCount,
-    loadUnreadNotificationsCount,
-  } = useAuth();
+  const { user, location, loadUnreadNotificationsCount } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
@@ -60,10 +56,6 @@ export default function NavigationSidebar() {
     router.push("/(tabs)/profile");
   };
 
-  const handleNotifications = () => {
-    router.push("/(stacks)/notifications" as any);
-  };
-
   const handleChangeLocation = () => {
     router.push("/(stacks)/selectLocation" as any);
   };
@@ -105,28 +97,24 @@ export default function NavigationSidebar() {
 
       {/* Actions */}
       <View style={styles.actions}>
-        
-
+        {/* Fila de Notificaciones: en pantallas grandes la campana abre un
+            popover anclado (NotificationBell). En mobile el click navega a
+            la lista completa. La fila entera sigue siendo clickable como
+            fallback en mobile. */}
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={handleNotifications}
+          onPress={() => router.push("/(stacks)/notifications" as any)}
         >
           <View style={styles.actionContent}>
-            <MaterialCommunityIcons
-              name="bell-outline"
-              size={24}
-              color={palette.textSecondary}
-            />
+            <View style={styles.bellSlot}>
+              <NotificationBell iconColor={palette.textSecondary} badgeSize="medium" />
+            </View>
             <Text variant="bodyMedium" style={styles.actionLabel}>
               Notificaciones
             </Text>
-            {unreadNotificationsCount > 0 && (
-              <Badge size={20} style={styles.badge}>
-                {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
-              </Badge>
-            )}
           </View>
         </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.actionButton}
           onPress={handleChangeLocation}
@@ -255,8 +243,12 @@ const styles = StyleSheet.create({
     opacity: 0.75,
     marginTop: 2,
   },
-  badge: {
-    backgroundColor: palette.error,
+  bellSlot: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: -8,
   },
   profile: {
     flexDirection: "row",

@@ -43,18 +43,26 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary>
-      <PaperProvider theme={theme}>
-        <AuthProvider>
+      {/* AuthProvider DEBE estar arriba de PaperProvider porque el
+          <Portal> de react-native-paper renderiza su contenido fuera del
+          subarbol de children del PaperProvider, pero dentro del PortalHost
+          que este monta. Si AuthProvider estuviera abajo, el contenido
+          del Menu (popover de notificaciones) no tendria acceso al context
+          de autenticacion y useAuth() lanzaria "must be used within an
+          AuthProvider". Moviendolo aqui hace que cualquier portal quede
+          dentro del contexto. */}
+      <AuthProvider>
+        <PaperProvider theme={theme}>
           <SelectDataProvider>
             <AlertsProvider>
               <NavigationHandler>
                 <App />
               </NavigationHandler>
-              <PermissionsOverlay />
+              {__DEV__ && <PermissionsOverlay />}
             </AlertsProvider>
           </SelectDataProvider>
-        </AuthProvider>
-      </PaperProvider>
+        </PaperProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }

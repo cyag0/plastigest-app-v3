@@ -1,9 +1,9 @@
+import NotificationBell from "@/components/Notifications/NotificationBell";
 import palette from "@/constants/palette";
-import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import React from "react";
 import { Platform, View } from "react-native";
-import { Appbar, Badge } from "react-native-paper";
+import { Appbar } from "react-native-paper";
 import WebBreadcrumb from "../WebBreadcrumb";
 
 export interface AppBarProps {
@@ -14,6 +14,12 @@ export interface AppBarProps {
   showNotificationButton?: boolean;
   showProfileButton?: boolean;
   onSearchPress?: () => void;
+  /**
+   * @deprecated La campana ahora se gestiona internamente con su propio
+   * popover en pantallas grandes o la navegacion a la lista completa en
+   * mobile. Este callback se ignora: la campana siempre renderiza
+   * `<NotificationBell />` con su logica propia.
+   */
   onNotificationPress?: () => void;
   onProfilePress?: () => void;
   rightActions?: React.ReactNode;
@@ -30,9 +36,9 @@ export default function AppBar({
   showBackButton: _showBackButton = true,
   showSearchButton = true,
   showNotificationButton = true,
-  showProfileButton = true,
+  showProfileButton: _showProfileButton = true,
   onSearchPress,
-  onNotificationPress,
+  onNotificationPress: _onNotificationPress,
   onProfilePress,
   rightActions,
   leftActions,
@@ -42,7 +48,6 @@ export default function AppBar({
   iconColor = palette.textSecondary,
 }: AppBarProps) {
   const router = useRouter();
-  const { unreadNotificationsCount } = useAuth();
   const isWeb = Platform.OS === "web";
   const useBreadcrumbTitle = showBreadcrumb && isWeb;
 
@@ -56,10 +61,6 @@ export default function AppBar({
 
   const handleSearch = () => {
     onSearchPress?.();
-  };
-
-  const handleNotifications = () => {
-    router.push("/(stacks)/notifications");
   };
 
   return (
@@ -112,40 +113,8 @@ export default function AppBar({
           />
         )}
 
-        {/* Botón de notificaciones */}
-        {showNotificationButton && (
-          <View style={{ position: "relative" }}>
-            <Appbar.Action
-              icon="bell-outline"
-              onPress={handleNotifications}
-              iconColor={iconColor}
-              rippleColor={palette.primary}
-            />
-            {unreadNotificationsCount > 0 && (
-              <Badge
-                style={{
-                  position: "absolute",
-                  top: 4,
-                  right: 4,
-                  backgroundColor: palette.error,
-                }}
-                size={18}
-              >
-                {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
-              </Badge>
-            )}
-          </View>
-        )}
-
-        {/* Botón de perfil */}
-        {/*  {showProfileButton && (
-          <Appbar.Action
-            icon="account-circle-outline"
-            onPress={handleProfile}
-            iconColor={iconColor}
-            rippleColor={palette.primary}
-          />
-        )} */}
+        {/* Botón de notificaciones — ahora con popover en pantallas grandes */}
+        {showNotificationButton && <NotificationBell iconColor={iconColor} />}
 
         {/* Acciones del lado derecho */}
         {rightActions}

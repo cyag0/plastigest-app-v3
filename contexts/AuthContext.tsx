@@ -6,7 +6,9 @@ import {
 } from "@/utils/axios";
 import Services from "@/utils/services";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from "expo-notifications";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 // Tipos
@@ -62,7 +64,19 @@ interface AuthContextType {
   login: (
     email: string,
     password: string
-  ) => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    // Info de rate limit que el backend envía en headers (X-RateLimit-*)
+    // o en el body cuando se devuelve 429. El front usa esto para mostrar
+    // "Te quedan X intentos" y un contador regresivo cuando se bloquea.
+    rateLimit?: {
+      limit: number;
+      remaining: number;
+      // Segundos hasta que se desbloquee (solo en 429).
+      retryAfter?: number;
+    };
+  }>;
   logout: () => Promise<void>;
   checkAuthStatus: () => Promise<void>;
   loadCompanies: () => Promise<void>;
@@ -70,6 +84,15 @@ interface AuthContextType {
   clearCompanySelection: () => Promise<void>;
   selectLocation: (location: any | null) => Promise<void>;
   location: App.Entities.Location | null;
+  // Estado del permiso de notificaciones push (web principalmente).
+  // "default" = nunca se ha pedido, "granted" = aceptado, "denied" = bloqueado,
+  // "unsupported" = el navegador no soporta.
+  notificationPermission: "default" | "granted" | "denied" | "unsupported";
+  // Dispara el dialogo nativo del navegador. Debe llamarse desde un onPress
+  // (user gesture) para que los navegadores modernos muestren el prompt.
+  requestNotificationPermission: () => Promise<
+    "default" | "granted" | "denied" | "unsupported"
+  >;
 }
 
 // Context
@@ -90,8 +113,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [permissions, setPermissions] = useState<string[]>([]);
 
   // Registrar notificaciones push cuando el usuario esta autenticado
-  const { fcmToken } = usePushNotifications({ enabled: Boolean(user) });
-  
+  const {
+    fcmToken,
+    deactivateToken,
+    permissionStatus,
+    requestPermission,
+  } = usePushNotifications({
+    enabled: Boolean(user),
+    onForegroundMessage: () => {
+      // Incremento optimista: mostramos el badge al instante, la lista se
+      // refresca al hacer foco en la pantalla de notificaciones.
+      setUnreadNotificationsCount((prev) => prev + 1);
+    },
+  });
+
   // Log del token para debugging
   useEffect(() => {
     if (user && fcmToken) {
@@ -101,6 +136,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
     }
   }, [user, fcmToken]);
+
+  // Sincronizar el badge del sistema operativo (iOS/Android) con el contador
+  // de no leidas. En web no hay badge nativo asi que lo omitimos.
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    Notifications.setBadgeCountAsync(Math.max(0, unreadNotificationsCount)).catch(
+      (error) => console.warn("No se pudo actualizar el badge:", error),
+    );
+  }, [unreadNotificationsCount]);
 
   // Variables de entorno
   const USER_DATA_KEY = process.env.EXPO_PUBLIC_USER_DATA_KEY || "user_data";
@@ -374,7 +418,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const login = async (
     email: string,
     password: string
-  ): Promise<{ success: boolean; error?: string }> => {
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    rateLimit?: { limit: number; remaining: number; retryAfter?: number };
+  }> => {
     try {
       // setIsLoading(true);
 
@@ -433,7 +481,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       let errorMessage = "Error de conexión. Inténtalo de nuevo.";
 
-      if (error.response?.status === 401) {
+      // Extraer info de rate limit de los headers de la respuesta.
+      // Laravel siempre envía X-RateLimit-Limit y X-RateLimit-Remaining en
+      // respuestas del middleware throttle (incluso en 401). En 429 agrega
+      // Retry-After. Axios v1 lower-case los nombres de headers.
+      const headers = error.response?.headers ?? {};
+      const limit = parseInt(headers["x-ratelimit-limit"] ?? "0", 10);
+      const remaining = parseInt(headers["x-ratelimit-remaining"] ?? "0", 10);
+      const retryAfterHeader = parseInt(headers["retry-after"] ?? "0", 10);
+
+      // Si el body del 429 trae retry_after/rate_limit (nuestro handler
+      // personalizado en bootstrap/app.php), preferirlos.
+      const bodyRetryAfter = error.response?.data?.retry_after as number | undefined;
+      const bodyLimit = error.response?.data?.rate_limit?.limit as number | undefined;
+      const bodyRemaining = error.response?.data?.rate_limit?.remaining as number | undefined;
+
+      const rateLimit: { limit: number; remaining: number; retryAfter?: number } | undefined =
+        limit > 0 || bodyLimit
+          ? {
+              limit: bodyLimit ?? limit,
+              remaining: bodyRemaining ?? remaining,
+              retryAfter: bodyRetryAfter ?? retryAfterHeader ?? undefined,
+            }
+          : undefined;
+
+      if (error.response?.status === 429) {
+        const seconds = rateLimit?.retryAfter ?? 60;
+        errorMessage = `Demasiados intentos. Espera ${seconds} segundos antes de intentar de nuevo.`;
+      } else if (error.response?.status === 401) {
         errorMessage =
           "Credenciales incorrectas. Verifica tu email y contraseña.";
       } else if (error.response?.status === 422) {
@@ -442,7 +517,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         errorMessage = error.response.data.message;
       }
 
-      return { success: false, error: errorMessage };
+      return { success: false, error: errorMessage, rateLimit };
     } finally {
       //setIsLoading(false);
     }
@@ -452,6 +527,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const logout = async () => {
     try {
       setIsLoading(true);
+
+      // IMPORTANTE: desactivar el token FCM ANTES de hacer logout en el
+      // servidor, porque authAPI.logout() invalida el access_token y la
+      // siguiente peticion a /device-tokens/deactivate regresaria 401.
+      try {
+        await deactivateToken();
+      } catch (error) {
+        console.warn("No se pudo desactivar el token FCM:", error);
+      }
 
       // Intentar hacer logout en el servidor
       try {
@@ -477,6 +561,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setLocation(null);
       setCompanies([]);
       setPermissions([]);
+      setUnreadNotificationsCount(0);
+
+      // Limpiar badge del sistema
+      if (Platform.OS !== "web") {
+        Notifications.setBadgeCountAsync(0).catch(() => undefined);
+      }
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
@@ -510,6 +600,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     clearCompanySelection,
     selectLocation,
     location,
+    notificationPermission: permissionStatus,
+    requestNotificationPermission: requestPermission,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

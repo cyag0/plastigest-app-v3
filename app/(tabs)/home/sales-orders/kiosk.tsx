@@ -403,7 +403,7 @@ export default function KioskScreen() {
   const handleRemove = useCallback((key: string) => {
     setCart((prev) => prev.filter((c) => c.key !== key));
   }, []);
-
+ 
   // ---------- Scanner ----------
 
   const handleScanned = useCallback(

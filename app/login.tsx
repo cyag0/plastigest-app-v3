@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   ScrollView,
@@ -28,6 +28,25 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+
+  // Rate limit — info devuelta por el backend en headers (X-RateLimit-*)
+  // y en el body cuando se devuelve 429. Usamos `remaining` para mostrar
+  // "Te quedan X intentos" y `retryAfter` para un contador regresivo
+  // cuando el backend nos bloquea.
+  const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
+  const [attemptsLimit, setAttemptsLimit] = useState<number | null>(null);
+  const [retryAfter, setRetryAfter] = useState<number | null>(null);
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
+
+  // Contador regresivo cuando el backend nos devuelve 429. Se reinicia
+  // cada segundo y al llegar a 0 el usuario puede intentar de nuevo.
+  useEffect(() => {
+    if (retryCountdown === null || retryCountdown <= 0) return;
+    const id = setTimeout(() => {
+      setRetryCountdown((prev) => (prev !== null ? prev - 1 : null));
+    }, 1000);
+    return () => clearTimeout(id);
+  }, [retryCountdown]);
 
   // Validaciones
   const [emailError, setEmailError] = useState("");
@@ -60,9 +79,17 @@ export default function LoginScreen() {
     return true;
   };
 
+  const isBlocked = retryCountdown !== null && retryCountdown > 0;
+
   const handleLogin = async () => {
     // Limpiar errores previos
     setError("");
+
+    // Si seguimos bloqueados, no dejamos reintentar
+    if (isBlocked) {
+      alerts.error(`Espera ${retryCountdown} segundos antes de intentar de nuevo.`);
+      return;
+    }
 
     // Validar formulario
     const isEmailValid = validateEmail(email);
@@ -78,6 +105,20 @@ export default function LoginScreen() {
       const result = await login(email.trim().toLowerCase(), password);
 
       if (!result.success) {
+        // Actualizar info de rate limit para la UI (sea 401, 429 u otro).
+        if (result.rateLimit) {
+          setAttemptsLimit(result.rateLimit.limit);
+          setAttemptsRemaining(result.rateLimit.remaining);
+          if (result.rateLimit.retryAfter !== undefined) {
+            setRetryAfter(result.rateLimit.retryAfter);
+            setRetryCountdown(result.rateLimit.retryAfter);
+          } else {
+            // Si no hubo 429, limpiamos cualquier bloqueo previo
+            setRetryAfter(null);
+            setRetryCountdown(null);
+          }
+        }
+
         // Mostrar error específico según el tipo
         let errorMessage = "";
         if (
@@ -93,6 +134,11 @@ export default function LoginScreen() {
         setError(errorMessage);
         alerts.error(errorMessage);
       } else {
+        // Login exitoso, limpiar contadores
+        setAttemptsRemaining(null);
+        setAttemptsLimit(null);
+        setRetryAfter(null);
+        setRetryCountdown(null);
         alerts.success("Sesión iniciada correctamente");
       }
     } catch (error: any) {
@@ -236,18 +282,59 @@ export default function LoginScreen() {
                   </Surface>
                 ) : null}
 
+                {/* Aviso de intentos restantes (cuando quedan 3 o menos) */}
+                {attemptsRemaining !== null &&
+                  attemptsLimit !== null &&
+                  retryCountdown === null &&
+                  attemptsRemaining > 0 &&
+                  attemptsRemaining <= 3 && (
+                    <Surface style={styles.warningContainer} elevation={0}>
+                      <MaterialCommunityIcons
+                        name="shield-alert-outline"
+                        size={20}
+                        color="#F59E0B"
+                      />
+                      <Text style={styles.warningText}>
+                        Te {attemptsRemaining === 1 ? "queda" : "quedan"}{" "}
+                        {attemptsRemaining} de {attemptsLimit} intentos. Si
+                        excedes el límite tendrás que esperar un minuto.
+                      </Text>
+                    </Surface>
+                  )}
+
+                {/* Contador regresivo cuando el backend nos bloquea (429) */}
+                {retryCountdown !== null && retryCountdown > 0 && (
+                  <Surface style={styles.blockedContainer} elevation={0}>
+                    <MaterialCommunityIcons
+                      name="lock-clock"
+                      size={20}
+                      color={palette.error}
+                    />
+                    <Text style={styles.blockedText}>
+                      Demasiados intentos. Podrás volver a intentar en{" "}
+                      <Text style={styles.blockedCountdown}>
+                        {retryCountdown}s
+                      </Text>
+                    </Text>
+                  </Surface>
+                )}
+
                 {/* Botón de login */}
                 <Button
                   mode="contained"
                   onPress={handleLogin}
                   style={styles.loginButton}
-                  disabled={isLoading}
+                  disabled={isLoading || isBlocked}
                   loading={isLoading}
-                  buttonColor={palette.primary}
+                  buttonColor={isBlocked ? palette.textSecondary : palette.primary}
                   icon={isLoading ? undefined : "login"}
                   contentStyle={styles.loginButtonContent}
                 >
-                  {isLoading ? "Iniciando sesión..." : "Iniciar Sesión"}
+                  {isLoading
+                    ? "Iniciando sesión..."
+                    : isBlocked
+                      ? `Bloqueado (${retryCountdown}s)`
+                      : "Iniciar Sesión"}
                 </Button>
               </Surface>
             </KeyboardAvoidingView>
@@ -359,6 +446,42 @@ const styles = StyleSheet.create({
     flex: 1,
     color: palette.error,
     fontSize: 13,
+  },
+  warningContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FEF3C7",
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: "#F59E0B",
+  },
+  warningText: {
+    flex: 1,
+    color: "#92400E",
+    fontSize: 12,
+  },
+  blockedContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: palette.error + "10",
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: palette.error,
+  },
+  blockedText: {
+    flex: 1,
+    color: palette.error,
+    fontSize: 13,
+  },
+  blockedCountdown: {
+    fontWeight: "700",
+    color: palette.error,
   },
   loginButton: {
     marginTop: 24,

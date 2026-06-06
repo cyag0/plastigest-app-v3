@@ -1,8 +1,13 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios, { AxiosInstance, AxiosResponse } from "axios";
 
-// Configuración base para el cliente axios usando variables de entorno
-const BASE_URL = "http://localhost/api"; /* "http://192.168.137.1/api"; */ //|| process.env.EXPO_PUBLIC_API_URL || "http://localhost:8080/api";
+// Configuración base para el cliente axios usando variables de entorno.
+// La URL se lee de EXPO_PUBLIC_API_URL definida en .env (o .env.production
+// al momento de hacer `eas build --profile production`).
+// En desarrollo local, dejar el fallback para que el bundler no truene si
+// olvidaste definir la variable.
+const BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL || "http://localhost/api";
 const API_TIMEOUT = parseInt(process.env.EXPO_PUBLIC_API_TIMEOUT || "10000");
 const AUTH_TOKEN_KEY = process.env.EXPO_PUBLIC_AUTH_TOKEN_KEY || "auth_token";
 const USER_DATA_KEY = process.env.EXPO_PUBLIC_USER_DATA_KEY || "user_data";

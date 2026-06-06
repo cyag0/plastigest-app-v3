@@ -1,48 +1,73 @@
 /* global firebase, importScripts */
 
+// El SW NO puede leer la config de Firebase desde self.location.search:
+// cuando el navegador instala un SW, strip-ea el query string del script.
+// Por eso la pagina le manda la config por postMessage y esperamos ack
+// antes de llamar a getToken en el cliente.
+
 importScripts("https://www.gstatic.com/firebasejs/12.14.0/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/12.14.0/firebase-messaging-compat.js");
 
-const params = new URL(self.location.href).searchParams;
-const firebaseConfig = {
-  apiKey: params.get("apiKey"),
-  authDomain: params.get("authDomain"),
-  projectId: params.get("projectId"),
-  storageBucket: params.get("storageBucket"),
-  messagingSenderId: params.get("messagingSenderId"),
-  appId: params.get("appId"),
-  measurementId: params.get("measurementId"),
-};
+let messagingInitialized = false;
+let app = null;
+let messaging = null;
 
-const requiredKeys = ["apiKey", "projectId", "messagingSenderId", "appId"];
-const hasConfig = requiredKeys.every((key) => firebaseConfig[key]);
-
-if (hasConfig) {
-  firebase.initializeApp(firebaseConfig);
-
-  const messaging = firebase.messaging();
-
-  messaging.onBackgroundMessage((payload) => {
-    const title = payload.notification?.title || "PlastiGest";
-    const options = {
-      body: payload.notification?.body,
-      data: payload.data || {},
-    };
-
-    self.registration.showNotification(title, options);
-  });
-} else {
-  console.warn("Firebase Messaging service worker sin configuracion web completa.");
+function initFirebase(config) {
+  if (messagingInitialized) return;
+  if (!config || !config.projectId) {
+    console.warn("[SW] Firebase config invalida, no se puede inicializar");
+    return;
+  }
+  try {
+    app = firebase.initializeApp(config);
+    messaging = firebase.messaging();
+    messaging.onBackgroundMessage((payload) => {
+      const title = payload.notification?.title || "PlastiGest";
+      const options = {
+        body: payload.notification?.body,
+        data: payload.data || {},
+      };
+      self.registration.showNotification(title, options);
+    });
+    messagingInitialized = true;
+    console.log("[SW] Firebase Messaging inicializado:", config.projectId);
+  } catch (error) {
+    console.error("[SW] Error inicializando Firebase:", error);
+  }
 }
+
+// La pagina nos manda la config por postMessage. Tambien respondemos por
+// el MessageChannel que envia para que la pagina sepa que estamos listos
+// antes de pedir el token.
+self.addEventListener("message", (event) => {
+  const data = event.data;
+  if (!data || typeof data !== "object") return;
+
+  if (data.type === "FIREBASE_CONFIG") {
+    initFirebase(data.config);
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage({
+        type: "FIREBASE_CONFIG_RECEIVED",
+        initialized: messagingInitialized,
+      });
+    }
+  }
+});
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+
+  const data = event.notification.data || {};
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       const visibleClient = clients.find((client) => "focus" in client);
 
       if (visibleClient) {
+        visibleClient.postMessage({
+          type: "PUSH_NOTIFICATION_OPENED",
+          data,
+        });
         return visibleClient.focus();
       }
 
