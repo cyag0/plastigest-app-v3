@@ -7,6 +7,7 @@ import ConfirmDialog, {
 import React, {
   createContext,
   ReactNode,
+  RefObject,
   useCallback,
   useContext,
   useRef,
@@ -120,31 +121,35 @@ interface AlertsAPI {
   info: (message: string) => void;
 }
 
-// Contexto para compartir el estado de las alertas
+// Contexto para compartir la API de alertas (expuesto por AlertsProvider)
 const AlertsContext = createContext<AlertsAPI | null>(null);
+
+/**
+ * Contexto que expone las refs imperativas al ConfirmDialog y al
+ * AlertSnackbar. Existe separado del AlertsContext para permitir
+ * que `<AlertsDialogs />` se monte al FINAL del árbol y sus
+ * `<Portal>` queden ENCIMA de cualquier otro portal del app
+ * (por ejemplo, el `ContextSwitcherModal`).
+ */
+interface AlertsRefs {
+  confirmDialogRef: RefObject<ConfirmDialogRef | null>;
+  snackbarRef: RefObject<AlertSnackbarRef | null>;
+}
+const AlertsRefsContext = createContext<AlertsRefs | null>(null);
 
 /**
  * AlertsProvider
  *
  * Proveedor de contexto que debe envolver la aplicación para poder
- * usar el hook useAlerts en cualquier componente.
- *
- * @example
- * // En App.tsx o _layout.tsx
- * import { AlertsProvider } from '@/hooks/useAlerts';
- *
- * export default function App() {
- *   return (
- *     <AlertsProvider>
- *       <YourAppContent />
- *     </AlertsProvider>
- *   );
- * }
+ * usar el hook useAlerts en cualquier componente. NO renderiza los
+ * diálogos aquí: ese trabajo lo hace `<AlertsDialogs />`, que se
+ * debe montar en el layout como ÚLTIMO hijo del `PaperProvider`
+ * para que sus portales queden al frente del z-index.
  */
 export function AlertsProvider({ children }: { children: ReactNode }) {
   // Referencias a los componentes usando useImperativeHandle
-  const confirmDialogRef = useRef<ConfirmDialogRef>(null);
-  const snackbarRef = useRef<AlertSnackbarRef>(null);
+  const confirmDialogRef = useRef<ConfirmDialogRef | null>(null);
+  const snackbarRef = useRef<AlertSnackbarRef | null>(null);
 
   /**
    * Muestra un diálogo de confirmación y retorna una Promise
@@ -181,15 +186,37 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
   }).current;
 
   return (
-    <AlertsContext.Provider value={api}>
-      {children}
+    <AlertsRefsContext.Provider value={{ confirmDialogRef, snackbarRef }}>
+      <AlertsContext.Provider value={api}>
+        {children}
+      </AlertsContext.Provider>
+    </AlertsRefsContext.Provider>
+  );
+}
 
+/**
+ * `AlertsDialogs` monta el `ConfirmDialog` y el `AlertSnackbar` en
+ * el punto del árbol donde se coloque. Para que sus portales queden
+ * por encima de cualquier otro modal (p. ej. el `ContextSwitcherModal`
+ * que se monta dentro del sidebar/AppBar), este componente DEBE
+ * renderizarse al final del árbol, justo antes de cerrar el
+ * `PaperProvider` en `app/_layout.tsx`.
+ */
+export function AlertsDialogs() {
+  const refs = useContext(AlertsRefsContext);
+  if (!refs) {
+    // No hay provider: no renderizamos nada. Esto permite usarlo
+    // condicionalmente sin romper el árbol en pruebas o storybooks.
+    return null;
+  }
+  return (
+    <>
       {/* Diálogo de confirmación */}
-      <ConfirmDialog ref={confirmDialogRef} />
+      <ConfirmDialog ref={refs.confirmDialogRef} />
 
       {/* Snackbar para notificaciones */}
-      <AlertSnackbar ref={snackbarRef} />
-    </AlertsContext.Provider>
+      <AlertSnackbar ref={refs.snackbarRef} />
+    </>
   );
 }
 

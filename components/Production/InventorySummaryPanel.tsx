@@ -105,7 +105,7 @@ export default function InventorySummaryPanel({
     wastePct > 20 ? palette.error : wastePct > 10 ? palette.warning : palette.success;
 
   return (
-    <Card style={[styles.card, { backgroundColor: palette.surface }]}>
+    <Card style={[styles.card, { backgroundColor: palette.surface, shadowOffset: { width: 0, height: 0 },}]}>
       <Card.Content>
         <View style={styles.headerRow}>
           <MaterialCommunityIcons name="chart-box" size={20} color={palette.primary} />
@@ -200,7 +200,10 @@ export default function InventorySummaryPanel({
 const styles = StyleSheet.create({
   card: {
     borderRadius: 12,
-    elevation: 2,
+    elevation: 0,
+    shadowColor: "transparent",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
   headerRow: {
     flexDirection: "row",

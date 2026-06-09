@@ -1,5 +1,6 @@
 import AppBar from "@/components/App/AppBar";
 import AppChip from "@/components/App/Chip";
+import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
 import EmptyState from "@/components/App/EmptyState";
 import SectionHeader from "@/components/App/SectionHeader";
 import QuickAccessCard from "@/components/Dashboard/QuickAccessCard";
@@ -63,6 +64,13 @@ export default function ProfileScreen() {
   const { colors } = useTheme();
   const [permissions, setPermissions] = useState<AppPermissions | null>(null);
   const [loadingPermissions, setLoadingPermissions] = useState(true);
+  // Modal de cambio de empresa/sucursal. Antes estos botones
+  // empujaban a `/(stacks)/selectCompany` y `/(stacks)/selectLocation`,
+  // saliendo del tab de Perfil. Ahora se abren sobre la misma pantalla.
+  const [switcherVisible, setSwitcherVisible] = useState(false);
+  const [switcherInitialView, setSwitcherInitialView] = useState<
+    "company" | "location"
+  >("company");
 
   useEffect(() => {
     checkPermissions();
@@ -654,13 +662,19 @@ export default function ProfileScreen() {
               icon="office-building-outline"
               label="Cambiar empresa"
               description="Selecciona otra compania"
-              onPress={() => router.push("/(stacks)/selectCompany" as any)}
+              onPress={() => {
+                setSwitcherInitialView("company");
+                setSwitcherVisible(true);
+              }}
             />
             <QuickAccessCard
               icon="map-marker-outline"
               label="Cambiar sucursal"
               description="Ubicacion activa"
-              onPress={() => router.push("/(stacks)/selectLocation" as any)}
+              onPress={() => {
+                setSwitcherInitialView("location");
+                setSwitcherVisible(true);
+              }}
             />
             <QuickAccessCard
               icon="cog-outline"
@@ -713,6 +727,15 @@ export default function ProfileScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Modal de cambio de empresa/sucursal. Reemplaza los
+          router.push a las pantallas /selectCompany y /selectLocation
+          para que el usuario no pierda el tab de Perfil. */}
+      <ContextSwitcherModal
+        visible={switcherVisible}
+        onDismiss={() => setSwitcherVisible(false)}
+        initialView={switcherInitialView}
+      />
     </SafeAreaView>
   );
 }

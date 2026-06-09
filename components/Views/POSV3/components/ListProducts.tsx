@@ -1,4 +1,8 @@
+import AppChip from "@/components/App/Chip";
+import EmptyState from "@/components/App/EmptyState";
+import SearchInput from "@/components/App/SearchInput";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import { useDebounce } from "@/hooks/useDebounce";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useCallback, useEffect, useState } from "react";
@@ -8,19 +12,11 @@ import {
   Image,
   ScrollView,
   StyleSheet,
+  Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  Badge,
-  Button,
-  Card,
-  Chip,
-  Divider,
-  Menu,
-  Searchbar,
-  Text,
-} from "react-native-paper";
+import { Menu } from "react-native-paper";
 
 export interface Unit {
   id: number;
@@ -28,7 +24,12 @@ export interface Unit {
   abbreviation: string;
   unit_type?: string;
   is_base_unit?: boolean;
-  factor_to_base?: number;
+  /**
+   * Factor de conversion a la unidad base. La API lo devuelve
+   * como string (e.g. "10.000000") por lo que se acepta number
+   * o string. Usar `Number()` o `parseFloat()` al operar.
+   */
+  factor_to_base?: number | string;
 }
 
 interface SelectedProduct {
@@ -74,14 +75,20 @@ const ProductCard = React.memo(
         return;
       }
 
-      const availableUnitIds = item.available_units?.map((unit) => unit.id) || [];
+      const availableUnitIds =
+        item.available_units?.map((unit) => unit.id) || [];
       const hasCurrentUnit = availableUnitIds.includes(selectedUnitId);
       const fallbackUnitId = item.available_units?.[0]?.id || 0;
 
       if (!hasCurrentUnit && fallbackUnitId !== selectedUnitId) {
         setSelectedUnitId(fallbackUnitId);
       }
-    }, [selectedProduct?.unit_id, item.id, item.available_units, selectedUnitId]);
+    }, [
+      selectedProduct?.unit_id,
+      item.id,
+      item.available_units,
+      selectedUnitId,
+    ]);
 
     const selectedUnit = item.available_units?.find(
       (u) => u.id === selectedUnitId,
@@ -96,77 +103,81 @@ const ProductCard = React.memo(
         return basePrice;
       }
 
-      // Si la unidad tiene un factor de conversión, multiplicar el precio base
-      const factor = selectedUnit.factor_to_base || 1;
+      // Si la unidad tiene un factor de conversión, multiplicar el precio base.
+      // El factor viene como string en la API (e.g. "10.000000"), se parsea
+      // de forma segura con fallback a 1.
+      const rawFactor = selectedUnit.factor_to_base;
+      const factor =
+        rawFactor === undefined || rawFactor === null
+          ? 1
+          : typeof rawFactor === "string"
+            ? parseFloat(rawFactor) || 1
+            : rawFactor || 1;
       return basePrice * factor;
     }, [item.price, selectedUnit]);
 
     const displayPrice = calculatePrice();
 
-    const stockColor =
-      item.current_stock && item.current_stock > 0
-        ? palette.success
-        : palette.error;
+    const inStock = item.current_stock && item.current_stock > 0;
+    const stockVariant: "success" | "error" = inStock ? "success" : "error";
+    const stockColor = inStock ? palette.success : palette.error;
 
     // Obtener la unidad base para mostrar con el stock
     const baseUnit = item.available_units?.find((u) => u.id === item.unit_id);
     const stockValue = parseFloat(String(item.current_stock || 0));
     const formattedStock = parseFloat(stockValue.toFixed(2));
-    const stockText = `${formattedStock}${baseUnit?.abbreviation ? ` ${baseUnit.abbreviation}` : ""}`;
+    const stockText = `${formattedStock}${
+      baseUnit?.abbreviation ? ` ${baseUnit.abbreviation}` : ""
+    }`;
 
-    const unitSelector = !item.is_package &&
+    const unitSelector =
+      !item.is_package &&
       item.available_units &&
       item.available_units.length > 0 && (
-        <View style={styles.unitSelectorContainer}>
-          <Menu
-            visible={showUnitMenu}
-            onDismiss={() => setShowUnitMenu(false)}
-            anchor={
-              <TouchableOpacity
-                style={styles.unitSelector}
-                onPress={(event) => {
-                  event.stopPropagation();
-                  setShowUnitMenu(true);
-                }}
-              >
-                <Text style={styles.unitSelectorText}>
-                  {selectedUnit?.abbreviation ||
-                    item.available_units[0]?.abbreviation ||
-                    "Unidad"}
-                </Text>
-                <MaterialCommunityIcons
-                  name={showUnitMenu ? "chevron-up" : "chevron-down"}
-                  size={20}
-                  color={palette.primary}
-                />
-              </TouchableOpacity>
-            }
-          >
-            {item.available_units.map((unit, index) => (
-              <React.Fragment key={unit.id}>
-                <Menu.Item
-                  onPress={() => {
-                    setSelectedUnitId(unit.id);
-                    onItemChange(item.id, "unit", unit.id);
-                    setShowUnitMenu(false);
-                  }}
-                  title={`${unit.name} (${unit.abbreviation})`}
-                  style={
-                    selectedUnitId === unit.id
-                      ? styles.unitMenuItemSelected
-                      : undefined
-                  }
-                  titleStyle={
-                    selectedUnitId === unit.id
-                      ? styles.unitMenuItemTextSelected
-                      : undefined
-                  }
-                />
-                {index < (item.available_units?.length || 0) - 1 && <Divider />}
-              </React.Fragment>
-            ))}
-          </Menu>
-        </View>
+        <Menu
+          visible={showUnitMenu}
+          onDismiss={() => setShowUnitMenu(false)}
+          anchor={
+            <TouchableOpacity
+              style={styles.unitSelector}
+              onPress={(event) => {
+                event.stopPropagation();
+                setShowUnitMenu(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.unitSelectorText} numberOfLines={1}>
+                {selectedUnit?.abbreviation ||
+                  item.available_units[0]?.abbreviation ||
+                  "Unidad"}
+              </Text>
+              <MaterialCommunityIcons
+                name={showUnitMenu ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={palette.textSecondary}
+              />
+            </TouchableOpacity>
+          }
+          contentStyle={styles.unitMenu}
+        >
+          {item.available_units.map((unit) => (
+            <Menu.Item
+              key={unit.id}
+              onPress={() => {
+                setSelectedUnitId(unit.id);
+                onItemChange(item.id, "unit", unit.id);
+                setShowUnitMenu(false);
+              }}
+              title={`${unit.name} (${unit.abbreviation})`}
+              leadingIcon={selectedUnitId === unit.id ? "check" : undefined}
+              titleStyle={
+                selectedUnitId === unit.id
+                  ? styles.unitMenuItemTextSelected
+                  : undefined
+              }
+            />
+          ))}
+        </Menu>
       );
 
     const quantityActions = selectedProduct ? (
@@ -177,39 +188,46 @@ const ProductCard = React.memo(
             event.stopPropagation();
             onItemChange(item.id, "decrement");
           }}
+          activeOpacity={0.7}
         >
-          <MaterialCommunityIcons name="minus" size={20} color="#fff" />
+          <MaterialCommunityIcons
+            name="minus"
+            size={16}
+            color={palette.textSecondary}
+          />
         </TouchableOpacity>
         <Text style={styles.quantityText}>{selectedProduct.quantity}</Text>
         <TouchableOpacity
-          style={styles.quantityButton}
+          style={[styles.quantityButton, styles.quantityButtonPrimary]}
           onPress={(event) => {
             event.stopPropagation();
             onItemChange(item.id, "increment");
           }}
+          activeOpacity={0.7}
         >
-          <MaterialCommunityIcons name="plus" size={20} color="#fff" />
+          <MaterialCommunityIcons name="plus" size={16} color="#fff" />
         </TouchableOpacity>
       </View>
     ) : (
-      <Button
-        icon="cart-plus"
-        mode="contained"
-        onPress={() =>
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={(event) => {
+          event.stopPropagation();
           onAddProduct(
             item,
             selectedUnit?.id || item.available_units?.[0]?.id || 0,
-          )
-        }
-        style={styles.addButton}
+          );
+        }}
+        activeOpacity={0.7}
       >
-        Agregar
-      </Button>
+        <MaterialCommunityIcons name="cart-plus" size={16} color="#fff" />
+        <Text style={styles.addButtonText}>Agregar</Text>
+      </TouchableOpacity>
     );
 
     if (compact) {
       return (
-        <Card style={styles.compactCard}>
+        <View style={styles.compactCard}>
           <View style={styles.compactRow}>
             <View style={styles.compactImageContainer}>
               {item.main_image?.uri ? (
@@ -219,30 +237,45 @@ const ProductCard = React.memo(
                   resizeMode="cover"
                 />
               ) : (
-                <View style={styles.compactImagePlaceholder}>
+                <View style={styles.imagePlaceholder}>
                   <MaterialCommunityIcons
                     name="package-variant"
-                    size={24}
-                    color={palette.textSecondary}
+                    size={20}
+                    color={palette.textMuted}
                   />
                 </View>
               )}
             </View>
 
             <View style={styles.compactInfo}>
-              <Text variant="bodySmall" style={styles.code} numberOfLines={1}>
+              <Text
+                style={styles.code}
+                numberOfLines={1}
+              >
                 {item.code || "Sin codigo"}
               </Text>
-              <Text variant="titleSmall" style={styles.name} numberOfLines={2}>
+              <Text
+                style={styles.name}
+                numberOfLines={2}
+              >
                 {item.name}
               </Text>
               <View style={styles.compactMetaRow}>
-                <Text variant="titleMedium" style={styles.price}>
-                  ${displayPrice.toFixed(2)}
+                <Text style={styles.price}>${displayPrice.toFixed(2)}</Text>
+                <View
+                  style={[
+                    styles.stockDot,
+                    { backgroundColor: stockColor },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.stockTextInline,
+                    { color: stockColor },
+                  ]}
+                >
+                  {stockText}
                 </Text>
-                <View style={[styles.inlineStockBadge, { backgroundColor: stockColor }]}>
-                  <Text style={styles.inlineStockText}>{stockText}</Text>
-                </View>
               </View>
             </View>
 
@@ -251,12 +284,12 @@ const ProductCard = React.memo(
               {quantityActions}
             </View>
           </View>
-        </Card>
+        </View>
       );
     }
 
     return (
-      <Card style={styles.card}>
+      <View style={styles.card}>
         {/* Imagen del producto */}
         <View style={styles.imageContainer}>
           {item.main_image?.uri ? (
@@ -266,45 +299,46 @@ const ProductCard = React.memo(
               resizeMode="cover"
             />
           ) : (
-            <View style={styles.imagePlaceholder}>
+            <View style={styles.imagePlaceholderLarge}>
               <MaterialCommunityIcons
                 name="package-variant"
-                size={40}
-                color={palette.textSecondary}
+                size={36}
+                color={palette.textMuted}
               />
             </View>
           )}
 
           {/* Badge de stock */}
-          <Badge
-            style={[styles.stockBadge, { backgroundColor: stockColor }]}
-            size={20}
-          >
-            {stockText}
-          </Badge>
+          <View style={styles.stockBadgeWrap}>
+            <AppChip
+              variant={stockVariant}
+              size="sm"
+              icon={inStock ? "package-check" : "package-variant-remove"}
+            >
+              {stockText}
+            </AppChip>
+          </View>
         </View>
 
         {/* Información del producto */}
-        <Card.Content style={styles.content}>
-          <View style={{ flex: 1 }}>
-            <Text variant="bodySmall" style={styles.code} numberOfLines={1}>
+        <View style={styles.content}>
+          <View style={styles.contentBody}>
+            <Text style={styles.code} numberOfLines={1}>
               {item.code}
             </Text>
-            <Text variant="titleSmall" style={styles.name} numberOfLines={1}>
+            <Text style={styles.name} numberOfLines={2}>
               {item.name}
             </Text>
-            <Text variant="titleMedium" style={styles.price}>
-              ${displayPrice.toFixed(2)}
-            </Text>
+            <Text style={styles.price}>${displayPrice.toFixed(2)}</Text>
           </View>
 
           {/* Selector de unidades (solo para productos, no paquetes) */}
           {unitSelector}
-        </Card.Content>
+        </View>
 
         {/* Botón de agregar o controles de cantidad */}
         <View style={styles.footer}>{quantityActions}</View>
-      </Card>
+      </View>
     );
   },
   // Función de comparación para evitar re-renders innecesarios
@@ -418,7 +452,7 @@ export default function ListProducts({
     return text
       .toLowerCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
+      .replace(/[̀-ͯ]/g, "");
   };
 
   const filteredProducts = products.filter((product) => {
@@ -434,11 +468,12 @@ export default function ListProducts({
       selectedCategory === null || product.category_id === selectedCategory;
 
     const stockValue = Number(product.current_stock || 0);
-    const matchesStockFilter = !showOutOfStockFilter || stockFilter === "all"
-      ? true
-      : stockFilter === "out_of_stock"
-        ? stockValue <= 0
-        : stockValue > 0;
+    const matchesStockFilter =
+      !showOutOfStockFilter || stockFilter === "all"
+        ? true
+        : stockFilter === "out_of_stock"
+          ? stockValue <= 0
+          : stockValue > 0;
 
     return matchesSearch && matchesCategory && matchesStockFilter;
   });
@@ -454,7 +489,8 @@ export default function ListProducts({
   const selectedCount = Object.keys(selectedProducts).length;
 
   const hasSearchQuery = Boolean(searchQuery || debouncedSearchQuery);
-  const isHidingOutOfStock = showOutOfStockFilter && stockFilter === "available";
+  const isHidingOutOfStock =
+    showOutOfStockFilter && stockFilter === "available";
 
   const handleSubmitSearch = () => {
     const normalizedQuery = normalizeText(searchQuery.trim());
@@ -496,143 +532,133 @@ export default function ListProducts({
 
   return (
     <View style={styles.container}>
+      {/* Toolbar */}
       <View style={styles.toolbar}>
-        {/* Buscador */}
+        {/* Search */}
         {showSearch && (
-          <Searchbar
-            placeholder="Buscar productos o escanear codigo"
-            onChangeText={(text) => {
-              setSearchQuery(text);
-              runSearchDebounce(text);
-            }}
-            onSubmitEditing={handleSubmitSearch}
-            value={searchQuery}
-            style={styles.searchbar}
-            mode="bar"
-          />
+          <View style={styles.searchWrap}>
+            <SearchInput
+              placeholder="Buscar productos o escanear codigo"
+              value={searchQuery}
+              onChangeText={(text: string) => {
+                setSearchQuery(text);
+                runSearchDebounce(text);
+              }}
+              onSubmitEditing={handleSubmitSearch}
+              showShortcut={false}
+              containerStyle={styles.searchInput}
+            />
+          </View>
         )}
 
+        {/* Summary row */}
         <View style={styles.summaryRow}>
           <Text style={styles.summaryText}>
-            {filteredProducts.length} visibles · {availableCount} con stock · {outOfStockCount} sin stock
+            {filteredProducts.length} visibles · {availableCount} con stock ·{" "}
+            {outOfStockCount} sin stock
           </Text>
           {selectedCount > 0 && (
-            <Text style={styles.selectedSummaryText}>{selectedCount} seleccionados</Text>
+            <View style={styles.selectedBadge}>
+              <MaterialCommunityIcons
+                name="check-circle"
+                size={12}
+                color={palette.primary}
+              />
+              <Text style={styles.selectedSummaryText}>
+                {selectedCount} seleccionados
+              </Text>
+            </View>
           )}
         </View>
 
+        {/* Controls row */}
         <View style={styles.controlsRow}>
           {showOutOfStockFilter && (
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.stockFilterContent}
+              contentContainerStyle={styles.chipsRow}
             >
-              <Chip
+              <AppChip
                 icon="package-check"
-                selected={stockFilter === "available"}
-                showSelectedCheck={false}
+                variant={
+                  stockFilter === "available" ? "success" : "default"
+                }
                 onPress={() => setStockFilter("available")}
-                style={[
-                  styles.filterChip,
-                  stockFilter === "available" && styles.availableChipSelected,
-                ]}
-                textStyle={[
-                  styles.filterChipText,
-                  stockFilter === "available" && styles.filterChipTextSelected,
-                ]}
               >
                 Disponibles ({availableCount})
-              </Chip>
-              <Chip
+              </AppChip>
+              <AppChip
                 icon="package-variant-remove"
-                selected={stockFilter === "out_of_stock"}
-                showSelectedCheck={false}
+                variant={
+                  stockFilter === "out_of_stock" ? "error" : "default"
+                }
                 onPress={() => setStockFilter("out_of_stock")}
-                style={[
-                  styles.filterChip,
-                  stockFilter === "out_of_stock" && styles.outOfStockChipSelected,
-                ]}
-                textStyle={[
-                  styles.filterChipText,
-                  stockFilter === "out_of_stock" && styles.filterChipTextSelected,
-                ]}
               >
                 Sin stock ({outOfStockCount})
-              </Chip>
-              <Chip
+              </AppChip>
+              <AppChip
                 icon="package-variant"
-                selected={stockFilter === "all"}
-                showSelectedCheck={false}
+                variant={stockFilter === "all" ? "primary" : "default"}
                 onPress={() => setStockFilter("all")}
-                style={[
-                  styles.filterChip,
-                  stockFilter === "all" && styles.allChipSelected,
-                ]}
-                textStyle={[
-                  styles.filterChipText,
-                  stockFilter === "all" && styles.filterChipTextSelected,
-                ]}
               >
                 Todos ({products.length})
-              </Chip>
+              </AppChip>
             </ScrollView>
           )}
 
-          <Button
-            mode={isCompactMode ? "contained" : "outlined"}
-            icon={isCompactMode ? "view-agenda" : "view-grid-outline"}
-            onPress={() => setViewMode((current) => current === "grid" ? "compact" : "grid")}
-            buttonColor={isCompactMode ? palette.primary : undefined}
-            textColor={isCompactMode ? "#fff" : palette.primary}
-            style={styles.viewModeButton}
-            compact
+          <TouchableOpacity
+            style={[
+              styles.viewModeButton,
+              isCompactMode && styles.viewModeButtonActive,
+            ]}
+            onPress={() =>
+              setViewMode((current) =>
+                current === "grid" ? "compact" : "grid",
+              )
+            }
+            activeOpacity={0.7}
           >
-            {isCompactMode ? "Compacto" : "Tarjetas"}
-          </Button>
+            <MaterialCommunityIcons
+              name={isCompactMode ? "view-agenda" : "view-grid-outline"}
+              size={14}
+              color={isCompactMode ? "#fff" : palette.textSecondary}
+            />
+            <Text
+              style={[
+                styles.viewModeButtonText,
+                isCompactMode && styles.viewModeButtonTextActive,
+              ]}
+            >
+              {isCompactMode ? "Compacto" : "Tarjetas"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Categorías */}
+        {/* Categories */}
         {showCategories && categories.length > 0 && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={styles.categoriesContainer}
-            contentContainerStyle={styles.categoriesContent}
+            contentContainerStyle={styles.chipsRow}
+            style={styles.categoriesScroll}
           >
-            <Chip
-              mode={selectedCategory === null ? "flat" : "outlined"}
-              selected={selectedCategory === null}
+            <AppChip
+              variant={selectedCategory === null ? "primary" : "default"}
               onPress={() => setSelectedCategory(null)}
-              style={[
-                styles.categoryChip,
-                selectedCategory === null && styles.categoryChipSelected,
-              ]}
-              textStyle={[
-                styles.categoryChipText,
-                selectedCategory === null && styles.categoryChipTextSelected,
-              ]}
             >
               Todas
-            </Chip>
+            </AppChip>
             {categories.map((category) => (
-              <Chip
+              <AppChip
                 key={category.id}
-                mode={selectedCategory === category.id ? "flat" : "outlined"}
-                selected={selectedCategory === category.id}
+                variant={
+                  selectedCategory === category.id ? "primary" : "default"
+                }
                 onPress={() => setSelectedCategory(category.id)}
-                style={[
-                  styles.categoryChip,
-                  selectedCategory === category.id && styles.categoryChipSelected,
-                ]}
-                textStyle={[
-                  styles.categoryChipText,
-                  selectedCategory === category.id &&
-                    styles.categoryChipTextSelected,
-                ]}
               >
                 {category.name}
-              </Chip>
+              </AppChip>
             ))}
           </ScrollView>
         )}
@@ -641,48 +667,42 @@ export default function ListProducts({
       {/* Grid de productos */}
       <View style={styles.productsContainer}>
         {loading ? (
-          <View style={styles.emptyStateContainer}>
+          <View style={styles.loadingWrap}>
             <MaterialCommunityIcons
               name="loading"
-              size={64}
-              color={palette.primary}
+              size={32}
+              color={palette.textMuted}
             />
-            <Text style={styles.emptyStateTitle}>Cargando productos...</Text>
+            <Text style={styles.loadingText}>Cargando productos...</Text>
           </View>
         ) : filteredProducts.length === 0 ? (
-          <View style={styles.emptyStateContainer}>
-            <View style={styles.emptyStateIconContainer}>
-              <MaterialCommunityIcons
-                name={
-                  stockFilter === "out_of_stock"
-                    ? "package-variant-remove"
-                    : hasSearchQuery
-                    ? "magnify-close"
-                    : "package-variant-closed"
-                }
-                size={80}
-                color={palette.primary}
-              />
-            </View>
-            <Text style={styles.emptyStateTitle}>
-              {stockFilter === "out_of_stock"
+          <EmptyState
+            icon={
+              stockFilter === "out_of_stock"
+                ? "package-variant-remove"
+                : hasSearchQuery
+                  ? "magnify-close"
+                  : "package-variant-closed"
+            }
+            title={
+              stockFilter === "out_of_stock"
                 ? "No hay productos sin stock"
                 : hasSearchQuery
-                ? "No se encontraron productos"
-                : isHidingOutOfStock
-                ? "No hay productos con stock"
-                : "No hay productos disponibles"}
-            </Text>
-            <Text style={styles.emptyStateSubtitle}>
-              {stockFilter === "out_of_stock"
+                  ? "No se encontraron productos"
+                  : isHidingOutOfStock
+                    ? "No hay productos con stock"
+                    : "No hay productos disponibles"
+            }
+            description={
+              stockFilter === "out_of_stock"
                 ? "Todos los productos visibles tienen stock disponible"
                 : hasSearchQuery
-                ? "Intenta con otros términos de búsqueda"
-                : isHidingOutOfStock
-                ? "Los productos sin stock están ocultos por defecto"
-                : "Agrega productos para empezar a vender"}
-            </Text>
-          </View>
+                  ? "Intenta con otros términos de búsqueda"
+                  : isHidingOutOfStock
+                    ? "Los productos sin stock están ocultos por defecto"
+                    : "Agrega productos para empezar a vender"
+            }
+          />
         ) : (
           <FlatList
             data={filteredProducts}
@@ -702,304 +722,310 @@ export default function ListProducts({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  toolbar: {
     backgroundColor: palette.background,
+  },
+
+  // --- Toolbar ---
+  toolbar: {
+    backgroundColor: palette.surface,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
-    paddingBottom: 10,
+    paddingBottom: tokens.spacing[3],
   },
-  searchbar: {
-    margin: 16,
-    marginBottom: 8,
-    backgroundColor: "#fff",
-    borderRadius: 8,
+  searchWrap: {
+    paddingHorizontal: tokens.spacing[5],
+    paddingTop: tokens.spacing[3],
+  },
+  searchInput: {
+    width: "100%",
+    height: 40,
   },
   summaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    marginBottom: 8,
+    gap: tokens.spacing[2],
+    paddingHorizontal: tokens.spacing[5],
+    paddingTop: tokens.spacing[3],
   },
   summaryText: {
+    ...tokens.typography.caption,
     color: palette.textSecondary,
-    fontSize: 12,
-    fontWeight: "600",
     flex: 1,
   },
+  selectedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: palette.primarySoft,
+    borderRadius: tokens.radius.full,
+  },
   selectedSummaryText: {
+    ...tokens.typography.micro,
     color: palette.primary,
-    fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   controlsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 16,
-    marginBottom: 8,
+    gap: tokens.spacing[2],
+    paddingHorizontal: tokens.spacing[5],
+    paddingTop: tokens.spacing[3],
   },
-  stockFilterContent: {
-    gap: 8,
+  chipsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing[2],
     paddingRight: 4,
   },
-  filterChip: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: 8,
-  },
-  availableChipSelected: {
-    backgroundColor: palette.primary,
-    borderColor: palette.primary,
-  },
-  outOfStockChipSelected: {
-    backgroundColor: palette.error,
-    borderColor: palette.error,
-  },
-  allChipSelected: {
-    backgroundColor: palette.accent,
-    borderColor: palette.accent,
-  },
-  filterChipText: {
-    color: palette.textSecondary,
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  filterChipTextSelected: {
-    color: "#fff",
+  categoriesScroll: {
+    marginTop: tokens.spacing[2],
+    paddingHorizontal: tokens.spacing[5],
   },
   viewModeButton: {
-    borderColor: palette.primary,
-    borderRadius: 8,
-  },
-  stockFilterContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 8,
-    alignItems: "flex-start",
-  },
-  stockFilterButton: {
-    borderColor: palette.error,
-    borderRadius: 8,
-  },
-  stockFilterButtonActive: {
-    borderColor: palette.error,
-  },
-  categoriesContainer: {
-    marginBottom: 8,
-    maxHeight: 36,
-  },
-  categoriesContent: {
-    paddingHorizontal: 16,
+    flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 4,
+    paddingHorizontal: tokens.spacing[3],
+    paddingVertical: 6,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+    flexShrink: 0,
   },
-  categoryChip: {
+  viewModeButtonActive: {
+    backgroundColor: palette.primary,
     borderColor: palette.primary,
   },
-  categoryChipSelected: {
-    backgroundColor: palette.primary,
+  viewModeButtonText: {
+    ...tokens.typography.micro,
+    color: palette.textSecondary,
   },
-  categoryChipText: {
-    color: palette.primary,
-  },
-  categoryChipTextSelected: {
+  viewModeButtonTextActive: {
     color: "#fff",
   },
+
+  // --- Products container ---
   productsContainer: {
     flex: 1,
   },
-  emptyStateContainer: {
+  loadingWrap: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 32,
-    paddingVertical: 64,
+    gap: tokens.spacing[2],
   },
-  emptyStateIconContainer: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: palette.surface,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  emptyStateTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: palette.text,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  emptyStateSubtitle: {
-    fontSize: 14,
+  loadingText: {
+    ...tokens.typography.body,
     color: palette.textSecondary,
-    textAlign: "center",
-    lineHeight: 20,
   },
   gridContent: {
-    paddingHorizontal: 10,
-    paddingBottom: 16,
+    padding: tokens.spacing[3],
+    paddingBottom: tokens.spacing[5],
   },
+
+  // --- Grid Card ---
   card: {
     flex: 1,
-    margin: 6,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    elevation: 2,
-  },
-  compactCard: {
-    marginHorizontal: 6,
-    marginVertical: 4,
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    elevation: 1,
+    margin: tokens.spacing[2],
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.lg,
     borderWidth: 1,
     borderColor: palette.border,
+    overflow: "hidden",
+    ...tokens.shadow.sm,
+  },
+  imageContainer: {
+    width: "100%",
+    height: 160,
+    position: "relative",
+    backgroundColor: palette.surfaceMuted,
+  },
+  image: {
+    width: "100%",
+    height: "100%",
+  },
+  imagePlaceholderLarge: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: palette.surfaceMuted,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  stockBadgeWrap: {
+    position: "absolute",
+    top: tokens.spacing[2],
+    right: tokens.spacing[2],
+  },
+
+  // --- Compact card ---
+  compactCard: {
+    marginHorizontal: tokens.spacing[2],
+    marginVertical: tokens.spacing[1],
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    ...tokens.shadow.xs,
   },
   compactRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: 10,
+    gap: tokens.spacing[3],
+    padding: tokens.spacing[3],
   },
   compactImageContainer: {
-    width: 58,
-    height: 58,
-    borderRadius: 8,
+    width: 56,
+    height: 56,
+    borderRadius: tokens.radius.md,
     overflow: "hidden",
+    backgroundColor: palette.surfaceMuted,
   },
   compactImage: {
     width: "100%",
     height: "100%",
   },
-  compactImagePlaceholder: {
+  imagePlaceholder: {
     width: "100%",
     height: "100%",
-    backgroundColor: palette.surface,
+    backgroundColor: palette.surfaceMuted,
     justifyContent: "center",
     alignItems: "center",
   },
   compactInfo: {
     flex: 1,
-    gap: 3,
+    minWidth: 0,
+    gap: 2,
   },
   compactMetaRow: {
     flexDirection: "row",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 8,
-  },
-  inlineStockBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  inlineStockText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "800",
+    gap: 6,
   },
   compactControls: {
-    width: 164,
-    gap: 8,
+    width: 130,
+    gap: tokens.spacing[2],
   },
-  imageContainer: {
-    width: "100%",
-    height: 180,
-    position: "relative",
-  },
-  image: {
-    width: "100%",
-    height: "100%",
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-  },
-  imagePlaceholder: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: palette.surface,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  stockBadge: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-  },
+
+  // --- Common card content ---
   content: {
-    paddingVertical: 12,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 4,
+    padding: tokens.spacing[3],
+    gap: tokens.spacing[2],
+  },
+  contentBody: {
+    gap: 2,
   },
   code: {
-    color: palette.textSecondary,
+    ...tokens.typography.micro,
+    color: palette.textMuted,
   },
   name: {
-    fontWeight: "600",
+    ...tokens.typography.bodyMd,
+    color: palette.text,
     minHeight: 20,
   },
   price: {
-    color: palette.primary,
-    fontWeight: "bold",
+    ...tokens.typography.bodyMd,
+    color: palette.text,
+    fontWeight: "700",
   },
+  stockDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  stockTextInline: {
+    ...tokens.typography.micro,
+    fontWeight: "600",
+  },
+
+  // --- Footer (action) ---
   footer: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    flexDirection: "row",
+    paddingHorizontal: tokens.spacing[3],
+    paddingBottom: tokens.spacing[3],
+    paddingTop: 0,
   },
   addButton: {
-    margin: 0,
-    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: palette.primary,
+    paddingVertical: 8,
+    borderRadius: tokens.radius.md,
   },
+  addButtonText: {
+    ...tokens.typography.bodyMd,
+    color: "#fff",
+    fontWeight: "600",
+  },
+
+  // --- Quantity controls ---
   quantityControls: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 2,
-    flex: 1,
+    gap: 4,
   },
   quantityButton: {
-    backgroundColor: palette.primary,
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    backgroundColor: palette.surfaceMuted,
+    width: 32,
+    height: 32,
+    borderRadius: tokens.radius.md,
     justifyContent: "center",
     alignItems: "center",
   },
-  quantityText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: palette.text,
-    minWidth: 30,
-    textAlign: "center",
+  quantityButtonPrimary: {
+    backgroundColor: palette.primary,
   },
-  unitSelectorContainer: {},
+  quantityText: {
+    ...tokens.typography.bodyMd,
+    fontWeight: "700",
+    color: palette.text,
+    minWidth: 28,
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+  },
+
+  // --- Unit selector ---
   unitSelector: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: tokens.spacing[2] + 2,
+    paddingVertical: 6,
     borderWidth: 1,
-    borderColor: palette.primary,
-    borderRadius: 8,
-    backgroundColor: "#fff",
+    borderColor: palette.border,
+    borderRadius: tokens.radius.md,
+    backgroundColor: palette.surface,
+    gap: 4,
   },
   unitSelectorText: {
-    color: palette.primary,
+    ...tokens.typography.micro,
+    color: palette.text,
     fontWeight: "600",
-    fontSize: 14,
+    flex: 1,
   },
-  unitMenuItemSelected: {
-    backgroundColor: palette.primary || "#e3f2fd",
+  unitMenu: {
+    marginTop: 4,
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.md,
+    ...tokens.shadow.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    // Z-index alto para superponerse a las cards de productos
+    // sin verse transparente. Importante: el Menu de Paper se
+    // renderiza en un portal, por lo que el zIndex debe estar
+    // en el contentStyle (no en un ancestor).
+    zIndex: 1000,
+    elevation: 8,
   },
   unitMenuItemTextSelected: {
-    color: "#fff",
+    color: palette.primary,
     fontWeight: "600",
   },
 });

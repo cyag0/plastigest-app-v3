@@ -6,6 +6,9 @@ import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import EditableTable, {
   EditableTableColumn,
 } from "@/components/Form/EditableTable/EditableTable";
+import FormulaPickerModal, {
+  FormulaPickerModalRef,
+} from "@/components/Production/FormulaPickerModal";
 import InventorySummaryPanel from "@/components/Production/InventorySummaryPanel";
 import MermasTable from "@/components/Production/MermasTable";
 import palette from "@/constants/palette";
@@ -13,12 +16,16 @@ import { useAlerts } from "@/hooks/useAlerts";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
+import { mergeProductRow } from "@/utils/groupByProduct";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FormikProps, useFormikContext } from "formik";
 import React, { useEffect, useRef } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Button, Card, Text } from "react-native-paper";
+
+// Helpers de producto (resolución de unidades) — se usan desde el modal de
+// fórmulas para construir las filas de consumptions / outputs.
 
 const CONSUMPTION_COLUMNS: EditableTableColumn[] = [
   {
@@ -231,42 +238,67 @@ export default function ProductionForm() {
       api={Services.productionOrders}
       id={editingId}
       submitButtonText={undefined}
+      showSubmitButton={false}
+      showResetButton={false}
       initialValues={initialValues}
       onSubmit={async (values) => {
-        const totalC = (values.consumptions ?? []).reduce(
+        // AppForm ya convirtió los valores a FormData antes de llamar a onSubmit.
+        // Recuperamos los valores originales (objetos) desde la instancia de
+        // Formik para poder calcular los totales reales y leer affect_stock.
+        const originalValues = formRef.current?.getValues() ?? values;
+
+        const totalC = (originalValues.consumptions ?? []).reduce(
           (a: number, b: any) => a + (Number(b.quantity) || 0),
           0,
         );
-        const totalO = (values.outputs ?? []).reduce(
+        const totalO = (originalValues.outputs ?? []).reduce(
           (a: number, b: any) => a + (Number(b.quantity) || 0),
           0,
         );
 
         const ok = await alerts.confirm(
           `Consumo total: ${totalC.toFixed(2)}  |  Producido: ${totalO.toFixed(2)}\n\n¿Registrar la producción?${
-            values.affect_stock ? " Se actualizará el stock." : " (modo borrador)"
+            originalValues.affect_stock
+              ? " Se actualizará el stock."
+              : " (modo borrador)"
           }`,
           { title: "Confirmar producción", okText: "Registrar" },
         );
         if (!ok) throw new Error("Cancelado por el usuario");
-      }}
-      onSuccess={async (response, values) => {
-        try {
-          if (values.affect_stock && !editingId) {
-            const orderId = response?.data?.id ?? response?.id;
-            if (orderId) {
+
+        // AppForm NO llama a la API cuando se le pasa onSubmit, así que la
+        // invocamos manualmente aquí con los valores convertidos a FormData.
+        const apiResponse = editingId
+          ? await Services.productionOrders.update(editingId, values)
+          : await Services.productionOrders.store(values);
+
+        // store/update regresan AxiosResponse<LaravelResponse<T>>, donde el
+        // body tiene la forma { data: T, message?: string }. Extraemos la
+        // orden creada/actualizada.
+        const order = apiResponse?.data?.data as
+          | { id?: number; folio?: string }
+          | undefined;
+
+        // Si es una orden nueva y debe afectar stock, la marcamos como
+        // completada para que el inventario se actualice.
+        if (originalValues.affect_stock && !editingId) {
+          const orderId = order?.id;
+          if (orderId) {
+            try {
               await Services.productionOrders.complete(orderId);
               alerts.success(
-                `Producción ${response?.data?.folio ?? ""} registrada · Stock actualizado`,
+                `Producción ${order?.folio ?? ""} registrada · Stock actualizado`,
+              );
+            } catch (e: any) {
+              alerts.error(
+                "Guardada pero no se pudo afectar el stock: " + (e?.message ?? ""),
               );
             }
-          } else if (!values.affect_stock) {
-            alerts.success("Borrador guardado");
-          } else {
-            alerts.success("Producción actualizada");
           }
-        } catch (e: any) {
-          alerts.error("Guardada pero no se pudo afectar el stock: " + (e?.message ?? ""));
+        } else if (!originalValues.affect_stock) {
+          alerts.success("Borrador guardado");
+        } else {
+          alerts.success("Producción actualizada");
         }
         router.push("/(tabs)/home/production" as any);
       }}
@@ -279,32 +311,109 @@ export default function ProductionForm() {
 function ProductionFormBody({ editingId }: { editingId?: number }) {
   const { values, submitForm, isSubmitting, setFieldValue } = useFormikContext<any>();
   const router = useRouter();
-  const alerts = useAlerts();
+  const formulaPickerRef = useRef<FormulaPickerModalRef>(null);
 
-  const handleSubmit = async () => {
+  // La confirmación, llamada a la API, alertas de éxito y navegación se
+  // manejan dentro del onSubmit de AppForm. Aquí solo disparamos submitForm
+  // y dejamos que AppForm muestre los errores en su propio catch.
+  const handleSubmit = () => {
     if (isSubmitting) return;
-    try {
-      await submitForm();
-      // Si estamos en draft o affect_stock=false → solo guardamos en draft
-      // Si affect_stock=true → después de guardar (POST store) hacemos complete
-      // AppForm internamente llama a Services.productionOrders.store(values) y devuelve la orden
-      if (!values.affect_stock) {
-        alerts.success("Producción guardada en borrador");
-        router.push("/(tabs)/home/production" as any);
-      } else {
-        // Llamamos a complete manualmente después del store
-        try {
-          // La respuesta del store no es accesible aquí, pero AppForm ya hizo la navegación en success.
-          // Solución: usamos el ref del form (no exponer aquí es complejo) - lo manejamos en la pantalla padre.
-        } catch (e) {
-          // noop
-        }
+    submitForm();
+  };
+
+  /**
+   * Recibe las fórmulas seleccionadas desde FormulaPickerModal junto con el
+   * multiplicador de unidades producidas, y reparte los items a las tablas
+   * `consumptions` y `outputs`.
+   *
+   * Reglas:
+   * - Cada `item` de la fórmula se suma a `consumptions` con
+   *   `expected_quantity × unitsProduced` y la `unit_id` del item.
+   * - El producto objetivo (`formula.product_id`) se agrega a `outputs` con
+   *   la suma de `expected_output_quantity` de todos los items, multiplicada
+   *   por `unitsProduced`. Si los items no traen `expected_output_quantity`,
+   *   se usa `1` como fallback por defecto (cantidad de unidades elaboradas).
+   * - Si el mismo `product_id` ya existe en la tabla destino, `mergeProductRow`
+   *   SUMA la cantidad y respeta la primera `unit_id` registrada
+   *   (no se sobreescribe).
+   */
+  const handleFormulasSelected = (
+    picked: App.Entities.Formula[],
+    unitsProduced: number,
+  ) => {
+    const multiplier = Number(unitsProduced) > 0 ? Number(unitsProduced) : 1;
+    const currentConsumptions: any[] = values.consumptions ?? [];
+    const currentOutputs: any[] = values.outputs ?? [];
+
+    let nextConsumptions = currentConsumptions;
+    let nextOutputs = currentOutputs;
+
+    for (const formula of picked) {
+      if (!formula?.id) continue;
+      const items = formula.items ?? [];
+
+      // ── Consumos: cada item aporta expected_quantity × multiplier.
+      for (const item of items) {
+        if (!item?.product_id) continue;
+        const qty = (Number(item.expected_quantity) || 0) * multiplier;
+        if (qty <= 0) continue;
+        nextConsumptions = mergeProductRow(
+          nextConsumptions,
+          {
+            product_id: item.product_id,
+            unit_id: Number(item.unit_id) || 0,
+            quantity: qty,
+            notes: item.notes ?? "",
+          },
+          "formula-c",
+        );
       }
-    } catch (e: any) {
-      if (e?.message && e.message !== "Cancelado por el usuario") {
-        alerts.error("Error: " + e.message);
+
+      // ── Output: producto objetivo. La cantidad es la suma de los
+      // expected_output_quantity de los items (× multiplier). Si ningún
+      // item trae expected_output_quantity, usamos 1 × multiplier.
+      if (formula.product_id) {
+        const sumOutputQty = items.reduce(
+          (acc, it) => acc + (Number(it?.expected_output_quantity) || 0),
+          0,
+        );
+        const outputQty =
+          sumOutputQty > 0
+            ? sumOutputQty * multiplier
+            : 1 * multiplier;
+        // Para la unidad del output usamos la unidad del producto objetivo
+        // o, en su defecto, la del primer item que tenga output_quantity.
+        const outputUnitId =
+          formula.product?.unit_id ??
+          items.find((it) => (it?.expected_output_quantity ?? 0) > 0)?.unit_id ??
+          0;
+        nextOutputs = mergeProductRow(
+          nextOutputs,
+          {
+            product_id: formula.product_id,
+            unit_id: Number(outputUnitId) || 0,
+            quantity: outputQty,
+            notes: "",
+          },
+          "formula-o",
+        );
       }
     }
+
+    if (nextConsumptions !== currentConsumptions) {
+      setFieldValue("consumptions", nextConsumptions);
+    }
+    if (nextOutputs !== currentOutputs) {
+      setFieldValue("outputs", nextOutputs);
+    }
+  };
+
+  const openFormulaPicker = () => {
+    formulaPickerRef.current?.show({
+      title: "Agregar fórmulas a la producción",
+      onSelect: handleFormulasSelected,
+      defaultUnits: 1,
+    });
   };
 
   return (
@@ -314,7 +423,9 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
       <FormulaListener />
 
       <SectionHeader icon="information" title="Información General" />
-      <Card style={styles.card}>
+      <Card style={[styles.card, {
+        shadowOffset: { width: 0, height: 0 },
+      }]}  elevation={0}>
         <Card.Content>
           <FormDatePicker
             name="production_date"
@@ -346,6 +457,17 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
 
       <View style={{ height: 12 }} />
 
+      <Button
+        icon="plus-circle"
+        mode="contained-tonal"
+        onPress={openFormulaPicker}
+        style={{ marginBottom: 12 }}
+        buttonColor={palette.primarySoft}
+        textColor={palette.primary}
+      >
+        Agregar fórmulas a la producción
+      </Button>
+
       <SectionHeader
         icon="package-variant-closed"
         title="Consumos"
@@ -356,7 +478,7 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
         columns={CONSUMPTION_COLUMNS}
         defaultRow={DEFAULT_CONSUMPTION}
         addLabel="Agregar consumo"
-        emptyMessage="Toca “Agregar consumo” para registrar lo que se va a procesar."
+        emptyMessage="Toca “Agregar consumo” o usa el botón de fórmulas de arriba para registrar los ingredientes a procesar."
       />
 
       <View style={{ height: 12 }} />
@@ -371,7 +493,7 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
         columns={OUTPUT_COLUMNS}
         defaultRow={DEFAULT_OUTPUT}
         addLabel="Agregar producto"
-        emptyMessage="Toca “Agregar producto” para registrar lo que se obtuvo."
+        emptyMessage="Toca “Agregar producto” o usa el botón de fórmulas de arriba para registrar lo que se obtuvo."
       />
 
       <View style={{ height: 12 }} />
@@ -411,6 +533,8 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
           {values.affect_stock ? "Registrar Producción" : "Guardar borrador"}
         </Button>
       </View>
+
+      <FormulaPickerModal ref={formulaPickerRef} />
     </ScrollView>
   );
 }
@@ -459,7 +583,12 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: palette.card,
     borderRadius: 12,
-    elevation: 1,
+    elevation: 0,
+    shadowColor: "transparent",
+    boxShadow: "transparent",
+    borderWidth: 1,
+    borderColor: palette.border,
+    shadowOffset: { width: 0, height: 0 },
   },
   sectionHeader: {
     flexDirection: "row",

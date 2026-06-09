@@ -7,7 +7,7 @@ import NavigationHandler from "@/components/NavigationHandler";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
-import { AlertsProvider } from "@/hooks/useAlerts";
+import { AlertsDialogs, AlertsProvider } from "@/hooks/useAlerts";
 import {
   MD3DarkTheme,
   MD3LightTheme,
@@ -89,7 +89,9 @@ function ThemedApp() {
   };
 
   return (
-    <PaperProvider theme={theme}>
+    <PaperProvider theme={{
+      ...theme,
+    }}>
       <SelectDataProvider>
         <AlertsProvider>
           <NavigationHandler>
@@ -125,6 +127,13 @@ function ThemedApp() {
             {__DEV__ && <PermissionsOverlay />}
           </NavigationHandler>
         </AlertsProvider>
+        {/* Renderizar los dialogs (ConfirmDialog, AlertSnackbar) al
+            FINAL del arbol. Como usan <Portal> de Paper, todos los
+            portales viven en el mismo host; los que se montan al
+            final del arbol se renderizan al final de ese host y, por
+            tanto, quedan por encima de cualquier otro modal abierto
+            (p. ej. el ContextSwitcherModal del sidebar). */}
+        <AlertsDialogs />
       </SelectDataProvider>
     </PaperProvider>
   );

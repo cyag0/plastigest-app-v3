@@ -1,10 +1,11 @@
+import KpiCard from "@/components/Dashboard/KpiCard";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
+import { useResponsive } from "@/hooks/useResponsive";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
-import { Card, Text } from "react-native-paper";
-import { useResponsive } from "@/hooks/useResponsive";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 
 interface TopProduct {
   product_id: number;
@@ -47,85 +48,38 @@ interface TopRowProps {
 
 function TopRow({ product, type }: TopRowProps) {
   const isIn = type === "in";
-  const color = isIn ? palette.error : palette.success;
   const icon = isIn ? "minus-circle" : "plus-circle";
   return (
-    <View
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingVertical: 4,
-      }}
-    >
-      <MaterialCommunityIcons name={icon as any} size={14} color={color} />
-      <Text
-        style={{
-          flex: 1,
-          color: palette.text,
-          fontSize: 12,
-          marginLeft: 6,
-        }}
-        numberOfLines={1}
-      >
+    <View style={styles.topRow}>
+      <View style={styles.topRowIconBox}>
+        <MaterialCommunityIcons
+          name={icon as any}
+          size={14}
+          color={isIn ? palette.error : palette.success}
+        />
+      </View>
+      <Text style={styles.topRowName} numberOfLines={1}>
         {product.product_name}
       </Text>
-      <Text style={{ color, fontSize: 12, fontWeight: "700" }}>
+      <Text
+        style={[
+          styles.topRowQty,
+          { color: isIn ? palette.error : palette.success },
+        ]}
+      >
         {isIn ? "−" : "+"}
         {product.quantity.toLocaleString("es-MX", { maximumFractionDigits: 2 })}{" "}
-        <Text style={{ color: palette.textSecondary, fontSize: 10 }}>
-          {product.unit_name}
-        </Text>
+        <Text style={styles.topRowUnit}>{product.unit_name}</Text>
       </Text>
     </View>
   );
 }
 
-interface StatTileProps {
-  icon: string;
-  label: string;
-  value: string;
-  sublabel?: string;
-  color: string;
-}
-
-function StatTile({ icon, label, value, sublabel, color }: StatTileProps) {
-  return (
-    <Card
-      style={[
-        styles.card,
-        { backgroundColor: palette.card, borderLeftColor: color, borderLeftWidth: 4 },
-      ]}
-    >
-      <Card.Content style={styles.cardContent}>
-        <View style={styles.iconWrap}>
-          <MaterialCommunityIcons name={icon as any} size={24} color={color} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text
-            variant="bodySmall"
-            style={{ color: palette.textSecondary, marginBottom: 2 }}
-          >
-            {label}
-          </Text>
-          <Text
-            variant="titleLarge"
-            style={{ color: palette.text, fontWeight: "700" }}
-          >
-            {value}
-          </Text>
-          {sublabel ? (
-            <Text variant="bodySmall" style={{ color: palette.textSecondary, marginTop: 2 }}>
-              {sublabel}
-            </Text>
-          ) : null}
-        </View>
-      </Card.Content>
-    </Card>
-  );
-}
-
 export default function ProductionKpiCards() {
-  const { isMobile, isTablet, isDesktop } = useResponsive();
+  const { isMobile, isMd, isXl } = useResponsive();
+  // Tablet = md+ (no xl), Desktop = xl
+  const isTablet = isMd && !isXl;
+  const isDesktop = isXl;
   const [stats, setStats] = useState<KpiData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -148,103 +102,80 @@ export default function ProductionKpiCards() {
 
   if (loading || !stats) {
     return (
-      <View
-        style={{
-          padding: 16,
-          alignItems: "center",
-          flexDirection: "row",
-          justifyContent: "center",
-        }}
-      >
+      <View style={styles.loadingWrap}>
         <ActivityIndicator color={palette.primary} size="small" />
-        <Text style={{ marginLeft: 8, color: palette.textSecondary }}>
-          Cargando KPIs del día…
-        </Text>
+        <Text style={styles.loadingText}>Cargando KPIs del día…</Text>
       </View>
     );
   }
 
-  const wasteColor =
-    stats.waste_percentage_today === null
-      ? palette.textSecondary
-      : stats.waste_percentage_today > 20
-        ? palette.error
-        : stats.waste_percentage_today > 10
-          ? palette.warning
-          : palette.success;
-
   const wasteValue = stats.waste_percentage_today === null
     ? "N/D"
     : `${stats.waste_percentage_today.toFixed(1)}%`;
-  const wasteSublabel = stats.waste_percentage_today === null
-    ? "Unidades mixtas: usa el detalle por orden"
-    : stats.waste_percentage_today > 20
-      ? "Alta — revisa insumos"
-      : stats.waste_percentage_today > 10
-        ? "Aceptable"
-        : "Óptima";
 
-  const tiles: StatTileProps[] = [
-    {
-      icon: "counter",
-      label: "Producciones",
-      value: String(stats.productions_count_today),
-      sublabel: "completadas hoy",
-      color: palette.primary,
-    },
-    {
-      icon: "import",
-      label: "Insumos consumidos",
-      value: String(stats.consumption_lines),
-      sublabel: `${stats.total_consumed_quantity.toLocaleString("es-MX", { maximumFractionDigits: 2 })} en total`,
-      color: palette.error,
-    },
-    {
-      icon: "export-variant",
-      label: "Productos generados",
-      value: String(stats.output_lines),
-      sublabel: `${stats.total_produced_quantity.toLocaleString("es-MX", { maximumFractionDigits: 2 })} en total`,
-      color: palette.success,
-    },
-    {
-      icon: "trash-can-outline",
-      label: "% Merma",
-      value: wasteValue,
-      sublabel: wasteSublabel,
-      color: wasteColor,
-    },
-  ];
+  const hasTop = stats.top_consumed.length > 0 || stats.top_produced.length > 0;
 
   if (isMobile) {
     return (
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}
+        contentContainerStyle={styles.mobileScroll}
       >
-        {tiles.map((t) => (
-          <View key={t.label} style={{ width: 200 }}>
-            <StatTile {...t} />
-          </View>
-        ))}
-        {(stats.top_consumed.length > 0 || stats.top_produced.length > 0) && (
-          <View style={{ width: 260 }}>
-            <Card style={[styles.card, { backgroundColor: palette.card }]}>
-              <Card.Content>
-                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                  <MaterialCommunityIcons name="chart-bar" size={18} color={palette.primary} />
-                  <Text style={{ marginLeft: 6, color: palette.text, fontWeight: "700" }}>
-                    Top del día
-                  </Text>
-                </View>
-                {stats.top_consumed.map((p) => (
-                  <TopRow key={`c-${p.product_id}-${p.unit_id}`} product={p} type="in" />
-                ))}
-                {stats.top_produced.map((p) => (
-                  <TopRow key={`o-${p.product_id}-${p.unit_id}`} product={p} type="out" />
-                ))}
-              </Card.Content>
-            </Card>
+        <View style={styles.mobileKpi}>
+          <KpiCard
+            icon="counter"
+            label="Producciones"
+            value={String(stats.productions_count_today)}
+          />
+        </View>
+        <View style={styles.mobileKpi}>
+          <KpiCard
+            icon="import"
+            label="Insumos Consumidos"
+            value={String(stats.consumption_lines)}
+          />
+        </View>
+        <View style={styles.mobileKpi}>
+          <KpiCard
+            icon="export-variant"
+            label="Productos Generados"
+            value={String(stats.output_lines)}
+          />
+        </View>
+        <View style={styles.mobileKpi}>
+          <KpiCard
+            icon="trash-can-outline"
+            label="% Merma"
+            value={wasteValue}
+          />
+        </View>
+        {hasTop && (
+          <View style={styles.mobileTop}>
+            <View style={styles.topCard}>
+              <View style={styles.topCardHeader}>
+                <MaterialCommunityIcons
+                  name="chart-bar"
+                  size={16}
+                  color={palette.textMuted}
+                />
+                <Text style={styles.topCardTitle}>TOP DEL DÍA</Text>
+              </View>
+              {stats.top_consumed.map((p) => (
+                <TopRow
+                  key={`c-${p.product_id}-${p.unit_id}`}
+                  product={p}
+                  type="in"
+                />
+              ))}
+              {stats.top_produced.map((p) => (
+                <TopRow
+                  key={`o-${p.product_id}-${p.unit_id}`}
+                  product={p}
+                  type="out"
+                />
+              ))}
+            </View>
           </View>
         )}
       </ScrollView>
@@ -252,102 +183,197 @@ export default function ProductionKpiCards() {
   }
 
   return (
-    <View style={{ padding: 12, gap: 8 }}>
+    <View style={styles.desktopWrap}>
       <View
-        style={{
-          flexDirection: "row",
-          flexWrap: isTablet ? "wrap" : "nowrap",
-          gap: 8,
-        }}
+        style={[
+          styles.kpiRow,
+          isTablet && styles.kpiRowTablet,
+        ]}
       >
-        {tiles.map((t) => (
-          <View
-            key={t.label}
-            style={{ flex: isDesktop ? 1 : undefined, minWidth: isTablet ? "48%" : 0 }}
-          >
-            <StatTile {...t} />
-          </View>
-        ))}
+        <View style={isDesktop ? styles.kpiFlex : undefined}>
+          <KpiCard
+            icon="counter"
+            label="Producciones"
+            value={String(stats.productions_count_today)}
+          />
+        </View>
+        <View style={isDesktop ? styles.kpiFlex : undefined}>
+          <KpiCard
+            icon="import"
+            label="Insumos Consumidos"
+            value={String(stats.consumption_lines)}
+          />
+        </View>
+        <View style={isDesktop ? styles.kpiFlex : undefined}>
+          <KpiCard
+            icon="export-variant"
+            label="Productos Generados"
+            value={String(stats.output_lines)}
+          />
+        </View>
+        <View style={isDesktop ? styles.kpiFlex : undefined}>
+          <KpiCard
+            icon="trash-can-outline"
+            label="% Merma"
+            value={wasteValue}
+          />
+        </View>
       </View>
-      {(stats.top_consumed.length > 0 || stats.top_produced.length > 0) && (
-        <Card style={[styles.card, { backgroundColor: palette.card }]}>
-          <Card.Content>
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-              <MaterialCommunityIcons name="chart-bar" size={18} color={palette.primary} />
-              <Text style={{ marginLeft: 6, color: palette.text, fontWeight: "700" }}>
-                Top 3 del día
-              </Text>
+
+      {hasTop && (
+        <View style={styles.topCard}>
+          <View style={styles.topCardHeader}>
+            <MaterialCommunityIcons
+              name="chart-bar"
+              size={16}
+              color={palette.textMuted}
+            />
+            <Text style={styles.topCardTitle}>TOP 3 DEL DÍA</Text>
+          </View>
+          <View style={styles.topCardBody}>
+            <View style={styles.topColumn}>
+              <Text style={styles.topColumnLabel}>MÁS CONSUMIDOS</Text>
+              {stats.top_consumed.length === 0 ? (
+                <Text style={styles.topEmpty}>—</Text>
+              ) : (
+                stats.top_consumed.map((p) => (
+                  <TopRow
+                    key={`c-${p.product_id}-${p.unit_id}`}
+                    product={p}
+                    type="in"
+                  />
+                ))
+              )}
             </View>
-            <View style={{ flexDirection: "row", gap: 16 }}>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    color: palette.textSecondary,
-                    fontSize: 11,
-                    marginBottom: 4,
-                    fontWeight: "700",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Más consumidos
-                </Text>
-                {stats.top_consumed.length === 0 ? (
-                  <Text style={{ color: palette.textSecondary, fontSize: 12 }}>—</Text>
-                ) : (
-                  stats.top_consumed.map((p) => (
-                    <TopRow key={`c-${p.product_id}-${p.unit_id}`} product={p} type="in" />
-                  ))
-                )}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={{
-                    color: palette.textSecondary,
-                    fontSize: 11,
-                    marginBottom: 4,
-                    fontWeight: "700",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Más producidos
-                </Text>
-                {stats.top_produced.length === 0 ? (
-                  <Text style={{ color: palette.textSecondary, fontSize: 12 }}>—</Text>
-                ) : (
-                  stats.top_produced.map((p) => (
-                    <TopRow key={`o-${p.product_id}-${p.unit_id}`} product={p} type="out" />
-                  ))
-                )}
-              </View>
+            <View style={styles.topColumn}>
+              <Text style={styles.topColumnLabel}>MÁS PRODUCIDOS</Text>
+              {stats.top_produced.length === 0 ? (
+                <Text style={styles.topEmpty}>—</Text>
+              ) : (
+                stats.top_produced.map((p) => (
+                  <TopRow
+                    key={`o-${p.product_id}-${p.unit_id}`}
+                    product={p}
+                    type="out"
+                  />
+                ))
+              )}
             </View>
-          </Card.Content>
-        </Card>
+          </View>
+        </View>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
+  // --- Loading ---
+  loadingWrap: {
+    padding: tokens.spacing[5],
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: tokens.spacing[2],
   },
-  cardContent: {
+  loadingText: {
+    ...tokens.typography.body,
+    color: palette.textSecondary,
+  },
+
+  // --- Mobile scroll ---
+  mobileScroll: {
+    paddingHorizontal: tokens.spacing[3],
+    paddingVertical: tokens.spacing[2],
+    gap: tokens.spacing[3],
+  },
+  mobileKpi: {
+    width: 200,
+  },
+  mobileTop: {
+    width: 260,
+  },
+
+  // --- Desktop/tablet wrap ---
+  desktopWrap: {
+    padding: tokens.spacing[3],
+    gap: tokens.spacing[3],
+  },
+  kpiRow: {
+    flexDirection: "row",
+    gap: tokens.spacing[3],
+  },
+  kpiRowTablet: {
+    flexWrap: "wrap",
+  },
+  kpiFlex: {
+    flex: 1,
+  },
+
+  // --- Top products card ---
+  topCard: {
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: tokens.spacing[4],
+    ...tokens.shadow.sm,
+  },
+  topCardHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    paddingVertical: 12,
+    gap: tokens.spacing[2],
+    marginBottom: tokens.spacing[3],
   },
-  iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  topCardTitle: {
+    ...tokens.typography.micro,
+    color: palette.textMuted,
+  },
+  topCardBody: {
+    flexDirection: "row",
+    gap: tokens.spacing[4],
+  },
+  topColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
+  topColumnLabel: {
+    ...tokens.typography.micro,
+    color: palette.textMuted,
+    marginBottom: tokens.spacing[2],
+  },
+  topEmpty: {
+    ...tokens.typography.caption,
+    color: palette.textMuted,
+  },
+
+  // --- Top row ---
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: tokens.spacing[1] + 2,
+    gap: tokens.spacing[2],
+  },
+  topRowIconBox: {
+    width: 20,
+    height: 20,
+    borderRadius: tokens.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff20",
+  },
+  topRowName: {
+    ...tokens.typography.caption,
+    color: palette.text,
+    flex: 1,
+    minWidth: 0,
+  },
+  topRowQty: {
+    ...tokens.typography.caption,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  topRowUnit: {
+    ...tokens.typography.micro,
+    color: palette.textMuted,
+    fontWeight: "400",
   },
 });

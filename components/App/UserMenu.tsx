@@ -12,7 +12,11 @@ export interface UserMenuProps {
   visible: boolean;
   onDismiss: () => void;
   anchor: React.ReactNode;
-  onSwitchLocation?: () => void;
+  /**
+   * Abre el modal de cambio de contexto. `initialView` decide si
+   * arranca en la lista de empresas o en la de sucursales.
+   */
+  onOpenContextSwitcher?: (initialView: "location" | "company") => void;
 }
 
 /**
@@ -24,7 +28,7 @@ export default function UserMenu({
   visible,
   onDismiss,
   anchor,
-  onSwitchLocation,
+  onOpenContextSwitcher,
 }: UserMenuProps) {
   const router = useRouter();
   const auth = useAuth();
@@ -38,13 +42,13 @@ export default function UserMenu({
 
   const handleSwitchCompany = useCallback(() => {
     onDismiss();
-    router.push("/(stacks)/selectCompany" as any);
-  }, [onDismiss, router]);
+    onOpenContextSwitcher?.("company");
+  }, [onDismiss, onOpenContextSwitcher]);
 
   const handleSwitchLocation = useCallback(() => {
     onDismiss();
-    onSwitchLocation?.();
-  }, [onDismiss, onSwitchLocation]);
+    onOpenContextSwitcher?.("location");
+  }, [onDismiss, onOpenContextSwitcher]);
 
   const handlePreferences = useCallback(() => {
     onDismiss();

@@ -1,22 +1,35 @@
-import palette from "@/constants/palette";
+import EmptyState from "@/components/App/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { tokens } from "@/constants/tokens";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
-import { ActivityIndicator, Card, IconButton, Text } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 
 interface LocationSelectorProps {
   onLocationSelected?: () => void;
 }
 
+/**
+ * Selector de sucursal en formato lista (estilo SaaS 2025):
+ * header con titulo + empresa actual, listado de sucursales como
+ * cards con icono y badge "ACTUAL" para la seleccionada, footer
+ * informativo. Pensado para usarse:
+ *  - Como pantalla completa (en `/(stacks)/selectLocation`)
+ *  - Como bloque embebido (en `LocationRequiredWrapper` durante el
+ *    bootstrap cuando todavia no hay sucursal elegida)
+ */
 export default function LocationSelector({
   onLocationSelected,
 }: LocationSelectorProps) {
-  const router = useRouter();
   const alerts = useAlerts();
   const {
     selectedCompany,
@@ -31,25 +44,24 @@ export default function LocationSelector({
     if (selectedCompany) {
       loadLocations();
     }
-  }, [selectedCompany]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCompany?.id]);
 
   const loadLocations = async () => {
     if (!selectedCompany) return;
-
     try {
       setIsLoadingLocations(true);
       const response = await Services.admin.locations.index({
         company_id: selectedCompany.id,
-        is_active: 1,
+        is_active: true,
       });
-
       const data = Array.isArray(response.data)
         ? response.data
         : response.data?.data || [];
-
       setLocations(data);
 
-      // Si hay solo una ubicación y no hay ninguna seleccionada, seleccionarla automáticamente
+      // Si hay solo una ubicacion y no hay ninguna seleccionada,
+      // seleccionarla automaticamente.
       if (data.length === 1 && !currentLocation) {
         await handleSelectLocation(data[0].id);
       }
@@ -63,463 +75,337 @@ export default function LocationSelector({
   const handleSelectLocation = async (locationId: number) => {
     const locationToSelect = locations.find((l) => l.id === locationId);
     if (!locationToSelect) {
-      alerts.error("Ubicación no encontrada");
+      alerts.error("Ubicacion no encontrada");
       return;
     }
-
-    // Si ya es la ubicación actual, no hacer nada
-    if (currentLocation?.id === locationId) {
-      return;
-    }
+    if (currentLocation?.id === locationId) return;
 
     const confirmed = await alerts.confirm(
       `¿Cambiar a ${locationToSelect.name}?`,
-      {
-        title: "Confirmar Cambio",
-        okText: "Cambiar",
-        cancelText: "Cancelar",
-      }
+      { title: "Confirmar Cambio", okText: "Cambiar", cancelText: "Cancelar" }
     );
-
     if (!confirmed) return;
 
     try {
       setLoading(true);
-
-      // Seleccionar la ubicación usando el contexto
       await selectLocation(locationToSelect);
-
       alerts.success(`Has cambiado a ${locationToSelect.name}`);
-
-      // Callback si existe, de lo contrario no hacer nada
-      // (el wrapper se actualizará automáticamente al detectar la ubicación)
-      if (onLocationSelected) {
-        onLocationSelected();
-      }
-    } catch (error) {
-      alerts.error("No se pudo cambiar de ubicación. Intenta nuevamente.");
+      onLocationSelected?.();
+    } catch {
+      alerts.error("No se pudo cambiar de ubicacion. Intenta nuevamente.");
     } finally {
       setLoading(false);
     }
   };
 
+  const styles = useThemedStyles((colors) => ({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    content: {
+      padding: tokens.spacing[5],
+      maxWidth: 600,
+      width: "100%",
+      alignSelf: "center",
+      gap: tokens.spacing[5],
+    },
+    header: {
+      alignItems: "center",
+      gap: tokens.spacing[2],
+    },
+    headerIconBox: {
+      width: 56,
+      height: 56,
+      borderRadius: tokens.radius.full,
+      backgroundColor: colors.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    title: {
+      ...tokens.typography.h1,
+      color: colors.text,
+      textAlign: "center",
+    },
+    subtitle: {
+      ...tokens.typography.body,
+      color: colors.textSecondary,
+      textAlign: "center",
+    },
+    currentCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing[3],
+      padding: tokens.spacing[4],
+      backgroundColor: colors.successSoft,
+      borderRadius: tokens.radius.lg,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.success,
+    },
+    currentIconBox: {
+      width: 32,
+      height: 32,
+      borderRadius: tokens.radius.full,
+      backgroundColor: colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    currentBody: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
+    },
+    currentLabel: {
+      ...tokens.typography.micro,
+      color: colors.success,
+      letterSpacing: 0.6,
+    },
+    currentName: {
+      ...tokens.typography.bodyMd,
+      color: colors.text,
+      fontWeight: "600",
+    },
+    sectionLabel: {
+      ...tokens.typography.micro,
+      color: colors.textMuted,
+      letterSpacing: 0.6,
+    },
+    list: {
+      gap: tokens.spacing[2],
+    },
+    option: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing[3],
+      padding: tokens.spacing[4],
+      backgroundColor: colors.surface,
+      borderRadius: tokens.radius.lg,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    optionActive: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primarySoft,
+    },
+    optionIconBox: {
+      width: 40,
+      height: 40,
+      borderRadius: tokens.radius.md,
+      backgroundColor: colors.surfaceMuted,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+    optionIconBoxActive: {
+      backgroundColor: colors.surface,
+    },
+    optionBody: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
+    },
+    optionTitle: {
+      ...tokens.typography.bodyMd,
+      color: colors.text,
+      fontWeight: "600",
+    },
+    optionSubtitle: {
+      ...tokens.typography.caption,
+      color: colors.textSecondary,
+    },
+    optionBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: tokens.spacing[2],
+      paddingVertical: 2,
+      borderRadius: tokens.radius.full,
+      backgroundColor: colors.successSoft,
+    },
+    optionBadgeText: {
+      ...tokens.typography.micro,
+      color: colors.success,
+      fontWeight: "700",
+    },
+    loadingBox: {
+      alignItems: "center",
+      paddingVertical: tokens.spacing[7],
+      gap: tokens.spacing[2],
+    },
+    loadingText: {
+      ...tokens.typography.body,
+      color: colors.textSecondary,
+    },
+    infoCard: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: tokens.spacing[2],
+      padding: tokens.spacing[3],
+      backgroundColor: colors.infoSoft,
+      borderRadius: tokens.radius.md,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.info,
+    },
+    infoText: {
+      ...tokens.typography.caption,
+      color: colors.textSecondary,
+      flex: 1,
+      lineHeight: 16,
+    },
+  }));
+
   if (!selectedCompany) {
     return (
-      <Card style={styles.emptyCard}>
-        <Card.Content style={styles.emptyContent}>
-          <MaterialCommunityIcons
-            name="office-building-outline"
-            size={64}
-            color={palette.textSecondary}
-            style={{ opacity: 0.5 }}
-          />
-          <Text variant="titleMedium" style={styles.emptyTitle}>
-            Selecciona una compañía primero
-          </Text>
-        </Card.Content>
-      </Card>
+      <View style={styles.container}>
+        <EmptyState
+          icon="office-building-outline"
+          title="Selecciona una compania primero"
+          description="Debes elegir una empresa antes de poder ver sus sucursales"
+        />
+      </View>
     );
   }
 
   if (isLoadingLocations) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={palette.primary} />
-        <Text variant="bodyMedium" style={styles.loadingText}>
-          Cargando ubicaciones...
-        </Text>
+      <View style={[styles.container, styles.loadingBox]}>
+        <ActivityIndicator size="large" color={styles.title.color} />
+        <Text style={styles.loadingText}>Cargando sucursales...</Text>
       </View>
     );
   }
 
   if (locations.length === 0) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Card style={styles.emptyCard}>
-          <Card.Content style={styles.emptyContent}>
-            <MaterialCommunityIcons
-              name="map-marker-off-outline"
-              size={64}
-              color={palette.textSecondary}
-              style={{ opacity: 0.5 }}
-            />
-            <Text variant="titleMedium" style={styles.emptyTitle}>
-              No hay ubicaciones disponibles
-            </Text>
-            <Text variant="bodyMedium" style={styles.emptySubtitle}>
-              Contacta al administrador para crear ubicaciones
-            </Text>
-          </Card.Content>
-        </Card>
+      <View style={styles.container}>
+        <EmptyState
+          icon="map-marker-off-outline"
+          title="Sin sucursales disponibles"
+          description="Contacta al administrador para crear sucursales"
+        />
       </View>
     );
   }
 
   return (
-    <SafeAreaView
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
+    <View style={styles.container}>
       <ScrollView
-        style={{
-          flex: 1,
-          maxWidth: 600,
-          width: "100%",
-        }}
-        contentContainerStyle={styles.scrollContainer}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerIcon}>
-            <IconButton
-              icon="map-marker"
-              size={32}
-              iconColor={palette.secondary}
-              style={{ margin: 0 }}
+          <View style={styles.headerIconBox}>
+            <MaterialCommunityIcons
+              name="map-marker"
+              size={28}
+              color={styles.optionBadgeText.color}
             />
           </View>
-          <Text variant="headlineSmall" style={styles.title}>
-            Selecciona tu Ubicación
-          </Text>
-          <Text variant="bodyMedium" style={styles.subtitle}>
+          <Text style={styles.title}>Selecciona tu sucursal</Text>
+          <Text style={styles.subtitle}>
             Cambia entre las ubicaciones de {selectedCompany.name}
           </Text>
         </View>
 
-        {/* Current Location Badge */}
         {currentLocation && (
-          <Card style={styles.currentLocationCard}>
-            <Card.Content style={styles.currentLocationContent}>
-              <View style={styles.currentLocationIcon}>
-                <IconButton
-                  icon="check-circle"
-                  size={20}
-                  iconColor={palette.secondary}
-                  style={{ margin: 0 }}
-                />
-              </View>
-              <View style={styles.currentLocationText}>
-                <Text variant="labelSmall" style={styles.currentLocationLabel}>
-                  UBICACIÓN ACTUAL
-                </Text>
-                <Text variant="titleMedium" style={styles.currentLocationName}>
-                  {currentLocation.name}
-                </Text>
-              </View>
-            </Card.Content>
-          </Card>
+          <View style={styles.currentCard}>
+            <View style={styles.currentIconBox}>
+              <MaterialCommunityIcons
+                name="check-circle"
+                size={18}
+                color={styles.optionBadgeText.color}
+              />
+            </View>
+            <View style={styles.currentBody}>
+              <Text style={styles.currentLabel}>SUCURSAL ACTUAL</Text>
+              <Text style={styles.currentName} numberOfLines={1}>
+                {currentLocation.name}
+              </Text>
+            </View>
+          </View>
         )}
 
-        {/* Locations Grid */}
-        <Text variant="titleSmall" style={styles.sectionTitle}>
-          Selecciona una Ubicación
-        </Text>
-        <View style={styles.locationsGrid}>
-          {locations.map((location) => {
-            const isCurrentLocation = currentLocation?.id === location.id;
-
-            return (
-              <Card
-                key={location.id}
-                style={[
-                  styles.locationActionCard,
-                  isCurrentLocation
-                    ? styles.currentLocationActionCard
-                    : styles.availableLocationActionCard,
-                ]}
-                onPress={() => {
-                  if (!isCurrentLocation && !loading) {
-                    handleSelectLocation(location.id);
+        <View style={{ gap: tokens.spacing[3] }}>
+          <Text style={styles.sectionLabel}>SUCURSALES</Text>
+          <View style={styles.list}>
+            {locations.map((loc) => {
+              const isActive = currentLocation?.id === loc.id;
+              const isLoading = loading && !isActive;
+              return (
+                <Pressable
+                  key={loc.id}
+                  onPress={() =>
+                    !isActive && !loading && handleSelectLocation(loc.id)
                   }
-                }}
-                disabled={loading}
-              >
-                <Card.Content style={styles.locationActionContent}>
-                  {/* Icon */}
-                  <View style={styles.locationIconContainer}>
+                  disabled={loading}
+                  style={({ pressed }) => [
+                    styles.option,
+                    isActive && styles.optionActive,
+                    pressed &&
+                      !isActive && {
+                        backgroundColor: styles.optionIconBox.backgroundColor,
+                      },
+                  ]}
+                >
+                  <View
+                    style={[
+                      styles.optionIconBox,
+                      isActive && styles.optionIconBoxActive,
+                    ]}
+                  >
                     <MaterialCommunityIcons
-                      name="map-marker"
-                      size={40}
+                      name={isActive ? "map-marker" : "map-marker-outline"}
+                      size={20}
                       color={
-                        isCurrentLocation ? palette.secondary : palette.primary
+                        isActive
+                          ? styles.optionBadgeText.color
+                          : styles.optionSubtitle.color
                       }
                     />
-                    {isCurrentLocation && (
-                      <View style={styles.currentBadgeIcon}>
-                        <MaterialCommunityIcons
-                          name="check-circle"
-                          size={20}
-                          color={palette.secondary}
-                        />
-                      </View>
+                  </View>
+                  <View style={styles.optionBody}>
+                    <Text style={styles.optionTitle} numberOfLines={1}>
+                      {loc.name}
+                    </Text>
+                    {!!loc.address && (
+                      <Text style={styles.optionSubtitle} numberOfLines={1}>
+                        {loc.address}
+                      </Text>
                     )}
                   </View>
-
-                  {/* Location Name */}
-                  <Text
-                    variant="titleMedium"
-                    style={[
-                      styles.locationActionName,
-                      {
-                        color: isCurrentLocation
-                          ? palette.secondary
-                          : palette.primary,
-                      },
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {location.name}
-                  </Text>
-
-                  {/* Description */}
-                  {location.description && (
-                    <Text
-                      variant="bodySmall"
-                      style={styles.locationActionDescription}
-                      numberOfLines={2}
-                    >
-                      {location.description}
-                    </Text>
-                  )}
-
-                  {/* Status Badge */}
-                  {isCurrentLocation && (
-                    <View style={styles.currentBadge}>
-                      <Text
-                        variant="labelSmall"
-                        style={styles.currentBadgeText}
-                      >
-                        ACTUAL
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Address */}
-                  <View style={styles.addressContainer}>
-                    <MaterialCommunityIcons
-                      name="map-marker-outline"
-                      size={14}
-                      color={palette.textSecondary}
-                      style={{ opacity: 0.6 }}
+                  {isLoading ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={styles.optionSubtitle.color}
                     />
-                    <Text
-                      variant="labelSmall"
-                      style={styles.locationActionAddress}
-                    >
-                      {location.address}
-                    </Text>
-                  </View>
-                </Card.Content>
-              </Card>
-            );
-          })}
+                  ) : isActive ? (
+                    <View style={styles.optionBadge}>
+                      <MaterialCommunityIcons
+                        name="check"
+                        size={12}
+                        color={styles.optionBadgeText.color}
+                      />
+                      <Text style={styles.optionBadgeText}>ACTUAL</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
-        {/* Footer Info */}
-        <Card style={styles.infoCard}>
-          <Card.Content style={styles.infoContent}>
-            <MaterialCommunityIcons
-              name="information"
-              size={20}
-              color={palette.blue}
-            />
-            <Text variant="bodySmall" style={styles.infoText}>
-              Los datos de inventario y reportes mostrados corresponderán a la
-              ubicación seleccionada.
-            </Text>
-          </Card.Content>
-        </Card>
+        <View style={styles.infoCard}>
+          <MaterialCommunityIcons
+            name="information"
+            size={16}
+            color={styles.infoText.color}
+          />
+          <Text style={styles.infoText}>
+            Los datos de inventario y reportes mostrados corresponderan a la
+            sucursal seleccionada.
+          </Text>
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  scrollContainer: {
-    maxWidth: 600,
-    width: "100%",
-    padding: 16,
-  },
-  header: {
-    alignItems: "center",
-  },
-  headerIcon: {
-    backgroundColor: palette.secondary + "15",
-    borderRadius: 50,
-    padding: 8,
-    marginBottom: 12,
-  },
-  title: {
-    color: palette.text,
-    fontWeight: "bold",
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  subtitle: {
-    color: palette.textSecondary,
-    textAlign: "center",
-    opacity: 0.85,
-  },
-  currentLocationCard: {
-    backgroundColor: palette.secondary + "10",
-    borderRadius: 16,
-    marginBottom: 24,
-    borderLeftWidth: 4,
-    borderLeftColor: palette.secondary,
-    shadowColor: "transparent",
-  },
-  currentLocationContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-  },
-  currentLocationIcon: {
-    marginRight: 12,
-  },
-  currentLocationText: {
-    flex: 1,
-  },
-  currentLocationLabel: {
-    color: palette.secondary,
-    fontWeight: "700",
-    marginBottom: 4,
-    letterSpacing: 0.5,
-  },
-  currentLocationName: {
-    color: palette.text,
-    fontWeight: "600",
-  },
-  centerContainer: {
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 48,
-  },
-  loadingText: {
-    marginTop: 16,
-    color: palette.textSecondary,
-  },
-  emptyCard: {
-    backgroundColor: palette.surface,
-    borderRadius: 16,
-    marginTop: 20,
-    shadowOffset: { width: 0, height: 0 },
-    shadowColor: "transparent",
-  },
-  emptyContent: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  emptyTitle: {
-    color: palette.text,
-    fontWeight: "600",
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    color: palette.textSecondary,
-    textAlign: "center",
-    opacity: 0.7,
-  },
-  sectionTitle: {
-    color: palette.textSecondary,
-    fontWeight: "700",
-    marginBottom: 16,
-    marginTop: 8,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-  },
-  locationsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    width: "100%",
-    gap: 12,
-    marginBottom: 24,
-  },
-  locationActionCard: {
-    width: "48%",
-    borderRadius: 16,
-    shadowColor: "transparent",
-  },
-  currentLocationActionCard: {
-    backgroundColor: palette.secondary + "15",
-    borderWidth: 2,
-    borderColor: palette.secondary + "40",
-  },
-  availableLocationActionCard: {
-    backgroundColor: palette.primary + "15",
-    borderWidth: 1,
-    borderColor: palette.primary + "20",
-  },
-  locationActionContent: {
-    alignItems: "center",
-    paddingVertical: 24,
-    paddingHorizontal: 12,
-    gap: 8,
-  },
-  locationIconContainer: {
-    position: "relative",
-    marginBottom: 8,
-  },
-  currentBadgeIcon: {
-    position: "absolute",
-    bottom: -4,
-    right: -4,
-    backgroundColor: palette.surface,
-    borderRadius: 10,
-  },
-  locationActionName: {
-    fontWeight: "bold",
-    textAlign: "center",
-    minHeight: 44,
-  },
-  locationActionDescription: {
-    color: palette.textSecondary,
-    textAlign: "center",
-    opacity: 0.8,
-  },
-  currentBadge: {
-    backgroundColor: palette.secondary,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 4,
-  },
-  currentBadgeText: {
-    color: "#fff",
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  addressContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginTop: 4,
-  },
-  locationActionAddress: {
-    color: palette.textSecondary,
-    opacity: 0.6,
-    textAlign: "center",
-  },
-  infoCard: {
-    backgroundColor: palette.blue + "10",
-    borderRadius: 12,
-    marginTop: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: palette.blue,
-    shadowColor: "transparent",
-  },
-  infoContent: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingVertical: 12,
-    gap: 12,
-  },
-  infoText: {
-    flex: 1,
-    color: palette.textSecondary,
-    lineHeight: 18,
-  },
-});

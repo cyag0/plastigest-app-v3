@@ -1,15 +1,14 @@
+import AppChip from "@/components/App/Chip";
+import EmptyState from "@/components/App/EmptyState";
+import KpiCard from "@/components/Dashboard/KpiCard";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import axios from "@/utils/axios";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { Dimensions, ScrollView, StyleSheet, View } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
-import {
-  ActivityIndicator,
-  Card,
-  SegmentedButtons,
-  Text,
-} from "react-native-paper";
+import { ActivityIndicator, Card, SegmentedButtons, Text } from "react-native-paper";
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -36,6 +35,16 @@ interface TransferStatsData {
   }>;
   avg_processing_time_hours: number;
 }
+
+const STATUS_META: Record<
+  string,
+  { label: string; variant: "primary" | "success" | "warning" | "error" | "info" | "default" }
+> = {
+  pending: { label: "Pendiente", variant: "warning" },
+  in_transit: { label: "En Tránsito", variant: "info" },
+  completed: { label: "Completado", variant: "success" },
+  cancelled: { label: "Cancelado", variant: "error" },
+};
 
 export default function TransferStats() {
   const [loading, setLoading] = useState(true);
@@ -64,45 +73,58 @@ export default function TransferStats() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={palette.primary} />
-        <Text style={{ marginTop: 16 }}>Cargando estadísticas...</Text>
+        <Text style={styles.loadingText}>Cargando estadísticas...</Text>
       </View>
     );
   }
 
   if (!stats) {
     return (
-      <View style={styles.centered}>
-        <Text>No se pudieron cargar las estadísticas</Text>
-      </View>
+      <EmptyState
+        icon="chart-box-outline"
+        title="Sin datos"
+        description="No se pudieron cargar las estadísticas de transferencias"
+      />
     );
   }
 
-  const statusLabels: Record<string, string> = {
-    pending: "Pendiente",
-    in_transit: "En Tránsito",
-    completed: "Completado",
-    cancelled: "Cancelado",
-  };
+  const hasStatusData = Object.keys(stats.transfers_by_status).length > 0;
+  const hasTrendData = stats.transfers_by_period.length > 0;
+  const hasTopProducts = stats.top_products.length > 0;
+  const hasTopLocations = stats.top_locations.length > 0;
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <MaterialCommunityIcons
-            name="chart-box"
-            size={32}
-            color={palette.primary}
-          />
-          <Text variant="headlineSmall" style={styles.title}>
-            Estadísticas de Transferencias
-          </Text>
-          <Text variant="bodyMedium" style={styles.subtitle}>
-            Análisis y métricas del sistema de transferencias
-          </Text>
-        </View>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* KPI Cards */}
+      <View style={styles.kpiGrid}>
+        <KpiCard
+          icon="swap-horizontal"
+          label="Total"
+          value={String(stats.total_transfers)}
+        />
+        <KpiCard
+          icon="package-variant"
+          label="Enviados"
+          value={String(stats.transfers_sent)}
+        />
+        <KpiCard
+          icon="truck-delivery"
+          label="Recibidos"
+          value={String(stats.transfers_received)}
+        />
+        <KpiCard
+          icon="clock-outline"
+          label="Tiempo Prom."
+          value={`${stats.avg_processing_time_hours}h`}
+        />
+      </View>
 
-        {/* Period Selector */}
+      {/* Period Selector */}
+      <View style={styles.periodWrap}>
         <SegmentedButtons
           value={period}
           onValueChange={setPeriod}
@@ -112,226 +134,169 @@ export default function TransferStats() {
             { value: "month", label: "Mes" },
             { value: "year", label: "Año" },
           ]}
-          style={styles.periodSelector}
+          theme={{
+            colors: {
+              secondaryContainer: palette.primarySoft,
+              onSecondaryContainer: palette.primary,
+            },
+          }}
         />
-
-        {/* Summary Cards */}
-        <View style={styles.summaryGrid}>
-          <Card style={styles.summaryCard}>
-            <Card.Content>
-              <MaterialCommunityIcons
-                name="swap-horizontal"
-                size={32}
-                color={palette.primary}
-              />
-              <Text variant="bodySmall" style={styles.summaryLabel}>
-                Total
-              </Text>
-              <Text variant="headlineMedium" style={styles.summaryValue}>
-                {stats.total_transfers}
-              </Text>
-            </Card.Content>
-          </Card>
-
-          <Card style={styles.summaryCard}>
-            <Card.Content>
-              <MaterialCommunityIcons
-                name="package-variant"
-                size={32}
-                color={palette.blue}
-              />
-              <Text variant="bodySmall" style={styles.summaryLabel}>
-                Enviados
-              </Text>
-              <Text
-                variant="headlineMedium"
-                style={[styles.summaryValue, { color: palette.blue }]}
-              >
-                {stats.transfers_sent}
-              </Text>
-            </Card.Content>
-          </Card>
-
-          <Card style={styles.summaryCard}>
-            <Card.Content>
-              <MaterialCommunityIcons
-                name="truck-delivery"
-                size={32}
-                color={palette.success}
-              />
-              <Text variant="bodySmall" style={styles.summaryLabel}>
-                Recibidos
-              </Text>
-              <Text
-                variant="headlineMedium"
-                style={[styles.summaryValue, { color: palette.success }]}
-              >
-                {stats.transfers_received}
-              </Text>
-            </Card.Content>
-          </Card>
-
-          <Card style={styles.summaryCard}>
-            <Card.Content>
-              <MaterialCommunityIcons
-                name="clock-outline"
-                size={32}
-                color={palette.warning}
-              />
-              <Text variant="bodySmall" style={styles.summaryLabel}>
-                Tiempo Prom.
-              </Text>
-              <Text
-                variant="headlineMedium"
-                style={[styles.summaryValue, { color: palette.warning }]}
-              >
-                {stats.avg_processing_time_hours}h
-              </Text>
-            </Card.Content>
-          </Card>
-        </View>
-
-        {/* Transfers by Status */}
-        {Object.keys(stats.transfers_by_status).length > 0 && (
-          <Card style={styles.chartCard}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.chartTitle}>
-                Transferencias por Estado
-              </Text>
-              <View style={styles.statusList}>
-                {Object.entries(stats.transfers_by_status).map(
-                  ([status, count]) => (
-                    <View key={status} style={styles.statusItem}>
-                      <Text variant="bodyMedium" style={styles.statusLabel}>
-                        {statusLabels[status] || status}
-                      </Text>
-                      <Text variant="titleMedium" style={styles.statusCount}>
-                        {count}
-                      </Text>
-                    </View>
-                  )
-                )}
-              </View>
-            </Card.Content>
-          </Card>
-        )}
-
-        {/* Transfers by Period Chart */}
-        {stats.transfers_by_period.length > 0 && (
-          <Card style={styles.chartCard}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.chartTitle}>
-                Tendencia de Transferencias
-              </Text>
-              <LineChart
-                data={{
-                  labels: stats.transfers_by_period.map((item) =>
-                    item.date
-                      ? new Date(item.date).toLocaleDateString("es-MX", {
-                          day: "2-digit",
-                          month: "short",
-                        })
-                      : item.month || ""
-                  ),
-                  datasets: [
-                    {
-                      data: stats.transfers_by_period.map((item) => item.count),
-                    },
-                  ],
-                }}
-                width={screenWidth - 64}
-                height={220}
-                chartConfig={{
-                  backgroundColor: palette.card,
-                  backgroundGradientFrom: palette.card,
-                  backgroundGradientTo: palette.card,
-                  decimalPlaces: 0,
-                  color: (opacity = 1) =>
-                    `rgba(${palette.primary}, ${opacity})`,
-                  labelColor: (opacity = 1) => palette.textSecondary,
-                  style: {
-                    borderRadius: 16,
-                  },
-                  propsForDots: {
-                    r: "6",
-                    strokeWidth: "2",
-                    stroke: palette.primary,
-                  },
-                }}
-                bezier
-                style={styles.chart}
-              />
-            </Card.Content>
-          </Card>
-        )}
-
-        {/* Top Products */}
-        {stats.top_products.length > 0 && (
-          <Card style={styles.chartCard}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.chartTitle}>
-                Productos Más Transferidos
-              </Text>
-              {stats.top_products.slice(0, 5).map((product, index) => (
-                <View key={product.id} style={styles.topItem}>
-                  <View style={styles.topItemRank}>
-                    <Text variant="labelLarge" style={styles.topItemRankText}>
-                      {index + 1}
-                    </Text>
-                  </View>
-                  <View style={styles.topItemInfo}>
-                    <Text variant="bodyMedium" style={styles.topItemName}>
-                      {product.name}
-                    </Text>
-                    <Text variant="bodySmall" style={styles.topItemDetails}>
-                      {product.total_quantity} unidades •{" "}
-                      {product.transfer_count} transferencias
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </Card.Content>
-          </Card>
-        )}
-
-        {/* Top Locations */}
-        {stats.top_locations.length > 0 && (
-          <Card style={styles.chartCard}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.chartTitle}>
-                Ubicaciones Más Activas
-              </Text>
-              <BarChart
-                data={{
-                  labels: stats.top_locations.map((loc) => loc.location_name),
-                  datasets: [
-                    {
-                      data: stats.top_locations.map(
-                        (loc) => loc.transfer_count
-                      ),
-                    },
-                  ],
-                }}
-                width={screenWidth - 64}
-                height={220}
-                chartConfig={{
-                  backgroundColor: palette.card,
-                  backgroundGradientFrom: palette.card,
-                  backgroundGradientTo: palette.card,
-                  decimalPlaces: 0,
-                  color: (opacity = 1) => palette.primary,
-                  labelColor: (opacity = 1) => palette.textSecondary,
-                  style: {
-                    borderRadius: 16,
-                  },
-                }}
-                style={styles.chart}
-                showValuesOnTopOfBars
-              />
-            </Card.Content>
-          </Card>
-        )}
       </View>
+
+      {/* Status breakdown */}
+      {hasStatusData && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Por estado</Text>
+          <View style={styles.card}>
+            <View style={styles.statusList}>
+              {Object.entries(stats.transfers_by_status).map(
+                ([status, count]) => {
+                  const meta = STATUS_META[status] ?? {
+                    label: status,
+                    variant: "default" as const,
+                  };
+                  return (
+                    <View key={status} style={styles.statusItem}>
+                      <AppChip variant={meta.variant} size="md">
+                        {meta.label}
+                      </AppChip>
+                      <Text style={styles.statusCount}>{count}</Text>
+                    </View>
+                  );
+                },
+              )}
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Trend Chart */}
+      {hasTrendData && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Tendencia</Text>
+          <View style={styles.card}>
+            <LineChart
+              data={{
+                labels: stats.transfers_by_period.map((item) =>
+                  item.date
+                    ? new Date(item.date).toLocaleDateString("es-MX", {
+                        day: "2-digit",
+                        month: "short",
+                      })
+                    : item.month || "",
+                ),
+                datasets: [
+                  {
+                    data: stats.transfers_by_period.map((item) => item.count),
+                  },
+                ],
+              }}
+              width={screenWidth - 64}
+              height={220}
+              chartConfig={{
+                backgroundColor: palette.surface,
+                backgroundGradientFrom: palette.surface,
+                backgroundGradientTo: palette.surface,
+                decimalPlaces: 0,
+                color: (opacity = 1) =>
+                  `rgba(79, 122, 58, ${opacity})`,
+                labelColor: () => palette.textSecondary,
+                propsForDots: {
+                  r: "5",
+                  strokeWidth: "2",
+                  stroke: palette.primary,
+                },
+                propsForBackgroundLines: {
+                  stroke: palette.border,
+                },
+              }}
+              bezier
+              style={styles.chart}
+              withInnerLines
+              withOuterLines={false}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* Top Products */}
+      {hasTopProducts && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Productos más transferidos</Text>
+          <View style={styles.card}>
+            {stats.top_products.slice(0, 5).map((product, index) => (
+              <View
+                key={product.id}
+                style={[
+                  styles.topItem,
+                  index < Math.min(stats.top_products.length, 5) - 1 &&
+                    styles.topItemDivider,
+                ]}
+              >
+                <View style={styles.topItemRank}>
+                  <Text style={styles.topItemRankText}>{index + 1}</Text>
+                </View>
+                <View style={styles.topItemInfo}>
+                  <Text style={styles.topItemName} numberOfLines={1}>
+                    {product.name}
+                  </Text>
+                  <Text style={styles.topItemDetails}>
+                    {product.total_quantity} unidades · {product.transfer_count} transferencias
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Top Locations */}
+      {hasTopLocations && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Ubicaciones más activas</Text>
+          <View style={styles.card}>
+            <BarChart
+              data={{
+                labels: stats.top_locations.map((loc) => loc.location_name),
+                datasets: [
+                  {
+                    data: stats.top_locations.map(
+                      (loc) => loc.transfer_count,
+                    ),
+                  },
+                ],
+              }}
+              width={screenWidth - 64}
+              height={220}
+              chartConfig={{
+                backgroundColor: palette.surface,
+                backgroundGradientFrom: palette.surface,
+                backgroundGradientTo: palette.surface,
+                decimalPlaces: 0,
+                color: (opacity = 1) => `rgba(79, 122, 58, ${opacity})`,
+                labelColor: () => palette.textSecondary,
+                propsForBackgroundLines: {
+                  stroke: palette.border,
+                },
+              }}
+              style={styles.chart}
+              showValuesOnTopOfBars
+              withInnerLines={false}
+              fromZero
+              yAxisLabel=""
+              yAxisSuffix=""
+            />
+          </View>
+        </View>
+      )}
+
+      {!hasStatusData && !hasTrendData && !hasTopProducts && !hasTopLocations && (
+        <EmptyState
+          icon="chart-line"
+          title="Sin datos para el período"
+          description="No hay transferencias registradas en el período seleccionado"
+        />
+      )}
     </ScrollView>
   );
 }
@@ -342,119 +307,110 @@ const styles = StyleSheet.create({
     backgroundColor: palette.background,
   },
   content: {
-    padding: 20,
+    padding: tokens.spacing[5],
+    gap: tokens.spacing[5],
   },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: palette.background,
+    gap: tokens.spacing[3],
   },
-  header: {
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  title: {
-    color: palette.text,
-    fontWeight: "bold",
-    marginTop: 12,
-    marginBottom: 8,
-    textAlign: "center",
-  },
-  subtitle: {
+  loadingText: {
+    ...tokens.typography.body,
     color: palette.textSecondary,
-    textAlign: "center",
   },
-  periodSelector: {
-    marginBottom: 20,
-  },
-  summaryGrid: {
+
+  // --- KPI Grid ---
+  kpiGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 20,
+    gap: tokens.spacing[3],
   },
-  summaryCard: {
-    flex: 1,
-    minWidth: "47%",
-    maxWidth: "48%",
-    backgroundColor: palette.card,
-    borderRadius: 12,
-    elevation: 0,
-    shadowColor: "transparent",
+
+  // --- Period selector ---
+  periodWrap: {
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.md,
+    padding: tokens.spacing[2],
+    borderWidth: 1,
+    borderColor: palette.border,
   },
-  summaryLabel: {
-    color: palette.textSecondary,
-    marginTop: 8,
+
+  // --- Section ---
+  section: {
+    gap: tokens.spacing[3],
   },
-  summaryValue: {
-    color: palette.primary,
-    fontWeight: "bold",
-    marginTop: 4,
-  },
-  chartCard: {
-    backgroundColor: palette.card,
-    borderRadius: 12,
-    marginBottom: 16,
-    elevation: 0,
-    shadowColor: "transparent",
-  },
-  chartTitle: {
+  sectionTitle: {
+    ...tokens.typography.h3,
     color: palette.text,
-    fontWeight: "bold",
-    marginBottom: 16,
+  },
+  card: {
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: tokens.spacing[4],
+    ...tokens.shadow.sm,
   },
   chart: {
-    marginVertical: 8,
-    borderRadius: 16,
+    marginVertical: tokens.spacing[2],
+    borderRadius: tokens.radius.md,
   },
+
+  // --- Status list ---
   statusList: {
-    gap: 12,
+    gap: tokens.spacing[2],
   },
   statusItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: palette.background,
-    borderRadius: 8,
-  },
-  statusLabel: {
-    color: palette.text,
+    paddingVertical: tokens.spacing[2],
   },
   statusCount: {
-    color: palette.primary,
-    fontWeight: "bold",
+    ...tokens.typography.h3,
+    color: palette.text,
+    fontVariant: ["tabular-nums"],
   },
+
+  // --- Top items list ---
   topItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    gap: tokens.spacing[3],
+    paddingVertical: tokens.spacing[3],
+  },
+  topItemDivider: {
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
   },
   topItemRank: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: palette.primary + "20",
+    width: 28,
+    height: 28,
+    borderRadius: tokens.radius.full,
+    backgroundColor: palette.primarySoft,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
   },
   topItemRankText: {
+    ...tokens.typography.micro,
     color: palette.primary,
-    fontWeight: "bold",
+    fontWeight: "700",
   },
   topItemInfo: {
     flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   topItemName: {
+    ...tokens.typography.bodyMd,
     color: palette.text,
     fontWeight: "600",
   },
   topItemDetails: {
+    ...tokens.typography.micro,
     color: palette.textSecondary,
-    marginTop: 2,
   },
 });

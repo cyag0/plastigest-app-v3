@@ -21,7 +21,14 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { Divider, IconButton, Menu, Searchbar, Text } from "react-native-paper";
+import {
+  Divider,
+  IconButton,
+  Menu,
+  Searchbar,
+  Text,
+  TouchableRipple,
+} from "react-native-paper";
 import AppListDataTable, { AppListColumn } from "./AppListDataTable";
 import AppListFilterBar, { FilterConfig } from "./AppListFilter";
 
@@ -323,6 +330,7 @@ function AppList<T extends { id: number | string }>({
   const [showSearch, setShowSearch] = useState(false);
   const [pagination, setPagination] = useState<any>(null);
   const [activeFilters, setActiveFilters] = useState<Record<string, any>>({});
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Hooks
   const alerts = useAlerts();
@@ -382,6 +390,7 @@ function AppList<T extends { id: number | string }>({
       if (usePagination) {
         params.paginated = true;
         params.per_page = itemsPerPage;
+        params.page = currentPage;
       }
 
       const response = await service.index(params);
@@ -407,8 +416,12 @@ function AppList<T extends { id: number | string }>({
 
   // Efectos
   useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
     loadData();
-  }, [searchQuery, activeFilters]);
+  }, [searchQuery, activeFilters, currentPage]);
 
   useFocusEffect(
     useCallback(() => {
@@ -421,6 +434,41 @@ function AppList<T extends { id: number | string }>({
   // Handlers
   const handleFilterChange = (filterValues: Record<string, any>) => {
     setActiveFilters(filterValues);
+    setCurrentPage(1); // Resetear a la primera página al cambiar filtros
+  };
+
+  const handlePageChange = (page: number) => {
+    if (!pagination) return;
+    const lastPage = pagination.last_page || 1;
+    if (page < 1 || page > lastPage) return;
+    setCurrentPage(page);
+  };
+
+  /**
+   * Construye la lista de páginas visibles en la barra de paginación.
+   * Si hay muchas páginas, agrupa con elipsis para no desbordar.
+   */
+  const buildPageItems = (current: number, last: number): (number | "…")[] => {
+    if (last <= 7) {
+      return Array.from({ length: last }, (_, i) => i + 1);
+    }
+
+    const items: (number | "…")[] = [];
+    const add = (value: number | "…") => {
+      if (items[items.length - 1] !== value) items.push(value);
+    };
+
+    add(1);
+    if (current > 4) add("…");
+
+    const start = Math.max(2, current - 1);
+    const end = Math.min(last - 1, current + 1);
+    for (let i = start; i <= end; i++) add(i);
+
+    if (current < last - 3) add("…");
+    add(last);
+
+    return items;
   };
 
   const handleItemPress = (item: T) => {
@@ -805,13 +853,70 @@ function AppList<T extends { id: number | string }>({
             )}
           </ScrollView>
 
-          {/* Información de paginación */}
+          {/* Controles de paginación */}
           {pagination && (
-            <View style={[styles.paginationInfo, { marginBottom: 16 }]}>
+            <View
+              style={[
+                styles.paginationContainer,
+                { marginBottom: 16 },
+              ]}
+            >
               <Text variant="bodySmall" style={styles.paginationText}>
-                Mostrando {pagination.from} - {pagination.to} de{" "}
-                {pagination.total} elementos
+                Mostrando {pagination.from ?? 0} - {pagination.to ?? 0} de{" "}
+                {pagination.total ?? 0} elementos
               </Text>
+
+              {pagination.last_page > 1 && (
+                <View style={styles.paginationControls}>
+                  <IconButton
+                    icon="chevron-left"
+                    size={20}
+                    disabled={currentPage <= 1}
+                    onPress={() => handlePageChange(currentPage - 1)}
+                  />
+
+                  {buildPageItems(currentPage, pagination.last_page).map(
+                    (item, index) =>
+                      item === "…" ? (
+                        <Text
+                          key={`ellipsis-${index}`}
+                          style={styles.paginationEllipsis}
+                        >
+                          …
+                        </Text>
+                      ) : (
+                        <TouchableRipple
+                          key={`page-${item}`}
+                          onPress={() => handlePageChange(item)}
+                          style={[
+                            styles.paginationPageButton,
+                            item === currentPage
+                              ? styles.paginationPageButtonActive
+                              : null,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.paginationPageText,
+                              item === currentPage
+                                ? styles.paginationPageTextActive
+                                : null,
+                            ]}
+                          >
+                            {item}
+                          </Text>
+                        </TouchableRipple>
+                      ),
+                  )}
+
+                  <IconButton
+                    icon="chevron-right"
+                    size={20}
+                    disabled={currentPage >= pagination.last_page}
+                    onPress={() => handlePageChange(currentPage + 1)}
+                  />
+                </View>
+              )}
             </View>
           )}
         </>
@@ -956,6 +1061,39 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
     paginationText: {
       color: c.textSecondary,
       opacity: 0.6,
+    },
+    paginationContainer: {
+      alignItems: "center" as const,
+      marginTop: 16,
+      gap: 8,
+    },
+    paginationControls: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      gap: 4,
+    },
+    paginationPageButton: {
+      minWidth: 36,
+      height: 36,
+      paddingHorizontal: 8,
+      borderRadius: 18,
+      alignItems: "center" as const,
+      justifyContent: "center" as const,
+    },
+    paginationPageButtonActive: {
+      backgroundColor: c.primary,
+    },
+    paginationPageText: {
+      color: c.text,
+      fontSize: 14,
+      fontWeight: "600" as const,
+    },
+    paginationPageTextActive: {
+      color: c.onPrimary || "#fff",
+    },
+    paginationEllipsis: {
+      color: c.textSecondary,
+      paddingHorizontal: 4,
     },
     tableActionsRow: {
       flexDirection: "row" as const,

@@ -1,3 +1,5 @@
+import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import dayjs, { Dayjs } from "dayjs";
 import { useField } from "formik";
 import React, { useEffect } from "react";
@@ -13,6 +15,17 @@ interface AppTimePickerProps {
   placeholder?: string;
   onChange?: (value: string, date: Dayjs) => void;
 }
+
+const paperTheme = {
+  colors: {
+    primary: palette.primary,
+    onSurfaceVariant: palette.textSecondary,
+    outline: palette.border,
+    surface: palette.surface,
+    onSurface: palette.text,
+    error: palette.error,
+  },
+};
 
 export default function AppTimePicker(props: AppTimePickerProps) {
   const [time, setTime] = React.useState({
@@ -69,7 +82,7 @@ export default function AppTimePicker(props: AppTimePickerProps) {
 
   return (
     <SafeAreaProvider>
-      <View>
+      <View style={styles.container}>
         <TouchableRipple onPress={() => setVisible(true)}>
           <TextInput
             readOnly
@@ -77,6 +90,13 @@ export default function AppTimePicker(props: AppTimePickerProps) {
             mode="outlined"
             label={props.label}
             placeholder={props.placeholder || "Ingresa un valor"}
+            theme={paperTheme}
+            outlineColor={palette.border}
+            activeOutlineColor={palette.primary}
+            textColor={palette.text}
+            placeholderTextColor={palette.textMuted}
+            style={styles.input}
+            contentStyle={styles.inputContent}
           />
         </TouchableRipple>
         <TimePickerModal
@@ -90,5 +110,18 @@ export default function AppTimePicker(props: AppTimePickerProps) {
     </SafeAreaProvider>
   );
 }
+
+const styles = {
+  container: {
+    marginVertical: tokens.spacing[2],
+  },
+  input: {
+    backgroundColor: palette.surface,
+  },
+  inputContent: {
+    ...tokens.typography.body,
+    color: palette.text,
+  },
+};
 
 export const FormTimePicker = MakeForm(AppTimePicker);

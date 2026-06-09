@@ -1,10 +1,22 @@
+import AppChip from "@/components/App/Chip";
+import EmptyState from "@/components/App/EmptyState";
+import KpiCard from "@/components/Dashboard/KpiCard";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { Dimensions, ScrollView, StyleSheet, View } from "react-native";
+import {
+  ActivityIndicator,
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
-import { ActivityIndicator, Card, Text } from "react-native-paper";
+
+const screenWidth = Dimensions.get("window").width;
 
 export default function SaleStats() {
   const [loading, setLoading] = useState(true);
@@ -28,7 +40,7 @@ export default function SaleStats() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.centered}>
         <ActivityIndicator size="large" color={palette.primary} />
         <Text style={styles.loadingText}>Cargando estadísticas...</Text>
       </View>
@@ -37,361 +49,260 @@ export default function SaleStats() {
 
   if (!stats) {
     return (
-      <View style={styles.errorContainer}>
-        <MaterialCommunityIcons
-          name="alert-circle"
-          size={48}
-          color={palette.error}
-        />
-        <Text style={styles.errorText}>
-          No se pudieron cargar las estadísticas
-        </Text>
-      </View>
+      <EmptyState
+        icon="chart-box-outline"
+        title="Sin datos"
+        description="No se pudieron cargar las estadísticas de ventas"
+      />
     );
   }
 
-  const chartConfig = {
-    backgroundColor: palette.surface,
-    backgroundGradientFrom: palette.surface,
-    backgroundGradientTo: palette.surface,
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(220, 38, 38, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(55, 65, 81, ${opacity})`,
-    style: {
-      borderRadius: 16,
-    },
-    propsForDots: {
-      r: "6",
-      strokeWidth: "2",
-      stroke: palette.primary,
-    },
-  };
+  const formatCurrency = (value: number) =>
+    (value || 0).toLocaleString("es-MX", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
 
-  // Preparar datos para el gráfico de tendencia
   const trendData = {
     labels:
       stats.sales_trend?.map((item: any) => {
-        const [year, month] = item.month.split("-");
+        const [, month] = item.month.split("-");
         const monthNames = [
-          "Ene",
-          "Feb",
-          "Mar",
-          "Abr",
-          "May",
-          "Jun",
-          "Jul",
-          "Ago",
-          "Sep",
-          "Oct",
-          "Nov",
-          "Dic",
+          "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+          "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
         ];
         return monthNames[parseInt(month) - 1];
       }) || [],
     datasets: [
       {
-        data: stats.sales_trend?.map((item: any) => item.total || 0) || [0],
-        color: (opacity = 1) => `rgba(220, 38, 38, ${opacity})`,
+        data:
+          stats.sales_trend?.map((item: any) => item.total || 0) || [0],
+        color: (opacity = 1) => `rgba(79, 122, 58, ${opacity})`,
         strokeWidth: 3,
       },
     ],
   };
 
-  // Preparar datos para el gráfico de métodos de pago
   const paymentMethodData = {
     labels: Object.values(stats.by_payment_method || {}).map(
-      (item: any) => item.label
+      (item: any) => item.label,
     ),
     datasets: [
       {
         data: Object.values(stats.by_payment_method || {}).map(
-          (item: any) => item.total
+          (item: any) => item.total,
         ),
       },
     ],
   };
 
+  const hasPaymentMethods =
+    Object.keys(stats.by_payment_method || {}).length > 0;
+  const hasTrend = stats.sales_trend && stats.sales_trend.length > 0;
+  const hasTopProducts =
+    stats.top_products && stats.top_products.length > 0;
+  const statusEntries = Object.entries(stats.by_status || {});
+
   return (
-    <ScrollView style={styles.container}>
-      {/* Resumen General */}
-      <View style={styles.section}>
-        <Text variant="titleLarge" style={styles.sectionTitle}>
-          Resumen General
-        </Text>
-        <View style={styles.statsGrid}>
-          <Card style={[styles.statCard, { backgroundColor: palette.error }]}>
-            <Card.Content>
-              <MaterialCommunityIcons
-                name="cart"
-                size={32}
-                color="#FFFFFF"
-              />
-              <Text variant="headlineMedium" style={styles.statValue}>
-                {stats.overview?.total_sales || 0}
-              </Text>
-              <Text variant="bodyMedium" style={styles.statLabel}>
-                Total Ventas
-              </Text>
-            </Card.Content>
-          </Card>
-
-          <Card style={[styles.statCard, { backgroundColor: palette.blue }]}>
-            <Card.Content>
-              <MaterialCommunityIcons
-                name="cash-multiple"
-                size={32}
-                color="#FFFFFF"
-              />
-              <Text variant="headlineMedium" style={styles.statValue}>
-                $
-                {(stats.overview?.total_amount || 0).toLocaleString("es-MX", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
-              <Text variant="bodyMedium" style={styles.statLabel}>
-                Monto Total
-              </Text>
-            </Card.Content>
-          </Card>
-
-          <Card style={[styles.statCard, { backgroundColor: palette.secondary }]}>
-            <Card.Content>
-              <MaterialCommunityIcons
-                name="chart-line"
-                size={32}
-                color="#FFFFFF"
-              />
-              <Text variant="headlineMedium" style={styles.statValue}>
-                $
-                {(stats.overview?.average_amount || 0).toLocaleString("es-MX", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
-              <Text variant="bodyMedium" style={styles.statLabel}>
-                Promedio por Venta
-              </Text>
-            </Card.Content>
-          </Card>
-
-          <Card style={[styles.statCard, { backgroundColor: palette.error }]}>
-            <Card.Content>
-              <MaterialCommunityIcons
-                name="calendar-today"
-                size={32}
-                color="#FFFFFF"
-              />
-              <Text variant="headlineMedium" style={styles.statValue}>
-                $
-                {(stats.overview?.average_per_day || 0).toLocaleString(
-                  "es-MX",
-                  {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  }
-                )}
-              </Text>
-              <Text variant="bodyMedium" style={styles.statLabel}>
-                Promedio Diario
-              </Text>
-            </Card.Content>
-          </Card>
-
-          <Card style={[styles.statCard, { backgroundColor: palette.accent }]}>
-            <Card.Content>
-              <MaterialCommunityIcons
-                name="calendar-check"
-                size={32}
-                color="#FFFFFF"
-              />
-              <Text variant="headlineMedium" style={styles.statValue}>
-                {stats.overview?.today_sales || 0}
-              </Text>
-              <Text variant="bodyMedium" style={styles.statLabel}>
-                Ventas Hoy
-              </Text>
-            </Card.Content>
-          </Card>
-
-          <Card style={[styles.statCard, { backgroundColor: palette.primary }]}>
-            <Card.Content>
-              <MaterialCommunityIcons
-                name="cash-check"
-                size={32}
-                color="#FFFFFF"
-              />
-              <Text variant="headlineMedium" style={styles.statValue}>
-                $
-                {(stats.overview?.today_amount || 0).toLocaleString("es-MX", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}
-              </Text>
-              <Text variant="bodyMedium" style={styles.statLabel}>
-                Monto Hoy
-              </Text>
-            </Card.Content>
-          </Card>
-        </View>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* KPI Cards */}
+      <View style={styles.kpiGrid}>
+        <KpiCard
+          icon="cart"
+          label="Total Ventas"
+          value={String(stats.overview?.total_sales || 0)}
+        />
+        <KpiCard
+          icon="cash-multiple"
+          label="Monto Total"
+          value={`$${formatCurrency(stats.overview?.total_amount || 0)}`}
+        />
+        <KpiCard
+          icon="chart-line"
+          label="Promedio Venta"
+          value={`$${formatCurrency(stats.overview?.average_amount || 0)}`}
+        />
+        <KpiCard
+          icon="calendar-today"
+          label="Promedio Diario"
+          value={`$${formatCurrency(stats.overview?.average_per_day || 0)}`}
+        />
+        <KpiCard
+          icon="calendar-check"
+          label="Ventas Hoy"
+          value={String(stats.overview?.today_sales || 0)}
+        />
+        <KpiCard
+          icon="cash-check"
+          label="Monto Hoy"
+          value={`$${formatCurrency(stats.overview?.today_amount || 0)}`}
+        />
       </View>
 
-      {/* Ventas por Estado */}
-      <View style={styles.section}>
-        <Text variant="titleLarge" style={styles.sectionTitle}>
-          Ventas por Estado
-        </Text>
-        <View style={styles.statusContainer}>
-          {Object.entries(stats.by_status || {}).map(
-            ([key, value]: [string, any]) => (
-              <Card key={key} style={styles.statusCard}>
-                <Card.Content style={styles.statusContent}>
-                  <View style={styles.statusHeader}>
-                    <Text variant="titleMedium" style={styles.statusLabel}>
-                      {value.label}
-                    </Text>
-                    <Text variant="headlineSmall" style={styles.statusCount}>
-                      {value.count}
-                    </Text>
-                  </View>
-                  <Text variant="bodyLarge" style={styles.statusAmount}>
-                    $
-                    {(value.total || 0).toLocaleString("es-MX", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </Text>
-                </Card.Content>
-              </Card>
-            )
-          )}
-        </View>
-      </View>
-
-      {/* Métodos de Pago */}
-      {Object.keys(stats.by_payment_method || {}).length > 0 && (
+      {/* Status breakdown */}
+      {statusEntries.length > 0 && (
         <View style={styles.section}>
-          <Text variant="titleLarge" style={styles.sectionTitle}>
-            Ventas por Método de Pago
-          </Text>
-          <Card style={styles.chartCard}>
-            <Card.Content>
-              <BarChart
-                data={paymentMethodData}
-                width={Dimensions.get("window").width - 64}
-                height={220}
-                chartConfig={chartConfig}
-                style={styles.chart}
-                yAxisLabel="$"
-                yAxisSuffix=""
-                showValuesOnTopOfBars
-                fromZero
-              />
-            </Card.Content>
-          </Card>
+          <Text style={styles.sectionTitle}>Por estado</Text>
+          <View style={styles.statusGrid}>
+            {statusEntries.map(([key, value]: [string, any]) => {
+              const variant = ((): "primary" | "success" | "warning" | "error" | "info" | "default" => {
+                if (key === "completed" || key === "paid") return "success";
+                if (key === "pending") return "warning";
+                if (key === "cancelled") return "error";
+                return "info";
+              })();
+              return (
+                <View key={key} style={styles.statusCard}>
+                  <View style={styles.statusHeader}>
+                    <AppChip variant={variant} size="md">
+                      {value.label}
+                    </AppChip>
+                    <Text style={styles.statusCount}>{value.count}</Text>
+                  </View>
+                  <Text style={styles.statusAmount}>
+                    ${formatCurrency(value.total)}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* Payment methods */}
+      {hasPaymentMethods && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Por método de pago</Text>
+          <View style={styles.card}>
+            <BarChart
+              data={paymentMethodData}
+              width={screenWidth - 64}
+              height={220}
+              chartConfig={{
+                backgroundColor: palette.surface,
+                backgroundGradientFrom: palette.surface,
+                backgroundGradientTo: palette.surface,
+                decimalPlaces: 0,
+                color: (opacity = 1) => `rgba(79, 122, 58, ${opacity})`,
+                labelColor: () => palette.textSecondary,
+                propsForBackgroundLines: {
+                  stroke: palette.border,
+                },
+              }}
+              style={styles.chart}
+              yAxisLabel="$"
+              yAxisSuffix=""
+              showValuesOnTopOfBars
+              fromZero
+            />
+          </View>
+
           <View style={styles.paymentMethodList}>
             {Object.entries(stats.by_payment_method || {}).map(
-              ([key, value]: [string, any]) => (
-                <Card key={key} style={styles.paymentMethodCard}>
-                  <Card.Content style={styles.paymentMethodContent}>
-                    <MaterialCommunityIcons
-                      name={
-                        key === "efectivo"
-                          ? "cash"
-                          : key === "tarjeta"
-                          ? "credit-card"
-                          : "bank-transfer"
-                      }
-                      size={24}
-                      color="#FFFFFF"
-                    />
+              ([key, value]: [string, any]) => {
+                const icon =
+                  key === "efectivo"
+                    ? "cash"
+                    : key === "tarjeta"
+                      ? "credit-card"
+                      : "bank-transfer";
+                return (
+                  <View key={key} style={styles.paymentMethodItem}>
+                    <View style={styles.paymentMethodIcon}>
+                      <MaterialCommunityIcons
+                        name={icon as any}
+                        size={18}
+                        color={palette.primary}
+                      />
+                    </View>
                     <View style={styles.paymentMethodInfo}>
-                      <Text variant="titleMedium" style={{ color: "#FFFFFF" }}>
+                      <Text style={styles.paymentMethodLabel}>
                         {value.label}
                       </Text>
-                      <Text
-                        variant="bodySmall"
-                        style={{ color: "#FFFFFF" }}
-                      >
+                      <Text style={styles.paymentMethodSub}>
                         {value.count} {value.count === 1 ? "venta" : "ventas"}
                       </Text>
                     </View>
-                    <Text
-                      variant="titleMedium"
-                      style={{ color: "#FFFFFF" }}
-                    >
-                      $
-                      {(value.total || 0).toLocaleString("es-MX", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                    <Text style={styles.paymentMethodTotal}>
+                      ${formatCurrency(value.total)}
                     </Text>
-                  </Card.Content>
-                </Card>
-              )
+                  </View>
+                );
+              },
             )}
           </View>
         </View>
       )}
 
-      {/* Tendencia de Ventas */}
-      {stats.sales_trend && stats.sales_trend.length > 0 && (
+      {/* Trend chart */}
+      {hasTrend && (
         <View style={styles.section}>
-          <Text variant="titleLarge" style={styles.sectionTitle}>
-            Tendencia de Ventas (6 meses)
-          </Text>
-          <Card style={styles.chartCard}>
-            <Card.Content>
-              <LineChart
-                data={trendData}
-                width={Dimensions.get("window").width - 64}
-                height={220}
-                chartConfig={chartConfig}
-                bezier
-                style={styles.chart}
-                yAxisLabel="$"
-                yAxisSuffix=""
-              />
-            </Card.Content>
-          </Card>
+          <Text style={styles.sectionTitle}>Tendencia (6 meses)</Text>
+          <View style={styles.card}>
+            <LineChart
+              data={trendData}
+              width={screenWidth - 64}
+              height={220}
+              chartConfig={{
+                backgroundColor: palette.surface,
+                backgroundGradientFrom: palette.surface,
+                backgroundGradientTo: palette.surface,
+                decimalPlaces: 0,
+                color: (opacity = 1) => `rgba(79, 122, 58, ${opacity})`,
+                labelColor: () => palette.textSecondary,
+                propsForDots: {
+                  r: "5",
+                  strokeWidth: "2",
+                  stroke: palette.primary,
+                },
+                propsForBackgroundLines: {
+                  stroke: palette.border,
+                },
+              }}
+              bezier
+              style={styles.chart}
+              yAxisLabel="$"
+              yAxisSuffix=""
+            />
+          </View>
         </View>
       )}
 
-      {/* Top Productos Vendidos */}
-      {stats.top_products && stats.top_products.length > 0 && (
+      {/* Top products */}
+      {hasTopProducts && (
         <View style={styles.section}>
-          <Text variant="titleLarge" style={styles.sectionTitle}>
-            Productos Más Vendidos
-          </Text>
-          {stats.top_products.map((product: any, index: number) => (
-            <Card key={product.product_id} style={styles.productCard}>
-              <Card.Content style={styles.productContent}>
-                <View style={styles.productRank}>
-                  <Text variant="titleLarge" style={styles.rankNumber}>
-                    {index + 1}
-                  </Text>
+          <Text style={styles.sectionTitle}>Productos más vendidos</Text>
+          <View style={styles.card}>
+            {stats.top_products.map((product: any, index: number) => (
+              <View
+                key={product.product_id}
+                style={[
+                  styles.topItem,
+                  index < stats.top_products.length - 1 &&
+                    styles.topItemDivider,
+                ]}
+              >
+                <View style={styles.topItemRank}>
+                  <Text style={styles.topItemRankText}>{index + 1}</Text>
                 </View>
-                <View style={styles.productInfo}>
-                  <Text variant="titleMedium" style={styles.productName}>
+                <View style={styles.topItemInfo}>
+                  <Text style={styles.topItemName} numberOfLines={1}>
                     {product.product_name}
                   </Text>
-                  <Text
-                    variant="bodySmall"
-                    style={{ color: "#FFFFFF" }}
-                  >
+                  <Text style={styles.topItemSub}>
                     {product.quantity_sold} unidades vendidas
                   </Text>
                 </View>
-                <Text variant="titleMedium" style={styles.productAmount}>
-                  $
-                  {(product.total_amount || 0).toLocaleString("es-MX", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                <Text style={styles.topItemTotal}>
+                  ${formatCurrency(product.total_amount)}
                 </Text>
-              </Card.Content>
-            </Card>
-          ))}
+              </View>
+            ))}
+          </View>
         </View>
       )}
     </ScrollView>
@@ -403,137 +314,168 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.background,
   },
-  loadingContainer: {
+  content: {
+    padding: tokens.spacing[5],
+    gap: tokens.spacing[5],
+  },
+  centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: palette.background,
+    gap: tokens.spacing[3],
   },
   loadingText: {
-    marginTop: 16,
+    ...tokens.typography.body,
     color: palette.textSecondary,
   },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: palette.background,
-    gap: 16,
-  },
-  errorText: {
-    color: palette.error,
-    fontSize: 16,
-  },
-  section: {
-    marginBottom: 24,
-    paddingHorizontal: 16,
-  },
-  sectionTitle: {
-    fontWeight: "bold",
-    marginBottom: 16,
-    color: palette.text,
-  },
-  statsGrid: {
+
+  // --- KPI grid ---
+  kpiGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    gap: tokens.spacing[3],
   },
-  statCard: {
-    flex: 1,
-    minWidth: "45%",
+
+  // --- Section ---
+  section: {
+    gap: tokens.spacing[3],
+  },
+  sectionTitle: {
+    ...tokens.typography.h3,
+    color: palette.text,
+  },
+  card: {
     backgroundColor: palette.surface,
-    borderRadius: 12,
+    borderRadius: tokens.radius.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: tokens.spacing[4],
+    ...tokens.shadow.sm,
   },
-  statValue: {
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginTop: 8,
+  chart: {
+    marginVertical: tokens.spacing[2],
+    borderRadius: tokens.radius.md,
   },
-  statLabel: {
-    color: "#FFFFFF",
-    marginTop: 4,
-  },
-  statusContainer: {
-    gap: 12,
+
+  // --- Status grid ---
+  statusGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: tokens.spacing[3],
   },
   statusCard: {
-    backgroundColor: palette.blue,
-    borderRadius: 12,
-  },
-  statusContent: {
-    gap: 8,
+    flexBasis: "47%",
+    flexGrow: 1,
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: tokens.spacing[3],
+    gap: tokens.spacing[2],
   },
   statusHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  statusLabel: {
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
   statusCount: {
-    fontWeight: "bold",
-    color: "#FFFFFF",
+    ...tokens.typography.h2,
+    color: palette.text,
+    fontVariant: ["tabular-nums"],
   },
   statusAmount: {
-    fontWeight: "bold",
-    color: "#FFFFFF",
+    ...tokens.typography.bodyMd,
+    color: palette.text,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
   },
-  chartCard: {
-    backgroundColor: palette.surface,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  chart: {
-    borderRadius: 16,
-  },
+
+  // --- Payment methods ---
   paymentMethodList: {
-    gap: 12,
+    gap: tokens.spacing[2],
   },
-  paymentMethodCard: {
-    backgroundColor: palette.secondary,
-    borderRadius: 12,
-  },
-  paymentMethodContent: {
+  paymentMethodItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
+    gap: tokens.spacing[3],
+    padding: tokens.spacing[3],
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
-  paymentMethodInfo: {
-    flex: 1,
-  },
-  productCard: {
-    backgroundColor: palette.primary,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  productContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  productRank: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: palette.primary + "20",
+  paymentMethodIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: tokens.radius.md,
+    backgroundColor: palette.primarySoft,
     justifyContent: "center",
     alignItems: "center",
   },
-  rankNumber: {
-    fontWeight: "bold",
-    color: "#FFFFFF",
-  },
-  productInfo: {
+  paymentMethodInfo: {
     flex: 1,
+    minWidth: 0,
   },
-  productName: {
+  paymentMethodLabel: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
     fontWeight: "600",
-    color: "#FFFFFF",
   },
-  productAmount: {
-    fontWeight: "bold",
-    color: "#FFFFFF",
+  paymentMethodSub: {
+    ...tokens.typography.micro,
+    color: palette.textSecondary,
+  },
+  paymentMethodTotal: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+
+  // --- Top products list ---
+  topItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing[3],
+    paddingVertical: tokens.spacing[3],
+  },
+  topItemDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+  },
+  topItemRank: {
+    width: 28,
+    height: 28,
+    borderRadius: tokens.radius.full,
+    backgroundColor: palette.primarySoft,
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
+  },
+  topItemRankText: {
+    ...tokens.typography.micro,
+    color: palette.primary,
+    fontWeight: "700",
+  },
+  topItemInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  topItemName: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
+    fontWeight: "600",
+  },
+  topItemSub: {
+    ...tokens.typography.micro,
+    color: palette.textSecondary,
+  },
+  topItemTotal: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
   },
 });

@@ -1,4 +1,7 @@
+import EmptyState from "@/components/App/EmptyState";
+import KpiCard from "@/components/Dashboard/KpiCard";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
@@ -7,10 +10,10 @@ import {
   Dimensions,
   ScrollView,
   StyleSheet,
+  Text,
   View,
 } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
-import { Card, Text } from "react-native-paper";
 
 const screenWidth = Dimensions.get("window").width;
 
@@ -60,7 +63,7 @@ export default function PurchaseStats() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.centered}>
         <ActivityIndicator size="large" color={palette.primary} />
         <Text style={styles.loadingText}>Cargando estadísticas...</Text>
       </View>
@@ -69,62 +72,32 @@ export default function PurchaseStats() {
 
   if (!stats) {
     return (
-      <View style={styles.emptyContainer}>
-        <MaterialCommunityIcons
-          name="chart-box-outline"
-          size={48}
-          color={palette.textSecondary}
-        />
-        <Text style={styles.emptyText}>No hay datos disponibles</Text>
-      </View>
+      <EmptyState
+        icon="chart-box-outline"
+        title="Sin datos"
+        description="No hay datos de compras disponibles"
+      />
     );
   }
 
-  const chartConfig = {
-    backgroundColor: palette.card,
-    backgroundGradientFrom: palette.card,
-    backgroundGradientTo: palette.card,
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(128, 150, 113, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(114, 92, 58, ${opacity})`,
-    style: {
-      borderRadius: 8,
-    },
-    propsForLabels: {
-      fontSize: 10,
-    },
-  };
-
-  // Preparar datos para gráfica de tendencia
   const trendData = {
     labels: (stats.purchase_trend || []).map((item) => {
-      const [year, month] = item.month.split("-");
+      const [, month] = item.month.split("-");
       const monthNames = [
-        "Ene",
-        "Feb",
-        "Mar",
-        "Abr",
-        "May",
-        "Jun",
-        "Jul",
-        "Ago",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dic",
+        "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+        "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
       ];
       return monthNames[parseInt(month) - 1];
     }),
     datasets: [
       {
         data: (stats.purchase_trend || []).map((item) => item.total),
-        color: (opacity = 1) => `rgba(128, 150, 113, ${opacity})`,
-        strokeWidth: 2,
+        color: (opacity = 1) => `rgba(79, 122, 58, ${opacity})`,
+        strokeWidth: 3,
       },
     ],
   };
 
-  // Preparar datos para gráfica de top proveedores
   const suppliersData = {
     labels: (stats.top_suppliers || []).slice(0, 5).map((s) => {
       const name = s.supplier_name;
@@ -139,91 +112,67 @@ export default function PurchaseStats() {
     ],
   };
 
+  const hasTrend = (stats.purchase_trend || []).length > 0;
+  const hasSuppliers = (stats.top_suppliers || []).length > 0;
+  const hasTopProducts = (stats.top_products || []).length > 0;
+
   return (
-    <ScrollView style={styles.container}>
-      {/* Stats Cards - 2 filas */}
-      <View style={styles.statsGrid}>
-        {/* Fila 1 */}
-        <View style={styles.statsRow}>
-          <Card style={[styles.statCard, { backgroundColor: palette.primary }]}>
-            <Card.Content style={styles.statContent}>
-              <View style={styles.statIcon}>
-                <MaterialCommunityIcons name="cart" size={24} color="#FFFFFF" />
-              </View>
-              <View style={styles.statInfo}>
-                <Text style={styles.statValue}>{stats.total_purchases}</Text>
-                <Text style={styles.statLabel}>Total Compras</Text>
-              </View>
-            </Card.Content>
-          </Card>
-
-          <Card style={[styles.statCard, { backgroundColor: palette.blue }]}>
-            <Card.Content style={styles.statContent}>
-              <View style={styles.statIcon}>
-                <MaterialCommunityIcons name="cash" size={24} color="#FFFFFF" />
-              </View>
-              <View style={styles.statInfo}>
-                <Text style={styles.statValue}>
-                  ${(stats.total_amount || 0).toFixed(0)}
-                </Text>
-                <Text style={styles.statLabel}>Monto Total</Text>
-              </View>
-            </Card.Content>
-          </Card>
-        </View>
-
-        {/* Fila 2 */}
-        <View style={styles.statsRow}>
-          <Card style={[styles.statCard, { backgroundColor: palette.accent }]}>
-            <Card.Content style={styles.statContent}>
-              <View style={styles.statIcon}>
-                <MaterialCommunityIcons
-                  name="package-variant-closed"
-                  size={24}
-                  color="#FFFFFF"
-                />
-              </View>
-              <View style={styles.statInfo}>
-                <Text style={styles.statValue}>{stats.received_count}</Text>
-                <Text style={styles.statLabel}>Recibidas</Text>
-              </View>
-            </Card.Content>
-          </Card>
-
-          <Card style={[styles.statCard, { backgroundColor: palette.error }]}>
-            <Card.Content style={styles.statContent}>
-              <View style={styles.statIcon}>
-                <MaterialCommunityIcons
-                  name="clock-outline"
-                  size={24}
-                  color="#FFFFFF"
-                />
-              </View>
-              <View style={styles.statInfo}>
-                <Text style={styles.statValue}>{stats.pending_count}</Text>
-                <Text style={styles.statLabel}>Pendientes</Text>
-              </View>
-            </Card.Content>
-          </Card>
-        </View>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+    >
+      {/* KPI Cards */}
+      <View style={styles.kpiGrid}>
+        <KpiCard
+          icon="cart"
+          label="Total Compras"
+          value={String(stats.total_purchases)}
+        />
+        <KpiCard
+          icon="cash"
+          label="Monto Total"
+          value={`$${(stats.total_amount || 0).toFixed(0)}`}
+        />
+        <KpiCard
+          icon="package-variant-closed"
+          label="Recibidas"
+          value={String(stats.received_count)}
+        />
+        <KpiCard
+          icon="clock-outline"
+          label="Pendientes"
+          value={String(stats.pending_count)}
+        />
       </View>
 
-      {/* Gráfica de Tendencia */}
-      <Card style={styles.chartCard}>
-        <Card.Content>
-          <Text style={styles.chartTitle}>Tendencia de Compras (6 meses)</Text>
-          {(stats.purchase_trend || []).length > 0 ? (
+      {/* Trend chart */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Tendencia (6 meses)</Text>
+        <View style={styles.card}>
+          {hasTrend ? (
             <LineChart
               data={trendData}
-              width={screenWidth - 48}
-              height={200}
-              chartConfig={chartConfig}
+              width={screenWidth - 64}
+              height={220}
+              chartConfig={{
+                backgroundColor: palette.surface,
+                backgroundGradientFrom: palette.surface,
+                backgroundGradientTo: palette.surface,
+                decimalPlaces: 0,
+                color: (opacity = 1) => `rgba(79, 122, 58, ${opacity})`,
+                labelColor: () => palette.textSecondary,
+                propsForDots: {
+                  r: "5",
+                  strokeWidth: "2",
+                  stroke: palette.primary,
+                },
+                propsForBackgroundLines: {
+                  stroke: palette.border,
+                },
+              }}
               bezier
               style={styles.chart}
-              withInnerLines={false}
-              withOuterLines={true}
-              withVerticalLabels={true}
-              withHorizontalLabels={true}
               formatYLabel={(value) => `$${parseInt(value)}`}
             />
           ) : (
@@ -233,19 +182,29 @@ export default function PurchaseStats() {
               </Text>
             </View>
           )}
-        </Card.Content>
-      </Card>
+        </View>
+      </View>
 
-      {/* Gráfica de Top Proveedores */}
-      <Card style={styles.chartCard}>
-        <Card.Content>
-          <Text style={styles.chartTitle}>Top 5 Proveedores</Text>
-          {(stats.top_suppliers || []).length > 0 ? (
+      {/* Top suppliers chart */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Top 5 proveedores</Text>
+        <View style={styles.card}>
+          {hasSuppliers ? (
             <BarChart
               data={suppliersData}
-              width={screenWidth - 48}
+              width={screenWidth - 64}
               height={220}
-              chartConfig={chartConfig}
+              chartConfig={{
+                backgroundColor: palette.surface,
+                backgroundGradientFrom: palette.surface,
+                backgroundGradientTo: palette.surface,
+                decimalPlaces: 0,
+                color: (opacity = 1) => `rgba(79, 122, 58, ${opacity})`,
+                labelColor: () => palette.textSecondary,
+                propsForBackgroundLines: {
+                  stroke: palette.border,
+                },
+              }}
               style={styles.chart}
               showValuesOnTopOfBars
               withInnerLines={false}
@@ -260,17 +219,24 @@ export default function PurchaseStats() {
               </Text>
             </View>
           )}
-        </Card.Content>
-      </Card>
+        </View>
+      </View>
 
-      {/* Lista de Productos Más Comprados */}
-      <Card style={styles.chartCard}>
-        <Card.Content>
-          <Text style={styles.chartTitle}>Productos Más Comprados</Text>
-          {(stats.top_products || []).length > 0 ? (
-            <View style={styles.productsList}>
-              {(stats.top_products || []).slice(0, 5).map((product, index) => (
-                <View key={index} style={styles.productItem}>
+      {/* Top products list */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Productos más comprados</Text>
+        <View style={styles.card}>
+          {hasTopProducts ? (
+            <View>
+              {stats.top_products.slice(0, 5).map((product, index) => (
+                <View
+                  key={`${product.product_name}-${index}`}
+                  style={[
+                    styles.productItem,
+                    index < Math.min(stats.top_products.length, 5) - 1 &&
+                      styles.productItemDivider,
+                  ]}
+                >
                   <View style={styles.productRank}>
                     <Text style={styles.productRankText}>{index + 1}</Text>
                   </View>
@@ -295,8 +261,8 @@ export default function PurchaseStats() {
               </Text>
             </View>
           )}
-        </Card.Content>
-      </Card>
+        </View>
+      </View>
     </ScrollView>
   );
 }
@@ -306,132 +272,101 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.background,
   },
-  loadingContainer: {
+  content: {
+    padding: tokens.spacing[5],
+    gap: tokens.spacing[5],
+  },
+  centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 32,
+    backgroundColor: palette.background,
+    gap: tokens.spacing[3],
   },
   loadingText: {
-    marginTop: 12,
+    ...tokens.typography.body,
     color: palette.textSecondary,
-    fontSize: 14,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 32,
-  },
-  emptyText: {
-    marginTop: 12,
-    color: palette.textSecondary,
-    fontSize: 14,
-  },
-  statsGrid: {
-    padding: 16,
-    gap: 12,
-  },
-  statsRow: {
+
+  // --- KPI grid ---
+  kpiGrid: {
     flexDirection: "row",
-    gap: 12,
+    flexWrap: "wrap",
+    gap: tokens.spacing[3],
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: palette.card,
-    elevation: 1,
+
+  // --- Section ---
+  section: {
+    gap: tokens.spacing[3],
   },
-  statContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 8,
-  },
-  statIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  statInfo: {
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "#FFFFFF",
-    marginTop: 2,
-  },
-  chartCard: {
-    margin: 16,
-    marginTop: 0,
-    backgroundColor: palette.card,
-    elevation: 1,
-  },
-  chartTitle: {
-    fontSize: 16,
-    fontWeight: "600",
+  sectionTitle: {
+    ...tokens.typography.h3,
     color: palette.text,
-    marginBottom: 12,
+  },
+  card: {
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: tokens.spacing[4],
+    ...tokens.shadow.sm,
   },
   chart: {
-    marginVertical: 8,
-    borderRadius: 8,
+    marginVertical: tokens.spacing[2],
+    borderRadius: tokens.radius.md,
   },
   emptyChart: {
-    padding: 32,
+    paddingVertical: tokens.spacing[7],
     alignItems: "center",
-    justifyContent: "center",
   },
   emptyChartText: {
-    color: palette.textSecondary,
-    fontSize: 14,
+    ...tokens.typography.body,
+    color: palette.textMuted,
   },
-  productsList: {
-    gap: 8,
-  },
+
+  // --- Product list ---
   productItem: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 12,
-    backgroundColor: palette.surface,
-    borderRadius: 8,
-    gap: 12,
+    gap: tokens.spacing[3],
+    paddingVertical: tokens.spacing[3],
+  },
+  productItemDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
   },
   productRank: {
     width: 28,
     height: 28,
-    borderRadius: 14,
-    backgroundColor: palette.primary,
+    borderRadius: tokens.radius.full,
+    backgroundColor: palette.primarySoft,
     justifyContent: "center",
     alignItems: "center",
+    flexShrink: 0,
   },
   productRankText: {
-    color: "#fff",
+    ...tokens.typography.micro,
+    color: palette.primary,
     fontWeight: "700",
-    fontSize: 12,
   },
   productInfo: {
     flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   productName: {
-    fontSize: 14,
-    fontWeight: "600",
+    ...tokens.typography.bodyMd,
     color: palette.text,
+    fontWeight: "600",
   },
   productQuantity: {
-    fontSize: 12,
+    ...tokens.typography.micro,
     color: palette.textSecondary,
-    marginTop: 2,
   },
   productAmount: {
-    fontSize: 14,
+    ...tokens.typography.bodyMd,
+    color: palette.text,
     fontWeight: "700",
-    color: palette.primary,
+    fontVariant: ["tabular-nums"],
   },
 });

@@ -378,6 +378,15 @@ export default function ProductsIndex(props: ProductsIndexProps) {
           },
           customActions: [
             {
+              title: "Ver Paquetes",
+              icon: "package-variant-closed",
+              onPress: (item) => {
+                router.push(
+                  `/(tabs)/inventory/packages?product_id=${item.id}` as any
+                );
+              },
+            },
+            {
               title: "Imprimir Etiquetas",
               icon: "barcode",
               onPress: (item) => {

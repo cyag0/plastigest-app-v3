@@ -4,7 +4,7 @@ import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import { FormProSelect, SelectDataProvider } from "@/components/Form/AppProSelect";
-import { AlertsProvider, useAlerts } from "@/hooks/useAlerts";
+import { AlertsDialogs, AlertsProvider, useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import React, {
@@ -186,6 +186,7 @@ const CreatePurchaseModal = forwardRef<
             />
           </AppForm>
         </SelectDataProvider>
+        <AlertsDialogs />
       </AlertsProvider>
     </AppModal>
   );

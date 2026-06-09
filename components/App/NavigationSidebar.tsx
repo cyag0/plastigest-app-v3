@@ -1,4 +1,5 @@
 import NotificationBell from "@/components/Notifications/NotificationBell";
+import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
 import UserMenu from "@/components/App/UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -7,7 +8,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useFocusEffect, usePathname } from "expo-router";
 import React, { useCallback, useState } from "react";
-import { Text, TouchableOpacity, View } from "react-native";
+import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { tokens } from "@/constants/tokens";
 import SidebarItem from "./SidebarItem";
 import SidebarSectionLabel from "./SidebarSectionLabel";
@@ -18,11 +19,14 @@ const STORAGE_KEY_COLLAPSED = "@plastigest/sidebar.collapsed";
 const EXPANDED_WIDTH = 260;
 const COLLAPSED_WIDTH = 72;
 
+// Strip the expo-router group prefix from a route, e.g.
+// "/(tabs)/home/production" -> "/home/production"
+const routeToPathname = (route: string) => route.replace(/^\/\([^)]+\)/, "");
+
 interface NavItem {
   label: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   route: string;
-  segment: string;
 }
 
 interface NavSection {
@@ -38,13 +42,11 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Inicio",
         icon: "home-variant",
         route: "/(tabs)/home",
-        segment: "/home",
       },
       {
         label: "Dashboard",
         icon: "view-dashboard-outline",
         route: "/(tabs)/reports",
-        segment: "/reports",
       },
     ],
   },
@@ -55,19 +57,16 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Inventario",
         icon: "archive-outline",
         route: "/(tabs)/inventory",
-        segment: "/inventory",
       },
       {
         label: "Producción",
         icon: "factory",
         route: "/(tabs)/home/production",
-        segment: "/production",
       },
       {
         label: "Transferencias",
         icon: "swap-horizontal",
         route: "/(tabs)/home/transfers-menu",
-        segment: "/transfers",
       },
     ],
   },
@@ -78,19 +77,16 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Ventas",
         icon: "cart-outline",
         route: "/(tabs)/home/sales",
-        segment: "/sales",
       },
       {
         label: "Pedidos",
         icon: "clipboard-list-outline",
         route: "/(tabs)/home/sales-orders",
-        segment: "/sales-orders",
       },
       {
         label: "Caja",
         icon: "cash-multiple",
         route: "/(tabs)/home/cash",
-        segment: "/cash",
       },
     ],
   },
@@ -101,7 +97,6 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Administración",
         icon: "cog-outline",
         route: "/(tabs)/administration",
-        segment: "/administration",
       },
     ],
   },
@@ -115,6 +110,14 @@ export default function NavigationSidebar() {
 
   const [collapsed, setCollapsed] = useState(false);
   const [userMenuVisible, setUserMenuVisible] = useState(false);
+  // Controla el modal de cambio de empresa/sucursal. Lo abrimos
+  // desde el bloque de sucursal del sidebar y desde el menu de
+  // usuario, en lugar de empujar a una ruta nueva (que sacaba al
+  // usuario de su tab actual).
+  const [switcherVisible, setSwitcherVisible] = useState(false);
+  const [switcherInitialView, setSwitcherInitialView] = useState<
+    "location" | "company"
+  >("location");
 
   useFocusEffect(
     useCallback(() => {
@@ -137,14 +140,19 @@ export default function NavigationSidebar() {
     });
   }, []);
 
-  const isActive = (segment: string) => pathname.includes(segment);
+  const isActive = (route: string) => pathname === routeToPathname(route);
 
   const handleNavigation = useCallback((route: string) => {
     router.push(route as any);
   }, []);
 
   const handleSwitchLocation = useCallback(() => {
-    router.push("/(stacks)/selectLocation" as any);
+    // Antes: router.push("/(stacks)/selectLocation") -> sacaba al
+    // usuario del tab en el que estaba. Ahora abrimos el modal
+    // contextual para que pueda cambiar de sucursal sin perder
+    // su lugar en la app.
+    setSwitcherInitialView("location");
+    setSwitcherVisible(true);
   }, []);
 
   // Color del logo: blanco si el primary es oscuro (light), oscuro
@@ -211,6 +219,9 @@ export default function NavigationSidebar() {
       paddingBottom: 4,
     },
     navigation: {
+      flex: 1,
+    },
+    navigationContent: {
       paddingTop: 4,
       paddingBottom: 8,
     },
@@ -330,7 +341,11 @@ export default function NavigationSidebar() {
       )}
 
       {/* Navigation items */}
-      <View style={styles.navigation}>
+      <ScrollView
+        style={styles.navigation}
+        contentContainerStyle={styles.navigationContent}
+        showsVerticalScrollIndicator={false}
+      >
         {NAV_SECTIONS.map((section) => (
           <View key={section.label}>
             <SidebarSectionLabel
@@ -338,14 +353,14 @@ export default function NavigationSidebar() {
               collapsed={collapsed}
             />
             {section.items.map((item) => {
-              const isHome = item.segment === "/home";
+              const isHome = item.route === "/(tabs)/home";
               const showBadge = isHome && unreadNotificationsCount > 0;
               return (
                 <SidebarItem
                   key={item.route}
                   icon={item.icon}
                   label={item.label}
-                  active={isActive(item.segment)}
+                  active={isActive(item.route)}
                   collapsed={collapsed}
                   badge={
                     showBadge
@@ -358,10 +373,7 @@ export default function NavigationSidebar() {
             })}
           </View>
         ))}
-      </View>
-
-      {/* Espaciador flexible */}
-      <View style={{ flex: 1 }} />
+      </ScrollView>
 
       {/* Footer: campana + sucursal + usuario */}
       <View style={styles.footer}>
@@ -437,9 +449,22 @@ export default function NavigationSidebar() {
               onPress={() => setUserMenuVisible(true)}
             />
           }
-          onSwitchLocation={handleSwitchLocation}
+          onOpenContextSwitcher={(view) => {
+            setUserMenuVisible(false);
+            setSwitcherVisible(true);
+            setSwitcherInitialView(view);
+          }}
         />
       </View>
+
+      {/* Modal de cambio de empresa/sucursal. No interfiere con
+          el tab actual: el modal vive en un Portal encima de la UI
+          y al cerrarse el usuario sigue donde estaba. */}
+      <ContextSwitcherModal
+        visible={switcherVisible}
+        onDismiss={() => setSwitcherVisible(false)}
+        initialView={switcherInitialView}
+      />
     </View>
   );
 }

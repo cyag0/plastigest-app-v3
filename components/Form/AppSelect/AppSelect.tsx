@@ -1,6 +1,7 @@
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { TouchableRipple } from "react-native-paper";
 import SelectDropdown from "react-native-select-dropdown";
 import MakeForm from "../AppForm/hoc";
@@ -10,7 +11,7 @@ interface AppSelectProps {
   value?: number[] | string[] | number | string;
   onChange?: (value: string[] | number[] | string | number) => void;
   onBlur?: () => void;
-  data?: Array<{ value: string; label: string }>;
+  data?: { value: string; label: string }[];
   multiple?: boolean;
   hideSearchBox?: boolean;
   readonly?: boolean;
@@ -95,8 +96,13 @@ export default function AppSelect(props: AppSelectProps) {
     return <ReadonlyText text={selectedValue} />;
   }
 
+  // Texto a mostrar en el botón (placeholder o valor seleccionado)
+  const buttonText = selectedValue || props.placeholder || "Seleccionar...";
+  const buttonTextColor = selectedValue
+    ? palette.text
+    : palette.textMuted;
+
   if (props.multiple) {
-    // Para múltiple, mostrar una vista simplificada por ahora
     return (
       <View style={styles.container}>
         <SelectDropdown
@@ -107,34 +113,32 @@ export default function AppSelect(props: AppSelectProps) {
             <View
               style={[styles.dropdownButton, props.disabled && styles.disabled]}
             >
-              <ReadonlyText
-                text={
-                  selectedValue ||
-                  props.placeholder ||
-                  "Seleccionar opciones..."
-                }
-                textStyle={{
-                  color: "#333",
-                }}
-              />
+              <Text
+                style={[styles.buttonText, { color: buttonTextColor }]}
+                numberOfLines={1}
+              >
+                {buttonText}
+              </Text>
+              <Text style={styles.chevron}>{"▾"}</Text>
             </View>
           )}
           renderItem={(item, index, isSelected) => {
-            const selectedItem = normalizedValue === item.value;
-
+            const isSelectedItem = normalizedValue === item.value;
             return (
               <View
                 style={[
                   styles.dropdownItem,
-                  selectedItem && styles.selectedItem,
+                  isSelectedItem && styles.selectedItem,
                 ]}
               >
-                <ReadonlyText
-                  text={item.label}
-                  textStyle={{
-                    color: "#333",
-                  }}
-                />
+                <Text
+                  style={[
+                    styles.itemText,
+                    isSelectedItem && styles.selectedItemText,
+                  ]}
+                >
+                  {item.label}
+                </Text>
               </View>
             );
           }}
@@ -157,28 +161,30 @@ export default function AppSelect(props: AppSelectProps) {
             <View
               style={[styles.dropdownButton, props.disabled && styles.disabled]}
             >
-              <ReadonlyText
-                textStyle={{
-                  color: "#333",
-                }}
-                text={selectedValue || props.placeholder || "Seleccionar..."}
-              />
+              <Text
+                style={[styles.buttonText, { color: buttonTextColor }]}
+                numberOfLines={1}
+              >
+                {buttonText}
+              </Text>
+              <Text style={styles.chevron}>{"▾"}</Text>
             </View>
           </TouchableRipple>
         )}
         renderItem={(item, index, isSelected) => {
-          const selectedItem = normalizedValue === item.value;
-
+          const isSelectedItem = normalizedValue === item.value;
           return (
             <View
-              style={[styles.dropdownItem, selectedItem && styles.selectedItem]}
+              style={[styles.dropdownItem, isSelectedItem && styles.selectedItem]}
             >
-              <ReadonlyText
-                text={item.label}
-                textStyle={{
-                  color: selectedItem ? "#fff" : undefined,
-                }}
-              />
+              <Text
+                style={[
+                  styles.itemText,
+                  isSelectedItem && styles.selectedItemText,
+                ]}
+              >
+                {item.label}
+              </Text>
             </View>
           );
         }}
@@ -188,6 +194,7 @@ export default function AppSelect(props: AppSelectProps) {
         search={!props.hideSearchBox}
         searchInputStyle={styles.searchInput}
         searchPlaceHolder="Buscar..."
+        searchPlaceHolderColor={palette.textMuted}
       />
     </View>
   );
@@ -198,41 +205,74 @@ export const FormSelectSimple = MakeForm(AppSelect);
 const styles = StyleSheet.create({
   container: {
     minHeight: 48,
+    marginVertical: tokens.spacing[2],
   },
+
+  // --- Button (the visible closed state) ---
   dropdownButton: {
     width: "100%",
     height: 48,
-    backgroundColor: "#f5f5f5",
-    borderRadius: 8,
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: "#ddd",
-    paddingHorizontal: 12,
-    justifyContent: "center",
+    borderColor: palette.border,
+    paddingHorizontal: tokens.spacing[3],
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   disabled: {
-    backgroundColor: "#e9ecef",
+    backgroundColor: palette.surfaceMuted,
     opacity: 0.6,
   },
-  dropdown: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ddd",
+  buttonText: {
+    ...tokens.typography.body,
+    flex: 1,
   },
+  chevron: {
+    fontSize: 14,
+    color: palette.textSecondary,
+    marginLeft: tokens.spacing[2],
+  },
+
+  // --- Dropdown panel (the open list) ---
+  dropdown: {
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    marginTop: 4,
+    ...tokens.shadow.md,
+  },
+
+  // --- Search input inside dropdown ---
+  searchInput: {
+    backgroundColor: palette.surfaceMuted,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+    borderRadius: 0,
+    paddingHorizontal: tokens.spacing[3],
+    color: palette.text,
+  },
+
+  // --- Items ---
   dropdownItem: {
     width: "100%",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingHorizontal: tokens.spacing[3],
+    paddingVertical: tokens.spacing[3],
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: palette.border,
   },
+  itemText: {
+    ...tokens.typography.body,
+    color: palette.text,
+  },
+  // El item seleccionado usa el color primary de la app (antes era palette.error)
   selectedItem: {
-    backgroundColor: palette.error,
+    backgroundColor: palette.primarySoft,
   },
-  searchInput: {
-    backgroundColor: "#f8f9fa",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
-    paddingHorizontal: 12,
+  selectedItemText: {
+    color: palette.primary,
+    fontWeight: "600",
   },
 });

@@ -1,4 +1,5 @@
 import NotificationBell from "@/components/Notifications/NotificationBell";
+import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
 import UserMenu from "@/components/App/UserMenu";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { useRouter } from "expo-router";
@@ -53,6 +54,12 @@ export default function AppBar({
   const isWeb = Platform.OS === "web";
   const useBreadcrumbTitle = showBreadcrumb && isWeb;
   const [userMenuVisible, setUserMenuVisible] = useState(false);
+  // Modal de cambio de empresa/sucursal. Antes el AppBar empujaba
+  // a `/(stacks)/selectLocation` y el usuario perdia su tab.
+  const [switcherVisible, setSwitcherVisible] = useState(false);
+  const [switcherInitialView, setSwitcherInitialView] = useState<
+    "location" | "company"
+  >("location");
 
   const styles = useThemedStyles((colors) => ({
     container: {
@@ -185,8 +192,12 @@ export default function AppBar({
             visible={userMenuVisible}
             onDismiss={() => setUserMenuVisible(false)}
             anchor={userMenuTrigger}
-            onSwitchLocation={() => {
-              router.push("/(stacks)/selectLocation" as any);
+            onOpenContextSwitcher={(view) => {
+              setUserMenuVisible(false);
+              setSwitcherVisible(true);
+              // Guardamos la vista inicial para que el modal sepa
+              // que el usuario queria cambiar empresa o sucursal.
+              setSwitcherInitialView(view);
             }}
           />
         )}
@@ -195,6 +206,13 @@ export default function AppBar({
         {rightActions}
         </View>
       </Appbar.Header>
+
+      {/* Modal de cambio de empresa/sucursal */}
+      <ContextSwitcherModal
+        visible={switcherVisible}
+        onDismiss={() => setSwitcherVisible(false)}
+        initialView={switcherInitialView}
+      />
     </View>
   );
 }

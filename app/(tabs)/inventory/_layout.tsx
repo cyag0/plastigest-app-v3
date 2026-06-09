@@ -92,6 +92,26 @@ export default function _layout() {
         name="products/[id]/edit"
         options={{ title: "Editar Producto" }}
       />
+      <Stack.Screen
+        name="packages"
+        options={{ title: "Paquetes" }}
+      />
+      <Stack.Screen
+        name="packages/index"
+        options={{ title: "Paquetes" }}
+      />
+      <Stack.Screen
+        name="packages/form"
+        options={{ title: "Nuevo Paquete" }}
+      />
+      <Stack.Screen
+        name="packages/[id]/index"
+        options={{ title: "Detalle del Paquete" }}
+      />
+      <Stack.Screen
+        name="packages/[id]/edit"
+        options={{ title: "Editar Paquete" }}
+      />
       <Stack.Screen name="adjustment/index" options={{ title: "Ajustes" }} />
       <Stack.Screen
         name="adjustment/form"

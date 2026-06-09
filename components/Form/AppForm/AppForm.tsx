@@ -16,6 +16,7 @@ import React, {
 } from "react";
 import {
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleProp,
   View,
@@ -97,6 +98,9 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
 
   const alerts = useAlerts();
   const { colors } = useTheme();
+  // Web usa botones compactos alineados a la derecha; mobile mantiene
+  // los botones grandes apilados y a todo lo ancho.
+  const isWeb = Platform.OS === "web";
   const styles = useThemedStyles((c) => ({
     formCard: {
       maxWidth: 900,
@@ -117,7 +121,22 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     },
     backgroundStyle: {
       backgroundColor: c.background,
-    }
+    },
+    // Wrapper de los botones. En web los botones van en fila alineados
+    // a la derecha y con padding reducido; en mobile se apilan a todo
+    // lo ancho como antes.
+    buttonContainer: {
+      padding: isWeb ? 8 : 16,
+      paddingHorizontal: isWeb ? 16 : 16,
+      gap: 8,
+      flexDirection: isWeb ? "row" : "column",
+      justifyContent: isWeb ? "flex-end" : "flex-start",
+      alignItems: isWeb ? "center" : "stretch",
+    },
+    buttonWrap: {
+      width: isWeb ? undefined : "100%",
+      maxWidth: isWeb ? 240 : undefined,
+    },
   }));
 
   useEffect(() => {
@@ -345,6 +364,128 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   const showButtons =
     props.showButtons === undefined ? true : props.showButtons;
 
+  // Bloque de botones (Submit/Reset o Editar/Eliminar en readonly).
+  // Se renderiza dentro del ScrollView en web (debajo de children) y
+  // fuera en mobile (siempre visible sobre el teclado).
+  const renderButtons = () => {
+    if (!showButtons) return null;
+
+    const inner = (
+      <View style={styles.cardWrap}>
+        <View style={styles.buttonContainer}>
+          {readonly ? (
+            <>
+              <View style={styles.buttonWrap}>
+                <Button
+                  mode="contained"
+                  compact={isWeb}
+                  onPress={() => {
+                    setReadonly(false);
+                  }}
+                >
+                  Editar Registro
+                </Button>
+              </View>
+
+              <View style={styles.buttonWrap}>
+                <Button
+                  mode="outlined"
+                  compact={isWeb}
+                  onPress={async () => {
+                    if (props.id && props.api) {
+                      try {
+                        setLoading(true);
+                        await props.api.destroy(props.id);
+                        formInstance.resetForm();
+                      } catch (error) {
+                        console.error("Error deleting record:", error);
+                      } finally {
+                        setLoading(false);
+                      }
+                    }
+                  }}
+                  disabled={
+                    !formInstance.isValid ||
+                    formInstance.isSubmitting ||
+                    loading
+                  }
+                  textColor={colors.error}
+                  loading={loading}
+                >
+                  Eliminar
+                </Button>
+              </View>
+            </>
+          ) : (
+            (props.showSubmitButton !== false ||
+              props.showResetButton !== false) && (
+              <>
+                {props.showSubmitButton !== false && (
+                  <View style={styles.buttonWrap}>
+                    <Button
+                      mode="contained"
+                      compact={isWeb}
+                      onPress={() => {
+                        const isValid = formInstance.validateForm();
+
+                        if (!isValid) {
+                          alerts.error(
+                            "Por favor, completa todos los campos requeridos.",
+                          );
+                          return;
+                        }
+
+                        formInstance.handleSubmit();
+                      }}
+                      disabled={
+                        !formInstance.isValid ||
+                        formInstance.isSubmitting ||
+                        loading
+                      }
+                      loading={loading}
+                    >
+                      {props.submitButtonText ||
+                        (props.id ? "Actualizar" : "Crear")}
+                    </Button>
+                  </View>
+                )}
+
+                {props.showResetButton !== false && (
+                  <View style={styles.buttonWrap}>
+                    <Button
+                      mode="outlined"
+                      compact={isWeb}
+                      onPress={() => formInstance.resetForm()}
+                      disabled={loading}
+                    >
+                      {props.resetButtonText || "Resetear"}
+                    </Button>
+                  </View>
+                )}
+
+                {props.additionalSubmitButtons &&
+                  props.additionalSubmitButtons}
+              </>
+            )
+          )}
+        </View>
+      </View>
+    );
+
+    // En mobile envolvemos con KeyboardAvoidingView para que el teclado
+    // no tape los botones. En web no es necesario.
+    if (isWeb) return inner;
+
+    return (
+      <KeyboardAvoidingView
+        behavior="padding"
+        keyboardVerticalOffset={100}
+      >
+        {inner}
+      </KeyboardAvoidingView>
+    );
+  };
+
   return (
     <AppFormContext.Provider value={contextValue}>
       <FormikProvider value={formInstance}>
@@ -361,112 +502,11 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
           >
            {props.children}
             <View style={{ height: props.disableScroll ? 0 : 16 }} />
+
+            {isWeb && renderButtons()}
           </ScrollView>
 
-          {showButtons && (
-            <KeyboardAvoidingView
-              behavior="padding"
-              keyboardVerticalOffset={100}
-            >
-              {readonly ? (
-                <>
-                  <View style={styles.cardWrap}>
-                    <View style={{ padding: 16, gap: 8 }}>
-                      <View>
-                        <Button
-                          mode="contained"
-                          onPress={() => {
-                            setReadonly(false);
-                          }}
-                        >
-                          Editar Registro
-                        </Button>
-                      </View>
-
-                      <View>
-                        <Button
-                          mode="outlined"
-                          onPress={async () => {
-                            if (props.id && props.api) {
-                              try {
-                                setLoading(true);
-                                await props.api.destroy(props.id);
-                                formInstance.resetForm();
-                              } catch (error) {
-                                console.error("Error deleting record:", error);
-                              } finally {
-                                setLoading(false);
-                              }
-                            }
-                          }}
-                          disabled={
-                            !formInstance.isValid ||
-                            formInstance.isSubmitting ||
-                            loading
-                          }
-                          textColor={colors.error}
-                          loading={loading}
-                        >
-                          Eliminar
-                        </Button>
-                      </View>
-                    </View>
-                  </View>
-                </>
-              ) : (
-                (props.showSubmitButton !== false ||
-                  props.showResetButton !== false) && (
-                  <View style={styles.cardWrap}>
-                    <View style={{ padding: 16, gap: 8 }}>
-                      {props.showSubmitButton !== false && (
-                        <View>
-                          <Button
-                            mode="contained"
-                            onPress={() => {
-                              const isValid = formInstance.validateForm();
-
-                              if (!isValid) {
-                                alerts.error(
-                                  "Por favor, completa todos los campos requeridos.",
-                                );
-                                return;
-                              }
-
-                              formInstance.handleSubmit();
-                            }}
-                            disabled={
-                              !formInstance.isValid ||
-                              formInstance.isSubmitting ||
-                              loading
-                            }
-                            loading={loading}
-                          >
-                            {props.submitButtonText ||
-                              (props.id ? "Actualizar" : "Crear")}
-                          </Button>
-                        </View>
-                      )}
-
-                      {props.showResetButton !== false && (
-                        <View>
-                          <Button
-                            mode="outlined"
-                            onPress={() => formInstance.resetForm()}
-                            disabled={loading}
-                          >
-                            {props.resetButtonText || "Resetear"}
-                          </Button>
-                        </View>
-                      )}
-
-                      {props.additionalSubmitButtons &&
-                        props.additionalSubmitButtons}
-                    </View>
-                  </View>
-                )
-              )}
-            </KeyboardAvoidingView>
-          )}
+          {!isWeb && renderButtons()}
         </View>
       </FormikProvider>
     </AppFormContext.Provider>

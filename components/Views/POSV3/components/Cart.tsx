@@ -1,15 +1,10 @@
+import EmptyState from "@/components/App/EmptyState";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { Image, ScrollView, StyleSheet, View } from "react-native";
-import {
-  Button,
-  Divider,
-  FAB,
-  IconButton,
-  Menu,
-  Text,
-} from "react-native-paper";
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Divider, FAB, Menu } from "react-native-paper";
 
 export interface CartItemData {
   id: number | string;
@@ -26,12 +21,12 @@ export interface CartItemData {
   main_image?: {
     uri: string;
   };
-  available_units?: Array<{
+  available_units?: {
     id: number;
     name: string;
     abbreviation: string;
     price: number;
-  }>;
+  }[];
 }
 
 interface CartProps {
@@ -83,109 +78,136 @@ function CartItemComponent({
     <View style={styles.itemContainer}>
       {/* Imagen y datos */}
       <View style={styles.itemRow}>
-        {item.main_image?.uri ? (
-          <Image
-            source={{ uri: item.main_image.uri }}
-            style={styles.productImage}
-          />
-        ) : (
-          <View style={styles.imagePlaceholder}>
-            <MaterialCommunityIcons
-              name="package-variant"
-              size={20}
-              color={palette.textSecondary}
+        <View style={styles.imageWrap}>
+          {item.main_image?.uri ? (
+            <Image
+              source={{ uri: item.main_image.uri }}
+              style={styles.productImage}
             />
-          </View>
-        )}
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <MaterialCommunityIcons
+                name="package-variant"
+                size={20}
+                color={palette.textMuted}
+              />
+            </View>
+          )}
+        </View>
 
         <View style={styles.itemInfo}>
-          <View
-            style={{ flexDirection: "row", justifyContent: "space-between" }}
-          >
-            <View>
+          <View style={styles.itemHeaderRow}>
+            <View style={styles.itemTitleWrap}>
               <Text
-                variant="bodyMedium"
                 style={styles.itemName}
                 numberOfLines={2}
               >
                 {item.name}
               </Text>
-              <Text variant="bodySmall" style={styles.itemCode}>
-                {item.code}
-              </Text>
+              <Text style={styles.itemCode}>{item.code}</Text>
             </View>
 
             {/* Selector de unidad */}
             {item.available_units && item.available_units.length > 1 && (
-              <Menu
-                visible={unitMenuVisible}
-                onDismiss={() => setUnitMenuVisible(false)}
-                anchor={
-                  <Button
-                    mode="outlined"
-                    compact
-                    onPress={() => setUnitMenuVisible(true)}
-                  >
-                    {item.unit_abbreviation || item.unit_name || item.unit || "Unidad"}
-                    <MaterialCommunityIcons name="chevron-down" size={16} />
-                  </Button>
-                }
-              >
-                {item.available_units.map((unit) => (
-                  <Menu.Item
-                    key={unit.id}
-                    onPress={() => handleUnitChange(unit.id)}
-                    title={`${unit.name} (${unit.abbreviation})`}
-                    leadingIcon={unit.id === item.unit_id ? "check" : undefined}
+              <View>
+                <TouchableOpacity
+                  style={styles.unitChip}
+                  onPress={() => setUnitMenuVisible(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.unitChipText} numberOfLines={1}>
+                    {item.unit_abbreviation ||
+                      item.unit_name ||
+                      item.unit ||
+                      "Unidad"}
+                  </Text>
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={12}
+                    color={palette.textSecondary}
                   />
-                ))}
-              </Menu>
+                </TouchableOpacity>
+                <Menu
+                  visible={unitMenuVisible}
+                  onDismiss={() => setUnitMenuVisible(false)}
+                  anchor={
+                    <View style={styles.menuAnchor}>
+                      <Text>·</Text>
+                    </View>
+                  }
+                  contentStyle={styles.unitMenu}
+                >
+                  {item.available_units.map((unit) => (
+                    <Menu.Item
+                      key={unit.id}
+                      onPress={() => handleUnitChange(unit.id)}
+                      title={`${unit.name} (${unit.abbreviation})`}
+                      leadingIcon={
+                        unit.id === item.unit_id ? "check" : undefined
+                      }
+                      titleStyle={
+                        unit.id === item.unit_id
+                          ? styles.unitMenuItemTextSelected
+                          : undefined
+                      }
+                    />
+                  ))}
+                </Menu>
+              </View>
             )}
           </View>
 
-          <Text variant="titleSmall" style={styles.itemPrice}>
-            ${item.price.toFixed(2)}
-            {item.unit_abbreviation && (
-              <Text style={styles.unitLabel}> /{item.unit_abbreviation}</Text>
-            )}
-          </Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.itemPrice}>
+              ${item.price.toFixed(2)}
+              {item.unit_abbreviation && (
+                <Text style={styles.unitLabel}>
+                  {" "}
+                  /{item.unit_abbreviation}
+                </Text>
+              )}
+            </Text>
+          </View>
         </View>
       </View>
 
       {/* Controles de cantidad */}
       <View style={styles.quantityRow}>
         <View style={styles.quantityControls}>
-          <IconButton
-            icon="minus"
-            size={16}
-            mode="contained"
-            containerColor={palette.surfaceMuted}
-            iconColor={palette.textSecondary}
+          <TouchableOpacity
+            style={styles.qtyButton}
             onPress={() => handleQuantityChange(-1)}
-          />
-          <Text variant="bodyMedium" style={styles.quantityText}>
-            {item.quantity}
-          </Text>
-          <IconButton
-            icon="plus"
-            size={16}
-            mode="contained"
-            containerColor={palette.success}
-            iconColor="#fff"
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="minus"
+              size={14}
+              color={palette.textSecondary}
+            />
+          </TouchableOpacity>
+          <Text style={styles.quantityText}>{item.quantity}</Text>
+          <TouchableOpacity
+            style={[styles.qtyButton, styles.qtyButtonPrimary]}
             onPress={() => handleQuantityChange(1)}
-          />
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="plus" size={14} color="#fff" />
+          </TouchableOpacity>
         </View>
 
         <View style={styles.itemRight}>
-          <Text variant="titleSmall" style={styles.itemTotal}>
-            ${item.total.toFixed(2)}
-          </Text>
-          <IconButton
-            icon="delete"
-            size={18}
-            iconColor={palette.error}
+          <Text style={styles.itemTotal}>${item.total.toFixed(2)}</Text>
+          <TouchableOpacity
+            style={styles.removeButton}
             onPress={() => onRemove(item.id)}
-          />
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="trash-can-outline"
+              size={16}
+              color={palette.error}
+            />
+          </TouchableOpacity>
         </View>
       </View>
     </View>
@@ -209,92 +231,98 @@ export default function Cart({
     <View style={[styles.container, isScreen && styles.screenContainer]}>
       {/* Header */}
       <View style={styles.header}>
-        <Text variant="titleLarge" style={styles.title}>
-          Carrito
-        </Text>
+        <View style={styles.headerTitleWrap}>
+          <View style={styles.headerIconBox}>
+            <MaterialCommunityIcons
+              name="cart-outline"
+              size={18}
+              color={palette.primary}
+            />
+          </View>
+          <Text style={styles.title}>Carrito</Text>
+          {items.length > 0 && (
+            <View style={styles.countBadge}>
+              <Text style={styles.countText}>{itemCount}</Text>
+            </View>
+          )}
+        </View>
         {items.length > 0 && onClearCart && (
-          <Button
-            mode="text"
+          <TouchableOpacity
             onPress={onClearCart}
-            textColor={palette.error}
-            compact
+            style={styles.clearButton}
+            activeOpacity={0.7}
           >
-            Limpiar
-          </Button>
+            <MaterialCommunityIcons
+              name="broom"
+              size={14}
+              color={palette.error}
+            />
+            <Text style={styles.clearButtonText}>Limpiar</Text>
+          </TouchableOpacity>
         )}
       </View>
 
-      <Divider />
+      <Divider style={styles.headerDivider} />
 
       {/* Items */}
-      <ScrollView style={styles.itemsList} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.itemsList}
+        showsVerticalScrollIndicator={false}
+      >
         {items.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons
-              name="cart-outline"
-              size={64}
-              color={palette.textSecondary}
+          <View style={styles.emptyWrap}>
+            <EmptyState
+              icon="cart-outline"
+              title="El carrito está vacío"
+              description="Agrega productos para comenzar"
+              compact
             />
-            <Text variant="bodyLarge" style={styles.emptyText}>
-              El carrito está vacío
-            </Text>
-            <Text variant="bodySmall" style={styles.emptySubtext}>
-              Agrega productos para comenzar
-            </Text>
           </View>
         ) : (
-          <>
-            {items.map((item) => (
-              <View key={item.id}>
-                <CartItemComponent
-                  item={item}
-                  onRemove={onRemoveItem}
-                  onItemChange={onItemChange}
-                />
-                <Divider style={styles.itemDivider} />
-              </View>
-            ))}
-          </>
+          items.map((item, index) => (
+            <View key={item.id}>
+              <CartItemComponent
+                item={item}
+                onRemove={onRemoveItem}
+                onItemChange={onItemChange}
+              />
+              {index < items.length - 1 && (
+                <View style={styles.itemDivider} />
+              )}
+            </View>
+          ))
         )}
       </ScrollView>
 
       {/* Children - contenido adicional */}
-     
-        {children}
+      {children}
 
       {/* Footer - Total y botón de finalizar */}
       {showFooter && items.length > 0 && (
         <View style={styles.footer}>
-          <Divider />
-
           <View style={styles.totalContainer}>
             <View style={styles.totalRow}>
-              <Text variant="bodyMedium" style={styles.totalLabel}>
-                Items:
-              </Text>
-              <Text variant="bodyMedium">{itemCount}</Text>
+              <Text style={styles.totalLabel}>Items</Text>
+              <Text style={styles.totalValue}>{itemCount}</Text>
             </View>
 
             <View style={styles.totalRow}>
-              <Text variant="titleMedium" style={styles.totalLabel}>
-                Total:
-              </Text>
-              <Text variant="titleLarge" style={styles.totalAmount}>
+              <Text style={styles.totalLabelStrong}>Total</Text>
+              <Text style={styles.totalAmount}>
                 ${cartTotal.toFixed(2)}
               </Text>
             </View>
           </View>
 
           {onFinish && (
-            <Button
-              mode="contained"
+            <TouchableOpacity
               onPress={onFinish}
               style={styles.finishButton}
-              contentStyle={styles.finishButtonContent}
-              labelStyle={styles.finishButtonLabel}
+              activeOpacity={0.7}
             >
-              Finalizar
-            </Button>
+              <Text style={styles.finishButtonText}>Finalizar</Text>
+              <MaterialCommunityIcons name="arrow-right" size={18} color="#fff" />
+            </TouchableOpacity>
           )}
         </View>
       )}
@@ -319,78 +347,183 @@ export default function Cart({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: palette.surface,
   },
   screenContainer: {
     // Estilos específicos cuando se muestra como pantalla
   },
+
+  // --- Header ---
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 16,
-    paddingBottom: 12,
+    paddingHorizontal: tokens.spacing[4],
+    paddingTop: tokens.spacing[4],
+    paddingBottom: tokens.spacing[3],
+  },
+  headerTitleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing[2],
+  },
+  headerIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: tokens.radius.md,
+    backgroundColor: palette.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
   },
   title: {
-    fontWeight: "bold",
+    ...tokens.typography.h3,
+    color: palette.text,
   },
+  countBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: tokens.radius.full,
+    paddingHorizontal: 6,
+    backgroundColor: palette.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countText: {
+    ...tokens.typography.micro,
+    color: palette.primary,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+  },
+  clearButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: tokens.radius.md,
+  },
+  clearButtonText: {
+    ...tokens.typography.micro,
+    color: palette.error,
+    fontWeight: "600",
+  },
+  headerDivider: {
+    backgroundColor: palette.border,
+  },
+
+  // --- Items list ---
   itemsList: {
     flex: 1,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 64,
-  },
-  emptyText: {
-    marginTop: 16,
-    color: palette.textSecondary,
-    fontWeight: "600",
-  },
-  emptySubtext: {
-    marginTop: 4,
-    color: palette.textSecondary,
+  emptyWrap: {
+    paddingTop: tokens.spacing[7],
   },
   itemContainer: {
-    padding: 16,
-    gap: 12,
+    paddingHorizontal: tokens.spacing[4],
+    paddingVertical: tokens.spacing[3],
+    gap: tokens.spacing[3],
   },
   itemRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: tokens.spacing[3],
+  },
+  imageWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: tokens.radius.md,
+    overflow: "hidden",
+    backgroundColor: palette.surfaceMuted,
   },
   productImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
+    width: "100%",
+    height: "100%",
   },
   imagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    backgroundColor: palette.surface,
+    width: "100%",
+    height: "100%",
+    backgroundColor: palette.surfaceMuted,
     justifyContent: "center",
     alignItems: "center",
   },
   itemInfo: {
     flex: 1,
+    minWidth: 0,
     gap: 4,
   },
-  itemName: {
-    fontWeight: "600",
+  itemHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: tokens.spacing[2],
+  },
+  itemTitleWrap: {
     flex: 1,
+    minWidth: 0,
+  },
+  itemName: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
+    fontWeight: "600",
   },
   itemCode: {
-    color: palette.textSecondary,
+    ...tokens.typography.micro,
+    color: palette.textMuted,
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   itemPrice: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
     fontWeight: "600",
   },
   unitLabel: {
-    fontSize: 12,
+    ...tokens.typography.micro,
     color: palette.textSecondary,
+    fontWeight: "400",
   },
+
+  // --- Unit chip in cart ---
+  unitChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: tokens.radius.full,
+    backgroundColor: palette.surfaceMuted,
+  },
+  unitChipText: {
+    ...tokens.typography.micro,
+    color: palette.text,
+    fontWeight: "600",
+  },
+  unitMenu: {
+    marginTop: 4,
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.md,
+    ...tokens.shadow.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    // Z-index alto para superponerse a las cards del carrito
+    // sin verse transparente. Paper renderiza el Menu en un
+    // portal, por lo que el zIndex va en el contentStyle.
+    zIndex: 1000,
+    elevation: 8,
+  },
+  menuAnchor: {
+    width: 0,
+    height: 0,
+    opacity: 0,
+    position: "absolute",
+  },
+  unitMenuItemTextSelected: {
+    color: palette.primary,
+    fontWeight: "600",
+  },
+
+  // --- Quantity row ---
   quantityRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -399,33 +532,64 @@ const styles = StyleSheet.create({
   quantityControls: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: tokens.spacing[2],
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: tokens.radius.md,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  qtyButton: {
+    width: 28,
+    height: 28,
+    borderRadius: tokens.radius.sm,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: palette.surface,
+  },
+  qtyButtonPrimary: {
+    backgroundColor: palette.primary,
   },
   quantityText: {
-    minWidth: 30,
+    ...tokens.typography.bodyMd,
+    minWidth: 28,
     textAlign: "center",
-    fontWeight: "600",
+    fontWeight: "700",
+    color: palette.text,
+    fontVariant: ["tabular-nums"],
   },
   itemRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: tokens.spacing[2],
   },
   itemTotal: {
-    fontWeight: "bold",
-    color: palette.primary,
+    ...tokens.typography.bodyMd,
+    fontWeight: "700",
+    color: palette.text,
+    fontVariant: ["tabular-nums"],
+  },
+  removeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: tokens.radius.md,
+    justifyContent: "center",
+    alignItems: "center",
   },
   itemDivider: {
-    marginHorizontal: 16,
+    height: 1,
+    backgroundColor: palette.border,
+    marginHorizontal: tokens.spacing[4],
   },
+
+  // --- Footer ---
   footer: {
+    backgroundColor: palette.surface,
     borderTopWidth: 1,
-    borderTopColor: "#bbb",
-    backgroundColor: "#fff",
+    borderTopColor: palette.border,
   },
   totalContainer: {
-    padding: 16,
-    gap: 8,
+    padding: tokens.spacing[4],
+    gap: tokens.spacing[2],
   },
   totalRow: {
     flexDirection: "row",
@@ -433,26 +597,44 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   totalLabel: {
+    ...tokens.typography.body,
+    color: palette.textSecondary,
+  },
+  totalLabelStrong: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
     fontWeight: "600",
   },
+  totalValue: {
+    ...tokens.typography.body,
+    color: palette.text,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
   totalAmount: {
-    fontWeight: "bold",
-    color: palette.primary,
+    ...tokens.typography.h2,
+    color: palette.text,
+    fontVariant: ["tabular-nums"],
   },
   finishButton: {
-    margin: 16,
-    marginTop: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: palette.primary,
+    marginHorizontal: tokens.spacing[4],
+    marginBottom: tokens.spacing[4],
+    paddingVertical: 12,
+    borderRadius: tokens.radius.md,
   },
-  finishButtonContent: {
-    paddingVertical: 8,
-  },
-  finishButtonLabel: {
-    fontSize: 16,
-    fontWeight: "bold",
+  finishButtonText: {
+    ...tokens.typography.bodyMd,
+    color: "#fff",
+    fontWeight: "700",
   },
   fab: {
     position: "absolute",
-    margin: 16,
+    margin: tokens.spacing[4],
     right: 0,
     bottom: 0,
     backgroundColor: palette.primary,

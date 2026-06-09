@@ -70,88 +70,111 @@ export default function AppListDataTable<T extends { id: number | string }>({
   renderActionsCell,
   onRowPress,
 }: AppListDataTableProps<T>) {
+  // Calcular el ancho total para que el scroll horizontal mantenga la
+  // alineación entre la tabla principal y la columna de acciones.
+  const totalColumnsWidth = columns.reduce(
+    (acc, column) => acc + (column.width || DEFAULT_COLUMN_WIDTH),
+    0,
+  );
+  const totalWidth = totalColumnsWidth + actionColumnWidth;
+
   return (
     <View style={styles.wrapper}>
-      <View style={styles.tableLayout}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator
-          contentContainerStyle={styles.mainTableScrollContent}
-        >
-          <DataTable>
-            <DataTable.Header style={styles.headerRow}>
-              {columns.map((column, columnIndex) => (
-                <DataTable.Title
-                  key={column.key || String(column.dataIndex || columnIndex)}
-                  style={{ width: column.width || DEFAULT_COLUMN_WIDTH }}
-                >
-                  <Text numberOfLines={1} style={styles.headerText}>
-                    {column.title}
-                  </Text>
-                </DataTable.Title>
-              ))}
-            </DataTable.Header>
-
-            {data.map((item, rowIndex) => (
-              <DataTable.Row
-                key={String(item.id)}
-                style={styles.dataRow}
-                onPress={onRowPress ? () => onRowPress(item) : undefined}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator
+        contentContainerStyle={[styles.tableLayout, { width: totalWidth }]}
+      >
+        {/* Tabla principal (columnas) */}
+        <View style={styles.mainTable}>
+          <View style={[styles.headerRow, { width: totalColumnsWidth }]}>
+            {columns.map((column, columnIndex) => (
+              <View
+                key={column.key || String(column.dataIndex || columnIndex)}
+                style={[
+                  styles.headerCell,
+                  { width: column.width || DEFAULT_COLUMN_WIDTH },
+                ]}
               >
-                {columns.map((column, columnIndex) => {
-                  const value = getValueByPath(item, column.dataIndex);
-                  const rendered = column.render
-                    ? column.render(value, item, rowIndex)
-                    : value;
-
-                  return (
-                    <DataTable.Cell
-                      key={
-                        (column.key ||
-                          String(column.dataIndex || columnIndex)) +
-                        "-" +
-                        String(item.id)
-                      }
-                      style={{ width: column.width || DEFAULT_COLUMN_WIDTH }}
-                    >
-                      <View
-                        style={[
-                          styles.cellContainer,
-                          { alignItems: getCellAlignment(column.align) as any },
-                        ]}
-                      >
-                        {renderCellValue(rendered)}
-                      </View>
-                    </DataTable.Cell>
-                  );
-                })}
-              </DataTable.Row>
-            ))}
-          </DataTable>
-        </ScrollView>
-
-        <View style={[styles.actionsColumn, { width: actionColumnWidth }]}>
-          <DataTable>
-            <DataTable.Header style={styles.headerRow}>
-              <DataTable.Title style={{ width: actionColumnWidth }}>
                 <Text numberOfLines={1} style={styles.headerText}>
-                  {actionColumnTitle}
+                  {column.title}
                 </Text>
-              </DataTable.Title>
-            </DataTable.Header>
-
-            {data.map((item, rowIndex) => (
-              <DataTable.Row key={`actions-${item.id}`} style={styles.dataRow}>
-                <DataTable.Cell style={{ width: actionColumnWidth }}>
-                  <View style={styles.actionsCell}>
-                    {renderActionsCell(item, rowIndex)}
-                  </View>
-                </DataTable.Cell>
-              </DataTable.Row>
+              </View>
             ))}
-          </DataTable>
+          </View>
+
+          {data.map((item, rowIndex) => (
+            <View
+              key={String(item.id)}
+              style={[
+                styles.dataRow,
+                { width: totalColumnsWidth },
+                onRowPress ? styles.rowPressable : null,
+              ]}
+              onTouchEnd={onRowPress ? () => onRowPress(item) : undefined}
+            >
+              {columns.map((column, columnIndex) => {
+                const value = getValueByPath(item, column.dataIndex);
+                const rendered = column.render
+                  ? column.render(value, item, rowIndex)
+                  : value;
+
+                return (
+                  <View
+                    key={
+                      (column.key ||
+                        String(column.dataIndex || columnIndex)) +
+                      "-" +
+                      String(item.id)
+                    }
+                    style={[
+                      styles.dataCell,
+                      { width: column.width || DEFAULT_COLUMN_WIDTH },
+                      { alignItems: getCellAlignment(column.align) as any },
+                    ]}
+                  >
+                    {renderCellValue(rendered)}
+                  </View>
+                );
+              })}
+            </View>
+          ))}
         </View>
-      </View>
+
+        {/* Columna de Acciones (siempre visible, alineada con las filas) */}
+        <View
+          style={[styles.actionsColumn, { width: actionColumnWidth }]}
+        >
+          <View
+            style={[
+              styles.headerRow,
+              styles.actionsHeader,
+              { width: actionColumnWidth },
+            ]}
+          >
+            <View style={[styles.headerCell, { width: actionColumnWidth }]}>
+              <Text numberOfLines={1} style={styles.headerText}>
+                {actionColumnTitle}
+              </Text>
+            </View>
+          </View>
+
+          {data.map((item, rowIndex) => (
+            <View
+              key={`actions-${item.id}`}
+              style={[styles.dataRow, { width: actionColumnWidth }]}
+            >
+              <View
+                style={[styles.dataCell, { width: actionColumnWidth }]}
+              >
+                <View style={styles.actionsCell}>
+                  {renderActionsCell(item, rowIndex)}
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -168,6 +191,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
   },
+  mainTable: {
+    flexDirection: "column",
+  },
   mainTableScrollContent: {
     minWidth: "100%",
   },
@@ -175,9 +201,22 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     borderLeftColor: palette.border,
     backgroundColor: palette.background,
+    flexDirection: "column",
+  },
+  actionsHeader: {
+    borderLeftWidth: 0,
   },
   headerRow: {
+    flexDirection: "row",
     backgroundColor: palette.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+    height: 48,
+    alignItems: "center",
+  },
+  headerCell: {
+    paddingHorizontal: 12,
+    justifyContent: "center",
   },
   headerText: {
     color: palette.textSecondary,
@@ -185,8 +224,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   dataRow: {
+    flexDirection: "row",
     minHeight: 56,
     height: 56,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+    backgroundColor: palette.background,
+  },
+  rowPressable: {
+    // placeholder para que quede explícito que se puede presionar
+  },
+  dataCell: {
+    paddingHorizontal: 12,
+    justifyContent: "center",
   },
   cellContainer: {
     width: "100%",

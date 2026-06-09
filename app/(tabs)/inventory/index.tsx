@@ -253,6 +253,12 @@ export default function InventoryScreen() {
             onPress={() => router.push("/(tabs)/inventory/products" as any)}
           />
           <QuickAccessCard
+            icon="package-variant-closed"
+            label="Paquetes"
+            description="Empaques y presentaciones"
+            onPress={() => router.push("/(tabs)/inventory/packages" as any)}
+          />
+          <QuickAccessCard
             icon="clipboard-check-outline"
             label="Inventario semanal"
             description="Verificacion fisica"

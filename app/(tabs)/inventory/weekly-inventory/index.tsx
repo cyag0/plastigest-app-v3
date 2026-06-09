@@ -4,7 +4,7 @@ import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
-import { AlertsProvider } from "@/hooks/useAlerts";
+import { AlertsDialogs, AlertsProvider } from "@/hooks/useAlerts";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import axios from "@/utils/axios";
@@ -256,6 +256,7 @@ export default function InventoryIndex() {
               numberOfLines={4}
             />
           </AppForm>
+          <AlertsDialogs />
         </AlertsProvider>
       </AppModal>
     </>

@@ -604,6 +604,15 @@ namespace App {
       company_id?: number;
       product_id: number;
       product_name?: string;
+      product_code?: string;
+      product?: {
+        id: number;
+        name: string;
+        code?: string | null;
+        product_type?: string | number | null;
+        unit_id?: number | null;
+        main_image?: { uri: string; name?: string; type?: string; size?: number | null } | null;
+      } | null;
       name: string;
       description?: string | null;
       version: number;

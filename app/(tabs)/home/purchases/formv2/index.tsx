@@ -4,13 +4,14 @@ import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormProSelect } from "@/components/Form/AppProSelect";
 import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useFormikContext } from "formik";
 import React, { useMemo } from "react";
-import { StyleSheet, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { Button, Text } from "react-native-paper";
 import { usePurchase } from "./PurchaseContext";
 
@@ -113,84 +114,86 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
       }}
       showResetButton={false}
     >
-      <View style={styles.header}>
-        <MaterialCommunityIcons
-          name="cash-register"
-          size={48}
-          color={palette.primary}
+      <View style={styles.formCard}>
+        <View style={styles.header}>
+          <MaterialCommunityIcons
+            name="cash-register"
+            size={48}
+            color={palette.primary}
+          />
+          <Text variant="headlineMedium" style={styles.title}>
+            Compra #{purchaseContext.currentPurchaseId || "Nueva"}
+          </Text>
+          <Text variant="bodyMedium" style={styles.subtitle}>
+            Sistema de compras
+          </Text>
+        </View>
+
+        <FormProSelect
+          name="company_id"
+          label="Compañía"
+          model="admin.companies"
+          placeholder="Seleccionar compañía"
+          disabled
         />
-        <Text variant="headlineMedium" style={styles.title}>
-          Compra #{purchaseContext.currentPurchaseId || "Nueva"}
-        </Text>
-        <Text variant="bodyMedium" style={styles.subtitle}>
-          Sistema de compras
-        </Text>
+
+        <FormProSelect
+          name="location_id"
+          label="Ubicación"
+          model="admin.locations"
+          placeholder="Seleccionar ubicación"
+          disabled
+        />
+
+        <FormDatePicker
+          name="purchase_date"
+          label="Fecha de Compra"
+          placeholder="YYYY-MM-DD"
+          required
+        />
+
+        <FormProSelect
+          name="supplier_id"
+          label="Proveedor"
+          onChange={(value) => {
+            purchaseContext.loadData(value);
+          }}
+          model="suppliers"
+          placeholder="Seleccionar proveedor"
+        />
+
+        <FormSelectSimple
+          name="payment_method"
+          label="Método de pago"
+          data={[
+            { value: "cash",     label: "Efectivo" },
+            { value: "card",     label: "Tarjeta" },
+            { value: "transfer", label: "Transferencia" },
+            { value: "other",    label: "Otro" },
+          ]}
+        />
+
+        <AppDependency name="supplier_id">
+          {(value) => {
+            if (!value) {
+              return (
+                <View style={styles.emptyMessage}>
+                  <MaterialCommunityIcons
+                    name="information"
+                    size={20}
+                    color={palette.textSecondary}
+                  />
+                  <Text variant="bodySmall" style={styles.emptyText}>
+                    Selecciona un proveedor para agregar productos
+                  </Text>
+                </View>
+              );
+            }
+
+            return <PurchasesContent supplier_id={value} />;
+          }}
+        </AppDependency>
       </View>
-
-      <FormProSelect
-        name="company_id"
-        label="Compañía"
-        model="admin.companies"
-        placeholder="Seleccionar compañía"
-        disabled
-      />
-
-      <FormProSelect
-        name="location_id"
-        label="Ubicación"
-        model="admin.locations"
-        placeholder="Seleccionar ubicación"
-        disabled
-      />
-
-      <FormDatePicker
-        name="purchase_date"
-        label="Fecha de Compra"
-        placeholder="YYYY-MM-DD"
-        required
-      />
-
-      <FormProSelect
-        name="supplier_id"
-        label="Proveedor"
-        onChange={(value) => {
-          purchaseContext.loadData(value);
-        }}
-        model="suppliers"
-        placeholder="Seleccionar proveedor"
-      />
-
-      <FormSelectSimple
-        name="payment_method"
-        label="Método de pago"
-        data={[
-          { value: "cash",     label: "Efectivo" },
-          { value: "card",     label: "Tarjeta" },
-          { value: "transfer", label: "Transferencia" },
-          { value: "other",    label: "Otro" },
-        ]}
-      />
-
-      <AppDependency name="supplier_id">
-        {(value) => {
-          if (!value) { 
-            return (
-              <View style={styles.emptyMessage}>
-                <MaterialCommunityIcons
-                  name="information"
-                  size={20}
-                  color={palette.textSecondary}
-                />
-                <Text variant="bodySmall" style={styles.emptyText}>
-                  Selecciona un proveedor para agregar productos
-                </Text>
-              </View>
-            );
-          }
-
-          return <PurchasesContent supplier_id={value} />;
-        }}
-      </AppDependency>
     </AppForm>
   );
 }
@@ -234,7 +237,7 @@ function PurchasesContent(props: PurchasesContentProps) {
 
       <View style={styles.actionsContainer}>
         <Button
-          mode="contained"
+          mode="outlined"
           onPress={() =>
             router.push(
               `/(tabs)/home/purchases/formv2/productos?supplier_id=${props.supplier_id}` as any,
@@ -242,26 +245,79 @@ function PurchasesContent(props: PurchasesContentProps) {
           }
           style={styles.button}
           icon="package-variant"
-          buttonColor={palette.primary}
         >
-          Ver Productos
-        </Button>
-
-        <Button
-          mode="contained"
-          onPress={() =>
-            router.push("/(tabs)/home/purchases/formv2/carrito" as any)
-          }
-          style={styles.button}
-          icon="cart"
-          buttonColor={palette.secondary}
-          disabled={cartItems.length === 0}
-        >
-          Ver Carrito ({cartItems.length})
+          {cartItems.length === 0 ? "Agregar productos" : "Editar productos"}
         </Button>
       </View>
 
-      {cartItems.length === 0 && (
+      {/* Lista de productos en el carrito - modo solo lectura */}
+      {cartItems.length > 0 ? (
+        <View style={styles.cartPreview}>
+          <View style={styles.cartPreviewHeader}>
+            <MaterialCommunityIcons
+              name="cart-outline"
+              size={16}
+              color={palette.textSecondary}
+            />
+            <Text style={styles.cartPreviewTitle}>
+              PRODUCTOS ({cartItems.length})
+            </Text>
+          </View>
+
+          <View style={styles.cartPreviewList}>
+            {cartItems.map((item, index) => (
+              <View
+                key={item.id ?? `${item.product_id}-${item.unit_id}-${index}`}
+                style={[
+                  styles.cartPreviewItem,
+                  index < cartItems.length - 1 && styles.cartPreviewItemDivider,
+                ]}
+              >
+                <View style={styles.cartPreviewImageWrap}>
+                  {item.main_image?.uri ? (
+                    <Image
+                      source={{ uri: item.main_image.uri }}
+                      style={styles.cartPreviewImage}
+                    />
+                  ) : (
+                    <View style={styles.cartPreviewImagePlaceholder}>
+                      <MaterialCommunityIcons
+                        name="package-variant"
+                        size={18}
+                        color={palette.textMuted}
+                      />
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.cartPreviewInfo}>
+                  <Text
+                    style={styles.cartPreviewName}
+                    numberOfLines={1}
+                  >
+                    {item.name}
+                  </Text>
+                  <Text style={styles.cartPreviewCode}>
+                    {item.code}
+                    {item.unit_abbreviation
+                      ? ` · ${item.unit_abbreviation}`
+                      : ""}
+                  </Text>
+                </View>
+
+                <View style={styles.cartPreviewNumbers}>
+                  <Text style={styles.cartPreviewQty}>
+                    {item.quantity} × ${item.price.toFixed(2)}
+                  </Text>
+                  <Text style={styles.cartPreviewTotal}>
+                    ${item.total.toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : (
         <View style={styles.emptyMessage}>
           <MaterialCommunityIcons
             name="information"
@@ -281,7 +337,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "transparent" as any,
-    padding: 16,
+  },
+  // Card que envuelve todo el contenido del formulario de compras.
+  // Limita el ancho maximo para mantener legibilidad en pantallas
+  // grandes y desactiva la sombra (sombra transparente) para un
+  // look mas limpio, dejando que el border sutil defina los limites.
+  formCard: {
+    width: "100%",
+    maxWidth: 800,
+    alignSelf: "center",
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: tokens.spacing[5],
+    shadowColor: "transparent",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+    gap: tokens.spacing[3],
   },
   card: {
     backgroundColor: "#fff",
@@ -337,5 +412,88 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: palette.textSecondary,
+  },
+
+  // --- Cart preview (read-only) ---
+  cartPreview: {
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: tokens.spacing[3],
+    gap: tokens.spacing[2],
+  },
+  cartPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingBottom: tokens.spacing[2],
+  },
+  cartPreviewTitle: {
+    ...tokens.typography.micro,
+    color: palette.textSecondary,
+    fontWeight: "600",
+  },
+  cartPreviewList: {
+    gap: 0,
+  },
+  cartPreviewItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing[3],
+    paddingVertical: tokens.spacing[2] + 2,
+  },
+  cartPreviewItemDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+  },
+  cartPreviewImageWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: tokens.radius.sm,
+    overflow: "hidden",
+    backgroundColor: palette.surfaceMuted,
+    flexShrink: 0,
+  },
+  cartPreviewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  cartPreviewImagePlaceholder: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: palette.surfaceMuted,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cartPreviewInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  cartPreviewName: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
+    fontWeight: "600",
+  },
+  cartPreviewCode: {
+    ...tokens.typography.micro,
+    color: palette.textMuted,
+  },
+  cartPreviewNumbers: {
+    alignItems: "flex-end",
+    gap: 2,
+    flexShrink: 0,
+  },
+  cartPreviewQty: {
+    ...tokens.typography.micro,
+    color: palette.textSecondary,
+    fontVariant: ["tabular-nums"],
+  },
+  cartPreviewTotal: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
   },
 });

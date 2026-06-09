@@ -98,6 +98,7 @@ export default function EditableTable({
 
       <Card
         style={[
+          {shadowOffset: { width: 0, height: 0 },},
           styles.card,
           borderLeft && {
             borderLeftWidth: 4,
@@ -270,6 +271,10 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: palette.card,
     borderRadius: 12,
+    elevation: 0,
+    shadowColor: "transparent",
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   empty: {
     padding: 24,

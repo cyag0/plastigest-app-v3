@@ -1,3 +1,5 @@
+import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import dayjs, { Dayjs } from "dayjs";
 import React from "react";
 import { View } from "react-native";
@@ -15,6 +17,17 @@ interface AppDatePickerProps {
   placeholder?: string;
   readonly?: boolean;
 }
+
+const paperTheme = {
+  colors: {
+    primary: palette.primary,
+    onSurfaceVariant: palette.textSecondary,
+    outline: palette.border,
+    surface: palette.surface,
+    onSurface: palette.text,
+    error: palette.error,
+  },
+};
 
 export default function AppDatePicker(props: AppDatePickerProps) {
   const [time, setTime] = React.useState({
@@ -51,7 +64,7 @@ export default function AppDatePicker(props: AppDatePickerProps) {
       {readonly ? (
         <ReadonlyText text={props.value || ""} />
       ) : (
-        <View>
+        <View style={styles.container}>
           <TouchableRipple onPress={() => setOpen(true)}>
             <View pointerEvents="none">
               <TextInput
@@ -61,6 +74,13 @@ export default function AppDatePicker(props: AppDatePickerProps) {
                 label={props.label}
                 placeholder={props.placeholder || "Selecciona una fecha"}
                 right={<TextInput.Icon icon="calendar" />}
+                theme={paperTheme}
+                outlineColor={palette.border}
+                activeOutlineColor={palette.primary}
+                textColor={palette.text}
+                placeholderTextColor={palette.textMuted}
+                style={styles.input}
+                contentStyle={styles.inputContent}
               />
             </View>
           </TouchableRipple>
@@ -81,5 +101,18 @@ export default function AppDatePicker(props: AppDatePickerProps) {
     </SafeAreaProvider>
   );
 }
+
+const styles = {
+  container: {
+    marginVertical: tokens.spacing[2],
+  },
+  input: {
+    backgroundColor: palette.surface,
+  },
+  inputContent: {
+    ...tokens.typography.body,
+    color: palette.text,
+  },
+};
 
 export const FormDatePicker = MakeForm(AppDatePicker);
