@@ -49,7 +49,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
           <MaterialCommunityIcons
             name="alert-circle-outline"
             size={64}
-            color={palette.red}
+            color={palette.error}
           />
           <Text variant="titleLarge" style={styles.title}>
             Algo salió mal
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   devError: {
-    color: palette.red,
+    color: palette.error,
     textAlign: "center",
     fontFamily: "monospace",
     marginTop: 4,

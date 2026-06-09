@@ -18,7 +18,7 @@ function DirectionBadge({ isSent }: { isSent: boolean }) {
       style={[
         styles.directionBadge,
         {
-          backgroundColor: isSent ? palette.blue : palette.red,
+          backgroundColor: isSent ? palette.blue : palette.error,
         },
       ]}
     >

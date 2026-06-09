@@ -102,14 +102,14 @@ export default function NotificationDetailScreen() {
 const styles = {
   safeArea: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   loadingContainer: {
     flex: 1,
     alignItems: "center" as const,
     justifyContent: "center" as const,
     gap: 10,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   loadingText: {
     color: palette.textSecondary,

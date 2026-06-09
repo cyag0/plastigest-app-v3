@@ -41,7 +41,7 @@ export default function SaleStats() {
         <MaterialCommunityIcons
           name="alert-circle"
           size={48}
-          color={palette.red}
+          color={palette.error}
         />
         <Text style={styles.errorText}>
           No se pudieron cargar las estadísticas
@@ -119,7 +119,7 @@ export default function SaleStats() {
           Resumen General
         </Text>
         <View style={styles.statsGrid}>
-          <Card style={[styles.statCard, { backgroundColor: palette.red }]}>
+          <Card style={[styles.statCard, { backgroundColor: palette.error }]}>
             <Card.Content>
               <MaterialCommunityIcons
                 name="cart"
@@ -421,7 +421,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   errorText: {
-    color: palette.red,
+    color: palette.error,
     fontSize: 16,
   },
   section: {

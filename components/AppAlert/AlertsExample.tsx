@@ -236,7 +236,7 @@ export default function AlertsExampleScreen() {
         mode="contained"
         onPress={handleDestructiveAction}
         style={styles.button}
-        buttonColor={palette.red}
+        buttonColor={palette.error}
       >
         6. Acción Destructiva
       </Button>

@@ -232,7 +232,7 @@ const CartRow = memo(function CartRow({
         <IconButton
           icon="trash-can-outline"
           size={16}
-          iconColor={palette.red}
+          iconColor={palette.error}
           onPress={() => onRemove(item.key)}
         />
       </View>
@@ -593,7 +593,7 @@ export default function KioskScreen() {
         {cart.length > 0 && (
           <Button
             compact
-            textColor={palette.red}
+            textColor={palette.error}
             onPress={() => setCart([])}
           >
             Vaciar
@@ -653,7 +653,7 @@ export default function KioskScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: palette.background }}>
+    <View style={{ flex: 1, backgroundColor: "transparent" as any }}>
       {wide ? (
         <View style={{ flex: 1, flexDirection: "row" }}>
           <View style={{ flex: 2 }}>{ProductsPane}</View>
@@ -866,7 +866,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 6,
     left: 6,
-    backgroundColor: palette.red,
+    backgroundColor: palette.error,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,

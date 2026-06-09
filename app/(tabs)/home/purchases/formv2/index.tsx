@@ -280,7 +280,7 @@ function PurchasesContent(props: PurchasesContentProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
     padding: 16,
   },
   card: {
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 16,
     padding: 12,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
     borderRadius: 8,
   },
   emptyText: {

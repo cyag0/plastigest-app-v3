@@ -64,13 +64,13 @@ export default function RecentMovements({ filter }: RecentMovementsProps) {
       case "entry":
         return { name: "arrow-down-circle", color: palette.success };
       case "exit":
-        return { name: "arrow-up-circle", color: palette.red };
+        return { name: "arrow-up-circle", color: palette.warning };
       case "transfer":
         return { name: "swap-horizontal-circle", color: palette.blue };
       case "production":
         return { name: "factory", color: palette.success };
       case "adjustment":
-        return { name: "clipboard-edit", color: palette.red };
+        return { name: "clipboard-edit", color: palette.textSecondary };
       default:
         return { name: "help-circle", color: palette.textSecondary };
     }
@@ -81,7 +81,7 @@ export default function RecentMovements({ filter }: RecentMovementsProps) {
       case "income":
         return { label: "Ingreso", color: palette.success };
       case "expense":
-        return { label: "Egreso", color: palette.error };
+        return { label: "Egreso", color: palette.warning };
       default:
         return { label: "Neutro", color: palette.textSecondary };
     }

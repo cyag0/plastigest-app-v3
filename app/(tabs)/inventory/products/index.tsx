@@ -253,7 +253,7 @@ export default function ProductsIndex(props: ProductsIndexProps) {
               {item.sale_price && (
                 <AppList.Title
                   style={{
-                    color: palette.error,
+                    color: palette.text,
                   }}
                 >
                   {"$" + item.sale_price}
@@ -339,7 +339,7 @@ export default function ProductsIndex(props: ProductsIndexProps) {
                             borderColor: palette.warning,
                             borderWidth: 1,
                             marginTop: 4,
-                            backgroundColor: palette.background,
+                            backgroundColor: "transparent" as any,
                           }}
                           textStyle={{
                             fontSize: 10,

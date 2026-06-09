@@ -1,8 +1,9 @@
 import AppBar from "@/components/App/AppBar";
 import { SkeletonListLoader } from "@/components/SkeletonLoader";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import useDebounce from "@/hooks/useDebounce";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import {
   CrudService,
   IndexParams,
@@ -17,7 +18,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
-  StyleSheet,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -71,6 +71,7 @@ function ItemMenu<T>({
   customActions = [],
 }: ItemMenuProps<T>) {
   const [visible, setVisible] = useState(false);
+  const { colors } = useTheme();
 
   return (
     <Menu
@@ -81,12 +82,12 @@ function ItemMenu<T>({
           size={20}
           style={{ padding: 8 }}
           name="dots-vertical"
-          color={palette.textSecondary}
+          color={colors.textSecondary}
           onPress={() => setVisible(true)}
         />
       }
       contentStyle={{
-        backgroundColor: palette.background,
+        backgroundColor: colors.surface,
       }}
     >
       {customActions.map((action, index) => {
@@ -108,8 +109,8 @@ function ItemMenu<T>({
             }}
             title={action.title}
             leadingIcon={action.icon}
-            titleStyle={{ color: action.color || palette.text }}
-            style={{ backgroundColor: palette.background }}
+            titleStyle={{ color: action.color || colors.text }}
+            style={{ backgroundColor: colors.surface }}
           />
         );
       })}
@@ -121,8 +122,8 @@ function ItemMenu<T>({
           }}
           title="Ver detalles"
           leadingIcon="eye"
-          titleStyle={{ color: palette.text }}
-          style={{ backgroundColor: palette.background }}
+          titleStyle={{ color: colors.text }}
+          style={{ backgroundColor: colors.surface }}
         />
       )}
       {showEdit && (
@@ -133,8 +134,8 @@ function ItemMenu<T>({
           }}
           title="Editar"
           leadingIcon="pencil"
-          titleStyle={{ color: palette.text }}
-          style={{ backgroundColor: palette.background }}
+          titleStyle={{ color: colors.text }}
+          style={{ backgroundColor: colors.surface }}
         />
       )}
       {showDelete && (
@@ -145,8 +146,8 @@ function ItemMenu<T>({
           }}
           title="Eliminar"
           leadingIcon="delete"
-          titleStyle={{ color: palette.error }}
-          style={{ backgroundColor: palette.background }}
+          titleStyle={{ color: colors.error }}
+          style={{ backgroundColor: colors.surface }}
         />
       )}
     </Menu>
@@ -186,6 +187,7 @@ const AppListTitle = ({
   style?: any;
   textProps?: React.ComponentProps<typeof Text>;
 }) => {
+  const styles = useThemedStyles(makeAppListStyles);
   return (
     <View style={styles.titleContainer}>
       {typeof children === "string" ? (
@@ -212,21 +214,24 @@ const AppListDescription = ({
   children,
   style = {},
   ...textProps
-}: AppListDescriptionProps) => (
-  <View style={styles.descriptionContainer}>
-    {typeof children === "string" ? (
-      <Text
-        variant="bodySmall"
-        style={[styles.cardDescription, style]}
-        {...textProps}
-      >
-        {children}
-      </Text>
-    ) : (
-      children
-    )}
-  </View>
-);
+}: AppListDescriptionProps) => {
+  const styles = useThemedStyles(makeAppListStyles);
+  return (
+    <View style={styles.descriptionContainer}>
+      {typeof children === "string" ? (
+        <Text
+          variant="bodySmall"
+          style={[styles.cardDescription, style]}
+          {...textProps}
+        >
+          {children}
+        </Text>
+      ) : (
+        children
+      )}
+    </View>
+  );
+};
 
 interface AppListProps<T> {
   // Props principales
@@ -324,6 +329,8 @@ function AppList<T extends { id: number | string }>({
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
   const shouldUseDataTable = width >= tabletBreakpoint && columns.length > 0;
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeAppListStyles);
 
   const getMenuFlag = (
     flag: ((item: T) => boolean) | boolean | undefined,
@@ -344,7 +351,7 @@ function AppList<T extends { id: number | string }>({
             return (
               <AppBar.Action
                 icon="plus"
-                iconColor={palette.error}
+                iconColor={colors.primary}
                 onPress={handleCreate}
               />
             );
@@ -522,7 +529,7 @@ function AppList<T extends { id: number | string }>({
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-                colors={[palette.primary]}
+                colors={[colors.primary]}
               />
             }
           >
@@ -544,7 +551,7 @@ function AppList<T extends { id: number | string }>({
                         <IconButton
                           icon="eye-outline"
                           size={18}
-                          iconColor={palette.textSecondary}
+                          iconColor={colors.textSecondary}
                           onPress={() => handleItemPress(item)}
                           style={styles.tableActionButton}
                         />
@@ -553,7 +560,7 @@ function AppList<T extends { id: number | string }>({
                         <IconButton
                           icon="pencil-outline"
                           size={18}
-                          iconColor={palette.primary}
+                          iconColor={colors.primary}
                           onPress={() => handleEdit(item)}
                           style={styles.tableActionButton}
                         />
@@ -562,7 +569,7 @@ function AppList<T extends { id: number | string }>({
                         <IconButton
                           icon="delete-outline"
                           size={18}
-                          iconColor={palette.error}
+                          iconColor={colors.error}
                           onPress={() => handleDelete(item)}
                           style={styles.tableActionButton}
                         />
@@ -718,7 +725,7 @@ function AppList<T extends { id: number | string }>({
                       <Divider
                         style={{
                           height: 2,
-                          backgroundColor: palette.border,
+                          backgroundColor: colors.border,
                         }}
                       />
                     )}
@@ -744,7 +751,7 @@ function AppList<T extends { id: number | string }>({
                           <AppList.Description>ID: </AppList.Description>
                           <AppList.Description
                             style={{
-                              color: palette.textSecondary,
+                              color: colors.textSecondary,
                               fontWeight: "bold",
                             }}
                           >
@@ -764,7 +771,7 @@ function AppList<T extends { id: number | string }>({
                             </AppList.Description>
                             <AppList.Description
                               style={{
-                                color: palette.textSecondary,
+                                color: colors.textSecondary,
                                 fontWeight: "bold",
                               }}
                             >
@@ -784,7 +791,7 @@ function AppList<T extends { id: number | string }>({
                         <AppList.Description>ID: </AppList.Description>
                         <AppList.Description
                           style={{
-                            color: palette.textSecondary,
+                            color: colors.textSecondary,
                             fontWeight: "bold",
                           }}
                         >
@@ -820,6 +827,7 @@ interface SearchBarComponentProps {
 
 function SearchBarComponent(props: SearchBarComponentProps) {
   const [searchQuery, setSearchQuery] = useState(props.value);
+  const styles = useThemedStyles(makeAppListStyles);
   const { run } = useDebounce((text: string) => {
     props.onChangeText(text);
   });
@@ -851,113 +859,119 @@ function SearchBarComponent(props: SearchBarComponentProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: palette.background,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: palette.background,
-  },
-  scrollContainer: {
-    padding: 16,
-    gap: 8,
-  },
-  tableScrollContainer: {
-    padding: 16,
-  },
-  scrollContainerGrid: {
-    padding: 0,
-  },
-  gridContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-  },
-  gridItem: {
-    width: "48%",
-    marginHorizontal: "1%",
-    marginBottom: 16,
-  },
-  searchbar: {
-    margin: 16,
-    marginBottom: 0,
-    backgroundColor: "#fff",
-    elevation: 2,
-  },
-  card: {
-    //marginBottom: 12,
-    backgroundColor: "#fff",
-    //elevation: 2,
-  },
-  cardContent: {
-    padding: 0,
-  },
-  cardMain: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
-  cardLeft: {
-    justifyContent: "center",
-  },
-  cardCenter: {
-    flex: 1,
-  },
-  cardRight: {
-    justifyContent: "center",
-  },
-  titleContainer: {
-    marginBottom: 4,
-  },
-  cardTitle: {
-    fontWeight: "bold",
-    color: palette.textSecondary,
-    lineHeight: 16,
-  },
-  descriptionContainer: {
-    marginBottom: 0,
-  },
-  cardDescription: {
-    color: palette.textSecondary,
-    opacity: 0.7,
-    lineHeight: 14,
-  },
-  loadingText: {
-    marginTop: 16,
-    color: palette.textSecondary,
-  },
-  emptyText: {
-    color: palette.textSecondary,
-    opacity: 0.7,
-    textAlign: "center",
-    fontSize: 16,
-  },
-  paginationInfo: {
-    alignItems: "center",
-    marginTop: 16,
-  },
-  paginationText: {
-    color: palette.textSecondary,
-    opacity: 0.6,
-  },
-  tableActionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  tableActionButton: {
-    margin: 0,
-  },
-  fab: {
-    position: "absolute",
-    margin: 16,
-    right: 0,
-    bottom: 0,
-  },
-});
+/**
+ * Factory de estilos a nivel de módulo. Usado por AppList,
+ * AppListTitle, AppListDescription, SearchBarComponent y
+ * AppListCard. Cada uno invoca useThemedStyles(makeAppListStyles)
+ * para obtener su propio styles reactivo al tema.
+ */
+function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
+  return {
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    centerContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: c.background,
+    },
+    scrollContainer: {
+      padding: 16,
+      gap: 8,
+    },
+    tableScrollContainer: {
+      padding: 16,
+    },
+    scrollContainerGrid: {
+      padding: 0,
+    },
+    gridContainer: {
+      flexDirection: "row" as const,
+      flexWrap: "wrap" as const,
+      paddingVertical: 16,
+      paddingHorizontal: 8,
+    },
+    gridItem: {
+      width: "48%",
+      marginHorizontal: "1%",
+      marginBottom: 16,
+    },
+    searchbar: {
+      margin: 16,
+      marginBottom: 0,
+      backgroundColor: c.surface,
+      elevation: 2,
+    },
+    card: {
+      backgroundColor: c.surface,
+    },
+    cardContent: {
+      padding: 0,
+    },
+    cardMain: {
+      flexDirection: "row" as const,
+      alignItems: "flex-start",
+    },
+    cardLeft: {
+      justifyContent: "center",
+    },
+    cardCenter: {
+      flex: 1,
+    },
+    cardRight: {
+      justifyContent: "center",
+    },
+    titleContainer: {
+      marginBottom: 4,
+    },
+    cardTitle: {
+      fontWeight: "bold" as const,
+      color: c.text,
+      lineHeight: 16,
+    },
+    descriptionContainer: {
+      marginBottom: 0,
+    },
+    cardDescription: {
+      color: c.textSecondary,
+      opacity: 0.75,
+      lineHeight: 14,
+    },
+    loadingText: {
+      marginTop: 16,
+      color: c.textSecondary,
+    },
+    emptyText: {
+      color: c.textSecondary,
+      opacity: 0.7,
+      textAlign: "center" as const,
+      fontSize: 16,
+    },
+    paginationInfo: {
+      alignItems: "center" as const,
+      marginTop: 16,
+    },
+    paginationText: {
+      color: c.textSecondary,
+      opacity: 0.6,
+    },
+    tableActionsRow: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+    },
+    tableActionButton: {
+      margin: 0,
+    },
+    fab: {
+      position: "absolute" as const,
+      margin: 16,
+      right: 0,
+      bottom: 0,
+    },
+  };
+}
 
 // Exportar componentes estáticos
 AppList.Card = AppListCard;

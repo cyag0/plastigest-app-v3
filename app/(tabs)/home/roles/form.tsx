@@ -142,7 +142,7 @@ export default function CreateRoleScreen(props: RoleProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   scrollContainer: {
     padding: 16,

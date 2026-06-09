@@ -112,7 +112,7 @@ export default function AdjustmentDetailScreen() {
             <MaterialCommunityIcons
               name={isIncrease ? "arrow-up-circle" : "arrow-down-circle"}
               size={28}
-              color={isIncrease ? palette.success : palette.red}
+              color={isIncrease ? palette.success : palette.error}
             />
           </View>
 

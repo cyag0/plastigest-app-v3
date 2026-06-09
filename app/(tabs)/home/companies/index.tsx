@@ -33,7 +33,7 @@ export default function CompaniesIndexScreen(props: CompanyIndexScreenProps) {
       align: "center",
       render: (_, item) => (
         <Chip
-          style={{ backgroundColor: item.is_active ? palette.primary : palette.red }}
+          style={{ backgroundColor: item.is_active ? palette.primary : palette.surfaceMuted }}
           textStyle={{ color: "white" }}
           compact
         >
@@ -62,7 +62,7 @@ export default function CompaniesIndexScreen(props: CompanyIndexScreenProps) {
           right: (
             <Chip
               style={{
-                backgroundColor: item.is_active ? palette.primary : palette.red,
+                backgroundColor: item.is_active ? palette.primary : palette.surfaceMuted,
               }}
               textStyle={{ color: "white" }}
               compact

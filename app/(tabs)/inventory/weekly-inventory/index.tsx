@@ -97,7 +97,7 @@ export default function InventoryIndex() {
             planning: palette.textSecondary,
             counting: palette.warning,
             completed: palette.success,
-            cancelled: palette.error,
+            cancelled: palette.textMuted,
           };
 
           return {
@@ -190,7 +190,7 @@ export default function InventoryIndex() {
             {
               title: isDownloading ? "Descargando..." : "Descargar PDF",
               icon: "file-pdf-box",
-              color: palette.error,
+              color: palette.primary,
               show: (item: App.Entities.InventoryCount.InventoryCount) =>
                 item.status === "completed",
               onPress: async (
@@ -325,9 +325,9 @@ function ProgressPieChart({
         strokeWidth={8}
         radius={size / 2.5}
         chartConfig={{
-          backgroundGradientFrom: palette.background,
+          backgroundGradientFrom: "transparent" as any,
           backgroundGradientFromOpacity: 0,
-          backgroundGradientTo: palette.background,
+          backgroundGradientTo: "transparent" as any,
           backgroundGradientToOpacity: 0.5,
           color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`, // Verde para la parte contada
           strokeWidth: 2, // optional, default 3
@@ -355,7 +355,7 @@ function ProgressPieChart({
             fontSize: 12,
             fontWeight: "bold",
 
-            color: palette.error,
+            color: palette.text,
           }}
         >
           {Math.round(percentage * 100)}%

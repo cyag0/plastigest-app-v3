@@ -45,7 +45,7 @@ export default function CarritoScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: palette.background }}>
+    <View style={{ flex: 1, backgroundColor: "transparent" as any }}>
       <Cart
         items={saleContext.cartItems}
         onItemChange={saleContext.handleItemChange}

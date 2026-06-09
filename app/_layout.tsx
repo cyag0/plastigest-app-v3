@@ -4,13 +4,19 @@ import "react-native-reanimated";
 
 import { SelectDataProvider } from "@/components/Form/AppProSelect";
 import NavigationHandler from "@/components/NavigationHandler";
-import palette from "@/constants/palette";
+import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { AlertsProvider } from "@/hooks/useAlerts";
-import { MD3LightTheme, PaperProvider } from "react-native-paper";
+import {
+  MD3DarkTheme,
+  MD3LightTheme,
+  PaperProvider,
+} from "react-native-paper";
 import { es, registerTranslation } from "react-native-paper-dates";
 import PermissionsOverlay from "@/components/Debug/PermissionsOverlay";
+import React from "react";
+import { View } from "react-native";
 
 registerTranslation("es", es);
 
@@ -18,23 +24,6 @@ export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
   });
-
-  const theme = {
-    ...MD3LightTheme,
-    roundness: 2,
-    colors: {
-      ...MD3LightTheme.colors,
-      primary: palette.primary,
-      secondary: palette.secondary,
-      surface: palette.surface,
-      background: palette.background,
-      onBackground: palette.text,
-      onSurface: palette.textSecondary,
-      surfaceVariant: palette.card,
-      error: palette.error,
-      outline: palette.border,
-    },
-  };
 
   if (!loaded) {
     // Async font loading only occurs in development.
@@ -52,28 +41,91 @@ export default function RootLayout() {
           AuthProvider". Moviendolo aqui hace que cualquier portal quede
           dentro del contexto. */}
       <AuthProvider>
-        <PaperProvider theme={theme}>
-          <SelectDataProvider>
-            <AlertsProvider>
-              <NavigationHandler>
-                <App />
-              </NavigationHandler>
-              {__DEV__ && <PermissionsOverlay />}
-            </AlertsProvider>
-          </SelectDataProvider>
-        </PaperProvider>
+        <ThemeProvider>
+          <ThemedApp />
+        </ThemeProvider>
       </AuthProvider>
     </ErrorBoundary>
   );
 }
 
-function App() {
+/**
+ * Componente interno que tiene acceso al ThemeContext y arma
+ * el PaperProvider con la paleta correspondiente al modo.
+ *
+ * Ademas envuelve la navegacion con un View cuyo background
+ * usa colors.background, para que las pantallas que aun no
+ * migraron al theme hook sigan el fondo del tema en vez de
+ * mostrar el slate-50 hardcodeado de la paleta light.
+ */
+function ThemedApp() {
+  const { mode, colors } = useTheme();
+  const base = mode === "dark" ? MD3DarkTheme : MD3LightTheme;
+  const theme = {
+    ...base,
+    roundness: 2,
+    colors: {
+      ...base.colors,
+      primary: colors.primary,
+      secondary: colors.secondary,
+      surface: colors.surface,
+      background: colors.background,
+      onBackground: colors.text,
+      onSurface: colors.textSecondary,
+      surfaceVariant: colors.surfaceMuted,
+      error: colors.error,
+      outline: colors.border,
+      // Look plano global: se anulan los elevation levels para que
+      // Card, Button, FAB, Surface elevado, etc. no proyecten sombra.
+      elevation: {
+        level0: "transparent",
+        level1: "transparent",
+        level2: "transparent",
+        level3: "transparent",
+        level4: "transparent",
+        level5: "transparent",
+      },
+    },
+  };
+
   return (
-    <Stack screenOptions={{ headerShown: false }} initialRouteName="login">
-      <Stack.Screen name="login" options={{ headerShown: false }} />
-      <Stack.Screen name="(stacks)" options={{ headerShown: false }} />
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="+not-found" />
-    </Stack>
+    <PaperProvider theme={theme}>
+      <SelectDataProvider>
+        <AlertsProvider>
+          <NavigationHandler>
+            {/* View raiz: fondo del tema actual. Garantiza que TODAS
+                las pantallas tengan el bg correcto sin migrar cada
+                una individualmente. Las vistas que usen backgroundColor
+                explicito en su contenedor sobrescribiran este fondo. */}
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: colors.background,
+              }}
+            >
+              <Stack
+                screenOptions={{ headerShown: false }}
+                initialRouteName="login"
+              >
+                <Stack.Screen
+                  name="login"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="(stacks)"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="(tabs)"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen name="+not-found" />
+              </Stack>
+            </View>
+            {__DEV__ && <PermissionsOverlay />}
+          </NavigationHandler>
+        </AlertsProvider>
+      </SelectDataProvider>
+    </PaperProvider>
   );
 }

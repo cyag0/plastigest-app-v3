@@ -161,6 +161,19 @@ export default function _layout() {
           title: "Ver Producción",
         }}
       />
+      <Stack.Screen
+        name="production/formulas/index"
+        options={{
+          title: "Fórmulas",
+          animation: "none",
+        }}
+      />
+      <Stack.Screen
+        name="production/formulas/form"
+        options={{
+          title: "Nueva Fórmula",
+        }}
+      />
 
       <Stack.Screen
         name="sales/index"

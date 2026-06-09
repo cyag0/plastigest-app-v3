@@ -65,7 +65,7 @@ const AlertSnackbar = forwardRef<AlertSnackbarRef>((props, ref) => {
       case "error":
         return {
           icon: "alert-circle",
-          backgroundColor: palette.red,
+          backgroundColor: palette.error,
           color: palette.background,
         };
       case "warning":

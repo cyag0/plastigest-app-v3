@@ -552,7 +552,7 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
         {formContext.readonly && form.values.details[index]?.previous_stock !== undefined && (
           <View
             style={{
-              backgroundColor: palette.background,
+              backgroundColor: "transparent" as any,
               padding: 12,
               borderRadius: 8,
               marginTop: 12,

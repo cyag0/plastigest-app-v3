@@ -144,7 +144,7 @@ export default function CompaniesForm(props: CompaniesProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   section: {
     marginBottom: 20,

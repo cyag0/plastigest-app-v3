@@ -1,25 +1,39 @@
+import AppChip from "@/components/App/Chip";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Card, Divider, List, Text } from "react-native-paper";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-interface AdminOption {
+export type AdminCategory = "system" | "company" | "location" | "catalog";
+
+export interface AdminOption {
   id: string;
   title: string;
   description: string;
-  icon: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
   route: string;
   color: string;
+  category?: AdminCategory;
+  requiredPermission?: string;
+  badge?: string | number;
+  badgeVariant?: "primary" | "success" | "warning" | "error" | "info" | "default";
 }
 
-interface AdminSectionProps {
+export interface AdminSectionProps {
   title: string;
-  icon: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
   options: AdminOption[];
 }
 
+/**
+ * Seccion colapsable de opciones de administracion. Cada
+ * seccion tiene un header con icono de categoria y una card
+ * blanca con las opciones en formato de lista compacta
+ * (estilo Linear/Vercel). Tonos suaves en vez de colores
+ * saturados.
+ */
 export default function AdminSection({
   title,
   icon,
@@ -31,112 +45,174 @@ export default function AdminSection({
 
   return (
     <View style={styles.section}>
-      {/* Section Header - Sin fondo destacado */}
+      {/* Section Header */}
       <View style={styles.sectionHeader}>
         <MaterialCommunityIcons
-          name={icon as any}
-          size={20}
-          color={palette.textSecondary}
-          style={styles.sectionIcon}
+          name={icon}
+          size={16}
+          color={palette.textMuted}
         />
-        <Text variant="titleSmall" style={styles.sectionTitle}>
-          {title}
-        </Text>
+        <Text style={styles.sectionTitle}>{title.toUpperCase()}</Text>
+        <View style={styles.countBadge}>
+          <Text style={styles.countText}>{options.length}</Text>
+        </View>
       </View>
 
       {/* Options List */}
-      <Card style={styles.optionsCard}>
+      <View style={styles.optionsCard}>
         {options.map((option, index) => (
-          <View key={option.id}>
-            <List.Item
-              title={option.title}
-              description={option.description}
+          <React.Fragment key={option.id}>
+            <TouchableOpacity
+              activeOpacity={0.7}
               onPress={() => router.push(option.route as any)}
-              left={(props) => (
-                <View
-                  style={[
-                    styles.listIcon,
-                    { backgroundColor: option.color + "20" },
-                  ]}
-                >
-                  <List.Icon
-                    icon={option.icon}
-                    color={option.color}
-                  />
-                </View>
-              )}
-              right={(props) => (
-                <List.Icon
-                  {...props}
-                  icon="chevron-right"
-                  color={palette.textSecondary}
+              style={styles.optionItem}
+            >
+              <View
+                style={[
+                  styles.iconBox,
+                  { backgroundColor: hexWithAlpha(option.color, 0.12) },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={option.icon}
+                  size={20}
+                  color={option.color}
                 />
-              )}
-              titleStyle={styles.listTitle}
-              descriptionStyle={styles.listDescription}
-              descriptionNumberOfLines={2}
-              style={styles.listItem}
-            />
-            {index < options.length - 1 && <Divider style={styles.divider} />}
-          </View>
+              </View>
+
+              <View style={styles.optionBody}>
+                <View style={styles.optionHeaderRow}>
+                  <Text style={styles.optionTitle} numberOfLines={1}>
+                    {option.title}
+                  </Text>
+                  {option.badge !== undefined && (
+                    <AppChip
+                      variant={option.badgeVariant ?? "primary"}
+                      size="sm"
+                    >
+                      {option.badge}
+                    </AppChip>
+                  )}
+                </View>
+                <Text
+                  style={styles.optionDescription}
+                  numberOfLines={2}
+                >
+                  {option.description}
+                </Text>
+              </View>
+
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={18}
+                color={palette.textMuted}
+                style={styles.chevron}
+              />
+            </TouchableOpacity>
+
+            {index < options.length - 1 && (
+              <View style={styles.divider} />
+            )}
+          </React.Fragment>
         ))}
-      </Card>
+      </View>
     </View>
   );
 }
 
+/**
+ * Convierte un color hex (#RRGGBB) a rgba con alpha. Usado
+ * para los icon-box tonales de las opciones de administracion.
+ */
+function hexWithAlpha(hex: string, alpha: number): string {
+  const clean = hex.replace("#", "");
+  if (clean.length !== 6) return hex;
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 const styles = StyleSheet.create({
   section: {
-    marginBottom: 20,
+    marginBottom: tokens.spacing[5],
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    marginBottom: 8,
-  },
-  sectionIcon: {
-    marginRight: 8,
+    paddingHorizontal: tokens.spacing[5],
+    paddingTop: tokens.spacing[3],
+    paddingBottom: tokens.spacing[2],
+    gap: tokens.spacing[2],
   },
   sectionTitle: {
-    fontWeight: "700",
+    ...tokens.typography.micro,
+    color: palette.textMuted,
+    flex: 1,
+  },
+  countBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: tokens.radius.full,
+    paddingHorizontal: 6,
+    backgroundColor: palette.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  countText: {
+    ...tokens.typography.micro,
     color: palette.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    fontSize: 13,
+    fontVariant: ["tabular-nums"],
   },
   optionsCard: {
-    marginHorizontal: 16,
+    marginHorizontal: tokens.spacing[5],
     backgroundColor: palette.surface,
-    borderRadius: 16,
-    shadowColor: "transparent",
+    borderRadius: tokens.radius.lg,
+    ...tokens.shadow.sm,
+    overflow: "hidden",
   },
-  listItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: "transparent",
-  },
-  listIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: "center",
+  optionItem: {
+    flexDirection: "row",
     alignItems: "center",
-    marginLeft: 0,
+    paddingVertical: tokens.spacing[3] + 2,
+    paddingHorizontal: tokens.spacing[4],
+    gap: tokens.spacing[3],
   },
-  listTitle: {
-    fontWeight: "600",
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: tokens.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  optionBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  optionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing[2],
+  },
+  optionTitle: {
+    ...tokens.typography.bodyMd,
     color: palette.text,
-    fontSize: 15,
+    flex: 1,
+    minWidth: 0,
   },
-  listDescription: {
+  optionDescription: {
+    ...tokens.typography.caption,
     color: palette.textSecondary,
-    lineHeight: 18,
-    fontSize: 13,
+    lineHeight: 16,
+  },
+  chevron: {
+    flexShrink: 0,
   },
   divider: {
-    marginLeft: 72,
+    height: 1,
     backgroundColor: palette.border,
+    marginLeft: tokens.spacing[4] + 40 + tokens.spacing[3],
   },
 });

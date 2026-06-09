@@ -254,7 +254,7 @@ export default function TransferDetailWizardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   content: {
     padding: 16,
@@ -265,6 +265,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
 });

@@ -238,7 +238,7 @@ export default function TransfersMenuScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   tabsContainer: {
     flexDirection: "row",
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
   },
   tabActive: {
-    borderBottomColor: palette.error,
+    borderBottomColor: palette.primary,
   },
   tabText: {
     fontSize: 15,
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
     color: palette.textSecondary,
   },
   tabTextActive: {
-    color: palette.error,
+    color: palette.primary,
   },
   scrollContainer: {
     padding: 20,

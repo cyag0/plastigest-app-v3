@@ -9,8 +9,8 @@ export function getTaskPriorityConfig(priority: App.Entities.TaskPriority) {
     case "urgent":
       return {
         label: "Urgente",
-        color: palette.red,
-        softBg: palette.red + "22",
+        color: palette.error,
+        softBg: palette.error + "22",
         icon: "alert-decagram-outline",
       };
     case "high":

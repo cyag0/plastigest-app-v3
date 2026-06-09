@@ -271,7 +271,7 @@ export default function LocationDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   centerContainer: {
     flex: 1,

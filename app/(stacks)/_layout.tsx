@@ -71,6 +71,12 @@ export default function _layout() {
           title: "Cambiar Contraseña",
         }}
       />
+      <Stack.Screen
+        name="home/all-modules"
+        options={{
+          title: "Todos los módulos",
+        }}
+      />
     </Stack>
   );
 }

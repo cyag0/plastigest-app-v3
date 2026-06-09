@@ -177,7 +177,7 @@ export default function CurrentWorkerForm(props: CurrentWorkerFormProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   scrollContent: {
     padding: 16,

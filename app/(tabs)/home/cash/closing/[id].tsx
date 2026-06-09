@@ -99,7 +99,7 @@ export default function CashClosingDetail() {
 
   const diff = parseFloat(item.difference ?? "0");
   const diffColor =
-    diff === 0 ? palette.success : diff > 0 ? palette.blue : palette.red;
+    diff === 0 ? palette.success : diff > 0 ? palette.blue : palette.error;
 
   return (
     <ScrollView
@@ -135,7 +135,7 @@ export default function CashClosingDetail() {
                 color:
                   parseFloat(item.expected_balance) >= 0
                     ? palette.success
-                    : palette.red,
+                    : palette.error,
               },
             ]}
           >
@@ -174,7 +174,7 @@ export default function CashClosingDetail() {
         <InfoRow
           label="Egresos"
           value={formatCurrency(item.total_expense)}
-          color={palette.red}
+          color={palette.error}
           icon="arrow-up-circle"
         />
         <View style={styles.divider} />
@@ -184,7 +184,7 @@ export default function CashClosingDetail() {
           color={
             parseFloat(item.expected_balance) >= 0
               ? palette.success
-              : palette.red
+              : palette.error
           }
           icon="calculator"
         />
@@ -276,7 +276,7 @@ export default function CashClosingDetail() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: palette.background },
+  scroll: { flex: 1, backgroundColor: "transparent" as any },
   container: { padding: 16, gap: 12, paddingBottom: 32 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   headerCard: {

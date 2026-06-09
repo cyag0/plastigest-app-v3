@@ -75,7 +75,7 @@ export default function SalesReportsIndexScreen() {
             {
               title: isDownloading ? "Descargando..." : "Descargar PDF",
               icon: "file-pdf-box",
-              color: palette.error,
+              color: palette.primary,
               show: () => true,
               onPress: async (item: any) => {
                 try {

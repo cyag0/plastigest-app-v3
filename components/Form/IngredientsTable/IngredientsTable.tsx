@@ -194,7 +194,7 @@ export default function IngredientsTable({
                         borderRadius: 4,
                       }}
                     >
-                      <Ionicons name="trash" size={16} color={palette.red} />
+                      <Ionicons name="trash" size={16} color={palette.error} />
                     </TouchableOpacity>
                   </View>
                 )}

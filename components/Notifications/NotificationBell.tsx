@@ -2,6 +2,7 @@ import NotificationDetailContent from "@/components/Notifications/NotificationDe
 import NotificationsPopover from "@/components/Notifications/NotificationsPopover";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAlerts } from "@/hooks/useAlerts";
 import services from "@/utils/services";
 import { useRouter } from "expo-router";
@@ -9,12 +10,11 @@ import { useCallback, useState } from "react";
 import {
   Platform,
   StyleSheet,
+  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
 import {
-  Appbar,
-  Badge,
   IconButton,
   Menu,
   Modal,
@@ -22,7 +22,7 @@ import {
   Text,
 } from "react-native-paper";
 
-const NOTIFICATIONS_ROUTE = "/(stacks)/notifications";
+const NOTIFICATIONS_ROUTE = "/(tabs)/notifications";
 const DESKTOP_BREAKPOINT = 900;
 
 export interface NotificationBellProps {
@@ -117,23 +117,31 @@ export default function NotificationBell({
 
   const bell = (
     <View style={styles.bellContainer}>
-      <Appbar.Action
-        icon="bell-outline"
-        iconColor={iconColor}
-        rippleColor={palette.primary}
+      <TouchableOpacity
         onPress={isDesktop ? () => setMenuVisible(true) : navigateToList}
         accessibilityLabel="Notificaciones"
-      />
+        style={styles.bellButton}
+        activeOpacity={0.7}
+      >
+        <MaterialCommunityIcons
+          name="bell-outline"
+          size={20}
+          color={iconColor}
+        />
+      </TouchableOpacity>
       {unreadNotificationsCount > 0 && (
-        <Badge
+        <View
           style={[
             styles.badge,
             badgeSize === "medium" ? styles.badgeMedium : styles.badgeSmall,
           ]}
-          size={badgeSize === "medium" ? 20 : 18}
         >
-          {unreadNotificationsCount > 99 ? "99+" : unreadNotificationsCount}
-        </Badge>
+          <Text style={styles.badgeText}>
+            {unreadNotificationsCount > 99
+              ? "99+"
+              : unreadNotificationsCount}
+          </Text>
+        </View>
       )}
     </View>
   );
@@ -207,17 +215,36 @@ const styles = StyleSheet.create({
   bellContainer: {
     position: "relative",
   },
+  bellButton: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 9999,
+  },
   badge: {
     position: "absolute",
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
     backgroundColor: palette.error,
+    paddingHorizontal: 4,
+    alignItems: "center",
+    justifyContent: "center",
   },
   badgeSmall: {
+    top: 2,
+    right: 2,
+  },
+  badgeMedium: {
     top: 4,
     right: 4,
   },
-  badgeMedium: {
-    top: 6,
-    right: 6,
+  badgeText: {
+    color: palette.textInverse,
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 12,
   },
   menuContent: {
     marginTop: 48,

@@ -259,14 +259,14 @@ export default function CashClosingForm() {
         <StatRow
           label="Egresos del día"
           value={formatCurrency(dayExpense)}
-          color={palette.red}
+          color={palette.warning}
           icon="arrow-up-circle"
         />
         <View style={styles.divider} />
         <StatRow
           label="Saldo esperado"
           value={formatCurrency(expectedBalance)}
-          color={expectedBalance >= 0 ? palette.success : palette.red}
+          color={expectedBalance >= 0 ? palette.success : palette.error}
           icon="calculator"
         />
         <StatRow
@@ -290,7 +290,7 @@ export default function CashClosingForm() {
                 key={m}
                 label={PAYMENT_LABELS[m]}
                 value={formatCurrency(net)}
-                color={net >= 0 ? palette.success : palette.red}
+                color={net >= 0 ? palette.success : palette.error}
               />
             );
           })}
@@ -335,7 +335,7 @@ export default function CashClosingForm() {
                   ? palette.success
                   : difference! > 0
                   ? palette.blue
-                  : palette.red
+                  : palette.error
               }
               icon="scale-balance"
             />
@@ -377,7 +377,7 @@ export default function CashClosingForm() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: palette.background },
+  scroll: { flex: 1, backgroundColor: "transparent" as any },
   container: { padding: 16, gap: 12, paddingBottom: 32 },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   section: {
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     color: palette.text,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   amountInput: {
     borderWidth: 1,
@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 18,
     color: palette.text,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
     fontWeight: "700",
     textAlign: "right",
   },
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 13,
     color: palette.text,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
     minHeight: 80,
     textAlignVertical: "top",
   },

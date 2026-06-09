@@ -27,7 +27,7 @@ export default function UploadTestPage() {
   };
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: palette.background }}>
+    <ScrollView style={{ flex: 1, backgroundColor: "transparent" as any }}>
       <View style={{ padding: 16 }}>
         <Text
           variant="headlineSmall"

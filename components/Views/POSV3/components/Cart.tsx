@@ -159,8 +159,8 @@ function CartItemComponent({
             icon="minus"
             size={16}
             mode="contained"
-            containerColor={palette.error}
-            iconColor="#fff"
+            containerColor={palette.surfaceMuted}
+            iconColor={palette.textSecondary}
             onPress={() => handleQuantityChange(-1)}
           />
           <Text variant="bodyMedium" style={styles.quantityText}>

@@ -19,7 +19,7 @@ const formatCurrency = (value: number) =>
 
 const TYPE_COLORS: Record<string, string> = {
   income: palette.success,
-  expense: palette.red,
+  expense: palette.warning,
   adjustment: palette.blue,
 };
 
@@ -62,7 +62,7 @@ function CashStatsBanner() {
 
   if (!stats) return null;
 
-  const balanceColor = stats.balance_actual >= 0 ? palette.success : palette.red;
+  const balanceColor = stats.balance_actual >= 0 ? palette.success : palette.error;
 
   const paymentEntries = Object.entries(stats.by_payment_method);
 
@@ -101,10 +101,10 @@ function CashStatsBanner() {
           </View>
           <View style={[styles.sideStat, { borderTopWidth: 1, borderTopColor: palette.border }]}>
             <View style={styles.sideStatHeader}>
-              <MaterialCommunityIcons name="arrow-up-circle" size={14} color={palette.red} />
+              <MaterialCommunityIcons name="arrow-up-circle" size={14} color={palette.warning} />
               <Text style={styles.sideStatLabel}>Egresos mes</Text>
             </View>
-            <Text style={[styles.sideStatValue, { color: palette.red }]}>
+            <Text style={[styles.sideStatValue, { color: palette.warning }]}>
               {formatCurrency(stats.total_expense)}
             </Text>
           </View>
@@ -117,7 +117,7 @@ function CashStatsBanner() {
           <View style={styles.methodChips}>
             {paymentEntries.map(([method, data]) => {
               const meta = PAYMENT_META[method] ?? { icon: "cash", label: data.label };
-              const color = data.balance >= 0 ? palette.success : palette.red;
+              const color = data.balance >= 0 ? palette.success : palette.error;
               return (
                 <View key={method} style={styles.methodChip}>
                   <View style={styles.methodChipHeader}>

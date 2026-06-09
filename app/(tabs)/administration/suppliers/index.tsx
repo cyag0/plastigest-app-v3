@@ -28,8 +28,8 @@ export default function SuppliersIndex() {
       align: "center",
       render: (_, item) => (
         <Chip
-          style={{ backgroundColor: item.is_active ? palette.success : palette.error }}
-          textStyle={{ color: "white" }}
+          style={{ backgroundColor: item.is_active ? palette.success : palette.surfaceMuted }}
+          textStyle={{ color: item.is_active ? "white" : palette.textMuted }}
           compact
         >
           {item.is_active ? "Activo" : "Inactivo"}
@@ -63,17 +63,17 @@ export default function SuppliersIndex() {
                     styles.statusChip,
                     {
                       backgroundColor: item.is_active
-                        ? palette.background
-                        : palette.error,
+                        ? "transparent" as any
+                        : palette.surfaceMuted,
                       borderColor: item.is_active
                         ? palette.primary
-                        : palette.red,
+                        : palette.borderStrong,
                     },
                   ]}
                   textStyle={[
                     styles.statusText,
                     {
-                      color: item.is_active ? "#2e7d32" : "#c62828",
+                      color: item.is_active ? "#2e7d32" : palette.textMuted,
                     },
                   ]}
                   compact

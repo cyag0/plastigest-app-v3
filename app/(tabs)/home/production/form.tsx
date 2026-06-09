@@ -1,712 +1,474 @@
+import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
+import EditableTable, {
+  EditableTableColumn,
+} from "@/components/Form/EditableTable/EditableTable";
+import InventorySummaryPanel from "@/components/Production/InventorySummaryPanel";
+import MermasTable from "@/components/Production/MermasTable";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
-import { useFormikContext } from "formik";
-import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
-import { Card, DataTable, Divider, Text } from "react-native-paper";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { FormikProps, useFormikContext } from "formik";
+import React, { useEffect, useRef } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { Button, Card, Text } from "react-native-paper";
 
-interface Ingredient {
-  id: number;
-  name: string;
-  code: string;
-  quantity_needed: number;
-  available_stock: number;
-  unit: string;
-}
+const CONSUMPTION_COLUMNS: EditableTableColumn[] = [
+  {
+    key: "product_id",
+    label: "Producto",
+    type: "product",
+    width: 230,
+    required: true,
+    productFetchParams: { product_type: ["raw_material", "processed"] },
+  },
+  { key: "unit_id", label: "Unidad", type: "unit", width: 110, required: true },
+  {
+    key: "quantity",
+    label: "Cantidad",
+    type: "number",
+    width: 110,
+    required: true,
+  },
+  { key: "notes", label: "Notas", type: "text", width: 180 },
+];
 
-interface ProductInfo {
-  id: number;
-  name: string;
-  code: string;
-  ingredients: Ingredient[];
-}
+const OUTPUT_COLUMNS: EditableTableColumn[] = [
+  {
+    key: "product_id",
+    label: "Producto",
+    type: "product",
+    width: 230,
+    required: true,
+    productFetchParams: { product_type: ["processed", "commercial"] },
+  },
+  { key: "unit_id", label: "Unidad", type: "unit", width: 110, required: true },
+  {
+    key: "quantity",
+    label: "Cantidad",
+    type: "number",
+    width: 110,
+    required: true,
+  },
+  { key: "notes", label: "Notas", type: "text", width: 180 },
+];
 
-interface ProductionFormData {
-  id?: number;
-  production_number?: string;
-  production_date: string;
-  location_id?: string;
-  product_id?: number;
-  quantity: number;
-  comments?: string;
-  company_id: number;
-}
+const DEFAULT_CONSUMPTION = {
+  product_id: 0,
+  unit_id: 0,
+  quantity: 0,
+  notes: "",
+};
 
-interface ProductionFormProps {
-  id?: number;
-  readonly?: boolean;
-}
+const DEFAULT_OUTPUT = {
+  product_id: 0,
+  unit_id: 0,
+  quantity: 0,
+  notes: "",
+};
 
-// Componente interno para mostrar ingredientes
-function IngredientsList() {
-  const { values, setFieldError, setFieldValue } =
-    useFormikContext<ProductionFormData>();
-  const { selectedLocation } = useSelectedLocation();
-  const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [maxQuantity, setMaxQuantity] = useState<number | null>(null);
-  const alerts = useAlerts();
+/** Componente que escucha el cambio de formula y pre-rellena las tablas */
+function FormulaListener() {
+  const { values, setFieldValue } = useFormikContext<any>();
+  const lastFormulaIdRef = useRef<number | null>(null);
 
-  // Fetch product info when product_id changes
   useEffect(() => {
-    if (!values.product_id || !selectedLocation?.id) {
-      setProductInfo(null);
-      setMaxQuantity(null);
-      return;
-    }
-
-    const fetchProductInfo = async () => {
+    const id = values.formula_id;
+    if (!id || id === lastFormulaIdRef.current) return;
+    lastFormulaIdRef.current = id;
+    (async () => {
       try {
-        setLoading(true);
-        if (!values.product_id) return;
-
-        const response = await Services.products.show(values.product_id);
-        const product = response.data.data;
-
-        // Obtener ingredientes con stock disponible
-        if (product.ingredients && product.ingredients.length > 0) {
-          const ingredientsWithStock = await Promise.all(
-            product.ingredients.map(async (ingredientData: any) => {
-              try {
-                // El resource retorna ingredient_id, no id del ingrediente
-                const ingredientId = ingredientData.ingredient_id;
-
-                // Obtener información completa del ingrediente incluyendo stock
-                const ingredientResponse = await Services.products.show(
-                  ingredientId
-                );
-                const ingredient = ingredientResponse.data.data;
-
-                const availableStock = ingredient.current_stock || 0;
-                const quantityNeeded = ingredientData.quantity || 1;
-
-                return {
-                  id: ingredientId,
-                  name: ingredientData.ingredient_name || ingredient.name,
-                  code: ingredientData.ingredient_code || ingredient.code,
-                  quantity_needed: quantityNeeded,
-                  available_stock: availableStock,
-                  unit: (ingredient as any).unit || "unidad",
-                };
-              } catch (error) {
-                console.error(
-                  `Error fetching stock for ingredient ${ingredientData.ingredient_id}:`,
-                  error
-                );
-                return {
-                  id: ingredientData.ingredient_id,
-                  name: ingredientData.ingredient_name || "Desconocido",
-                  code: ingredientData.ingredient_code || "",
-                  quantity_needed: ingredientData.quantity || 1,
-                  available_stock: 0,
-                  unit: "unidad",
-                };
-              }
-            })
+        const r: any = await Services.formulas.show(id);
+        const formula = r?.data?.data ?? r?.data;
+        const items = formula?.items ?? [];
+        if (items.length === 0) return;
+        setFieldValue(
+          "consumptions",
+          items.map((it: any) => ({
+            product_id: it.product_id,
+            unit_id: it.unit_id,
+            quantity: Number(it.expected_quantity) || 0,
+            expected_quantity: Number(it.expected_quantity) || 0,
+            notes: it.notes ?? "",
+            _key: `prefill-c-${Date.now()}-${Math.random()}`,
+          })),
+        );
+        if (formula.expected_output_quantity && items[0]?.expected_output_quantity) {
+          setFieldValue(
+            "outputs",
+            items.map((it: any) => ({
+              product_id: it.product_id,
+              unit_id: it.unit_id,
+              quantity: Number(it.expected_output_quantity) || 0,
+              expected_quantity: Number(it.expected_output_quantity) || 0,
+              notes: it.notes ?? "",
+              _key: `prefill-o-${Date.now()}-${Math.random()}`,
+            })),
           );
-
-          // Calcular cantidad máxima que se puede producir
-          const maxProducible = Math.min(
-            ...ingredientsWithStock.map((ing) =>
-              Math.floor(ing.available_stock / ing.quantity_needed)
-            )
-          );
-
-          setProductInfo({
-            id: product.id,
-            name: product.name,
-            code: product.code || "",
-            ingredients: ingredientsWithStock,
-          });
-
-          setMaxQuantity(maxProducible);
-
-          // Validar cantidad actual y mostrar alerta
-          if (values.quantity > maxProducible) {
-            setFieldError(
-              "quantity",
-              `La cantidad máxima que puedes producir es ${maxProducible}`
-            );
-            setFieldValue("quantity", maxProducible);
-
-            if (maxProducible === 0) {
-              alerts.warning(
-                "No hay stock suficiente de los ingredientes para producir este producto"
-              );
-            } else {
-              alerts.warning(
-                `Se ha ajustado la cantidad. Máximo producible: ${maxProducible} unidades`
-              );
-            }
-          }
-        } else {
-          setProductInfo(null);
-          setMaxQuantity(null);
         }
-      } catch (error) {
-        console.error("Error fetching product info:", error);
-        setProductInfo(null);
-        setMaxQuantity(null);
-      } finally {
-        setLoading(false);
+      } catch (e) {
+        console.warn("No se pudo pre-rellenar desde la fórmula", e);
       }
-    };
+    })();
+  }, [values.formula_id, setFieldValue]);
 
-    fetchProductInfo();
-  }, [values.product_id, selectedLocation?.id]);
-
-  // Validar cantidad cuando cambia
-  useEffect(() => {
-    if (maxQuantity !== null && values.quantity > maxQuantity) {
-      setFieldError(
-        "quantity",
-        `La cantidad máxima que puedes producir es ${maxQuantity}`
-      );
-
-      setFieldValue("quantity", maxQuantity);
-    }
-  }, [values.quantity, maxQuantity]);
-
-  if (!values.product_id) {
-    return null;
-  }
-
-  if (loading) {
-    return (
-      <Card style={{ marginBottom: 16, backgroundColor: palette.surface }}>
-        <Card.Content>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 16,
-            }}
-          >
-            <ActivityIndicator size="small" color={palette.primary} />
-            <Text style={{ marginLeft: 8, color: palette.text }}>
-              Cargando información de ingredientes...
-            </Text>
-          </View>
-        </Card.Content>
-      </Card>
-    );
-  }
-
-  if (!productInfo || productInfo.ingredients.length === 0) {
-    return (
-      <Card style={{ marginBottom: 16, backgroundColor: palette.warning }}>
-        <Card.Content>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <MaterialCommunityIcons
-              name="alert-circle"
-              size={20}
-              color={palette.error}
-              style={{ marginRight: 8 }}
-            />
-            <Text style={{ color: palette.error, flex: 1 }}>
-              Este producto no tiene ingredientes configurados
-            </Text>
-          </View>
-        </Card.Content>
-      </Card>
-    );
-  }
-
-  const hasInsufficientStock = productInfo.ingredients.some(
-    (ing) => ing.available_stock < ing.quantity_needed * values.quantity
-  );
-
-  return (
-    <View style={{ marginBottom: 16 }}>
-      <Card style={{ backgroundColor: palette.card }}>
-        <Card.Content>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginBottom: 12,
-            }}
-          >
-            <MaterialCommunityIcons
-              name="package-variant"
-              size={24}
-              color={palette.primary}
-              style={{ marginRight: 8 }}
-            />
-            <Text
-              variant="titleMedium"
-              style={{ fontWeight: "bold", color: palette.text }}
-            >
-              Ingredientes Necesarios
-            </Text>
-          </View>
-
-          {maxQuantity !== null && (
-            <View
-              style={{
-                backgroundColor:
-                  maxQuantity > 0 ? palette.success : palette.warning,
-                padding: 12,
-                borderRadius: 4,
-                marginBottom: 12,
-                flexDirection: "row",
-                alignItems: "center",
-              }}
-            >
-              <MaterialCommunityIcons
-                name={maxQuantity > 0 ? "check-circle" : "alert"}
-                size={20}
-                color={maxQuantity > 0 ? palette.background : palette.error}
-                style={{ marginRight: 8 }}
-              />
-              <Text
-                style={{
-                  fontWeight: "bold",
-                  color: maxQuantity > 0 ? palette.background : palette.error,
-                  flex: 1,
-                }}
-              >
-                {maxQuantity > 0
-                  ? `Puedes producir hasta ${maxQuantity} unidades`
-                  : "No hay suficiente stock para producir"}
-              </Text>
-            </View>
-          )}
-
-          <DataTable>
-            <DataTable.Header>
-              <DataTable.Title>Ingrediente</DataTable.Title>
-              <DataTable.Title numeric>Por Unidad</DataTable.Title>
-              <DataTable.Title numeric>Total</DataTable.Title>
-              <DataTable.Title numeric>Disponible</DataTable.Title>
-            </DataTable.Header>
-
-            {productInfo.ingredients.map((ingredient) => {
-              const totalNeeded = ingredient.quantity_needed * values.quantity;
-              const isInsufficient = ingredient.available_stock < totalNeeded;
-
-              return (
-                <DataTable.Row
-                  key={ingredient.id}
-                  style={
-                    isInsufficient ? { backgroundColor: palette.warning } : {}
-                  }
-                >
-                  <DataTable.Cell>
-                    <View
-                      style={{ flexDirection: "row", alignItems: "center" }}
-                    >
-                      {isInsufficient && (
-                        <MaterialCommunityIcons
-                          name="alert"
-                          size={16}
-                          color={palette.error}
-                          style={{ marginRight: 4 }}
-                        />
-                      )}
-                      <Text style={{ color: palette.text }}>
-                        {ingredient.name}
-                      </Text>
-                    </View>
-                  </DataTable.Cell>
-                  <DataTable.Cell numeric>
-                    <Text style={{ color: palette.text }}>
-                      {ingredient.quantity_needed}
-                    </Text>
-                  </DataTable.Cell>
-                  <DataTable.Cell numeric>
-                    <Text
-                      style={
-                        isInsufficient
-                          ? { color: palette.error, fontWeight: "bold" }
-                          : { color: palette.text }
-                      }
-                    >
-                      {totalNeeded}
-                    </Text>
-                  </DataTable.Cell>
-                  <DataTable.Cell numeric>
-                    <Text style={{ color: palette.text }}>
-                      {ingredient.available_stock}
-                    </Text>
-                  </DataTable.Cell>
-                </DataTable.Row>
-              );
-            })}
-          </DataTable>
-
-          {hasInsufficientStock && (
-            <View
-              style={{
-                backgroundColor: palette.warning,
-                padding: 12,
-                borderRadius: 4,
-                marginTop: 12,
-                borderLeftWidth: 4,
-                borderLeftColor: palette.error,
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  marginBottom: 4,
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="alert-circle"
-                  size={20}
-                  color={palette.error}
-                  style={{ marginRight: 8 }}
-                />
-                <Text
-                  style={{ color: palette.error, fontWeight: "bold", flex: 1 }}
-                >
-                  Stock insuficiente para algunos ingredientes
-                </Text>
-              </View>
-              <Text
-                style={{ color: palette.error, fontSize: 12, marginTop: 4 }}
-              >
-                Reduce la cantidad a producir o asegúrate de tener suficiente
-                inventario
-              </Text>
-            </View>
-          )}
-        </Card.Content>
-      </Card>
-    </View>
-  );
+  return null;
 }
 
-export default function ProductionForm(props: ProductionFormProps) {
-  const params = useLocalSearchParams();
-  const productionId =
-    props.id || (params.id ? parseInt(params.id as string) : undefined);
-  const formRef = useRef<AppFormRef<ProductionFormData>>(null);
-
+export default function ProductionForm() {
+  const params = useLocalSearchParams<{ id?: string; duplicateFrom?: string }>();
+  const router = useRouter();
+  const alerts = useAlerts();
   const { company } = useSelectedCompany();
   const { selectedLocation } = useSelectedLocation();
-  const alerts = useAlerts();
+  const formRef = useRef<AppFormRef<any>>(null);
+  const [initialValues, setInitialValues] = React.useState<any | null>(null);
+  const [editingId, setEditingId] = React.useState<number | undefined>(undefined);
 
-  // Handler para validar antes de enviar
-  const handleSubmit = async (values: ProductionFormData) => {
-    // Obtener información del producto para validar stock
-    try {
-      const product = await Services.products.show(values.product_id!);
+  // Cargar valores iniciales: edición o duplicado
+  useEffect(() => {
+    (async () => {
+      const baseValues = {
+        production_date: new Date().toISOString().split("T")[0],
+        responsible_user_id: 0,
+        formula_id: null,
+        notes: "",
+        consumptions: [] as any[],
+        outputs: [] as any[],
+        wastes: [] as any[],
+        affect_stock: true,
+      };
 
-      const productData = product.data as any;
-
-      if (!productData.ingredients || productData.ingredients.length === 0) {
-        alerts.error("Este producto no tiene ingredientes configurados");
-        throw new Error("Sin ingredientes configurados");
+      if (params.id) {
+        setEditingId(parseInt(params.id, 10));
       }
 
-      // Verificar disponibilidad de ingredientes
-      const ingredientsWithStock = await Promise.all(
-        productData.ingredients.map(async (ing: any) => {
-          try {
-            const ingredientData = await Services.products.show(
-              ing.ingredient_id
-            );
-            const ingData = ingredientData.data as any;
-            return {
-              name: ingData.name,
-              needed: ing.quantity * values.quantity,
-              available: ingData.current_stock || 0,
-            };
-          } catch {
-            return {
-              name: ing.ingredient_name || "Desconocido",
-              needed: ing.quantity * values.quantity,
-              available: 0,
-            };
+      const sourceId = params.id ?? params.duplicateFrom;
+      if (sourceId) {
+        try {
+          const r: any = await Services.productionOrders.show(parseInt(sourceId as string, 10));
+          const order = r?.data?.data ?? r?.data;
+          if (params.duplicateFrom) {
+            setInitialValues({
+              ...baseValues,
+              production_date: new Date().toISOString().split("T")[0],
+              formula_id: order.formula_id,
+              responsible_user_id: order.responsible_user_id,
+              notes: order.notes,
+              consumptions: (order.consumptions ?? []).map((c: any) => ({
+                product_id: c.product_id,
+                unit_id: c.unit_id,
+                quantity: Number(c.quantity) || 0,
+                notes: c.notes ?? "",
+                _key: `dup-c-${Date.now()}-${Math.random()}`,
+              })),
+              outputs: (order.outputs ?? []).map((o: any) => ({
+                product_id: o.product_id,
+                unit_id: o.unit_id,
+                quantity: Number(o.quantity) || 0,
+                notes: o.notes ?? "",
+                _key: `dup-o-${Date.now()}-${Math.random()}`,
+              })),
+              wastes: [],
+            });
+          } else {
+            setInitialValues({
+              ...baseValues,
+              production_date: order.production_date,
+              responsible_user_id: order.responsible_user_id,
+              formula_id: order.formula_id,
+              notes: order.notes ?? "",
+              consumptions: (order.consumptions ?? []).map((c: any) => ({
+                product_id: c.product_id,
+                unit_id: c.unit_id,
+                quantity: Number(c.quantity) || 0,
+                expected_quantity: c.expected_quantity,
+                notes: c.notes ?? "",
+                _key: `edit-c-${Date.now()}-${Math.random()}`,
+              })),
+              outputs: (order.outputs ?? []).map((o: any) => ({
+                product_id: o.product_id,
+                unit_id: o.unit_id,
+                quantity: Number(o.quantity) || 0,
+                expected_quantity: o.expected_quantity,
+                notes: o.notes ?? "",
+                _key: `edit-o-${Date.now()}-${Math.random()}`,
+              })),
+              wastes: (order.wastes ?? []).map((w: any) => ({
+                product_id: w.product_id,
+                unit_id: w.unit_id,
+                quantity: Number(w.quantity) || 0,
+                reason: w.reason ?? "other",
+                notes: w.notes ?? "",
+                _key: `edit-w-${Date.now()}-${Math.random()}`,
+              })),
+            });
           }
-        })
-      );
-
-      const hasInsufficient = ingredientsWithStock.some(
-        (ing: any) => ing.available < ing.needed
-      );
-
-      if (hasInsufficient) {
-        const confirmed = await alerts.confirm(
-          "Algunos ingredientes no tienen stock suficiente. ¿Deseas continuar de todas formas?",
-          {
-            title: "Stock insuficiente",
-            okText: "Sí, continuar",
-            cancelText: "Cancelar",
-          }
-        );
-
-        if (!confirmed) {
-          throw new Error("Cancelado por el usuario");
+          return;
+        } catch (e: any) {
+          alerts.error("No se pudo cargar la producción: " + e.message);
         }
-      } else {
-        // Confirmar producción normal
-        const confirmed = await alerts.confirm(
-          `¿Confirmas el registro de ${values.quantity} unidades? Se restarán los ingredientes del inventario.`,
-          {
-            title: "Confirmar producción",
-            okText: "Confirmar",
-            cancelText: "Cancelar",
-          }
-        );
+      }
+      setInitialValues(baseValues);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.id, params.duplicateFrom]);
 
-        if (!confirmed) {
-          throw new Error("Cancelado por el usuario");
-        }
-      }
-    } catch (error: any) {
-      if (error.message === "Cancelado por el usuario") {
-        throw error;
-      }
-      alerts.error("Error al validar la producción: " + error.message);
-      throw error;
-    }
-  };
+  if (!initialValues) {
+    return null;
+  }
 
   return (
     <AppForm
       ref={formRef}
-      api={Services.productions}
-      id={productionId}
-      readonly={props.readonly}
-      style={{ backgroundColor: palette.background }}
-      submitButtonText="Registrar Producción"
-      onSubmit={handleSubmit}
-      initialValues={{
-        company_id: company?.id || 0,
-        location_id: selectedLocation?.id?.toString() || "",
-        production_date: new Date().toISOString().split("T")[0],
-        quantity: 1,
+      api={Services.productionOrders}
+      id={editingId}
+      submitButtonText={undefined}
+      initialValues={initialValues}
+      onSubmit={async (values) => {
+        const totalC = (values.consumptions ?? []).reduce(
+          (a: number, b: any) => a + (Number(b.quantity) || 0),
+          0,
+        );
+        const totalO = (values.outputs ?? []).reduce(
+          (a: number, b: any) => a + (Number(b.quantity) || 0),
+          0,
+        );
+
+        const ok = await alerts.confirm(
+          `Consumo total: ${totalC.toFixed(2)}  |  Producido: ${totalO.toFixed(2)}\n\n¿Registrar la producción?${
+            values.affect_stock ? " Se actualizará el stock." : " (modo borrador)"
+          }`,
+          { title: "Confirmar producción", okText: "Registrar" },
+        );
+        if (!ok) throw new Error("Cancelado por el usuario");
+      }}
+      onSuccess={async (response, values) => {
+        try {
+          if (values.affect_stock && !editingId) {
+            const orderId = response?.data?.id ?? response?.id;
+            if (orderId) {
+              await Services.productionOrders.complete(orderId);
+              alerts.success(
+                `Producción ${response?.data?.folio ?? ""} registrada · Stock actualizado`,
+              );
+            }
+          } else if (!values.affect_stock) {
+            alerts.success("Borrador guardado");
+          } else {
+            alerts.success("Producción actualizada");
+          }
+        } catch (e: any) {
+          alerts.error("Guardada pero no se pudo afectar el stock: " + (e?.message ?? ""));
+        }
+        router.push("/(tabs)/home/production" as any);
       }}
     >
-      {/* Información General */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          marginBottom: 16,
-        }}
-      >
-        <MaterialCommunityIcons
-          name="information"
-          size={24}
-          color={palette.primary}
-          style={{ marginRight: 8 }}
-        />
-        <Text
-          variant="titleMedium"
-          style={{ fontWeight: "bold", color: palette.text }}
-        >
-          Información de Producción
-        </Text>
-      </View>
-
-      <Card style={{ marginBottom: 16, backgroundColor: palette.card }}>
-        <Card.Content>
-          <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
-            <MaterialCommunityIcons
-              name="factory"
-              size={20}
-              color={palette.primary}
-              style={{ marginRight: 8, marginTop: 2 }}
-            />
-            <Text
-              variant="bodyMedium"
-              style={{ color: palette.textSecondary, flex: 1 }}
-            >
-              Selecciona un producto procesado y la cantidad producida. El
-              sistema automáticamente restará los ingredientes del inventario.
-            </Text>
-          </View>
-        </Card.Content>
-      </Card>
-
-      <FormProSelect
-        name="company_id"
-        label="Compañía"
-        model="admin.companies"
-        placeholder="Seleccionar compañía"
-        disabled
-      />
-
-      <FormProSelect
-        name="location_id"
-        label="Ubicación"
-        model="admin.locations"
-        placeholder="Seleccionar ubicación"
-        disabled
-      />
-
-      <FormDatePicker
-        name="production_date"
-        label="Fecha de Producción"
-        placeholder="YYYY-MM-DD"
-        required
-      />
-
-      <Divider
-        style={{ marginVertical: 24, backgroundColor: palette.border }}
-      />
-
-      {/* Producto y Cantidad */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          marginBottom: 16,
-        }}
-      >
-        <MaterialCommunityIcons
-          name="package-variant-closed"
-          size={24}
-          color={palette.primary}
-          style={{ marginRight: 8 }}
-        />
-        <Text
-          variant="titleMedium"
-          style={{ fontWeight: "bold", color: palette.text }}
-        >
-          Producto a Producir
-        </Text>
-      </View>
-
-      <FormProSelect
-        name="product_id"
-        label="Producto Procesado"
-        model="products"
-        fetchParams={{
-          product_type: ["processed"],
-        }}
-        placeholder="Seleccionar producto procesado"
-        required
-      />
-
-      {/* Mostrar ingredientes y validaciones */}
-      <IngredientsList />
-
-      <FormInput
-        name="quantity"
-        label="Cantidad producida"
-        placeholder="Ingrese la cantidad"
-        keyboardType="numeric"
-        required
-      />
-
-      <FormInput
-        name="comments"
-        label="Comentarios"
-        placeholder="Notas adicionales sobre la producción"
-        multiline
-        numberOfLines={4}
-      />
-
-      <Divider
-        style={{ marginVertical: 24, backgroundColor: palette.border }}
-      />
-
-      {/* Información de Ingredientes */}
-      <Card style={{ backgroundColor: palette.info, marginBottom: 16 }}>
-        <Card.Content>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              marginBottom: 8,
-            }}
-          >
-            <MaterialCommunityIcons
-              name="alert-circle-outline"
-              size={24}
-              color={palette.error}
-              style={{ marginRight: 8 }}
-            />
-            <Text
-              variant="titleMedium"
-              style={{
-                fontWeight: "bold",
-                color: palette.error,
-              }}
-            >
-              Importante
-            </Text>
-          </View>
-          <View style={{ paddingLeft: 32 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "flex-start",
-                marginBottom: 4,
-              }}
-            >
-              <MaterialCommunityIcons
-                name="minus"
-                size={16}
-                color={palette.textSecondary}
-                style={{ marginRight: 4, marginTop: 2 }}
-              />
-              <Text
-                variant="bodyMedium"
-                style={{ color: palette.textSecondary, flex: 1 }}
-              >
-                Al registrar la producción, se restarán automáticamente los
-                ingredientes necesarios del inventario.
-              </Text>
-            </View>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "flex-start",
-                marginBottom: 4,
-              }}
-            >
-              <MaterialCommunityIcons
-                name="plus"
-                size={16}
-                color={palette.textSecondary}
-                style={{ marginRight: 4, marginTop: 2 }}
-              />
-              <Text
-                variant="bodyMedium"
-                style={{ color: palette.textSecondary, flex: 1 }}
-              >
-                Se agregará el producto terminado al inventario.
-              </Text>
-            </View>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "flex-start",
-              }}
-            >
-              <MaterialCommunityIcons
-                name="check"
-                size={16}
-                color={palette.textSecondary}
-                style={{ marginRight: 4, marginTop: 2 }}
-              />
-              <Text
-                variant="bodyMedium"
-                style={{ color: palette.textSecondary, flex: 1 }}
-              >
-                Asegúrate de tener suficiente stock de los ingredientes.
-              </Text>
-            </View>
-          </View>
-        </Card.Content>
-      </Card>
+      <ProductionFormBody editingId={editingId} />
     </AppForm>
   );
 }
+
+function ProductionFormBody({ editingId }: { editingId?: number }) {
+  const { values, submitForm, isSubmitting, setFieldValue } = useFormikContext<any>();
+  const router = useRouter();
+  const alerts = useAlerts();
+
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+    try {
+      await submitForm();
+      // Si estamos en draft o affect_stock=false → solo guardamos en draft
+      // Si affect_stock=true → después de guardar (POST store) hacemos complete
+      // AppForm internamente llama a Services.productionOrders.store(values) y devuelve la orden
+      if (!values.affect_stock) {
+        alerts.success("Producción guardada en borrador");
+        router.push("/(tabs)/home/production" as any);
+      } else {
+        // Llamamos a complete manualmente después del store
+        try {
+          // La respuesta del store no es accesible aquí, pero AppForm ya hizo la navegación en success.
+          // Solución: usamos el ref del form (no exponer aquí es complejo) - lo manejamos en la pantalla padre.
+        } catch (e) {
+          // noop
+        }
+      }
+    } catch (e: any) {
+      if (e?.message && e.message !== "Cancelado por el usuario") {
+        alerts.error("Error: " + e.message);
+      }
+    }
+  };
+
+  return (
+    <ScrollView
+      contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
+    >
+      <FormulaListener />
+
+      <SectionHeader icon="information" title="Información General" />
+      <Card style={styles.card}>
+        <Card.Content>
+          <FormDatePicker
+            name="production_date"
+            label="Fecha de Producción"
+            required
+          />
+          <FormProSelect
+            name="responsible_user_id"
+            label="Responsable"
+            model="users"
+            required
+          />
+          <FormProSelect
+            name="formula_id"
+            label="Fórmula (opcional)"
+            model="formulas"
+            fetchParams={{ is_active: true }}
+            placeholder="Sin fórmula"
+            clearable
+          />
+          <FormInput name="notes" label="Observaciones" multiline numberOfLines={3} />
+          <FormCheckBox
+            name="affect_stock"
+            label="Afectar stock al guardar"
+            text="Si está activo, descuenta ingredientes y suma productos al inventario inmediatamente."
+          />
+        </Card.Content>
+      </Card>
+
+      <View style={{ height: 12 }} />
+
+      <SectionHeader
+        icon="package-variant-closed"
+        title="Consumos"
+        badge={`${(values.consumptions ?? []).length} items`}
+      />
+      <EditableTable
+        name="consumptions"
+        columns={CONSUMPTION_COLUMNS}
+        defaultRow={DEFAULT_CONSUMPTION}
+        addLabel="Agregar consumo"
+        emptyMessage="Toca “Agregar consumo” para registrar lo que se va a procesar."
+      />
+
+      <View style={{ height: 12 }} />
+
+      <SectionHeader
+        icon="package-variant"
+        title="Resultados Obtenidos"
+        badge={`${(values.outputs ?? []).length} items`}
+      />
+      <EditableTable
+        name="outputs"
+        columns={OUTPUT_COLUMNS}
+        defaultRow={DEFAULT_OUTPUT}
+        addLabel="Agregar producto"
+        emptyMessage="Toca “Agregar producto” para registrar lo que se obtuvo."
+      />
+
+      <View style={{ height: 12 }} />
+
+      <SectionHeader
+        icon="trash-can-outline"
+        title="Mermas"
+        badge={`${(values.wastes ?? []).length} items`}
+      />
+      <MermasTable />
+
+      <View style={{ height: 12 }} />
+
+      <SectionHeader icon="chart-box" title="Resumen" />
+      <InventorySummaryPanel />
+
+      <View style={{ height: 16 }} />
+
+      <View style={styles.actionBar}>
+        <Button
+          mode="outlined"
+          onPress={() => router.back()}
+          style={{ flex: 1, marginRight: 8 }}
+        >
+          Cancelar
+        </Button>
+        <Button
+          mode="contained"
+          onPress={handleSubmit}
+          loading={isSubmitting}
+          disabled={isSubmitting}
+          buttonColor={palette.primary}
+          textColor="#fff"
+          icon={values.affect_stock ? "content-save" : "file-document-outline"}
+          style={{ flex: 1.4 }}
+        >
+          {values.affect_stock ? "Registrar Producción" : "Guardar borrador"}
+        </Button>
+      </View>
+    </ScrollView>
+  );
+}
+
+function SectionHeader({
+  icon,
+  title,
+  badge,
+}: {
+  icon: string;
+  title: string;
+  badge?: string;
+}) {
+  return (
+    <View style={styles.sectionHeader}>
+      <MaterialCommunityIcons
+        name={icon as any}
+        size={20}
+        color={palette.primary}
+      />
+      <Text
+        variant="titleSmall"
+        style={{ color: palette.text, fontWeight: "700", marginLeft: 8, flex: 1 }}
+      >
+        {title}
+      </Text>
+      {badge ? (
+        <View
+          style={{
+            backgroundColor: palette.primary + "22",
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+            borderRadius: 999,
+          }}
+        >
+          <Text style={{ color: palette.primary, fontSize: 11, fontWeight: "600" }}>
+            {badge}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: palette.card,
+    borderRadius: 12,
+    elevation: 1,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  actionBar: {
+    flexDirection: "row",
+    marginTop: 16,
+  },
+});

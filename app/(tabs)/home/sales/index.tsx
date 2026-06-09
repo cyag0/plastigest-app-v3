@@ -49,7 +49,7 @@ export default function SalesIndex() {
       case "closed":
         return palette.primary;
       case "cancelled":
-        return palette.red;
+        return palette.textMuted;
       default:
         return "#6c757d";
     }
@@ -376,7 +376,7 @@ export default function SalesIndex() {
             {
               title: isDownloading ? "Descargando..." : "Imprimir PDF",
               icon: "file-pdf-box",
-              color: palette.error,
+              color: palette.primary,
               show: () => true,
               onPress: handleDownloadPdf,
             },
@@ -450,7 +450,7 @@ export default function SalesIndex() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   tabsContainer: {
     flexDirection: "row",
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
   },
   tabActive: {
-    borderBottomColor: palette.error,
+    borderBottomColor: palette.primary,
   },
   tabText: {
     fontSize: 15,
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
     color: palette.textSecondary,
   },
   tabTextActive: {
-    color: palette.error,
+    color: palette.primary,
   },
   rightContent: {
     alignItems: "flex-end" as const,

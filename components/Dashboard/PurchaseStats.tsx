@@ -190,7 +190,7 @@ export default function PurchaseStats() {
             </Card.Content>
           </Card>
 
-          <Card style={[styles.statCard, { backgroundColor: palette.red }]}>
+          <Card style={[styles.statCard, { backgroundColor: palette.error }]}>
             <Card.Content style={styles.statContent}>
               <View style={styles.statIcon}>
                 <MaterialCommunityIcons

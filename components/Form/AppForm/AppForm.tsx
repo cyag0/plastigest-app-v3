@@ -1,5 +1,7 @@
-import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
 import { CrudService } from "@/utils/services/crudService";
 import { FormikProps, FormikProvider, useFormik } from "formik";
@@ -94,6 +96,29 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   const [readonly, setReadonly] = useState(!!props.readonly);
 
   const alerts = useAlerts();
+  const { colors } = useTheme();
+  const styles = useThemedStyles((c) => ({
+    formCard: {
+      maxWidth: 900,
+      width: "100%",
+      alignSelf: "center",
+      backgroundColor: c.surface,
+      borderRadius: tokens.radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      padding: tokens.spacing[5],
+      ...tokens.shadow.sm,
+    },
+    cardWrap: {
+      width: "100%",
+      maxWidth: 900,
+      alignSelf: "center",
+      backgroundColor: c.background
+    },
+    backgroundStyle: {
+      backgroundColor: c.background,
+    }
+  }));
 
   useEffect(() => {
     loadInitialValues();
@@ -323,13 +348,18 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   return (
     <AppFormContext.Provider value={contextValue}>
       <FormikProvider value={formInstance}>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, backgroundColor: styles.backgroundStyle.backgroundColor }}>
           <ScrollView
             scrollEnabled={!props.disableScroll}
-            style={[{ padding: 16 }, props.style]}
-            contentContainerStyle={[props.containerStyle,{maxWidth: 800, alignSelf: "center", width : "100%"}]}
+            style={[{ padding: 16,
+              backgroundColor: styles.backgroundStyle.backgroundColor,
+            }, props.style]}
+            contentContainerStyle={[
+              props.containerStyle,
+              styles.cardWrap,
+            ]}
           >
-            {props.children}
+           {props.children}
             <View style={{ height: props.disableScroll ? 0 : 16 }} />
           </ScrollView>
 
@@ -340,8 +370,8 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
             >
               {readonly ? (
                 <>
-                  <View style={{ padding: 16 }}>
-                    <View style={{ gap: 8 }}>
+                  <View style={styles.cardWrap}>
+                    <View style={{ padding: 16, gap: 8 }}>
                       <View>
                         <Button
                           mode="contained"
@@ -369,13 +399,12 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
                               }
                             }
                           }}
-                          theme={{ colors: { primary: "#fff" } }}
                           disabled={
                             !formInstance.isValid ||
                             formInstance.isSubmitting ||
                             loading
                           }
-                          textColor={palette.red}
+                          textColor={colors.error}
                           loading={loading}
                         >
                           Eliminar
@@ -387,8 +416,8 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
               ) : (
                 (props.showSubmitButton !== false ||
                   props.showResetButton !== false) && (
-                  <View style={{ padding: 16 }}>
-                    <View style={{ gap: 8 }}>
+                  <View style={styles.cardWrap}>
+                    <View style={{ padding: 16, gap: 8 }}>
                       {props.showSubmitButton !== false && (
                         <View>
                           <Button

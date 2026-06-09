@@ -106,7 +106,7 @@ const ProductCard = React.memo(
     const stockColor =
       item.current_stock && item.current_stock > 0
         ? palette.success
-        : palette.red;
+        : palette.error;
 
     // Obtener la unidad base para mostrar con el stock
     const baseUnit = item.available_units?.find((u) => u.id === item.unit_id);
@@ -756,8 +756,8 @@ const styles = StyleSheet.create({
     borderColor: palette.primary,
   },
   outOfStockChipSelected: {
-    backgroundColor: palette.red,
-    borderColor: palette.red,
+    backgroundColor: palette.error,
+    borderColor: palette.error,
   },
   allChipSelected: {
     backgroundColor: palette.accent,
@@ -781,11 +781,11 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   stockFilterButton: {
-    borderColor: palette.red,
+    borderColor: palette.error,
     borderRadius: 8,
   },
   stockFilterButtonActive: {
-    borderColor: palette.red,
+    borderColor: palette.error,
   },
   categoriesContainer: {
     marginBottom: 8,

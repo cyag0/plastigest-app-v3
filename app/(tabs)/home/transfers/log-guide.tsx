@@ -124,7 +124,7 @@ export default function TransferLogGuideScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   content: {
     padding: 16,

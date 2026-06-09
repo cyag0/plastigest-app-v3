@@ -155,7 +155,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: palette.background }}>
+    <View style={{ flex: 1, backgroundColor: "transparent" as any }}>
       <ScrollView style={styles.container}>
         <Card style={styles.card}>
           <Card.Content>
@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   card: {
     backgroundColor: palette.surface,
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
     padding: 12,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
     borderRadius: 8,
   },
   actions: {

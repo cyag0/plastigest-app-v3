@@ -89,7 +89,7 @@ export default function CashClosingIndex() {
       renderCard={({ item }: { item: any }) => {
         const diff = parseFloat(item.difference ?? "0");
         const diffColor =
-          diff === 0 ? palette.success : diff > 0 ? palette.blue : palette.red;
+          diff === 0 ? palette.success : diff > 0 ? palette.blue : palette.error;
 
         return {
           title: formatDate(item.closing_date),

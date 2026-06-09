@@ -395,11 +395,11 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
                     {/* Gastos e Ingreso Neto */}
                     <Divider style={{ marginVertical: 16 }} />
                     <View style={styles.paymentMethod}>
-                      <MaterialCommunityIcons name="cash-minus" size={20} color={palette.red} />
+                      <MaterialCommunityIcons name="cash-minus" size={20} color={palette.error} />
                       <Text style={{ flex: 1, marginLeft: 8, fontWeight: "600" }}>
                         Total Gastos
                       </Text>
-                      <Text variant="titleSmall" style={{ color: palette.red }}>
+                      <Text variant="titleSmall" style={{ color: palette.error }}>
                         -{formatCurrency(dailyStats.total_expenses || 0)}
                       </Text>
                     </View>

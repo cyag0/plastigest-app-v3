@@ -167,7 +167,7 @@ export default function LocationFormScreen(props: LocationFormProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   scrollContainer: {
     padding: 16,

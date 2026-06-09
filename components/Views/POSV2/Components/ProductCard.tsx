@@ -18,7 +18,7 @@ export default function ProductCard({
   const stockColor =
     product.current_stock && product.current_stock > 0
       ? palette.success
-      : palette.red;
+      : palette.error;
 
   const stockText = product.current_stock || 0;
 

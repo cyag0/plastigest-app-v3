@@ -58,9 +58,21 @@ export default function TabLayout() {
               }}
             />
             <Tabs.Screen
-              name="(stacks)"
+              name="notifications"
               options={{
-                tabBarButton: () => null,
+                href: null,
+              }}
+            />
+            <Tabs.Screen
+              name="tasks"
+              options={{
+                href: null,
+              }}
+            />
+            <Tabs.Screen
+              name="preferences"
+              options={{
+                href: null,
               }}
             />
           </Tabs>
@@ -155,9 +167,21 @@ export default function TabLayout() {
       />
 
       <Tabs.Screen
-        name="(stacks)"
+        name="notifications"
         options={{
-          tabBarButton: () => null,
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="tasks"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="preferences"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
@@ -168,14 +192,13 @@ const styles = StyleSheet.create({
   webContainer: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: palette.surface,
-    padding: 24,
+    backgroundColor: "transparent" as any,
     paddingLeft: 0,
   },
   webContent: {
     flex: 1,
     overflow: "hidden",
     borderRadius: 8,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
 });

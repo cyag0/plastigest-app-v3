@@ -362,7 +362,52 @@ const Services = {
     },
   },
   productions: {
-    ...createCrudService<any>("/auth/admin/productions"),
+    // Mantenido por compatibilidad con código legacy, apunta a la nueva ruta.
+    ...createCrudService<any>("/auth/admin/production-orders"),
+  },
+  productionOrders: {
+    ...createCrudService<any>("/auth/admin/production-orders"),
+    async getInitialData() {
+      const response = await axiosClient.get(
+        "/auth/admin/production-orders/initial-data",
+      );
+      return response.data;
+    },
+    async getTodayStats(params?: { location_id?: number | string }) {
+      const response = await axiosClient.get(
+        "/auth/admin/production-orders/today-stats",
+        { params },
+      );
+      return response.data;
+    },
+    async complete(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/production-orders/${id}/complete`,
+      );
+      return response.data;
+    },
+    async cancel(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/production-orders/${id}/cancel`,
+      );
+      return response.data;
+    },
+    async getVariance(id: number) {
+      const response = await axiosClient.get(
+        `/auth/admin/production-orders/${id}/variance`,
+      );
+      return response.data;
+    },
+  },
+  formulas: {
+    ...createCrudService<any>("/auth/admin/formulas"),
+    async clone(id: number, name?: string) {
+      const response = await axiosClient.post(
+        `/auth/admin/formulas/${id}/clone`,
+        { name },
+      );
+      return response.data;
+    },
   },
   suppliers: {
     ...createCrudService<App.Entities.Supplier>("/auth/admin/suppliers"),

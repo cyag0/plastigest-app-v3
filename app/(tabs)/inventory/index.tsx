@@ -1,26 +1,21 @@
+import AppChip from "@/components/App/Chip";
+import SectionHeader from "@/components/App/SectionHeader";
+import KpiCard from "@/components/Dashboard/KpiCard";
+import QuickAccessCard from "@/components/Dashboard/QuickAccessCard";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import Services from "@/utils/services";
 import { Href, useRouter } from "expo-router";
 import React from "react";
 import {
-  ActivityIndicator,
-  Dimensions,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Text,
+  TouchableOpacity,
   View,
 } from "react-native";
-import { PieChart, ProgressChart } from "react-native-chart-kit";
-import {
-  Card,
-  Divider,
-  Icon,
-  IconButton,
-  Text,
-  TouchableRipple,
-} from "react-native-paper";
-import Carousel from "react-native-reanimated-carousel";
+import { ActivityIndicator } from "react-native-paper";
 
 interface InventoryStats {
   total_products: number;
@@ -37,75 +32,17 @@ interface InventoryStats {
   };
 }
 
-interface InventoryOption {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  route: Href;
-  color: string;
-  badge?: number;
-}
-
 export default function InventoryScreen() {
   const router = useRouter();
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [stats, setStats] = React.useState<InventoryStats | null>(null);
 
-  const isWeb = Platform.OS === "web";
-
-  const inventoryOptions: InventoryOption[] = [
-    {
-      id: "view-inventory",
-      title: "Ver Inventario",
-      description: "Consulta el stock actual de todos los productos",
-      icon: "package-variant",
-      route: "/(tabs)/inventory/products",
-      color: palette.primary,
-    },
-    {
-      id: "weekly-check",
-      title: "Inventario Semanal",
-      description: "Verificación física del inventario",
-      icon: "clipboard-check",
-      route: "/(tabs)/inventory/weekly-inventory",
-      color: palette.blue,
-    },
-    {
-      id: "adjustments",
-      title: "Ajustes",
-      description: "Registra ajustes de inventario por mermas o pérdidas",
-      icon: "tune",
-      route: "/(tabs)/inventory/adjustment",
-      color: palette.warning,
-    },
-    {
-      id: "transfers",
-      title: "Transferencias",
-      description: "Mueve inventario entre sucursales",
-      icon: "truck-fast",
-      route: "/(tabs)/inventory/products",
-      color: palette.accent,
-    },
-    {
-      id: "low-stock",
-      title: "Stock Bajo",
-      description: "Productos que necesitan reposición",
-      icon: "alert-circle",
-      route: "/(tabs)/inventory/products?filter=low_stock",
-      color: palette.error,
-      badge: stats?.low_stock_products || 0,
-    },
-  ];
-
   const loadData = async () => {
     try {
-      // Llamada real a la API
       const response = await Services.reports.inventoryStats({
-        scope: "location", // Cambiar a "general" para ver todas las sucursales
+        scope: "location",
       });
-
       setStats(response.data.data);
     } catch (error) {
       console.error("Error loading inventory stats:", error);
@@ -125,12 +62,46 @@ export default function InventoryScreen() {
   };
 
   const formatCurrency = (value: number) => {
+    if (value >= 1_000_000) {
+      return `$${(value / 1_000_000).toFixed(1)}M`;
+    }
+    if (value >= 1_000) {
+      return `$${(value / 1_000).toFixed(1)}K`;
+    }
     return new Intl.NumberFormat("es-MX", {
       style: "currency",
       currency: "MXN",
       minimumFractionDigits: 0,
     }).format(value);
   };
+
+  const formatStock = (value: number) => {
+    if (value >= 1_000) {
+      return `${(value / 1_000).toFixed(1)}K`;
+    }
+    return new Intl.NumberFormat("es-MX").format(value);
+  };
+
+  // --- Derivados ---
+  const stockHealth = stats?.stock_health;
+  const totalForHealth =
+    (stockHealth?.optimal ?? 0) +
+    (stockHealth?.low ?? 0) +
+    (stockHealth?.critical ?? 0) +
+    (stockHealth?.out ?? 0);
+
+  const lowStockCount = stats?.low_stock_products ?? 0;
+  const totalProducts = stats?.total_products ?? 0;
+  const inventoryValue = stats?.inventory_value ?? 0;
+  const totalStock = stats?.total_stock ?? 0;
+  const outOfStock = stats?.out_of_stock_products ?? 0;
+
+  const categoryEntries: [string, number][] = stats?.products_by_category
+    ? (Object.entries(stats.products_by_category) as [string, number][]).sort(
+        (a, b) => b[1] - a[1],
+      )
+    : [];
+  const maxCategory = Math.max(1, ...categoryEntries.map(([, v]) => v));
 
   if (loading) {
     return (
@@ -140,524 +111,507 @@ export default function InventoryScreen() {
     );
   }
 
-  const categoryData = stats?.products_by_category
-    ? Object.entries(stats.products_by_category).map(
-        ([name, value], index) => ({
-          name,
-          population: value,
-          color: [
-            palette.primary,
-            palette.info,
-            palette.accent,
-            palette.warning,
-          ][index % 4],
-          legendFontColor: palette.text,
-          legendFontSize: 12,
-        })
-      )
-    : [];
-
-  const stockHealthData = {
-    labels: ["Óptimo", "Bajo", "Crítico"],
-    data: [
-      (stats?.stock_health?.optimal || 0) / 100,
-      (stats?.stock_health?.low || 0) / 100,
-      (stats?.stock_health?.critical || 0) / 100,
-    ],
-  };
-
-  function Statistic(props: { icon: string; value: number; label: string }) {
-    return (
-      <View
-        style={{
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-          }}
-        >
-          <Icon source={props.icon} color={"#fff"} size={32} />
-          <Text
-            variant="headlineSmall"
-            style={{
-              color: "#fff",
-              fontWeight: "bold",
-            }}
-          >
-            {props.value}
-          </Text>
-        </View>
-        <Text
-          variant="labelMedium"
-          style={{
-            color: "#eee",
-            lineHeight: 8,
-          }}
-        >
-          {props.label}
-        </Text>
-      </View>
-    );
-  }
-
-  const statistics = [
-    {
-      icon: "cube-outline",
-      value: stats?.total_products || 0,
-      label: "Total Productos",
-    },
-    {
-      icon: "warehouse",
-      value: stats?.total_stock || 0,
-      label: "Stock Total",
-    },
-    {
-      icon: "cash",
-      value: stats?.inventory_value || 0,
-      label: "Valor Inventario",
-    },
-    /*     {
-      icon: "alert",
-      value: stats?.low_stock_products || 0,
-      label: "Stock Bajo",
-    },
-    {
-      icon: "close-circle-outline",
-      value: stats?.out_of_stock_products || 0,
-      label: "Sin Stock",
-    }, */
-  ];
-
   return (
-    <View style={[styles.container]}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { maxWidth: 800, alignSelf: "center" },
-        ]}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        <View
-          style={{
-            height: 240,
-            marginBottom: 16,
-            width: "100%",
-          }}
-        >
-          <Carousel
-            loop
-            width={isWeb ? 800 : Dimensions.get("window").width}
-            height={280}
-            autoPlay={true}
-            autoPlayInterval={2000}
-            pagingEnabled={true}
-            snapEnabled={true}
-            mode="parallax"
-            data={[
-              { type: "stats", color: palette.primary },
-              { type: "health", color: palette.info },
-              { type: "category", color: palette.accent },
-            ]}
-            scrollAnimationDuration={1000}
-            renderItem={({ item, index }: { item: any; index: number }) => {
-              if (item.type === "stats") {
-                return (
-                  <View
-                    style={{
-                      backgroundColor: palette.primary,
-                      borderRadius: 12,
-                      padding: 16,
-                      marginBottom: 24,
-                      flex: 1,
-                      justifyContent: "center",
-                      alignItems: "center",
-                    }}
-                  >
-                    {/* Content */}
-                    <View
-                      style={{
-                        justifyContent: "center",
-                        alignItems: "center",
-                      }}
-                    >
-                      <Text
-                        variant="headlineLarge"
-                        style={{
-                          color: "#fff",
-                          fontWeight: "bold",
-                          paddingHorizontal: 20,
-                          paddingTop: 20,
-                          marginBottom: 8,
-                        }}
-                      >
-                        Inventario
-                      </Text>
-                      <Text
-                        variant="bodyMedium"
-                        style={{
-                          color: "#fff",
-                          opacity: 0.9,
-                          paddingHorizontal: 20,
-                        }}
-                      >
-                        Gestiona y monitorea tu stock
-                      </Text>
-                    </View>
-
-                    <View
-                      style={{
-                        gap: 16,
-                        paddingBottom: 16,
-                        marginTop: 20,
-                        flexDirection: "row",
-                        justifyContent: "center",
-                      }}
-                    >
-                      {statistics.map((stat) => (
-                        <Statistic
-                          key={stat.label}
-                          icon={stat.icon}
-                          value={stat.value}
-                          label={stat.label}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                );
-              }
-
-              if (item.type === "health") {
-                return (
-                  <Card
-                    style={[
-                      styles.chartCard,
-                      {
-                        backgroundColor: palette.card,
-                        borderWidth: 2,
-                        borderColor: item.color + "30",
-                        boxShadow: "transparent",
-                        shadowColor: "transparent",
-                      },
-                    ]}
-                  >
-                    <Card.Content>
-                      <Text variant="titleMedium" style={styles.chartTitle}>
-                        Salud del Stock
-                      </Text>
-                      <ProgressChart
-                        data={stockHealthData}
-                        width={Dimensions.get("window").width - 80}
-                        height={200}
-                        strokeWidth={16}
-                        radius={32}
-                        chartConfig={{
-                          backgroundColor: palette.card,
-                          backgroundGradientFrom: palette.card,
-                          backgroundGradientTo: palette.card,
-                          color: (opacity = 1, index = 0) => {
-                            const colors = [
-                              palette.success,
-                              palette.warning,
-                              palette.error,
-                            ];
-                            return colors[index] || palette.primary;
-                          },
-                          labelColor: (opacity = 1) => palette.text,
-                        }}
-                        hideLegend={false}
-                      />
-                    </Card.Content>
-                  </Card>
-                );
-              }
-
-              if (item.type === "category" && categoryData.length > 0) {
-                return (
-                  <Card
-                    style={[
-                      styles.chartCard,
-                      {
-                        backgroundColor: item.color + "15",
-                        borderWidth: 2,
-                        borderColor: item.color + "30",
-                        shadowColor: "transparent",
-                      },
-                    ]}
-                  >
-                    <Card.Content>
-                      <Text variant="titleMedium" style={styles.chartTitle}>
-                        Productos por Categoría
-                      </Text>
-                      <PieChart
-                        data={categoryData}
-                        width={Dimensions.get("window").width - 80}
-                        height={200}
-                        chartConfig={{
-                          color: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
-                          labelColor: (opacity = 1) => palette.text,
-                        }}
-                        accessor="population"
-                        backgroundColor="transparent"
-                        paddingLeft="15"
-                        absolute
-                      />
-                    </Card.Content>
-                  </Card>
-                );
-              }
-
-              return <View />;
-            }}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
+    >
+      {/* ============== RESUMEN ============== */}
+      <View style={styles.section}>
+        <SectionHeader title="Resumen" />
+        <View style={styles.kpiRow}>
+          <KpiCard
+            icon="package-variant-closed"
+            label="Total productos"
+            value={formatStock(totalProducts)}
+          />
+          <KpiCard
+            icon="warehouse"
+            label="Stock total"
+            value={formatStock(totalStock)}
           />
         </View>
-
-        {/* Opciones de Inventario */}
-        <View style={{ paddingHorizontal: 16 }}>
-          <Text variant="titleLarge" style={styles.sectionTitle}>
-            Acciones Rápidas
-          </Text>
+        <View style={styles.kpiRow}>
+          <KpiCard
+            icon="cash-multiple"
+            label="Valor inventario"
+            value={formatCurrency(inventoryValue)}
+          />
+          <KpiCard
+            icon="alert-circle-outline"
+            label="Stock bajo"
+            value={formatStock(lowStockCount + outOfStock)}
+            inverseDelta={lowStockCount + outOfStock > 0}
+            delta={
+              totalProducts > 0
+                ? {
+                    value: ((lowStockCount + outOfStock) / totalProducts) * 100,
+                    period: "del total",
+                  }
+                : undefined
+            }
+          />
         </View>
+      </View>
 
-        {inventoryOptions.map((option, index) => (
-          <React.Fragment key={option.id}>
-            <TouchableRipple
-              onPress={() => router.push(option.route as any)}
-              style={styles.optionItem}
-            >
-              <View style={styles.optionContent}>
-                <View
-                  style={[
-                    styles.optionIcon,
-                    { backgroundColor: option.color + "20" },
-                  ]}
-                >
-                  <IconButton
-                    icon={option.icon}
-                    size={28}
-                    iconColor={option.color}
-                    style={{ margin: 0 }}
-                  />
-                </View>
-
-                <View style={styles.optionText}>
-                  <Text variant="titleMedium" style={styles.optionTitle}>
-                    {option.title}
-                  </Text>
-                  <Text
-                    variant="bodySmall"
-                    style={styles.optionDescription}
-                    numberOfLines={2}
-                  >
-                    {option.description}
-                  </Text>
-                </View>
-
-                {option.badge !== undefined && option.badge > 0 && (
-                  <View
-                    style={[styles.badge, { backgroundColor: option.color }]}
-                  >
-                    <Text variant="labelSmall" style={styles.badgeText}>
-                      {option.badge}
-                    </Text>
-                  </View>
-                )}
-
-                <IconButton
-                  icon="chevron-right"
-                  size={24}
-                  iconColor={palette.textSecondary}
-                  style={{ margin: 0 }}
+      {/* ============== SALUD DEL STOCK ============== */}
+      {stockHealth && totalForHealth > 0 && (
+        <View style={styles.section}>
+          <SectionHeader
+            title="Salud del stock"
+            badge={`${totalProducts}`}
+            actionLabel="Detalles"
+            onAction={() => router.push("/(tabs)/inventory/products" as any)}
+          />
+          <View style={styles.card}>
+            <HealthRow
+              label="Optimo"
+              value={stockHealth.optimal}
+              total={totalForHealth}
+              color={palette.success}
+              bg={palette.successSoft}
+            />
+            <Divider />
+            <HealthRow
+              label="Bajo"
+              value={stockHealth.low}
+              total={totalForHealth}
+              color={palette.warning}
+              bg={palette.warningSoft}
+            />
+            <Divider />
+            <HealthRow
+              label="Critico"
+              value={stockHealth.critical}
+              total={totalForHealth}
+              color={palette.error}
+              bg={palette.errorSoft}
+            />
+            {stockHealth.out > 0 && (
+              <>
+                <Divider />
+                <HealthRow
+                  label="Agotado"
+                  value={stockHealth.out}
+                  total={totalForHealth}
+                  color={palette.text}
+                  bg={palette.surfaceMuted}
                 />
-              </View>
-            </TouchableRipple>
-
-            {index < inventoryOptions.length - 1 && (
-              <Divider style={{ marginLeft: 80 }} />
+              </>
             )}
-          </React.Fragment>
-        ))}
-
-        {/* Alertas */}
-        {(stats?.low_stock_products || 0) > 0 && (
-          <View style={{ paddingHorizontal: 16 }}>
-            <Card style={[styles.alertCard, { marginTop: 16 }]}>
-              <Card.Content>
-                <View style={styles.alertContent}>
-                  <IconButton
-                    icon="alert-circle"
-                    size={24}
-                    iconColor={palette.error}
-                    style={{ margin: 0 }}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text variant="titleSmall" style={styles.alertTitle}>
-                      Productos con Stock Bajo
-                    </Text>
-                    <Text variant="bodySmall" style={styles.alertText}>
-                      Hay {stats?.low_stock_products} productos que necesitan
-                      reposición urgente. Revisa el inventario para evitar
-                      desabastecimiento.
-                    </Text>
-                  </View>
-                </View>
-              </Card.Content>
-            </Card>
           </View>
-        )}
-      </ScrollView>
+        </View>
+      )}
+
+      {/* ============== PRODUCTOS POR CATEGORIA ============== */}
+      {categoryEntries.length > 0 && (
+        <View style={styles.section}>
+          <SectionHeader
+            title="Productos por categoria"
+            badge={`${categoryEntries.length}`}
+          />
+          <View style={styles.card}>
+            {categoryEntries.slice(0, 6).map(([name, count], idx) => (
+              <React.Fragment key={name}>
+                <CategoryRow
+                  name={name}
+                  count={count}
+                  percentage={(count / maxCategory) * 100}
+                  rank={idx + 1}
+                />
+                {idx < Math.min(categoryEntries.length, 6) - 1 && <Divider />}
+              </React.Fragment>
+            ))}
+            {categoryEntries.length > 6 && (
+              <TouchableOpacity
+                style={styles.seeMore}
+                onPress={() => router.push("/(tabs)/inventory/products" as any)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.seeMoreText}>
+                  Ver {categoryEntries.length - 6} mas
+                </Text>
+                <Text style={styles.seeMoreArrow}>{"→"}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
+      {/* ============== ACCIONES RAPIDAS ============== */}
+      <View style={styles.section}>
+        <SectionHeader title="Acciones rapidas" />
+        <View style={styles.actionsGrid}>
+          <QuickAccessCard
+            icon="package-variant"
+            label="Ver inventario"
+            description="Stock de todos los productos"
+            onPress={() => router.push("/(tabs)/inventory/products" as any)}
+          />
+          <QuickAccessCard
+            icon="clipboard-check-outline"
+            label="Inventario semanal"
+            description="Verificacion fisica"
+            onPress={() =>
+              router.push("/(tabs)/inventory/weekly-inventory" as any)
+            }
+          />
+          <QuickAccessCard
+            icon="tune-variant"
+            label="Ajustes"
+            description="Mermas o perdidas"
+            onPress={() => router.push("/(tabs)/inventory/adjustment" as any)}
+          />
+          <QuickAccessCard
+            icon="alert-circle-outline"
+            label="Stock bajo"
+            description="Productos a reponer"
+            onPress={() =>
+              router.push(
+                "/(tabs)/inventory/products?filter=low_stock" as any,
+              )
+            }
+          />
+        </View>
+      </View>
+
+      {/* ============== ALERTA ============== */}
+      {lowStockCount > 0 && (
+        <View style={styles.section}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={[styles.alertCard, { borderLeftColor: palette.error }]}
+            onPress={() =>
+              router.push(
+                "/(tabs)/inventory/products?filter=low_stock" as any,
+              )
+            }
+          >
+            <View
+              style={[
+                styles.alertIcon,
+                { backgroundColor: palette.errorSoft },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="alert-circle"
+                size={18}
+                color={palette.error}
+              />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <View style={styles.alertHeader}>
+                <Text style={styles.alertTitle}>Stock bajo</Text>
+                <AppChip variant="error" size="sm">
+                  {lowStockCount}
+                </AppChip>
+              </View>
+              <Text style={styles.alertText} numberOfLines={2}>
+                Hay {lowStockCount} producto{lowStockCount === 1 ? "" : "s"} que
+                {lowStockCount === 1 ? " necesita" : " necesitan"} reposicion
+                urgente. Revisa el inventario para evitar desabastecimiento.
+              </Text>
+            </View>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={18}
+              color={palette.textMuted}
+            />
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>
+          Datos en tiempo real de la sucursal activa
+        </Text>
+      </View>
+    </ScrollView>
+  );
+}
+
+// ============== SUBCOMPONENTES ==============
+
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+
+function Divider() {
+  return <View style={styles.divider} />;
+}
+
+interface HealthRowProps {
+  label: string;
+  value: number;
+  total: number;
+  color: string;
+  bg: string;
+}
+
+function HealthRow({ label, value, total, color, bg }: HealthRowProps) {
+  const percentage = total > 0 ? (value / total) * 100 : 0;
+  return (
+    <View style={styles.healthRow}>
+      <View style={styles.healthLabelRow}>
+        <View style={[styles.healthDot, { backgroundColor: color }]} />
+        <Text style={styles.healthLabel}>{label}</Text>
+        <Text style={styles.healthCount}>{value}</Text>
+        <Text style={styles.healthPercent}>
+          {percentage.toFixed(0)}%
+        </Text>
+      </View>
+      <View style={styles.healthBarTrack}>
+        <View
+          style={[
+            styles.healthBarFill,
+            { width: `${percentage}%`, backgroundColor: color },
+          ]}
+        />
+      </View>
     </View>
   );
 }
 
+interface CategoryRowProps {
+  name: string;
+  count: number;
+  percentage: number;
+  rank: number;
+}
+
+function CategoryRow({ name, count, percentage, rank }: CategoryRowProps) {
+  return (
+    <View style={styles.categoryRow}>
+      <View style={styles.categoryRank}>
+        <Text style={styles.categoryRankText}>{rank}</Text>
+      </View>
+      <View style={styles.categoryBody}>
+        <View style={styles.categoryHeader}>
+          <Text style={styles.categoryName} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text style={styles.categoryCount}>{count}</Text>
+        </View>
+        <View style={styles.categoryBarTrack}>
+          <View
+            style={[
+              styles.categoryBarFill,
+              { width: `${percentage}%`, backgroundColor: palette.primary },
+            ]}
+          />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ============== STYLES ==============
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   centered: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  scrollContent: {
-    paddingTop: 0,
-    paddingBottom: 40,
+  content: {
+    paddingBottom: tokens.spacing[10],
   },
-  header: {
-    marginBottom: 24,
-    alignItems: "center",
+
+  // --- Sections ---
+  section: {
+    paddingHorizontal: tokens.spacing[5],
+    marginBottom: tokens.spacing[5],
   },
-  headerIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: palette.primary + "15",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  headerTitle: {
-    fontWeight: "bold",
-    color: palette.text,
-    marginBottom: 4,
-  },
-  headerSubtitle: {
-    color: palette.textSecondary,
-    textAlign: "center",
-  },
-  statCard: {
-    width: 120,
-    backgroundColor: palette.card,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  statIconContainer: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  card: {
     backgroundColor: palette.surface,
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  statLabel: {
-    color: palette.textSecondary,
-    lineHeight: 12,
-  },
-  statValue: {
-    fontWeight: "bold",
-    color: palette.text,
-    fontSize: 14,
-  },
-  sectionTitle: {
-    fontWeight: "bold",
-    color: palette.text,
-    marginBottom: 8,
-    marginTop: 8,
-  },
-  chartCard: {
-    width: Dimensions.get("window").width,
-    backgroundColor: palette.card,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  chartTitle: {
-    fontWeight: "bold",
-    color: palette.text,
-    marginBottom: 12,
-  },
-  optionsCard: {
-    backgroundColor: palette.card,
-    borderRadius: 12,
-    elevation: 2,
+    borderRadius: tokens.radius.lg,
+    ...tokens.shadow.sm,
     overflow: "hidden",
-    marginBottom: 16,
   },
-  optionItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+  divider: {
+    height: 1,
+    backgroundColor: palette.border,
+    marginLeft: tokens.spacing[4],
   },
-  optionContent: {
+
+  // --- KPI ---
+  kpiRow: {
+    flexDirection: "row",
+    gap: tokens.spacing[3],
+    marginBottom: tokens.spacing[3],
+  },
+
+  // --- Health bar ---
+  healthRow: {
+    padding: tokens.spacing[4],
+    gap: tokens.spacing[2],
+  },
+  healthLabelRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: tokens.spacing[2],
   },
-  optionIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: "center",
-    alignItems: "center",
+  healthDot: {
+    width: 8,
+    height: 8,
+    borderRadius: tokens.radius.full,
   },
-  optionText: {
+  healthLabel: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
     flex: 1,
   },
-  optionTitle: {
-    fontWeight: "600",
+  healthCount: {
+    ...tokens.typography.bodyMd,
     color: palette.text,
+    fontVariant: ["tabular-nums"],
+  },
+  healthPercent: {
+    ...tokens.typography.caption,
+    color: palette.textMuted,
+    fontVariant: ["tabular-nums"],
+    minWidth: 40,
+    textAlign: "right",
+  },
+  healthBarTrack: {
+    height: 8,
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: tokens.radius.full,
+    overflow: "hidden",
+  },
+  healthBarFill: {
+    height: "100%",
+    borderRadius: tokens.radius.full,
+  },
+
+  // --- Category bars ---
+  categoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: tokens.spacing[4],
+    gap: tokens.spacing[3],
+  },
+  categoryRank: {
+    width: 28,
+    height: 28,
+    borderRadius: tokens.radius.full,
+    backgroundColor: palette.primarySoft,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  categoryRankText: {
+    ...tokens.typography.caption,
+    fontWeight: "700",
+    color: palette.primary,
+    fontVariant: ["tabular-nums"],
+  },
+  categoryBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  categoryHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: tokens.spacing[2],
+  },
+  categoryName: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
+    flex: 1,
+    minWidth: 0,
+  },
+  categoryCount: {
+    ...tokens.typography.bodyMd,
+    color: palette.textSecondary,
+    fontVariant: ["tabular-nums"],
+  },
+  categoryBarTrack: {
+    height: 6,
+    backgroundColor: palette.surfaceMuted,
+    borderRadius: tokens.radius.full,
+    overflow: "hidden",
+  },
+  categoryBarFill: {
+    height: "100%",
+    borderRadius: tokens.radius.full,
+  },
+  seeMore: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: tokens.spacing[3],
+    gap: 4,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+  },
+  seeMoreText: {
+    ...tokens.typography.bodyMd,
+    color: palette.primary,
+  },
+  seeMoreArrow: {
+    ...tokens.typography.bodyMd,
+    color: palette.primary,
+  },
+
+  // --- Actions grid ---
+  actionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: tokens.spacing[3],
+  },
+
+  // --- Alert ---
+  alertCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.lg,
+    padding: tokens.spacing[4],
+    gap: tokens.spacing[3],
+    borderLeftWidth: 4,
+    ...tokens.shadow.sm,
+  },
+  alertIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: tokens.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  alertHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing[2],
     marginBottom: 2,
   },
-  optionDescription: {
+  alertTitle: {
+    ...tokens.typography.bodyMd,
+    color: palette.text,
+    fontWeight: "600",
+  },
+  alertText: {
+    ...tokens.typography.caption,
     color: palette.textSecondary,
     lineHeight: 18,
   },
-  badge: {
-    minWidth: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: "center",
+
+  // --- Footer ---
+  footer: {
     alignItems: "center",
-    paddingHorizontal: 8,
+    paddingVertical: tokens.spacing[5],
   },
-  badgeText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  alertCard: {
-    backgroundColor: palette.error + "10",
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: palette.error,
-    shadowColor: "transparent",
-  },
-  alertContent: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  alertTitle: {
-    fontWeight: "bold",
-    color: palette.text,
-    marginBottom: 4,
-  },
-  alertText: {
-    color: palette.textSecondary,
-    lineHeight: 20,
+  footerText: {
+    ...tokens.typography.caption,
+    color: palette.textMuted,
   },
 });

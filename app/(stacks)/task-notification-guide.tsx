@@ -33,7 +33,7 @@ const notificationFlows: {
     trigger: "Cuando un conteo o movimiento deja productos por debajo del minimo.",
     recipients: "Usuarios operativos de inventario y compras segun preferencias activas.",
     icon: "package-variant-remove",
-    color: palette.red,
+    color: palette.error,
   },
   {
     event: "inventory_count_discrepancy",
@@ -407,7 +407,7 @@ export default function TaskNotificationGuideScreen() {
       alerts.success("Prueba creada. Revisa Tareas y la campana de notificaciones.");
 
       if (taskId) {
-        router.push(`/(stacks)/tasks/${taskId}` as any);
+        router.push(`/(tabs)/tasks/${taskId}` as any);
       }
     } catch (error: any) {
       alerts.error(
@@ -473,7 +473,7 @@ export default function TaskNotificationGuideScreen() {
           <Button
             mode="outlined"
             icon="checkbox-marked-outline"
-            onPress={() => router.push("/(stacks)/tasks" as any)}
+            onPress={() => router.push("/(tabs)/tasks" as any)}
             style={styles.secondaryAction}
             contentStyle={styles.actionContent}
           >
@@ -482,7 +482,7 @@ export default function TaskNotificationGuideScreen() {
           <Button
             mode="outlined"
             icon="bell-outline"
-            onPress={() => router.push("/(stacks)/notifications" as any)}
+            onPress={() => router.push("/(tabs)/notifications" as any)}
             style={styles.secondaryAction}
             contentStyle={styles.actionContent}
           >

@@ -523,5 +523,108 @@ namespace App {
       created_at: string;
       updated_at: string;
     }
+
+    // ============== Producción (nuevo módulo) ==============
+
+    type ProductionStatus = "draft" | "completed" | "cancelled";
+
+    interface ProductionOrder {
+      id: number;
+      folio: string;
+      production_date: string;
+      company_id?: number;
+      location_id?: number;
+      location_name?: string;
+      formula_id?: number | null;
+      formula_name?: string | null;
+      responsible_user_id?: number;
+      responsible_name?: string;
+      status: ProductionStatus;
+      status_label: string;
+      status_color: string;
+      notes?: string | null;
+      wastes?: ProductionWaste[];
+      total_consumed_quantity?: number | null;
+      total_produced_quantity?: number | null;
+      waste_percentage?: number | null;
+      completed_at?: string | null;
+      cancelled_at?: string | null;
+      consumptions?: ProductionOrderConsumption[];
+      outputs?: ProductionOrderOutput[];
+      summary?: {
+        consumption_count?: number;
+        output_count?: number;
+        waste_count?: number;
+        waste_percentage?: number | null;
+      };
+      created_at?: string;
+      updated_at?: string;
+    }
+
+    interface ProductionOrderConsumption {
+      id?: number;
+      product_id: number;
+      product_name?: string;
+      product_code?: string;
+      unit_id: number;
+      unit_name?: string;
+      quantity: number;
+      expected_quantity?: number | null;
+      variance_pct?: number | null;
+      notes?: string | null;
+    }
+
+    interface ProductionOrderOutput {
+      id?: number;
+      product_id: number;
+      product_name?: string;
+      product_code?: string;
+      unit_id: number;
+      unit_name?: string;
+      quantity: number;
+      expected_quantity?: number | null;
+      variance_pct?: number | null;
+      notes?: string | null;
+    }
+
+    interface ProductionWaste {
+      id?: number;
+      product_id: number;
+      product_name?: string;
+      unit_id: number;
+      unit_name?: string;
+      quantity: number;
+      reason: string;
+      reason_label?: string;
+      notes?: string | null;
+    }
+
+    interface Formula {
+      id: number;
+      company_id?: number;
+      product_id: number;
+      product_name?: string;
+      name: string;
+      description?: string | null;
+      version: number;
+      is_active: boolean;
+      notes?: string | null;
+      items?: FormulaItem[];
+      created_at?: string;
+      updated_at?: string;
+    }
+
+    interface FormulaItem {
+      id?: number;
+      product_id: number;
+      product_name?: string;
+      product_code?: string;
+      unit_id: number;
+      unit_name?: string;
+      expected_quantity: number;
+      expected_output_quantity?: number | null;
+      sort_order?: number;
+      notes?: string | null;
+    }
   }
 }

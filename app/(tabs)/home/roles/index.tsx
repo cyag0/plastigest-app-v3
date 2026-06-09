@@ -31,9 +31,9 @@ export default function RolesListScreen() {
       render: (_, item) => (
         <Chip
           style={{
-            backgroundColor: item.is_active ? palette.primary : palette.red,
+            backgroundColor: item.is_active ? palette.primary : palette.surfaceMuted,
           }}
-          textStyle={{ color: "white" }}
+          textStyle={{ color: item.is_active ? "white" : palette.textMuted }}
           compact
         >
           {item.is_active ? "Activo" : "Inactivo"}
@@ -106,7 +106,7 @@ export default function RolesListScreen() {
                 style={{
                   backgroundColor: item.is_active
                     ? palette.primary
-                    : palette.red,
+                    : palette.surfaceMuted,
                   marginBottom: 4,
                 }}
                 textStyle={{ color: "white" }}

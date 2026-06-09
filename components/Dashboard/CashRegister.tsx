@@ -294,7 +294,7 @@ export default function CashRegister() {
                   <MaterialCommunityIcons
                     name="cash-minus"
                     size={32}
-                    color={palette.red}
+                    color={palette.warning}
                   />
                 </View>
                 <Text variant="titleLarge" style={styles.summaryValue}>
@@ -357,7 +357,7 @@ export default function CashRegister() {
                     <View>
                       <Text style={styles.paymentMethodText}>{pm.method}</Text>
                       {pm.expenses > 0 && (
-                        <Text style={{ fontSize: 12, color: palette.red }}>
+                        <Text style={{ fontSize: 12, color: palette.warning }}>
                           Gastos: -{formatCurrency(pm.expenses)}
                         </Text>
                       )}
@@ -390,7 +390,7 @@ export default function CashRegister() {
                   <MaterialCommunityIcons
                     name="cash-minus"
                     size={24}
-                    color={palette.red}
+                    color={palette.warning}
                   />
                 )}
               />
@@ -400,7 +400,7 @@ export default function CashRegister() {
                   <View key={index} style={styles.paymentMethodRow}>
                     <Text style={styles.paymentMethodText}>{cat.category}</Text>
                     <View style={styles.paymentMethodRight}>
-                      <Text style={[styles.paymentMethodAmount, { color: palette.red }]}>
+                      <Text style={[styles.paymentMethodAmount, { color: palette.warning }]}>
                         -{formatCurrency(cat.total)}
                       </Text>
                       <Text style={styles.paymentMethodPercentage}>

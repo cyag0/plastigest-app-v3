@@ -116,7 +116,7 @@ export default function PackagesIndex() {
       align: "center",
       render: (_, item) => (
         <Text
-          style={{ fontWeight: "bold", color: item.is_active ? palette.success : palette.red }}
+          style={{ fontWeight: "bold", color: item.is_active ? palette.success : palette.textMuted }}
         >
           {item.is_active ? "Activo" : "Inactivo"}
         </Text>
@@ -149,7 +149,7 @@ export default function PackagesIndex() {
             <AppList.Description
               style={{
                 fontWeight: "bold",
-                color: item.is_active ? palette.success : palette.red,
+                color: item.is_active ? palette.success : palette.textMuted,
               }}
             >
               {item.is_active ? "Activo" : "Inactivo"}

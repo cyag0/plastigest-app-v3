@@ -1,36 +1,33 @@
-import AdminSection from "@/components/Administration/AdminSection";
+import AdminSection, {
+  AdminOption,
+} from "@/components/Administration/AdminSection";
+import EmptyState from "@/components/App/EmptyState";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
-import { Card, IconButton, Text } from "react-native-paper";
-
-interface AdminOption {
-  id: string;
-  title: string;
-  description: string;
-  icon: string;
-  route: string;
-  color: string;
-  category: "system" | "company" | "location" | "catalog";
-  requiredPermission?: string;
-}
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 export default function AdministrationScreen() {
-  const router = useRouter();
-  const { selectedCompany, user, location } = useAuth();
+  const { selectedCompany, user, location, hasPermission: authHasPermission } =
+    useAuth();
 
   // Helper para verificar si el usuario tiene un permiso
   const hasPermission = (permission: string) => {
-    return user?.permissions?.includes(permission) ?? false;
+    if (!permission) return true;
+    return (
+      authHasPermission(permission) ||
+      user?.permissions?.includes(permission as any) ||
+      false
+    );
   };
 
   const adminOptions: AdminOption[] = [
-    // === CONFIGURACIÓN DEL SISTEMA (Solo Super Admins) ===
+    // === CONFIGURACION DEL SISTEMA (Solo Super Admins) ===
     {
       id: "system-companies",
-      title: "Gestión de Compañías",
+      title: "Gestion de companias",
       description: "Administra todas las empresas del sistema",
       icon: "office-building-cog",
       route: "/(tabs)/administration/companies",
@@ -40,20 +37,20 @@ export default function AdministrationScreen() {
     },
     {
       id: "system-users",
-      title: "Usuarios del Sistema",
+      title: "Usuarios del sistema",
       description: "Gestiona usuarios y accesos globales",
       icon: "account-cog",
       route: "/(tabs)/administration/users",
-      color: palette.secondary,
+      color: palette.textSecondary,
       category: "system",
       requiredPermission: "users_manage",
     },
 
-    // === CONFIGURACIÓN DE LA EMPRESA ===
+    // === CONFIGURACION DE LA EMPRESA ===
     {
       id: "company-settings",
-      title: "Mi Compañía",
-      description: "Edita datos fiscales y configuración de tu empresa",
+      title: "Mi compania",
+      description: "Edita datos fiscales y configuracion de tu empresa",
       icon: "office-building",
       route: selectedCompany
         ? `/(tabs)/administration/companies/${selectedCompany.id}/edit`
@@ -64,11 +61,11 @@ export default function AdministrationScreen() {
     },
     {
       id: "company-users",
-      title: "Usuarios de la Empresa",
+      title: "Usuarios de la empresa",
       description: "Gestiona usuarios con acceso a esta empresa",
       icon: "account-group",
       route: "/(tabs)/administration/company-users",
-      color: palette.secondary,
+      color: palette.textSecondary,
       category: "company",
       requiredPermission: "users_list",
     },
@@ -84,18 +81,18 @@ export default function AdministrationScreen() {
     },
     {
       id: "roles",
-      title: "Roles y Permisos",
+      title: "Roles y permisos",
       description: "Define roles y gestiona permisos de acceso",
       icon: "shield-account",
       route: "/(tabs)/home/roles",
-      color: palette.error,
+      color: palette.primary,
       category: "company",
       requiredPermission: "roles_list",
     },
     {
       id: "notification-preferences",
-      title: "Preferencias de Notificaciones",
-      description: "Configura qué eventos generan notificaciones y a quién",
+      title: "Preferencias de notificaciones",
+      description: "Configura que eventos generan notificaciones y a quien",
       icon: "bell-cog-outline",
       route: "/(stacks)/notification-preferences",
       color: palette.warning,
@@ -106,50 +103,50 @@ export default function AdministrationScreen() {
     // === MI SUCURSAL ===
     {
       id: "current-location",
-      title: "Mi Sucursal",
-      description: "Edita configuración de tu sucursal actual",
+      title: "Mi sucursal",
+      description: "Edita configuracion de tu sucursal actual",
       icon: "store-edit",
       route: `/(tabs)/administration/locations/${location?.id}/edit`,
-      color: palette.accent,
+      color: palette.success,
       category: "location",
       requiredPermission: "locations_update",
     },
     {
       id: "location-settings",
-      title: "Configuración",
+      title: "Configuracion",
       description: "Ajustes y preferencias de tu sucursal",
       icon: "cog",
       route: `/(tabs)/administration/settings`,
-      color: palette.primary,
+      color: palette.textSecondary,
       category: "location",
       requiredPermission: "locations_update",
     },
     {
       id: "current-workers",
-      title: "Personal de mi Sucursal",
+      title: "Personal de mi sucursal",
       description: "Gestiona solo trabajadores de tu sucursal actual",
-      icon: "account-group",
+      icon: "account-group-outline",
       route: "/(tabs)/administration/current-workers",
-      color: palette.secondary,
+      color: palette.textSecondary,
       category: "location",
       requiredPermission: "workers_list",
     },
     {
       id: "recurring-tasks",
-      title: "Tareas Recurrentes",
-      description: "Programa tareas automáticas (conteos, reportes)",
+      title: "Tareas recurrentes",
+      description: "Programa tareas automaticas (conteos, reportes)",
       icon: "calendar-clock",
       route: "/(tabs)/administration/recurring-tasks",
-      color: palette.accent,
+      color: palette.success,
       category: "location",
       requiredPermission: "tasks_manage",
     },
 
-    // === CATÁLOGOS ===
+    // === CATALOGOS ===
     {
       id: "categories",
-      title: "Categorías",
-      description: "Organiza productos en grupos lógicos",
+      title: "Categorias",
+      description: "Organiza productos en grupos logicos",
       icon: "shape",
       route: "/(tabs)/administration/categories",
       color: palette.primary,
@@ -158,7 +155,7 @@ export default function AdministrationScreen() {
     },
     {
       id: "units",
-      title: "Unidades de Medida",
+      title: "Unidades de medida",
       description: "Define unidades para inventarios (kg, pza, caja, etc.)",
       icon: "weight-kilogram",
       route: "/(tabs)/administration/unidades",
@@ -168,9 +165,9 @@ export default function AdministrationScreen() {
     },
     {
       id: "packages",
-      title: "Paquetes de Producto",
+      title: "Paquetes de producto",
       description: "Define paquetes y presentaciones de productos",
-      icon: "weight-kilogram",
+      icon: "package-variant",
       route: "/(tabs)/administration/packages",
       color: palette.warning,
       category: "catalog",
@@ -182,125 +179,100 @@ export default function AdministrationScreen() {
       description: "Registra y gestiona proveedores de productos",
       icon: "truck-delivery",
       route: "/(tabs)/administration/suppliers",
-      color: palette.blue,
+      color: palette.info,
       category: "catalog",
       requiredPermission: "suppliers_list",
     },
     {
       id: "clients",
       title: "Clientes",
-      description: "Gestiona información y historial de clientes",
+      description: "Gestiona informacion e historial de clientes",
       icon: "account-multiple",
       route: "/(tabs)/administration/clientes",
-      color: palette.accent,
+      color: palette.success,
       category: "catalog",
       requiredPermission: "customers_list",
     },
   ];
 
-  // Filtrar opciones según permisos
+  // Filtrar opciones segun permisos:
+  // - Si la opcion no requiere permiso, se muestra.
+  // - Si requiere, debe estar en user.permissions (cargado por AuthContext).
   const visibleOptions = adminOptions.filter((option) => {
     if (!option.requiredPermission) return true;
-    return true || hasPermission(option.requiredPermission);
+    return hasPermission(option.requiredPermission);
   });
 
-  const getCategoryTitle = (category: string) => {
-    switch (category) {
-      case "system":
-        return "Configuración del Sistema";
-      case "company":
-        return "Mi Empresa";
-      case "location":
-        return "Mi Sucursal";
-      case "catalog":
-        return "Catálogos";
-      default:
-        return "Otros";
-    }
-  };
-
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case "system":
-        return "server-security";
-      case "company":
-        return "office-building-cog";
-      case "location":
-        return "store-cog";
-      case "catalog":
-        return "database-cog";
-      default:
-        return "cog";
-    }
-  };
-
-  const categories = ["system", "company", "location", "catalog"] as const;
+  const categories = [
+    { key: "system", title: "Configuracion del sistema", icon: "server-security" },
+    { key: "company", title: "Mi empresa", icon: "office-building-cog" },
+    { key: "location", title: "Mi sucursal", icon: "store-cog" },
+    { key: "catalog", title: "Catalogos", icon: "database-cog" },
+  ] as const;
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Info Header */}
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ============== INFO HEADER ============== */}
         {visibleOptions.length > 0 && (
-          <Card style={styles.headerCard}>
-            <Card.Content style={styles.headerContent}>
-              <View style={styles.headerIconContainer}>
-                <IconButton
-                  icon="information-outline"
-                  size={24}
-                  iconColor={palette.blue}
-                  style={{ margin: 0 }}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text variant="titleSmall" style={styles.headerTitle}>
-                  {selectedCompany
-                    ? `Configurando: ${selectedCompany.name}`
-                    : "Selecciona una empresa para comenzar"}
-                </Text>
-                <Text variant="bodySmall" style={styles.headerSubtitle}>
-                  Solo verás las opciones para las que tienes permisos
-                </Text>
-              </View>
-            </Card.Content>
-          </Card>
+          <View style={styles.headerCard}>
+            <View style={styles.headerIconBox}>
+              <MaterialCommunityIcons
+                name="information-outline"
+                size={20}
+                color={palette.info}
+              />
+            </View>
+            <View style={styles.headerBody}>
+              <Text style={styles.headerTitle}>
+                {selectedCompany
+                  ? `Configurando: ${selectedCompany.name}`
+                  : "Selecciona una empresa para comenzar"}
+              </Text>
+              <Text style={styles.headerSubtitle}>
+                Solo veras las opciones para las que tienes permisos
+              </Text>
+            </View>
+          </View>
         )}
 
-        {/* Categories as Accordion Sections */}
+        {/* ============== CATEGORIES ============== */}
         {categories.map((category) => {
           const categoryOptions = visibleOptions.filter(
-            (opt) => opt.category === category
+            (opt) => opt.category === category.key,
           );
 
           return (
             <AdminSection
-              key={category}
-              title={getCategoryTitle(category)}
-              icon={getCategoryIcon(category)}
+              key={category.key}
+              title={category.title}
+              icon={category.icon as keyof typeof MaterialCommunityIcons.glyphMap}
               options={categoryOptions}
             />
           );
         })}
 
-        {/* Empty state si no tiene permisos */}
+        {/* ============== EMPTY STATE ============== */}
         {visibleOptions.length === 0 && (
-          <View style={styles.emptyContainer}>
-            <View style={styles.emptyIconContainer}>
-              <IconButton
-                icon="shield-off"
-                size={64}
-                iconColor={palette.textSecondary}
-                style={{ margin: 0 }}
-              />
-            </View>
-            <Text variant="titleLarge" style={styles.emptyTitle}>
-              Sin Acceso
-            </Text>
-            <Text variant="bodyMedium" style={styles.emptyText}>
-              No tienes permisos para acceder a opciones de administración.
-              Contacta a tu administrador.
-            </Text>
+          <View style={styles.emptyWrapper}>
+            <EmptyState
+              icon="shield-off-outline"
+              title="Sin acceso"
+              description="No tienes permisos para acceder a opciones de administracion. Contacta a tu administrador."
+            />
           </View>
         )}
+
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            {visibleOptions.length} opcion
+            {visibleOptions.length === 1 ? "" : "es"} disponible
+            {visibleOptions.length === 1 ? "" : "s"}
+          </Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -309,69 +281,64 @@ export default function AdministrationScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   scrollContent: {
-    paddingTop: 16,
-    paddingBottom: 32,
+    paddingTop: tokens.spacing[4],
+    paddingBottom: tokens.spacing[10],
   },
+
+  // --- Header card ---
   headerCard: {
-    marginHorizontal: 16,
-    marginBottom: 20,
-    backgroundColor: palette.blue + "15",
-    borderRadius: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: palette.blue,
-    elevation: 0,
-    shadowColor: "transparent",
-  },
-  headerContent: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 8,
+    backgroundColor: palette.surface,
+    marginHorizontal: tokens.spacing[5],
+    marginBottom: tokens.spacing[5],
+    padding: tokens.spacing[4],
+    borderRadius: tokens.radius.lg,
+    borderLeftWidth: 4,
+    borderLeftColor: palette.info,
+    gap: tokens.spacing[3],
+    ...tokens.shadow.sm,
   },
-  headerIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: palette.blue + "25",
-    justifyContent: "center",
+  headerIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: tokens.radius.md,
+    backgroundColor: palette.infoSoft,
     alignItems: "center",
-    marginRight: 12,
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  headerBody: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   headerTitle: {
-    fontWeight: "600",
+    ...tokens.typography.bodyMd,
     color: palette.text,
-    marginBottom: 2,
+    fontWeight: "600",
   },
   headerSubtitle: {
+    ...tokens.typography.caption,
     color: palette.textSecondary,
     lineHeight: 16,
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
+
+  // --- Empty state ---
+  emptyWrapper: {
+    paddingTop: tokens.spacing[10],
+  },
+
+  // --- Footer ---
+  footer: {
     alignItems: "center",
-    paddingVertical: 80,
-    gap: 12,
+    paddingTop: tokens.spacing[5],
   },
-  emptyIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: palette.textSecondary + "15",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  emptyTitle: {
-    color: palette.text,
-    fontWeight: "700",
-  },
-  emptyText: {
-    color: palette.textSecondary,
-    textAlign: "center",
-    paddingHorizontal: 32,
+  footerText: {
+    ...tokens.typography.caption,
+    color: palette.textMuted,
   },
 });

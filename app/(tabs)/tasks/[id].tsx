@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   loadingText: {
     marginTop: 12,

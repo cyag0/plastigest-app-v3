@@ -164,7 +164,7 @@ export default function ExpensesIndex() {
             <Text
               variant="titleMedium"
               style={{
-                color: palette.red,
+                color: palette.error,
                 fontWeight: "bold",
               }}
             >

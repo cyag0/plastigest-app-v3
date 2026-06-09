@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   productsSection: {
     flex: 1,
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 12,
     fontSize: 14,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
     minHeight: 80,
     marginTop: 4,
   },

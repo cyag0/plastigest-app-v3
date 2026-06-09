@@ -57,7 +57,7 @@ const tableColumns: AppListColumn<InventoryAdjustmentItem>[] = [
             alignItems: "center",
             gap: 6,
             alignSelf: "flex-start",
-            backgroundColor: isIn ? palette.success : palette.red,
+            backgroundColor: isIn ? palette.success : palette.error,
             borderRadius: 999,
             paddingHorizontal: 10,
             paddingVertical: 4,
@@ -194,7 +194,7 @@ export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
               <MaterialCommunityIcons
                 name={isIncrease ? "arrow-up-circle" : "arrow-down-circle"}
                 size={32}
-                color={isIncrease ? palette.success : palette.red}
+                color={isIncrease ? palette.success : palette.error}
               />
             </View>
           ),

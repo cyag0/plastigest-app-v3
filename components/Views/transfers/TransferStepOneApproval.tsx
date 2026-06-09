@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     borderColor: "#E4B4AC",
   },
   rejectionLabel: {
-    color: palette.red,
+    color: palette.error,
     fontSize: 12,
     fontWeight: "700",
     marginBottom: 2,
@@ -434,6 +434,6 @@ const styles = StyleSheet.create({
     backgroundColor: palette.success,
   },
   rejectButton: {
-    backgroundColor: palette.red,
+    backgroundColor: palette.error,
   },
 });

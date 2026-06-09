@@ -1,21 +1,31 @@
-import palette from "@/constants/palette";
+import AppBar from "@/components/App/AppBar";
+import AppChip from "@/components/App/Chip";
+import EmptyState from "@/components/App/EmptyState";
+import SectionHeader from "@/components/App/SectionHeader";
+import QuickAccessCard from "@/components/Dashboard/QuickAccessCard";
+import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useAlerts } from "@/hooks/useAlerts";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Camera } from "expo-camera";
 import * as Notifications from "expo-notifications";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { Alert, Linking, ScrollView, StyleSheet, View } from "react-native";
 import {
-  ActivityIndicator,
-  Avatar,
-  Card,
+  Alert,
+  Linking,
+  Platform,
+  ScrollView,
+  StyleSheet,
   Text,
-  useTheme,
-} from "react-native-paper";
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// Importaciones dinámicas para evitar errores de tipos
+// Importaciones dinamicas para evitar errores de tipos
 const Location = require("expo-location");
 const MediaLibrary = require("expo-media-library");
 
@@ -32,10 +42,25 @@ interface AppPermissions {
   mediaLibrary: PermissionStatus;
 }
 
+type PermissionTone = "success" | "warning" | "error";
+
+const PERMISSION_META: {
+  key: keyof AppPermissions;
+  label: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+}[] = [
+  { key: "camera", label: "Camara", icon: "camera-outline" },
+  { key: "notifications", label: "Notificaciones", icon: "bell-outline" },
+  { key: "location", label: "Ubicacion", icon: "map-marker-outline" },
+  { key: "mediaLibrary", label: "Galeria", icon: "image-multiple-outline" },
+];
+
 export default function ProfileScreen() {
-  const theme = useTheme();
   const router = useRouter();
-  const { user, logout, isLoading, selectedCompany, location } = useAuth();
+  const alerts = useAlerts();
+  const { user, logout, isLoading, selectedCompany, location, permissions: userPermissions } =
+    useAuth();
+  const { colors } = useTheme();
   const [permissions, setPermissions] = useState<AppPermissions | null>(null);
   const [loadingPermissions, setLoadingPermissions] = useState(true);
 
@@ -113,11 +138,11 @@ export default function ProfileScreen() {
         if (!result.granted && !result.canAskAgain) {
           Alert.alert(
             "Permiso Denegado",
-            "Has denegado este permiso permanentemente. Para activarlo, ve a la configuración de la aplicación.",
+            "Has denegado este permiso permanentemente. Para activarlo, ve a la configuracion de la aplicacion.",
             [
               { text: "Cancelar", style: "cancel" },
               {
-                text: "Abrir Configuración",
+                text: "Abrir Configuracion",
                 onPress: () => Linking.openSettings(),
               },
             ]
@@ -130,42 +155,30 @@ export default function ProfileScreen() {
     }
   };
 
-  const getPermissionIcon = (permission: PermissionStatus) => {
-    if (permission.granted) return "check-circle";
-    if (!permission.canAskAgain) return "cancel";
-    return "alert-circle";
+  const getPermissionTone = (p: PermissionStatus): PermissionTone => {
+    if (p.granted) return "success";
+    if (!p.canAskAgain) return "error";
+    return "warning";
   };
 
-  const getPermissionColor = (permission: PermissionStatus) => {
-    if (permission.granted) return palette.success;
-    if (!permission.canAskAgain) return palette.red;
-    return palette.warning;
+  const getPermissionText = (p: PermissionStatus) => {
+    if (p.granted) return "Concedido";
+    if (!p.canAskAgain) return "Bloqueado";
+    return "No concedido";
   };
 
-  const getPermissionText = (permission: PermissionStatus) => {
-    if (permission.granted) return "Concedido";
-    if (!permission.canAskAgain) return "Denegado Permanentemente";
-    return "No Concedido";
-  };
-
-  const handleLogout = () => {
-    console.log("Logout initiated");
-
-    Alert.alert(
-      "Cerrar Sesión",
-      "¿Estás seguro de que quieres cerrar sesión?",
-      [
-        {
-          text: "Cancelar",
-          style: "cancel",
-        },
-        {
-          text: "Cerrar Sesión",
-          style: "destructive",
-          onPress: logout,
-        },
-      ]
+  const handleLogout = async () => {
+    const confirmed = await alerts.confirm(
+      "¿Estas seguro de que quieres cerrar sesion?",
+      {
+        title: "Cerrar sesion",
+        okText: "Salir",
+        cancelText: "Cancelar",
+      },
     );
+    if (confirmed) {
+      await logout();
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -190,696 +203,513 @@ export default function ProfileScreen() {
       .substring(0, 2);
   };
 
-  if (isLoading) {
-    return (
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-      >
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.loadingText}>Cargando perfil...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const role = user?.roles?.[0]?.name || "Usuario";
+  const initials = getInitials(user?.name || "Usuario");
+  const memberSince = user?.created_at ? formatDate(user.created_at) : "N/A";
+  const lastUpdate = user?.updated_at ? formatDate(user.updated_at) : "N/A";
+  const grantedPermissions = userPermissions?.length ?? 0;
 
-  if (!user) {
-    return (
-      <SafeAreaView
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-      >
-        <View style={styles.errorContainer}>
-          <Text variant="bodyLarge">
-            No se pudo cargar la información del usuario
-          </Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const styles = useThemedStyles((c) => ({
+    safe: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    content: {
+      paddingBottom: tokens.spacing[10],
+    },
+    headerCard: {
+      backgroundColor: c.surface,
+      marginHorizontal: tokens.spacing[5],
+      marginTop: tokens.spacing[5],
+      marginBottom: tokens.spacing[4],
+      borderRadius: tokens.radius.lg,
+      padding: tokens.spacing[5],
+      ...tokens.shadow.sm,
+    },
+    headerTop: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing[4],
+    },
+    avatar: {
+      width: 72,
+      height: 72,
+      borderRadius: tokens.radius.full,
+      backgroundColor: c.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+    avatarInitials: {
+      color: c.primaryForeground,
+      fontSize: 24,
+      fontWeight: "700",
+      letterSpacing: 0.5,
+    },
+    headerInfo: {
+      flex: 1,
+      minWidth: 0,
+      gap: tokens.spacing[2],
+    },
+    headerName: {
+      ...tokens.typography.h1,
+      color: c.text,
+    },
+    headerMetaRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: tokens.spacing[2],
+    },
+    emailRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginTop: 2,
+    },
+    email: {
+      ...tokens.typography.bodySm,
+      color: c.textSecondary,
+      flexShrink: 1,
+    },
+    contextRow: {
+      flexDirection: "row",
+      gap: tokens.spacing[3],
+      paddingHorizontal: tokens.spacing[5],
+      marginBottom: tokens.spacing[5],
+    },
+    contextTile: {
+      flex: 1,
+      backgroundColor: c.surface,
+      borderRadius: tokens.radius.lg,
+      padding: tokens.spacing[4],
+      gap: tokens.spacing[2],
+      minWidth: 0,
+      ...tokens.shadow.sm,
+    },
+    contextIconBox: {
+      width: 32,
+      height: 32,
+      borderRadius: tokens.radius.sm,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    contextLabel: {
+      ...tokens.typography.micro,
+      color: c.textMuted,
+    },
+    contextValue: {
+      ...tokens.typography.bodyMd,
+      color: c.text,
+    },
+    contextSub: {
+      ...tokens.typography.caption,
+      color: c.textSecondary,
+    },
+    section: {
+      paddingHorizontal: tokens.spacing[5],
+      marginBottom: tokens.spacing[5],
+    },
+    card: {
+      backgroundColor: c.surface,
+      borderRadius: tokens.radius.lg,
+      ...tokens.shadow.sm,
+      overflow: "hidden",
+    },
+    infoRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: tokens.spacing[4],
+      gap: tokens.spacing[3],
+    },
+    infoIconBox: {
+      width: 32,
+      height: 32,
+      borderRadius: tokens.radius.sm,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+    infoLabel: {
+      ...tokens.typography.caption,
+      color: c.textMuted,
+    },
+    infoValue: {
+      ...tokens.typography.bodyMd,
+      color: c.text,
+      marginTop: 1,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: c.border,
+      marginLeft: tokens.spacing[4] + 32 + tokens.spacing[3],
+    },
+    permissionsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: tokens.spacing[3],
+    },
+    permissionCard: {
+      flexBasis: "48%",
+      flexGrow: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing[3],
+      backgroundColor: c.surface,
+      borderRadius: tokens.radius.lg,
+      padding: tokens.spacing[3] + 2,
+      minHeight: 64,
+      ...tokens.shadow.sm,
+    },
+    permissionIconBox: {
+      width: 36,
+      height: 36,
+      borderRadius: tokens.radius.md,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+    permissionBody: {
+      flex: 1,
+      minWidth: 0,
+      gap: 4,
+    },
+    permissionLabel: {
+      ...tokens.typography.bodyMd,
+      color: c.text,
+    },
+    permissionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: tokens.spacing[4],
+      gap: tokens.spacing[3],
+    },
+    skeletonTitle: {
+      width: 100,
+      height: 12,
+      borderRadius: 4,
+      backgroundColor: c.surfaceMuted,
+      marginBottom: 6,
+    },
+    skeletonSub: {
+      width: 60,
+      height: 16,
+      borderRadius: tokens.radius.full,
+      backgroundColor: c.surfaceMuted,
+    },
+    actionsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: tokens.spacing[3],
+    },
+    logoutButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: c.surface,
+      borderRadius: tokens.radius.lg,
+      padding: tokens.spacing[4],
+      gap: tokens.spacing[3],
+      ...tokens.shadow.sm,
+    },
+    logoutIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: tokens.radius.md,
+      backgroundColor: colors.errorSoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    logoutLabel: {
+      ...tokens.typography.bodyMd,
+      color: colors.error,
+      flex: 1,
+    },
+    footer: {
+      alignItems: "center",
+      paddingVertical: tokens.spacing[6],
+      gap: 4,
+    },
+    footerText: {
+      ...tokens.typography.caption,
+      color: c.textMuted,
+    },
+    footerSubtext: {
+      ...tokens.typography.caption,
+      color: c.textMuted,
+      opacity: 0.7,
+    },
+  }));
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: palette.surface }]}
-    >
+    <SafeAreaView style={styles.safe}>
+
       <ScrollView
-        style={styles.scrollView}
+        style={styles.scroll}
         contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Modern Header */}
-        <View
-          style={[styles.headerSection, { backgroundColor: palette.primary }]}
-        >
+        {/* ============== HEADER CARD ============== */}
+        <View style={styles.headerCard}>
           <View style={styles.headerTop}>
-            <View style={{ flex: 1 }}>
-              <Text variant="displaySmall" style={styles.headerName}>
-                {user.name || "Cesar Yahir Alarcon"}
-              </Text>
-              <Text variant="bodyLarge" style={styles.headerEmail}>
-                {user.email || "correo@ejemplo.com"}
-              </Text>
-              {user.email_verified_at && (
-                <View style={styles.verifiedBadge}>
-                  <MaterialCommunityIcons
-                    name="check-circle"
-                    size={16}
-                    color={palette.success}
-                  />
-                  <Text variant="bodySmall" style={styles.verifiedText}>
-                    Email Verificado
-                  </Text>
-                </View>
-              )}
+            <View style={styles.avatar}>
+              <Text style={styles.avatarInitials}>{initials}</Text>
             </View>
-            <Avatar.Text
-              size={100}
-              label={getInitials(user.name || "Cesar Yahir")}
-              labelStyle={{
-                color: palette.primary,
-                fontSize: 36,
-                fontWeight: "bold",
-              }}
-              style={[styles.avatar, { backgroundColor: "#fff" }]}
+
+            <View style={styles.headerInfo}>
+              <Text style={styles.headerName} numberOfLines={1}>
+                {user?.name || "Usuario"}
+              </Text>
+              <View style={styles.headerMetaRow}>
+                <AppChip variant="primary" size="sm" icon="shield-account">
+                  {role}
+                </AppChip>
+                {user?.email_verified_at ? (
+                  <AppChip variant="success" size="sm" icon="check-circle">
+                    Verificado
+                  </AppChip>
+                ) : (
+                  <AppChip variant="warning" size="sm" icon="alert-circle">
+                    Sin verificar
+                  </AppChip>
+                )}
+              </View>
+              <View style={styles.emailRow}>
+                <MaterialCommunityIcons
+                  name="email-outline"
+                  size={14}
+                  color={colors.textMuted}
+                />
+                <Text style={styles.email} numberOfLines={1}>
+                  {user?.email || "sin-correo@plastigest.com"}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* ============== CONTEXTO ACTIVO (empresa/sucursal) ============== */}
+        <View style={styles.contextRow}>
+          <ContextTile
+            icon="office-building-outline"
+            label="Empresa"
+            value={selectedCompany?.name || "Sin empresa"}
+            sublabel={selectedCompany?.business_name || undefined}
+            tone="primary"
+          />
+          <ContextTile
+            icon="map-marker-outline"
+            label="Sucursal"
+            value={location?.name || "Sin sucursal"}
+            sublabel={location?.address || undefined}
+            tone="info"
+          />
+        </View>
+
+        {/* ============== DETALLES DE LA CUENTA ============== */}
+        <View style={styles.section}>
+          <SectionHeader
+            title="Detalles de la cuenta"
+            badge={`#${user?.id ?? "—"}`}
+          />
+          <View style={styles.card}>
+            <InfoRow
+              icon="identifier"
+              label="ID de usuario"
+              value={`#${user?.id ?? "—"}`}
+              tone="primary"
+            />
+            <Divider />
+            <InfoRow
+              icon="calendar-plus"
+              label="Miembro desde"
+              value={memberSince}
+              tone="success"
+            />
+            <Divider />
+            <InfoRow
+              icon="update"
+              label="Ultima actualizacion"
+              value={lastUpdate}
+              tone="info"
+            />
+            <Divider />
+            <InfoRow
+              icon="shield-key-outline"
+              label="Permisos del sistema"
+              value={`${grantedPermissions} permiso${grantedPermissions === 1 ? "" : "s"}`}
+              tone="warning"
             />
           </View>
         </View>
 
-        {/* Quick Stats */}
-        <View style={styles.statsContainer}>
-          <Card
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: palette.success + "15",
-                shadowColor: "transparent",
-                shadowOffset: { width: 0, height: 0 },
-              },
-            ]}
-          >
-            <Card.Content style={styles.statContent}>
-              <MaterialCommunityIcons
-                name="office-building"
-                size={32}
-                color={palette.success}
-              />
-              <Text
-                variant="titleLarge"
-                style={{
-                  color: palette.success,
-                  fontWeight: "bold",
-                  textAlign: "center",
-                }}
-              >
-                {selectedCompany?.name || "N/A"}
-              </Text>
-              <Text
-                variant="bodySmall"
-                style={{ color: palette.textSecondary, textAlign: "center" }}
-              >
-                Compañía Activa
-              </Text>
-            </Card.Content>
-          </Card>
+        {/* ============== PERMISOS DE LA APLICACION ============== */}
+        <View style={styles.section}>
+          <SectionHeader
+            title="Permisos del dispositivo"
+            actionLabel="Reverificar"
+            onAction={checkPermissions}
+          />
 
-          <Card
-            style={[
-              styles.statCard,
-              {
-                backgroundColor: palette.primary + "15",
-              },
-            ]}
-          >
-            <Card.Content style={styles.statContent}>
-              <MaterialCommunityIcons
-                name="map-marker"
-                size={32}
-                color={palette.blue}
-              />
-              <Text
-                variant="titleLarge"
-                style={{
-                  color: palette.blue,
-                  textAlign: "center",
-                  fontWeight: "bold",
-                }}
-              >
-                {location?.name || "N/A"}
-              </Text>
-              <Text
-                variant="bodySmall"
-                style={{ color: palette.textSecondary }}
-              >
-                Ubicación Activa
-              </Text>
-            </Card.Content>
-          </Card>
-        </View>
-
-        {/* Account Details */}
-        <Card
-          style={[styles.infoCard, { backgroundColor: palette.primary + "15" }]}
-        >
-          <Card.Content>
-            <View style={styles.permissionHeader}>
-              <MaterialCommunityIcons
-                name="account-details"
-                size={24}
-                color={palette.primary}
-              />
-              <Text variant="titleLarge" style={styles.sectionTitle}>
-                Detalles de la Cuenta
-              </Text>
+          {loadingPermissions ? (
+            <View style={styles.card}>
+              {[0, 1].map((i) => (
+                <View key={i} style={styles.permissionRow}>
+                  <View style={styles.permissionIconBox} />
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.skeletonTitle} />
+                    <View style={styles.skeletonSub} />
+                  </View>
+                </View>
+              ))}
             </View>
-
-            <View style={styles.detailRow}>
-              <View style={styles.detailIconContainer}>
-                <MaterialCommunityIcons
-                  name="identifier"
-                  size={20}
-                  color={palette.primary}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  variant="bodySmall"
-                  style={{ color: palette.textSecondary }}
-                >
-                  ID de Usuario
-                </Text>
-                <Text variant="bodyLarge" style={{ fontWeight: "600" }}>
-                  #{user.id}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.detailRow}>
-              <View style={styles.detailIconContainer}>
-                <MaterialCommunityIcons
-                  name="calendar-plus"
-                  size={20}
-                  color={palette.success}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  variant="bodySmall"
-                  style={{ color: palette.textSecondary }}
-                >
-                  Fecha de Registro
-                </Text>
-                <Text variant="bodyLarge" style={{ fontWeight: "600" }}>
-                  {formatDate(user.created_at)}
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.detailRow}>
-              <View style={styles.detailIconContainer}>
-                <MaterialCommunityIcons
-                  name="update"
-                  size={20}
-                  color={palette.info}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text
-                  variant="bodySmall"
-                  style={{ color: palette.textSecondary }}
-                >
-                  Última Actualización
-                </Text>
-                <Text variant="bodyLarge" style={{ fontWeight: "600" }}>
-                  {formatDate(user.updated_at)}
-                </Text>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
-
-        {/* Acciones Rápidas */}
-        <Card
-          style={[
-            styles.actionsCard,
-            { backgroundColor: palette.warning + "15" },
-          ]}
-        >
-          <Card.Content>
-            <View style={styles.permissionHeader}>
-              <MaterialCommunityIcons
-                name="flash"
-                size={24}
-                color={palette.warning}
-              />
-              <Text variant="titleLarge" style={styles.sectionTitle}>
-                Acciones Rápidas
-              </Text>
-            </View>
-
-            <View style={styles.actionGrid}>
-              <Card
-                style={[
-                  styles.actionItem,
-                  { backgroundColor: palette.primary + "15" },
-                ]}
-                onPress={() => router.push("/(stacks)/selectCompany")}
-              >
-                <Card.Content style={styles.actionItemContent}>
-                  <MaterialCommunityIcons
-                    name="office-building"
-                    size={32}
-                    color={palette.primary}
-                  />
-                  <Text
-                    variant="labelLarge"
-                    style={{
-                      color: palette.primary,
-                      fontWeight: "bold",
-                      marginTop: 8,
-                      textAlign: "center",
-                    }}
+          ) : permissions ? (
+            <View style={styles.permissionsGrid}>
+              {PERMISSION_META.map((meta) => {
+                const p = permissions[meta.key];
+                const tone = getPermissionTone(p);
+                const blocked = !p.granted && !p.canAskAgain;
+                return (
+                  <TouchableOpacity
+                    key={meta.key}
+                    activeOpacity={0.7}
+                    onPress={() => !p.granted && requestPermission(meta.key)}
+                    style={styles.permissionCard}
                   >
-                    Cambiar Compañía
-                  </Text>
-                </Card.Content>
-              </Card>
-
-              <Card
-                style={[
-                  styles.actionItem,
-                  { backgroundColor: palette.blue + "15" },
-                ]}
-                onPress={() => router.push("/(stacks)/selectLocation")}
-              >
-                <Card.Content style={styles.actionItemContent}>
-                  <MaterialCommunityIcons
-                    name="map-marker"
-                    size={32}
-                    color={palette.blue}
-                  />
-                  <Text
-                    variant="labelLarge"
-                    style={{
-                      color: palette.blue,
-                      fontWeight: "bold",
-                      marginTop: 8,
-                      textAlign: "center",
-                    }}
-                  >
-                    Cambiar Ubicación
-                  </Text>
-                </Card.Content>
-              </Card>
-
-              <Card
-                style={[
-                  styles.actionItem,
-                  { backgroundColor: palette.primary + "15" },
-                ]}
-                onPress={() => router.push("/(stacks)/notification-preferences" as any)}
-              >
-                <Card.Content style={styles.actionItemContent}>
-                  <MaterialCommunityIcons
-                    name="bell-cog-outline"
-                    size={32}
-                    color={palette.primary}
-                  />
-                  <Text
-                    variant="labelLarge"
-                    style={{
-                      color: palette.primary,
-                      fontWeight: "bold",
-                      marginTop: 8,
-                      textAlign: "center",
-                    }}
-                  >
-                    Preferencias de Notificaciones
-                  </Text>
-                </Card.Content>
-              </Card>
-
-              <Card
-                style={[
-                  styles.actionItem,
-                  { backgroundColor: palette.warning + "15" },
-                ]}
-                onPress={() => router.push("/(stacks)/change-password" as any)}
-              >
-                <Card.Content style={styles.actionItemContent}>
-                  <MaterialCommunityIcons
-                    name="lock-reset"
-                    size={32}
-                    color={palette.warning}
-                  />
-                  <Text
-                    variant="labelLarge"
-                    style={{
-                      color: palette.warning,
-                      fontWeight: "bold",
-                      marginTop: 8,
-                      textAlign: "center",
-                    }}
-                  >
-                    Cambiar Contraseña
-                  </Text>
-                </Card.Content>
-              </Card>
-
-              <Card
-                style={[
-                  styles.actionItem,
-                  { backgroundColor: palette.red + "15" },
-                ]}
-                onPress={handleLogout}
-                disabled={isLoading}
-              >
-                <Card.Content style={styles.actionItemContent}>
-                  <MaterialCommunityIcons
-                    name="logout"
-                    size={32}
-                    color={palette.red}
-                  />
-                  <Text
-                    variant="labelLarge"
-                    style={{
-                      color: palette.red,
-                      fontWeight: "bold",
-                      marginTop: 8,
-                      textAlign: "center",
-                    }}
-                  >
-                    {isLoading ? "Saliendo..." : "Cerrar Sesión"}
-                  </Text>
-                </Card.Content>
-              </Card>
-            </View>
-          </Card.Content>
-        </Card>
-
-        {/* Permisos de la App */}
-        <Card
-          style={[
-            styles.permissionsCard,
-            { backgroundColor: palette.blue + "15" },
-          ]}
-        >
-          <Card.Content>
-            <View style={styles.permissionHeader}>
-              <MaterialCommunityIcons
-                name="shield-check"
-                size={28}
-                color={palette.blue}
-              />
-              <Text variant="titleLarge" style={styles.sectionTitle}>
-                Permisos de la Aplicación
-              </Text>
-            </View>
-
-            {loadingPermissions ? (
-              <View style={styles.loadingPermissions}>
-                <ActivityIndicator size="small" color={palette.primary} />
-                <Text
-                  variant="bodySmall"
-                  style={{ color: palette.textSecondary, marginTop: 8 }}
-                >
-                  Verificando permisos...
-                </Text>
-              </View>
-            ) : permissions ? (
-              <View style={styles.permissionsGrid}>
-                {/* Cámara */}
-                <Card
-                  style={[
-                    styles.permissionCard,
-                    { backgroundColor: palette.surface },
-                  ]}
-                  onPress={() =>
-                    !permissions.camera.granted && requestPermission("camera")
-                  }
-                >
-                  <Card.Content style={styles.permissionContent}>
-                    <View style={styles.permissionIconContainer}>
-                      <MaterialCommunityIcons
-                        name="camera"
-                        size={32}
-                        color={getPermissionColor(permissions.camera)}
-                      />
-                      <MaterialCommunityIcons
-                        name={getPermissionIcon(permissions.camera)}
-                        size={20}
-                        color={getPermissionColor(permissions.camera)}
-                        style={styles.permissionStatusIcon}
-                      />
-                    </View>
-                    <Text variant="titleMedium" style={styles.permissionTitle}>
-                      Cámara
-                    </Text>
-                    <Text
-                      variant="bodySmall"
+                    <View
                       style={[
-                        styles.permissionStatus,
-                        { color: getPermissionColor(permissions.camera) },
-                      ]}
-                    >
-                      {getPermissionText(permissions.camera)}
-                    </Text>
-                    {!permissions.camera.granted &&
-                      permissions.camera.canAskAgain && (
-                        <Text
-                          variant="labelSmall"
-                          style={[
-                            styles.permissionAction,
-                            { color: palette.primary },
-                          ]}
-                        >
-                          Toca para activar
-                        </Text>
-                      )}
-                    {!permissions.camera.canAskAgain &&
-                      !permissions.camera.granted && (
-                        <Text
-                          variant="labelSmall"
-                          style={[
-                            styles.permissionAction,
-                            { color: palette.red },
-                          ]}
-                        >
-                          Ir a ajustes
-                        </Text>
-                      )}
-                  </Card.Content>
-                </Card>
-
-                {/* Notificaciones */}
-                <Card
-                  style={[
-                    styles.permissionCard,
-                    { backgroundColor: palette.surface },
-                  ]}
-                  onPress={() =>
-                    !permissions.notifications.granted &&
-                    requestPermission("notifications")
-                  }
-                >
-                  <Card.Content style={styles.permissionContent}>
-                    <View style={styles.permissionIconContainer}>
-                      <MaterialCommunityIcons
-                        name="bell"
-                        size={32}
-                        color={getPermissionColor(permissions.notifications)}
-                      />
-                      <MaterialCommunityIcons
-                        name={getPermissionIcon(permissions.notifications)}
-                        size={20}
-                        color={getPermissionColor(permissions.notifications)}
-                        style={styles.permissionStatusIcon}
-                      />
-                    </View>
-                    <Text variant="titleMedium" style={styles.permissionTitle}>
-                      Notificaciones
-                    </Text>
-                    <Text
-                      variant="bodySmall"
-                      style={[
-                        styles.permissionStatus,
+                        styles.permissionIconBox,
                         {
-                          color: getPermissionColor(permissions.notifications),
+                          backgroundColor:
+                            tone === "success"
+                              ? colors.successSoft
+                              : tone === "warning"
+                              ? colors.warningSoft
+                              : colors.errorSoft,
                         },
                       ]}
                     >
-                      {getPermissionText(permissions.notifications)}
-                    </Text>
-                    {!permissions.notifications.granted &&
-                      permissions.notifications.canAskAgain && (
-                        <Text
-                          variant="labelSmall"
-                          style={[
-                            styles.permissionAction,
-                            { color: palette.primary },
-                          ]}
-                        >
-                          Toca para activar
-                        </Text>
-                      )}
-                    {!permissions.notifications.canAskAgain &&
-                      !permissions.notifications.granted && (
-                        <Text
-                          variant="labelSmall"
-                          style={[
-                            styles.permissionAction,
-                            { color: palette.red },
-                          ]}
-                        >
-                          Ir a ajustes
-                        </Text>
-                      )}
-                  </Card.Content>
-                </Card>
-
-                {/* Ubicación */}
-                <Card
-                  style={[
-                    styles.permissionCard,
-                    { backgroundColor: palette.surface },
-                  ]}
-                  onPress={() =>
-                    !permissions.location.granted &&
-                    requestPermission("location")
-                  }
-                >
-                  <Card.Content style={styles.permissionContent}>
-                    <View style={styles.permissionIconContainer}>
                       <MaterialCommunityIcons
-                        name="map-marker"
-                        size={32}
-                        color={getPermissionColor(permissions.location)}
-                      />
-                      <MaterialCommunityIcons
-                        name={getPermissionIcon(permissions.location)}
+                        name={meta.icon}
                         size={20}
-                        color={getPermissionColor(permissions.location)}
-                        style={styles.permissionStatusIcon}
+                        color={
+                          tone === "success"
+                            ? colors.success
+                            : tone === "warning"
+                            ? colors.warning
+                            : colors.error
+                        }
                       />
                     </View>
-                    <Text variant="titleMedium" style={styles.permissionTitle}>
-                      Ubicación
-                    </Text>
-                    <Text
-                      variant="bodySmall"
-                      style={[
-                        styles.permissionStatus,
-                        { color: getPermissionColor(permissions.location) },
-                      ]}
-                    >
-                      {getPermissionText(permissions.location)}
-                    </Text>
-                    {!permissions.location.granted &&
-                      permissions.location.canAskAgain && (
-                        <Text
-                          variant="labelSmall"
-                          style={[
-                            styles.permissionAction,
-                            { color: palette.primary },
-                          ]}
-                        >
-                          Toca para activar
-                        </Text>
-                      )}
-                    {!permissions.location.canAskAgain &&
-                      !permissions.location.granted && (
-                        <Text
-                          variant="labelSmall"
-                          style={[
-                            styles.permissionAction,
-                            { color: palette.red },
-                          ]}
-                        >
-                          Ir a ajustes
-                        </Text>
-                      )}
-                  </Card.Content>
-                </Card>
-
-                {/* Galería */}
-                <Card
-                  style={[
-                    styles.permissionCard,
-                    { backgroundColor: palette.surface },
-                  ]}
-                  onPress={() =>
-                    !permissions.mediaLibrary.granted &&
-                    requestPermission("mediaLibrary")
-                  }
-                >
-                  <Card.Content style={styles.permissionContent}>
-                    <View style={styles.permissionIconContainer}>
-                      <MaterialCommunityIcons
-                        name="image-multiple"
-                        size={32}
-                        color={getPermissionColor(permissions.mediaLibrary)}
-                      />
-                      <MaterialCommunityIcons
-                        name={getPermissionIcon(permissions.mediaLibrary)}
-                        size={20}
-                        color={getPermissionColor(permissions.mediaLibrary)}
-                        style={styles.permissionStatusIcon}
-                      />
+                    <View style={styles.permissionBody}>
+                      <Text style={styles.permissionLabel}>{meta.label}</Text>
+                      <AppChip
+                        variant={tone === "success" ? "success" : tone === "warning" ? "warning" : "error"}
+                        size="sm"
+                      >
+                        {getPermissionText(p)}
+                      </AppChip>
                     </View>
-                    <Text variant="titleMedium" style={styles.permissionTitle}>
-                      Galería
-                    </Text>
-                    <Text
-                      variant="bodySmall"
-                      style={[
-                        styles.permissionStatus,
-                        { color: getPermissionColor(permissions.mediaLibrary) },
-                      ]}
-                    >
-                      {getPermissionText(permissions.mediaLibrary)}
-                    </Text>
-                    {!permissions.mediaLibrary.granted &&
-                      permissions.mediaLibrary.canAskAgain && (
-                        <Text
-                          variant="labelSmall"
-                          style={[
-                            styles.permissionAction,
-                            { color: palette.primary },
-                          ]}
-                        >
-                          Toca para activar
-                        </Text>
-                      )}
-                    {!permissions.mediaLibrary.canAskAgain &&
-                      !permissions.mediaLibrary.granted && (
-                        <Text
-                          variant="labelSmall"
-                          style={[
-                            styles.permissionAction,
-                            { color: palette.red },
-                          ]}
-                        >
-                          Ir a ajustes
-                        </Text>
-                      )}
-                  </Card.Content>
-                </Card>
-              </View>
-            ) : (
-              <Text
-                variant="bodySmall"
-                style={{ color: palette.textSecondary, textAlign: "center" }}
-              >
-                No se pudieron cargar los permisos
-              </Text>
-            )}
-          </Card.Content>
-        </Card>
+                    {!p.granted && p.canAskAgain && (
+                      <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={18}
+                        color={colors.textMuted}
+                      />
+                    )}
+                    {blocked && (
+                      <TouchableOpacity
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        onPress={() => Linking.openSettings()}
+                      >
+                        <MaterialCommunityIcons
+                          name="cog-outline"
+                          size={18}
+                          color={colors.error}
+                        />
+                      </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.card}>
+              <EmptyState
+                compact
+                icon="shield-off-outline"
+                title="No se pudieron cargar los permisos"
+                description="Intenta de nuevo desde Reverificar"
+              />
+            </View>
+          )}
+        </View>
 
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text
-            variant="bodySmall"
-            style={{ color: theme.colors.onSurfaceVariant }}
+        {/* ============== ACCIONES RAPIDAS ============== */}
+        <View style={styles.section}>
+          <SectionHeader title="Acciones rapidas" />
+          <View style={styles.actionsGrid}>
+            <QuickAccessCard
+              icon="office-building-outline"
+              label="Cambiar empresa"
+              description="Selecciona otra compania"
+              onPress={() => router.push("/(stacks)/selectCompany" as any)}
+            />
+            <QuickAccessCard
+              icon="map-marker-outline"
+              label="Cambiar sucursal"
+              description="Ubicacion activa"
+              onPress={() => router.push("/(stacks)/selectLocation" as any)}
+            />
+            <QuickAccessCard
+              icon="cog-outline"
+              label="Preferencias"
+              description="Tema, densidad y comportamiento"
+              onPress={() => router.push("/(tabs)/preferences" as any)}
+            />
+            <QuickAccessCard
+              icon="lock-reset"
+              label="Cambiar contrasena"
+              description="Actualiza tu clave"
+              onPress={() => router.push("/(stacks)/change-password" as any)}
+            />
+          </View>
+        </View>
+
+        {/* ============== CERRAR SESION ============== */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={styles.logoutButton}
+            onPress={handleLogout}
+            disabled={isLoading}
           >
+            <View style={styles.logoutIcon}>
+              <MaterialCommunityIcons
+                name="logout"
+                size={18}
+                color={colors.error}
+              />
+            </View>
+            <Text style={styles.logoutLabel}>
+              {isLoading ? "Saliendo..." : "Cerrar sesion"}
+            </Text>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={18}
+              color={colors.textMuted}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* ============== FOOTER ============== */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
             PlastiGest v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
+          </Text>
+          <Text style={styles.footerSubtext}>
+            Hecho con {"\u{1F33F}"} para la gestion de tu negocio
           </Text>
         </View>
       </ScrollView>
@@ -887,201 +717,147 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    paddingBottom: 32,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
-  },
-  headerSection: {
-    paddingTop: 40,
-    paddingBottom: 24,
-    paddingHorizontal: 20,
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    marginBottom: 16,
-  },
-  headerTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 20,
-  },
-  headerName: {
-    color: "#fff",
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  headerEmail: {
-    color: "rgba(255,255,255,0.9)",
-    marginBottom: 8,
-  },
-  verifiedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    alignSelf: "flex-start",
-  },
-  verifiedText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  avatar: {
-    borderWidth: 4,
-    borderColor: "rgba(255,255,255,0.3)",
-  },
-  statsContainer: {
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
-  statCard: {
-    flex: 1,
-    borderRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
-    shadowColor: "transparent",
-  },
-  statContent: {
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 8,
-  },
-  infoCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    backgroundColor: palette.red,
-    shadowOffset: { width: 0, height: 0 },
-    shadowColor: "transparent",
-  },
-  sectionTitle: {
-    fontWeight: "bold",
-    color: palette.text,
-  },
-  detailRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.surface,
-  },
-  detailIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: palette.surface,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  actionsCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    backgroundColor: palette.card,
-    shadowOffset: { width: 0, height: 0 },
-    shadowColor: "transparent",
-  },
-  actionGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  actionItem: {
-    flex: 1,
-    minWidth: "45%",
-    borderRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    shadowColor: "transparent",
-  },
-  actionItemContent: {
-    alignItems: "center",
-    paddingVertical: 20,
-  },
-  footer: {
-    alignItems: "center",
-    marginTop: 16,
-  },
-  permissionsCard: {
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 16,
-    shadowOffset: { width: 0, height: 0 },
-    shadowColor: "transparent",
-  },
-  permissionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 20,
-  },
-  loadingPermissions: {
-    alignItems: "center",
-    paddingVertical: 20,
-  },
-  permissionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  permissionCard: {
-    flex: 1,
-    minWidth: "45%",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: palette.primary + "20",
-    shadowOffset: { width: 0, height: 0 },
-    shadowColor: "transparent",
-  },
-  permissionContent: {
-    alignItems: "center",
-    paddingVertical: 16,
-    gap: 8,
-  },
-  permissionIconContainer: {
-    position: "relative",
-    marginBottom: 8,
-  },
-  permissionStatusIcon: {
-    position: "absolute",
-    bottom: -4,
-    right: -4,
-    backgroundColor: palette.surface,
-    borderRadius: 10,
-  },
-  permissionTitle: {
-    fontWeight: "bold",
-    textAlign: "center",
-  },
-  permissionStatus: {
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  permissionAction: {
-    marginTop: 4,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-});
+// ============== SUBCOMPONENTES ==============
+
+function Divider() {
+  const styles = useThemedStyles((c) => ({
+    divider: {
+      height: 1,
+      backgroundColor: c.border,
+      marginLeft: tokens.spacing[4] + 32 + tokens.spacing[3],
+    },
+  }));
+  return <View style={styles.divider} />;
+}
+
+interface ContextTileProps {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  label: string;
+  value: string;
+  sublabel?: string;
+  tone: "primary" | "info" | "success" | "warning" | "error";
+}
+
+function ContextTile({ icon, label, value, sublabel, tone }: ContextTileProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles((c) => ({
+    contextTile: {
+      flex: 1,
+      backgroundColor: c.surface,
+      borderRadius: tokens.radius.lg,
+      padding: tokens.spacing[4],
+      gap: tokens.spacing[2],
+      minWidth: 0,
+      ...tokens.shadow.sm,
+    },
+    contextIconBox: {
+      width: 32,
+      height: 32,
+      borderRadius: tokens.radius.sm,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    contextLabel: {
+      ...tokens.typography.micro,
+      color: c.textMuted,
+    },
+    contextValue: {
+      ...tokens.typography.bodyMd,
+      color: c.text,
+    },
+    contextSub: {
+      ...tokens.typography.caption,
+      color: c.textSecondary,
+    },
+  }));
+
+  const tonePalette = {
+    primary: { bg: colors.primarySoft, fg: colors.primary },
+    info: { bg: colors.infoSoft, fg: colors.info },
+    success: { bg: colors.successSoft, fg: colors.success },
+    warning: { bg: colors.warningSoft, fg: colors.warning },
+    error: { bg: colors.errorSoft, fg: colors.error },
+  }[tone];
+
+  return (
+    <View style={styles.contextTile}>
+      <View style={[styles.contextIconBox, { backgroundColor: tonePalette.bg }]}>
+        <MaterialCommunityIcons name={icon} size={18} color={tonePalette.fg} />
+      </View>
+      <Text style={styles.contextLabel}>{label.toUpperCase()}</Text>
+      <Text style={styles.contextValue} numberOfLines={1}>
+        {value}
+      </Text>
+      {sublabel ? (
+        <Text style={styles.contextSub} numberOfLines={1}>
+          {sublabel}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+interface InfoRowProps {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  label: string;
+  value: string;
+  tone: "primary" | "info" | "success" | "warning" | "error";
+}
+
+function InfoRow({ icon, label, value, tone }: InfoRowProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles((c) => ({
+    infoRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: tokens.spacing[4],
+      gap: tokens.spacing[3],
+    },
+    infoIconBox: {
+      width: 32,
+      height: 32,
+      borderRadius: tokens.radius.sm,
+      alignItems: "center",
+      justifyContent: "center",
+      flexShrink: 0,
+    },
+    infoLabel: {
+      ...tokens.typography.caption,
+      color: c.textMuted,
+    },
+    infoValue: {
+      ...tokens.typography.bodyMd,
+      color: c.text,
+      marginTop: 1,
+    },
+  }));
+  const tonePalette = {
+    primary: { bg: colors.primarySoft, fg: colors.primary },
+    info: { bg: colors.infoSoft, fg: colors.info },
+    success: { bg: colors.successSoft, fg: colors.success },
+    warning: { bg: colors.warningSoft, fg: colors.warning },
+    error: { bg: colors.errorSoft, fg: colors.error },
+  }[tone];
+
+  return (
+    <View style={styles.infoRow}>
+      <View style={[styles.infoIconBox, { backgroundColor: tonePalette.bg }]}>
+        <MaterialCommunityIcons name={icon} size={16} color={tonePalette.fg} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue} numberOfLines={1}>
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ============== STYLES ==============
+
+
+// Hack visual: la transicion de hover en web para las cards
+if (Platform.OS === "web") {
+  // no-op: tokens.shadow.sm se aplica estaticamente
+}

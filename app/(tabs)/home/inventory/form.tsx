@@ -445,7 +445,7 @@ function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
                 width: 60,
                 height: 60,
                 borderRadius: 8,
-                backgroundColor: palette.background,
+                backgroundColor: "transparent" as any,
               }}
               resizeMode="cover"
             />
@@ -476,7 +476,7 @@ function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
         {/* Stock Information */}
         <View
           style={{
-            backgroundColor: palette.background,
+            backgroundColor: "transparent" as any,
             padding: 12,
             borderRadius: 8,
             gap: 8,
@@ -520,7 +520,7 @@ function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
                 backgroundColor:
                   isCorrect === true
                     ? palette.success + "15"
-                    : palette.background,
+                    : "transparent" as any,
                 borderRadius: 8,
                 borderWidth: 1,
                 borderColor:
@@ -554,7 +554,7 @@ function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
                 backgroundColor:
                   isCorrect === false
                     ? palette.error + "15"
-                    : palette.background,
+                    : "transparent" as any,
                 borderRadius: 8,
                 borderWidth: 1,
                 borderColor:
@@ -593,7 +593,7 @@ function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
                       flexDirection: "row",
                       alignItems: "center",
                       gap: 8,
-                      backgroundColor: palette.background,
+                      backgroundColor: "transparent" as any,
                       borderRadius: 8,
                       padding: 8,
                       borderWidth: 1,
@@ -785,7 +785,7 @@ function ProductCard({ index, product, inventoryCountId }: ProductCardProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: "transparent" as any,
   },
   productCard: {
     marginBottom: 16,

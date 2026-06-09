@@ -222,13 +222,13 @@ function resolveDeepLink(
   eventType: string | undefined,
   entityId: string | undefined,
 ): string {
-  const fallback = "/(stacks)/notifications";
+  const fallback = "/(tabs)/notifications";
 
   if (!eventType || !entityId) return fallback;
 
   switch (eventType) {
     case "task_event":
-      return `/(stacks)/tasks/${entityId}`;
+      return `/(tabs)/tasks/${entityId}`;
     case "purchase_update":
       return `/(tabs)/home/purchases/${entityId}`;
     case "low_stock":

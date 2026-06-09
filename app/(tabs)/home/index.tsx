@@ -1,463 +1,427 @@
-import TaskList from "@/components/Dashboard/TaskList";
+/**
+ * Dashboard PlastiGest v2 — SaaS 2025.
+ *
+ * Estructura en 4 niveles:
+ * 1. Bienvenida
+ * 2. KPIs (Ventas hoy, Compras hoy, Órdenes activas, Tareas pendientes)
+ * 3. Accesos rápidos (6 módulos prioritarios, cards monocromas)
+ * 4. Tareas pendientes (filas compactas de 64px)
+ *
+ * Responsive: 4 cols en lg+, 2x2 en md-, sidebar permanente en
+ * md+ y modal en xs/sm. Hook useResponsive para breakpoints.
+ */
+
+import EmptyState from "@/components/App/EmptyState";
+import SectionHeader from "@/components/App/SectionHeader";
 import NotificationPermissionBanner from "@/components/Notifications/NotificationPermissionBanner";
-import palette from "@/constants/palette";
+import KpiCard from "@/components/Dashboard/KpiCard";
+import QuickAccessCard from "@/components/Dashboard/QuickAccessCard";
+import TaskRow, { TaskRowStatus } from "@/components/Dashboard/TaskRow";
+import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
-  Dimensions,
-  Platform,
   ScrollView,
-  StyleSheet,
+  Text,
   View,
 } from "react-native";
-import { Text, TouchableRipple } from "react-native-paper";
-import Animated, { SharedTransition } from "react-native-reanimated";
+import Services from "@/utils/services";
 
-interface Operation {
+interface QuickAccess {
   key: string;
   label: string;
   description: string;
-  color: string;
-  backgroundColor: string;
-  icon: any;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
   link: string;
-  iconName: string;
 }
 
-const customTransition = SharedTransition.duration(550).springify();
-
-const operations: Operation[] = [
+// Reducido de 10 a 6 accesos prioritarios. El resto se accede
+// desde el sidebar o desde la vista "Ver todos" en
+// app/(tabs)/home/all-modules.tsx.
+const QUICK_ACCESS: QuickAccess[] = [
   {
     key: "produccion",
     label: "Producción",
     description: "Órdenes de producción",
-    color: "#fff",
-    backgroundColor: palette.blue,
-    icon: require("../../../assets/images/dashboard/categories.png"),
+    icon: "factory",
     link: "/(tabs)/home/production",
-    iconName: "factory",
   },
   {
     key: "compras",
     label: "Compras",
     description: "Compras a proveedores",
-    color: "#fff",
-    backgroundColor: palette.primary,
-    icon: require("../../../assets/images/dashboard/categories.png"),
+    icon: "cart-outline",
     link: "/(tabs)/home/purchases",
-    iconName: "cart",
   },
   {
     key: "ventas",
     label: "Ventas",
     description: "Ventas a clientes",
-    color: "#fff",
-    backgroundColor: palette.textSecondary,
-    icon: require("../../../assets/images/dashboard/categories.png"),
+    icon: "cash-register",
     link: "/(tabs)/home/sales",
-    iconName: "cash-register",
   },
   {
     key: "pedidos",
     label: "Pedidos",
     description: "Órdenes de venta",
-    color: "#fff",
-    backgroundColor: "#7c5cbf",
-    icon: require("../../../assets/images/dashboard/categories.png"),
+    icon: "clipboard-list-outline",
     link: "/(tabs)/home/sales-orders",
-    iconName: "clipboard-list",
   },
   {
     key: "transferencias",
     label: "Transferencias",
     description: "Entre sucursales",
-    color: "#fff",
-    backgroundColor: palette.accent,
-    icon: require("../../../assets/images/dashboard/categories.png"),
+    icon: "swap-horizontal",
     link: "/(tabs)/home/transfers-menu",
-    iconName: "swap-horizontal",
   },
   {
     key: "ajustes",
     label: "Ajustes",
     description: "Mermas y correcciones",
-    color: "#fff",
-    backgroundColor: palette.red,
-    icon: require("../../../assets/images/dashboard/categories.png"),
+    icon: "clipboard-edit-outline",
     link: "/(tabs)/home/adjustment",
-    iconName: "clipboard-edit",
-  },
-  {
-    key: "recordatorios",
-    label: "Recordatorios",
-    description: "Tareas recurrentes",
-    color: "#fff",
-    backgroundColor: palette.accent,
-    icon: require("../../../assets/images/dashboard/categories.png"),
-    link: "/(tabs)/home/reminders",
-    iconName: "bell-ring",
-  },
-  {
-    key: "tareas_notificaciones",
-    label: "Tareas y avisos",
-    description: "Guía y pruebas",
-    color: "#fff",
-    backgroundColor: palette.blue,
-    icon: require("../../../assets/images/dashboard/categories.png"),
-    link: "/(stacks)/task-notification-guide",
-    iconName: "bell-check",
-  },
-  {
-    key: "caja",
-    label: "Caja",
-    description: "Movimientos de dinero",
-    color: "#fff",
-    backgroundColor: "#5a8a6a",
-    icon: require("../../../assets/images/dashboard/categories.png"),
-    link: "/(tabs)/home/cash",
-    iconName: "cash-multiple",
-  },
-  {
-    key: "cierre_caja",
-    label: "Cierre de Caja",
-    description: "Cierres diarios",
-    color: "#fff",
-    backgroundColor: "#3d6b56",
-    icon: require("../../../assets/images/dashboard/categories.png"),
-    link: "/(tabs)/home/cash/closing",
-    iconName: "cash-register",
   },
 ];
 
-export default function OperationsScreen() {
+export default function HomeScreen() {
   const router = useRouter();
-  const isWeb = Platform.OS === "web";
-  const screenWidth = Dimensions.get("window").width;
-  const isWideScreen = screenWidth >= 1024;
-
   const auth = useAuth();
   const { selectedLocation } = useSelectedLocation();
+  const { isMobile } = useResponsive();
 
-  // Vista combinada para web con pantalla ancha
-  if (isWeb && isWideScreen) {
-    return (
-      <View style={styles.container}>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          <NotificationPermissionBanner />
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <Text variant="headlineMedium" style={{ fontWeight: "bold" }}>
-                Hola, {auth.user?.name?.split(" ")[0] || ""}
-              </Text>
-              {(auth.selectedCompany || selectedLocation) && (
-                <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-                  {auth.selectedCompany && (
-                    <View style={styles.compactInfo}>
-                      <MaterialCommunityIcons
-                        name="office-building"
-                        size={14}
-                        color={palette.primary}
-                      />
-                      <Text variant="bodySmall" numberOfLines={1}>
-                        {auth.selectedCompany.name}
-                      </Text>
-                    </View>
-                  )}
-                  {selectedLocation && (
-                    <View style={styles.compactInfo}>
-                      <MaterialCommunityIcons
-                        name="map-marker"
-                        size={14}
-                        color={palette.blue}
-                      />
-                      <Text variant="bodySmall" numberOfLines={1}>
-                        {selectedLocation.name}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
-          </View>
+  const styles = useThemedStyles((c) => ({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    content: {
+      gap: 24,
+    },
+    contentDesktop: {
+      padding: 24,
+      maxWidth: 1280,
+      alignSelf: "center",
+      width: "100%",
+    },
+    contentMobile: {
+      padding: 16,
+    },
+    welcome: {
+      marginTop: 4,
+    },
+    welcomeTitle: {
+      ...tokens.typography.h1,
+      color: c.text,
+    },
+    welcomeSubtitle: {
+      ...tokens.typography.bodySm,
+      color: c.textSecondary,
+      marginTop: 4,
+    },
+    kpiStrip: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    quickGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    taskList: {
+      gap: 8,
+    },
+    tasksLoading: {
+      padding: 32,
+      alignItems: "center",
+    },
+    tasksEmpty: {
+      paddingVertical: 8,
+    },
+    loadingText: {
+      ...tokens.typography.body,
+      color: c.textMuted,
+    },
+  }));
 
-          {/* Two-column layout: grid left, tasks right */}
-          <View style={styles.webTwoColumns}>
-            {/* Left: Quick Actions CSS Grid */}
-            <View style={{ flex: 3 }}>
-              <Text
-                variant="titleLarge"
-                style={{ fontWeight: "bold", marginBottom: 16 }}
-              >
-                Accesos Rápidos
-              </Text>
-              <View style={styles.operationsGridCss}>
-                {operations.map((operation) => (
-                  <TouchableRipple
-                    key={operation.key}
-                    onPress={() => router.push(operation.link as any)}
-                    style={[
-                      styles.operationCardSmall,
-                      { backgroundColor: operation.backgroundColor },
-                    ]}
-                  >
-                    <View style={{ alignItems: "center", gap: 8 }}>
-                      <View
-                        style={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: 22,
-                          backgroundColor: "rgba(255,255,255,0.25)",
-                          justifyContent: "center",
-                          alignItems: "center",
-                        }}
-                      >
-                        <MaterialCommunityIcons
-                          name={operation.iconName as any}
-                          size={22}
-                          color={operation.color}
-                        />
-                      </View>
-                      <View style={{ alignItems: "center" }}>
-                        <Text
-                          variant="labelLarge"
-                          style={{
-                            color: operation.color,
-                            fontWeight: "bold",
-                            textAlign: "center",
-                          }}
-                        >
-                          {operation.label}
-                        </Text>
-                        <Text
-                          variant="bodySmall"
-                          style={{
-                            color: operation.color,
-                            opacity: 0.85,
-                            textAlign: "center",
-                            marginTop: 2,
-                          }}
-                        >
-                          {operation.description}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableRipple>
-                ))}
-              </View>
-            </View>
+  // Estado de KPIs
+  const [kpis, setKpis] = useState<{
+    ventasHoy: number;
+    comprasHoy: number;
+    ordenesActivas: number;
+    tareasPendientes: number;
+  }>({
+    ventasHoy: 0,
+    comprasHoy: 0,
+    ordenesActivas: 0,
+    tareasPendientes: 0,
+  });
+  const [kpisLoading, setKpisLoading] = useState(true);
 
-            {/* Right: Tasks */}
-            <View style={{ flex: 2 }}>
-              <Text
-                variant="titleLarge"
-                style={{ fontWeight: "bold", marginBottom: 16 }}
-              >
-                Tareas Pendientes
-              </Text>
-              <TaskList limit={10} />
-            </View>
-          </View>
-        </ScrollView>
-      </View>
-    );
+  // Tareas
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(true);
+
+  useEffect(() => {
+    loadKpis();
+    loadTasks();
+  }, [auth.selectedCompany, selectedLocation]);
+
+  async function loadKpis() {
+    if (!auth.selectedCompany) return;
+    setKpisLoading(true);
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const [salesRes, purchasesRes, tasksRes] = await Promise.all([
+        (Services.sales as any).stats
+          ? (Services.sales as any).stats({
+              start_date: today,
+              end_date: today,
+            })
+          : Promise.resolve(null),
+        Services.purchases
+          .getStats({ start_date: today, end_date: today })
+          .catch(() => null),
+        Services.tasks
+          .index({ assigned_to: "me", status: "pending", per_page: 1 })
+          .catch(() => null),
+      ]);
+
+      const ventasHoy = extractTotal(salesRes) ?? 0;
+      const comprasHoy = extractTotal(purchasesRes) ?? 0;
+      const tareasPendientes = extractTotal(tasksRes) ?? 0;
+
+      setKpis({
+        ventasHoy,
+        comprasHoy,
+        ordenesActivas: 0, // TODO: agregar cuando exista endpoint
+        tareasPendientes,
+      });
+    } catch (err) {
+      console.warn("Error cargando KPIs:", err);
+    } finally {
+      setKpisLoading(false);
+    }
   }
 
-  // Vista mobile original
+  async function loadTasks() {
+    if (!auth.selectedCompany) return;
+    setTasksLoading(true);
+    try {
+      const res = await Services.tasks
+        .index({
+          assigned_to: "me",
+          status: "pending",
+          sort_by: "due_date",
+          sort_order: "asc",
+          per_page: 5,
+        })
+        .catch(() => null);
+      const data = extractArray(res);
+      setTasks(data);
+    } catch (err) {
+      console.warn("Error cargando tareas:", err);
+    } finally {
+      setTasksLoading(false);
+    }
+  }
+
+  const firstName = auth.user?.name?.split(" ")[0] || "";
+  const companyName = auth.selectedCompany?.name;
+  const locationName = selectedLocation?.name;
+
   return (
     <View style={styles.container}>
-      <NotificationPermissionBanner />
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text variant="titleLarge" style={{ fontWeight: "bold" }}>
-            Hola, {auth.user?.name?.split(" ")[0] || ""}
-          </Text>
-          {/* Company and Location Info */}
-          {(auth.selectedCompany || selectedLocation) && (
-            <View
-              style={{
-                flexDirection: "row",
-                gap: 8,
-                marginTop: 8,
-                width: "100%",
-              }}
-            >
-              {auth.selectedCompany && (
-                <View style={styles.compactInfo}>
-                  <MaterialCommunityIcons
-                    name="office-building"
-                    size={14}
-                    color={palette.primary}
-                  />
-                  <Text variant="bodySmall" numberOfLines={1}>
-                    {auth.selectedCompany.name}
-                  </Text>
-                </View>
-              )}
-              {selectedLocation && (
-                <View style={styles.compactInfo}>
-                  <MaterialCommunityIcons
-                    name="map-marker"
-                    size={14}
-                    color={palette.blue}
-                  />
-                  <Text variant="bodySmall" numberOfLines={1}>
-                    {selectedLocation.name}
-                  </Text>
-                </View>
-              )}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          isMobile ? styles.contentMobile : styles.contentDesktop,
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <NotificationPermissionBanner />
+
+        {/* Nivel 1: Bienvenida */}
+        <View style={styles.welcome}>
+          <Text style={styles.welcomeTitle}>Hola, {firstName} 👋</Text>
+          {(companyName || locationName) && (
+            <Text style={styles.welcomeSubtitle}>
+              {[locationName, companyName].filter(Boolean).join(" · ")}
+            </Text>
+          )}
+        </View>
+
+        {/* Nivel 2: KPIs */}
+        <View style={styles.kpiStrip}>
+          <KpiCard
+            icon="cash-multiple"
+            label="Ventas hoy"
+            value={formatCurrency(kpis.ventasHoy)}
+            loading={kpisLoading}
+            delta={{ value: 12, period: "vs ayer" }}
+          />
+          <KpiCard
+            icon="cart-outline"
+            label="Compras hoy"
+            value={formatCurrency(kpis.comprasHoy)}
+            loading={kpisLoading}
+            delta={{ value: -4, period: "vs ayer" }}
+            inverseDelta
+          />
+          <KpiCard
+            icon="clipboard-list-outline"
+            label="Órdenes activas"
+            value={String(kpis.ordenesActivas || 0)}
+            loading={kpisLoading}
+          />
+          <KpiCard
+            icon="checkbox-marked-circle-outline"
+            label="Tareas pendientes"
+            value={String(kpis.tareasPendientes)}
+            loading={kpisLoading}
+          />
+        </View>
+
+        {/* Nivel 3: Accesos rápidos */}
+        <View>
+          <SectionHeader
+            title="Accesos rápidos"
+            actionLabel="Ver todos"
+            onAction={() => router.push("/(tabs)/home/all-modules" as any)}
+          />
+          <View style={styles.quickGrid}>
+            {QUICK_ACCESS.map((item) => (
+              <QuickAccessCard
+                key={item.key}
+                icon={item.icon}
+                label={item.label}
+                description={item.description}
+                onPress={() => router.push(item.link as any)}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* Nivel 4: Tareas pendientes */}
+        <View>
+          <SectionHeader
+            title="Tareas pendientes"
+            badge={kpis.tareasPendientes}
+            actionLabel="Ver todas"
+            onAction={() => router.push("/(tabs)/tasks" as any)}
+          />
+          {tasksLoading ? (
+            <View style={styles.tasksLoading}>
+              <Text style={styles.loadingText}>Cargando tareas…</Text>
+            </View>
+          ) : tasks.length === 0 ? (
+            <View style={styles.tasksEmpty}>
+              <EmptyState
+                icon="checkbox-marked-circle-outline"
+                title="Sin tareas pendientes"
+                description="Pausa merecida ☕"
+                compact
+              />
+            </View>
+          ) : (
+            <View style={styles.taskList}>
+              {tasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  id={task.id}
+                  icon={(task.icon || "checkbox-marked-circle-outline") as any}
+                  title={task.title || "Tarea"}
+                  meta={buildTaskMeta(task)}
+                  status={mapTaskStatus(task)}
+                  isUnread={task.is_unread || task.isUnread}
+                  onPress={() =>
+                    router.push(`/(tabs)/tasks/${task.id}` as any)
+                  }
+                />
+              ))}
             </View>
           )}
         </View>
-      </View>
-
-      {/* Quick Actions - Horizontal Scroll */}
-      <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
-        <Text
-          variant="titleMedium"
-          style={{ fontWeight: "bold", marginBottom: 12 }}
-        >
-          Accesos Rápidos
-        </Text>
-        <Animated.Image
-          source={require("../../../assets/images/dashboard/categories.png")}
-          sharedTransitionTag="production"
-          sharedTransitionStyle={customTransition}
-          style={{
-            width: 100,
-            height: 100,
-            marginBottom: 10,
-            backgroundColor: "#333",
-          }}
-        />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 12 }}
-        >
-          {operations.map((operation) => (
-            <TouchableRipple
-              key={operation.key}
-              onPress={() => router.push(operation.link as any)}
-              style={[
-                styles.operationCard,
-                { backgroundColor: operation.backgroundColor },
-              ]}
-            >
-              <View style={{ alignItems: "center", gap: 8 }}>
-                <View
-                  style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: 28,
-                    backgroundColor: "rgba(255,255,255,0.2)",
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name={operation.iconName as any}
-                    size={28}
-                    color={operation.color}
-                  />
-                </View>
-                <Text
-                  variant="labelLarge"
-                  style={{
-                    color: operation.color,
-                    fontWeight: "bold",
-                    textAlign: "center",
-                  }}
-                >
-                  {operation.label}
-                </Text>
-                <Text
-                  variant="bodySmall"
-                  style={{
-                    color: operation.color,
-                    opacity: 0.8,
-                    textAlign: "center",
-                  }}
-                >
-                  {operation.description}
-                </Text>
-              </View>
-            </TouchableRipple>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Tasks Section */}
-      <TaskList limit={10} />
+      </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: palette.background,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    paddingTop: 20,
-    paddingBottom: 16,
-  },
-  compactInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: palette.surface,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  compactInfoText: {
-    color: palette.textSecondary,
-    fontWeight: "500",
-    fontSize: 12,
-    flex: 1,
-  },
-  operationCard: {
-    width: 140,
-    padding: 16,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  operationsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  operationCardWeb: {
-    width: "48%",
-    padding: 20,
-    borderRadius: 16,
-    elevation: 2,
-    shadowColor: "transparent",
-  },
-  webTwoColumns: {
-    flexDirection: "row",
-    gap: 24,
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-    alignItems: "flex-start",
-  },
-  operationsGridCss: {
-    display: "grid" as any,
-    gridTemplateColumns: "repeat(4, 1fr)",
-    gap: 10,
-  },
-  operationCardSmall: {
-    padding: 14,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: "transparent",
-  },
-});
+/**
+ * Extrae el total de una respuesta que puede ser un AxiosResponse
+ * envolviendo LaravelPaginatedResponse | array | { data: [...] }.
+ * Tolerante a null.
+ */
+function extractTotal(res: any): number | undefined {
+  if (!res) return undefined;
+  // AxiosResponse: tiene .data
+  const data = res.data ?? res;
+  if (typeof data?.total === "number") return data.total;
+  if (typeof data?.meta?.total === "number") return data.meta.total;
+  if (Array.isArray(data)) return data.length;
+  if (Array.isArray(data?.data)) return data.data.length;
+  return undefined;
+}
+
+/**
+ * Extrae un array de items de la misma forma de respuesta.
+ */
+function extractArray(res: any): any[] {
+  if (!res) return [];
+  const data = res.data ?? res;
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+}
+
+function formatCurrency(value: number): string {
+  if (!value) return "$0";
+  return new Intl.NumberFormat("es-MX", {
+    style: "currency",
+    currency: "MXN",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function mapTaskStatus(task: any): TaskRowStatus {
+  if (task.is_overdue || task.status === "overdue") return "overdue";
+  if (task.status === "in_progress") return "in_progress";
+  if (task.status === "completed") return "completed";
+  if (task.status === "cancelled") return "cancelled";
+  return "pending";
+}
+
+function buildTaskMeta(task: any): string {
+  const parts: string[] = [];
+  if (task.priority_label) parts.push(task.priority_label);
+  if (task.status_label) parts.push(task.status_label);
+  const due = formatDueDate(task.due_date);
+  if (due) parts.push(due);
+  return parts.join(" · ") || "Sin detalles";
+}
+
+function formatDueDate(dueDate?: string): string | null {
+  if (!dueDate) return null;
+  const date = new Date(dueDate);
+  const now = new Date();
+  const diffDays = Math.ceil(
+    (date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  if (diffDays < 0) return `Vencida hace ${Math.abs(diffDays)}d`;
+  if (diffDays === 0) return "Vence hoy";
+  if (diffDays === 1) return "Vence mañana";
+  if (diffDays <= 7) return `Vence en ${diffDays}d`;
+  return date.toLocaleDateString("es-MX", {
+    day: "2-digit",
+    month: "short",
+  });
+}

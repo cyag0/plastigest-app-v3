@@ -158,7 +158,7 @@ export default function TransferStepTwoShip({
           <MaterialCommunityIcons
             name="truck-delivery-outline"
             size={22}
-            color={palette.red}
+            color={palette.error}
           />
           <Text variant="titleMedium" style={styles.sectionTitle}>
             Paso 2: Envio
@@ -396,6 +396,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   shipButton: {
-    backgroundColor: palette.red,
+    backgroundColor: palette.error,
   },
 });
