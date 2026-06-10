@@ -489,7 +489,9 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   return (
     <AppFormContext.Provider value={contextValue}>
       <FormikProvider value={formInstance}>
-        <View style={{ flex: 1, backgroundColor: styles.backgroundStyle.backgroundColor }}>
+        <View style={[{ flex: 1, backgroundColor: styles.backgroundStyle.backgroundColor, 
+            
+         }, props.containerStyle]}>
           <ScrollView
             scrollEnabled={!props.disableScroll}
             style={[{ padding: 16,

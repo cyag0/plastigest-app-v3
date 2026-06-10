@@ -49,10 +49,17 @@ export default function SelectCompanyScreen() {
   const [loadingLocations, setLoadingLocations] = useState(false);
 
   useEffect(() => {
+    // Solo cargamos companies si el array esta vacio. Antes
+    // `loadCompanies` estaba en el array de deps, pero como
+    // AuthContext no la envuelve en useCallback, era una
+    // referencia nueva en cada render y este effect se re-ejecutaba
+    // eternamente, lo que hacia parpadear `isLoadingCompanies` y
+    // deshabilitaba los Pressables intermitentemente.
     if (companies.length === 0) {
       loadCompanies();
     }
-  }, [companies.length, loadCompanies]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companies.length]);
 
   const loadAndSelectLocation = async (companyId: number) => {
     try {
@@ -65,10 +72,14 @@ export default function SelectCompanyScreen() {
         ? response.data
         : response.data?.data || [];
 
+      // Si la empresa tiene exactamente una sucursal, la auto-seleccionamos
+      // y la app va directo al home. Si tiene 0 o 2+ dejamos `location` en
+      // null para que el NavigationHandler renderice el LocationSelector.
+      // NO reseteamos a null al final: eso borraba la auto-seleccion y la
+      // app se quedaba atorada en el selector de sucursal.
       if (Array.isArray(locationsData) && locationsData.length === 1) {
         await selectLocation(locationsData[0]);
       }
-      await selectLocation(null);
     } catch (error) {
       console.error("Error loading locations:", error);
     } finally {
@@ -83,22 +94,42 @@ export default function SelectCompanyScreen() {
       return;
     }
     if (currentCompany?.id === companyId) {
+      // Ya estamos en esta empresa: salimos de la pantalla sin
+      // pedir confirmacion. Antes el onPress hacia short-circuit
+      // con `!isCurrent && ...` y este `router.back()` nunca
+      // llegaba a ejecutarse, dejando al usuario atascado.
       router.back();
       return;
     }
 
-    const confirmed = await alerts.confirm(
-      `¿Cambiar a ${companyToSelect.name}?`,
-      { title: "Confirmar Cambio", okText: "Cambiar", cancelText: "Cancelar" }
-    );
-    if (!confirmed) return;
+    // Solo pedimos confirmacion cuando estamos cambiando de empresa
+    // (ya hay `currentCompany`). En el bootstrap inicial la accion es
+    // implicita y un dialogo extra solo agrega friccion y un punto
+    // de falla extra (Portal/dialog puede no montarse en algunos
+    // navegadores web).
+    if (currentCompany) {
+      const confirmed = await alerts.confirm(
+        `¿Cambiar a ${companyToSelect.name}?`,
+        { title: "Confirmar Cambio", okText: "Cambiar", cancelText: "Cancelar" }
+      );
+      if (!confirmed) return;
+    }
 
     try {
       setLoading(true);
-      await selectLocation(null);
+      // Solo limpiamos la sucursal previa si estamos cambiando de empresa
+      // (no en el bootstrap inicial). Esto evita el flash del LoaderWithLogo
+      // que se dispara cuando `selectLocation` prende `isSwitchingLocation`.
+      if (currentCompany) {
+        await selectLocation(null);
+      }
       await selectCompany(companyToSelect);
       await loadAndSelectLocation(companyId);
-      alerts.success(`Has cambiado a ${companyToSelect.name}`);
+      alerts.success(
+        currentCompany
+          ? `Has cambiado a ${companyToSelect.name}`
+          : `Empresa ${companyToSelect.name} seleccionada`
+      );
       router.back();
     } catch {
       alerts.error("No se pudo cambiar de compania. Intenta nuevamente.");
@@ -328,10 +359,19 @@ export default function SelectCompanyScreen() {
                 return (
                   <Pressable
                     key={company.id}
-                    onPress={() =>
-                      !isCurrent && !loading && handleSelectCompany(company.id)
-                    }
-                    disabled={loading}
+                    // onPress siempre llama a handleSelectCompany (incluso
+                    // cuando es la empresa actual). El cortocircuito
+                    // `!isCurrent && ...` se elimino porque silenciaba
+                    // el tap y dejaba al usuario sin forma de salir
+                    // (router.back() nunca se ejecutaba).
+                    onPress={() => {
+                      if (isLoading) return;
+                      handleSelectCompany(company.id);
+                    }}
+                    // Usamos el estado combinado (auth + local) para
+                    // bloquear taps duplicados durante la auto-seleccion
+                    // de sucursal, no solo el `loading` local.
+                    disabled={isLoading}
                     style={({ pressed }) => [
                       styles.option,
                       isCurrent && styles.optionActive,

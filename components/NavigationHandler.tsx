@@ -176,13 +176,13 @@ function LoaderWithLogo({ message }: { message: string }) {
         <MaterialCommunityIcons
           name="package-variant"
           size={80}
-          color={palette.error}
+          color={palette.primary}
         />
 
         <Text
           variant="displaySmall"
           style={{
-            color: palette.error,
+            color: palette.primary,
             fontWeight: "bold",
           }}
         >

@@ -1,20 +1,20 @@
-import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useColors } from "@/contexts/ThemeContext";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { useAlerts } from "@/hooks/useAlerts";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
+  Platform,
   ScrollView,
-  StyleSheet,
+  Text as RNText,
   View,
 } from "react-native";
 import {
   Button,
   HelperText,
-  Surface,
-  Text,
   TextInput,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -22,6 +22,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 export default function LoginScreen() {
   const { login, isLoading } = useAuth();
   const alerts = useAlerts();
+  const colors = useColors();
 
   // Estados del formulario
   const [email, setEmail] = useState("");
@@ -80,6 +81,161 @@ export default function LoginScreen() {
   };
 
   const isBlocked = retryCountdown !== null && retryCountdown > 0;
+
+  // Tema Paper aplicado a los inputs para que el outlined mode se
+  // vea consistente con la paleta del nuevo diseno.
+  const paperTheme = {
+    colors: {
+      primary: colors.primary,
+      onSurfaceVariant: colors.textSecondary,
+      outline: colors.border,
+      surface: colors.surface,
+      onSurface: colors.text,
+      error: colors.error,
+    },
+  };
+
+  const styles = useThemedStyles((c) => ({
+    container: {
+      flex: 1,
+      backgroundColor: c.background,
+    },
+    scrollContainer: {
+      flexGrow: 1,
+      justifyContent: "center",
+      padding: tokens.spacing[5],
+    },
+    content: {
+      flex: 1,
+      justifyContent: "center",
+      maxWidth: 480,
+      width: "100%",
+      alignSelf: "center",
+    },
+    header: {
+      alignItems: "center",
+      marginBottom: tokens.spacing[9],
+      gap: tokens.spacing[2],
+    },
+    logoBox: {
+      width: 64,
+      height: 64,
+      borderRadius: tokens.radius.full,
+      backgroundColor: c.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: tokens.spacing[2],
+    },
+    title: {
+      ...tokens.typography.h1,
+      color: c.text,
+      textAlign: "center",
+    },
+    subtitle: {
+      ...tokens.typography.body,
+      color: c.textSecondary,
+      textAlign: "center",
+    },
+    form: {
+      padding: tokens.spacing[7],
+      borderRadius: tokens.radius.lg,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+      ...tokens.shadow.md,
+    },
+    formHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: tokens.spacing[7],
+      gap: tokens.spacing[3],
+    },
+    formTitle: {
+      ...tokens.typography.h3,
+      color: c.text,
+    },
+    inputContainer: {
+      marginBottom: tokens.spacing[3],
+    },
+    input: {
+      backgroundColor: c.surface,
+    },
+    inputContent: {
+      ...tokens.typography.body,
+      color: c.text,
+    },
+    errorBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing[2],
+      backgroundColor: c.errorSoft,
+      padding: tokens.spacing[3],
+      borderRadius: tokens.radius.md,
+      marginVertical: tokens.spacing[2],
+      borderLeftWidth: 3,
+      borderLeftColor: c.error,
+    },
+    errorText: {
+      ...tokens.typography.bodySm,
+      color: c.error,
+      flex: 1,
+    },
+    warningBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing[2],
+      backgroundColor: c.warningSoft,
+      padding: tokens.spacing[3],
+      borderRadius: tokens.radius.md,
+      marginVertical: tokens.spacing[2],
+      borderLeftWidth: 3,
+      borderLeftColor: c.warning,
+    },
+    warningText: {
+      ...tokens.typography.bodySm,
+      color: c.text,
+      flex: 1,
+    },
+    blockedBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing[2],
+      backgroundColor: c.errorSoft,
+      padding: tokens.spacing[3],
+      borderRadius: tokens.radius.md,
+      marginVertical: tokens.spacing[2],
+      borderLeftWidth: 3,
+      borderLeftColor: c.error,
+    },
+    blockedText: {
+      ...tokens.typography.bodySm,
+      color: c.error,
+      flex: 1,
+    },
+    blockedCountdown: {
+      fontWeight: "700",
+      color: c.error,
+    },
+    submitButton: {
+      marginTop: tokens.spacing[6],
+      borderRadius: tokens.radius.md,
+    },
+    submitButtonContent: {
+      height: 48,
+    },
+    footer: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: tokens.spacing[7],
+      gap: tokens.spacing[2],
+    },
+    footerText: {
+      ...tokens.typography.caption,
+      color: c.textMuted,
+    },
+  }));
 
   const handleLogin = async () => {
     // Limpiar errores previos
@@ -158,349 +314,199 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={[palette.card, palette.background]}
-        style={styles.gradient}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContainer}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.content}>
-            <KeyboardAvoidingView
-              behavior={"position"}
-              style={styles.keyboardView}
-              keyboardVerticalOffset={30}
-            >
-              {/* Logo/Header */}
-              <View style={styles.header}>
-                <View style={styles.logoContainer}>
-                  <MaterialCommunityIcons
-                    name="package-variant"
-                    size={80}
-                    color={palette.error}
-                  />
-                </View>
-                <Text variant="displaySmall" style={styles.title}>
-                  PlastiGest
-                </Text>
-                <Text variant="titleMedium" style={styles.subtitle}>
-                  Gestión integral de plásticos
-                </Text>
+            {/* Header con logo */}
+            <View style={styles.header}>
+              <View style={styles.logoBox}>
+                <MaterialCommunityIcons
+                  name="package-variant"
+                  size={32}
+                  color={colors.primary}
+                />
+              </View>
+              <RNText style={styles.title}>PlastiGest</RNText>
+              <RNText style={styles.subtitle}>
+                Gestión integral de plásticos
+              </RNText>
+            </View>
+
+            {/* Formulario de login */}
+            <View style={styles.form}>
+              <View style={styles.formHeader}>
+                <MaterialCommunityIcons
+                  name="login"
+                  size={22}
+                  color={colors.primary}
+                />
+                <RNText style={styles.formTitle}>Iniciar Sesión</RNText>
               </View>
 
-              {/* Formulario de login */}
-              <Surface style={styles.form} elevation={0}>
-                <View style={styles.formHeader}>
+              {/* Campo Email */}
+              <View style={styles.inputContainer}>
+                <TextInput
+                  label="Email"
+                  value={email}
+                  onChangeText={(text) => {
+                    setEmail(text);
+                    if (emailError) validateEmail(text);
+                  }}
+                  onBlur={() => validateEmail(email)}
+                  mode="outlined"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  error={!!emailError}
+                  disabled={isLoading}
+                  theme={paperTheme}
+                  outlineColor={colors.border}
+                  activeOutlineColor={colors.primary}
+                  textColor={colors.text}
+                  placeholderTextColor={colors.textMuted}
+                  left={
+                    <TextInput.Icon
+                      icon="email-outline"
+                      color={emailError ? colors.error : colors.primary}
+                    />
+                  }
+                  style={styles.input}
+                  contentStyle={styles.inputContent}
+                />
+                <HelperText type="error" visible={!!emailError}>
+                  {emailError}
+                </HelperText>
+              </View>
+
+              {/* Campo Contraseña */}
+              <View style={styles.inputContainer}>
+                <TextInput
+                  label="Contraseña"
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    if (passwordError) validatePassword(text);
+                  }}
+                  onBlur={() => validatePassword(password)}
+                  mode="outlined"
+                  secureTextEntry={!showPassword}
+                  autoComplete="password"
+                  error={!!passwordError}
+                  disabled={isLoading}
+                  theme={paperTheme}
+                  outlineColor={colors.border}
+                  activeOutlineColor={colors.primary}
+                  textColor={colors.text}
+                  placeholderTextColor={colors.textMuted}
+                  left={
+                    <TextInput.Icon
+                      icon="lock-outline"
+                      color={passwordError ? colors.error : colors.primary}
+                    />
+                  }
+                  right={
+                    <TextInput.Icon
+                      icon={showPassword ? "eye-off-outline" : "eye-outline"}
+                      onPress={() => setShowPassword(!showPassword)}
+                      color={colors.textMuted}
+                    />
+                  }
+                  style={styles.input}
+                  contentStyle={styles.inputContent}
+                />
+                <HelperText type="error" visible={!!passwordError}>
+                  {passwordError}
+                </HelperText>
+              </View>
+
+              {/* Error general */}
+              {error ? (
+                <View style={styles.errorBanner}>
                   <MaterialCommunityIcons
-                    name="login"
-                    size={32}
-                    color={palette.primary}
+                    name="alert-circle"
+                    size={18}
+                    color={colors.error}
                   />
-                  <Text variant="headlineSmall" style={styles.formTitle}>
-                    Iniciar Sesión
-                  </Text>
+                  <RNText style={styles.errorText}>{error}</RNText>
                 </View>
+              ) : null}
 
-                {/* Campo Email */}
-                <View style={styles.inputContainer}>
-                  <TextInput
-                    label="Email"
-                    value={email}
-                    onChangeText={(text) => {
-                      setEmail(text);
-                      if (emailError) validateEmail(text);
-                    }}
-                    onBlur={() => validateEmail(email)}
-                    mode="outlined"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    error={!!emailError}
-                    disabled={isLoading}
-                    outlineColor={palette.border}
-                    activeOutlineColor={palette.primary}
-                    left={
-                      <TextInput.Icon
-                        icon="email-outline"
-                        color={emailError ? palette.error : palette.primary}
-                      />
-                    }
-                    style={styles.input}
-                  />
-                  <HelperText type="error" visible={!!emailError}>
-                    {emailError}
-                  </HelperText>
-                </View>
-
-                {/* Campo Contraseña */}
-                <View style={styles.inputContainer}>
-                  <TextInput
-                    label="Contraseña"
-                    value={password}
-                    onChangeText={(text) => {
-                      setPassword(text);
-                      if (passwordError) validatePassword(text);
-                    }}
-                    onBlur={() => validatePassword(password)}
-                    mode="outlined"
-                    secureTextEntry={!showPassword}
-                    autoComplete="password"
-                    error={!!passwordError}
-                    disabled={isLoading}
-                    outlineColor={palette.border}
-                    activeOutlineColor={palette.primary}
-                    left={
-                      <TextInput.Icon
-                        icon="lock-outline"
-                        color={passwordError ? palette.error : palette.primary}
-                      />
-                    }
-                    right={
-                      <TextInput.Icon
-                        icon={showPassword ? "eye-off-outline" : "eye-outline"}
-                        onPress={() => setShowPassword(!showPassword)}
-                        color={palette.textSecondary}
-                      />
-                    }
-                    style={styles.input}
-                  />
-                  <HelperText type="error" visible={!!passwordError}>
-                    {passwordError}
-                  </HelperText>
-                </View>
-
-                {/* Error general */}
-                {error ? (
-                  <Surface style={styles.errorContainer} elevation={0}>
+              {/* Aviso de intentos restantes (cuando quedan 3 o menos) */}
+              {attemptsRemaining !== null &&
+                attemptsLimit !== null &&
+                retryCountdown === null &&
+                attemptsRemaining > 0 &&
+                attemptsRemaining <= 3 && (
+                  <View style={styles.warningBanner}>
                     <MaterialCommunityIcons
-                      name="alert-circle"
-                      size={20}
-                      color={palette.error}
+                      name="shield-alert-outline"
+                      size={18}
+                      color={colors.warning}
                     />
-                    <Text style={styles.errorText}>{error}</Text>
-                  </Surface>
-                ) : null}
-
-                {/* Aviso de intentos restantes (cuando quedan 3 o menos) */}
-                {attemptsRemaining !== null &&
-                  attemptsLimit !== null &&
-                  retryCountdown === null &&
-                  attemptsRemaining > 0 &&
-                  attemptsRemaining <= 3 && (
-                    <Surface style={styles.warningContainer} elevation={0}>
-                      <MaterialCommunityIcons
-                        name="shield-alert-outline"
-                        size={20}
-                        color="#F59E0B"
-                      />
-                      <Text style={styles.warningText}>
-                        Te {attemptsRemaining === 1 ? "queda" : "quedan"}{" "}
-                        {attemptsRemaining} de {attemptsLimit} intentos. Si
-                        excedes el límite tendrás que esperar un minuto.
-                      </Text>
-                    </Surface>
-                  )}
-
-                {/* Contador regresivo cuando el backend nos bloquea (429) */}
-                {retryCountdown !== null && retryCountdown > 0 && (
-                  <Surface style={styles.blockedContainer} elevation={0}>
-                    <MaterialCommunityIcons
-                      name="lock-clock"
-                      size={20}
-                      color={palette.error}
-                    />
-                    <Text style={styles.blockedText}>
-                      Demasiados intentos. Podrás volver a intentar en{" "}
-                      <Text style={styles.blockedCountdown}>
-                        {retryCountdown}s
-                      </Text>
-                    </Text>
-                  </Surface>
+                    <RNText style={styles.warningText}>
+                      Te {attemptsRemaining === 1 ? "queda" : "quedan"}{" "}
+                      {attemptsRemaining} de {attemptsLimit} intentos. Si
+                      excedes el límite tendrás que esperar un minuto.
+                    </RNText>
+                  </View>
                 )}
 
-                {/* Botón de login */}
-                <Button
-                  mode="contained"
-                  onPress={handleLogin}
-                  style={styles.loginButton}
-                  disabled={isLoading || isBlocked}
-                  loading={isLoading}
-                  buttonColor={isBlocked ? palette.textSecondary : palette.primary}
-                  icon={isLoading ? undefined : "login"}
-                  contentStyle={styles.loginButtonContent}
-                >
-                  {isLoading
-                    ? "Iniciando sesión..."
-                    : isBlocked
-                      ? `Bloqueado (${retryCountdown}s)`
-                      : "Iniciar Sesión"}
-                </Button>
-              </Surface>
-            </KeyboardAvoidingView>
+              {/* Contador regresivo cuando el backend nos bloquea (429) */}
+              {retryCountdown !== null && retryCountdown > 0 && (
+                <View style={styles.blockedBanner}>
+                  <MaterialCommunityIcons
+                    name="lock-clock"
+                    size={18}
+                    color={colors.error}
+                  />
+                  <RNText style={styles.blockedText}>
+                    Demasiados intentos. Podrás volver a intentar en{" "}
+                    <RNText style={styles.blockedCountdown}>
+                      {retryCountdown}s
+                    </RNText>
+                  </RNText>
+                </View>
+              )}
+
+              {/* Botón de login */}
+              <Button
+                mode="contained"
+                onPress={handleLogin}
+                style={styles.submitButton}
+                disabled={isLoading || isBlocked}
+                loading={isLoading}
+                buttonColor={isBlocked ? colors.textMuted : colors.primary}
+                icon={isLoading ? undefined : "login"}
+                contentStyle={styles.submitButtonContent}
+              >
+                {isLoading
+                  ? "Iniciando sesión..."
+                  : isBlocked
+                    ? `Bloqueado (${retryCountdown}s)`
+                    : "Iniciar Sesión"}
+              </Button>
+            </View>
 
             {/* Footer */}
             <View style={styles.footer}>
               <MaterialCommunityIcons
                 name="shield-check"
-                size={16}
-                color="#FFFFFF80"
+                size={14}
+                color={colors.textMuted}
               />
-              <Text variant="bodySmall" style={styles.footerText}>
+              <RNText style={styles.footerText}>
                 PlastiGest v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
-              </Text>
+              </RNText>
             </View>
           </View>
         </ScrollView>
-      </LinearGradient>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: palette.background,
-  },
-  gradient: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContainer: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 20,
-  },
-  content: {
-    flex: 1,
-    justifyContent: "center",
-    maxWidth: 480,
-    width: "100%",
-    alignSelf: "center",
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: 48,
-  },
-  logoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: palette.error + "15",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "transparent",
-    borderWidth: 2,
-    borderColor: palette.error + "20",
-  },
-  title: {
-    fontWeight: "bold",
-    color: palette.error,
-    textShadowColor: "rgba(0, 0, 0, 0.2)",
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
-  },
-  subtitle: {
-    textAlign: "center",
-    color: palette.error,
-    opacity: 0.95,
-  },
-  form: {
-    padding: 32,
-    borderRadius: 24,
-    marginBottom: 20,
-    backgroundColor: "#FFFFFF",
-    shadowColor: "transparent",
-  },
-  formHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 32,
-    gap: 12,
-  },
-  formTitle: {
-    color: palette.text,
-    fontWeight: "700",
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  input: {
-    backgroundColor: "#FFFFFF",
-  },
-  errorContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: palette.error + "10",
-    padding: 12,
-    borderRadius: 8,
-    marginVertical: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: palette.error,
-  },
-  errorText: {
-    flex: 1,
-    color: palette.error,
-    fontSize: 13,
-  },
-  warningContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "#FEF3C7",
-    padding: 12,
-    borderRadius: 8,
-    marginVertical: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: "#F59E0B",
-  },
-  warningText: {
-    flex: 1,
-    color: "#92400E",
-    fontSize: 12,
-  },
-  blockedContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: palette.error + "10",
-    padding: 12,
-    borderRadius: 8,
-    marginVertical: 8,
-    borderLeftWidth: 4,
-    borderLeftColor: palette.error,
-  },
-  blockedText: {
-    flex: 1,
-    color: palette.error,
-    fontSize: 13,
-  },
-  blockedCountdown: {
-    fontWeight: "700",
-    color: palette.error,
-  },
-  loginButton: {
-    marginTop: 24,
-    paddingVertical: 8,
-    borderRadius: 12,
-    shadowColor: "transparent",
-  },
-  loginButtonContent: {
-    height: 48,
-  },
-  footer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 32,
-    gap: 8,
-  },
-  footerText: {
-    color: "#FFFFFF",
-    opacity: 0.8,
-  },
-});

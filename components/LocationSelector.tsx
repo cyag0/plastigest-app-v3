@@ -78,18 +78,34 @@ export default function LocationSelector({
       alerts.error("Ubicacion no encontrada");
       return;
     }
-    if (currentLocation?.id === locationId) return;
+    if (currentLocation?.id === locationId) {
+      // Ya estamos en esta sucursal: salimos de la pantalla sin
+      // pedir confirmacion. Antes el onPress hacia short-circuit
+      // con `!isActive && ...` y este callback nunca llegaba
+      // a ejecutarse, dejando al usuario atascado.
+      onLocationSelected?.();
+      return;
+    }
 
-    const confirmed = await alerts.confirm(
-      `¿Cambiar a ${locationToSelect.name}?`,
-      { title: "Confirmar Cambio", okText: "Cambiar", cancelText: "Cancelar" }
-    );
-    if (!confirmed) return;
+    // Solo pedimos confirmacion cuando estamos cambiando de sucursal
+    // (ya hay `currentLocation`). En el bootstrap inicial la accion
+    // es implicita (tambien para el auto-select de la unica sucursal).
+    if (currentLocation) {
+      const confirmed = await alerts.confirm(
+        `¿Cambiar a ${locationToSelect.name}?`,
+        { title: "Confirmar Cambio", okText: "Cambiar", cancelText: "Cancelar" }
+      );
+      if (!confirmed) return;
+    }
 
     try {
       setLoading(true);
       await selectLocation(locationToSelect);
-      alerts.success(`Has cambiado a ${locationToSelect.name}`);
+      alerts.success(
+        currentLocation
+          ? `Has cambiado a ${locationToSelect.name}`
+          : `Sucursal ${locationToSelect.name} seleccionada`
+      );
       onLocationSelected?.();
     } catch {
       alerts.error("No se pudo cambiar de ubicacion. Intenta nuevamente.");
@@ -334,10 +350,19 @@ export default function LocationSelector({
               return (
                 <Pressable
                   key={loc.id}
-                  onPress={() =>
-                    !isActive && !loading && handleSelectLocation(loc.id)
-                  }
-                  disabled={loading}
+                  // onPress siempre llama a handleSelectLocation (incluso
+                  // cuando es la sucursal actual). El cortocircuito
+                  // `!isActive && ...` se elimino porque silenciaba
+                  // el tap y dejaba al usuario sin forma de salir
+                  // (onLocationSelected nunca se ejecutaba).
+                  onPress={() => {
+                    if (loading) return;
+                    handleSelectLocation(loc.id);
+                  }}
+                  // Combinamos loading local + carga inicial de locations
+                  // para bloquear taps durante la auto-seleccion de la
+                  // unica sucursal, igual que en selectCompany.
+                  disabled={loading || isLoadingLocations}
                   style={({ pressed }) => [
                     styles.option,
                     isActive && styles.optionActive,
