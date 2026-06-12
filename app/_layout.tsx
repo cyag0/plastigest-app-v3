@@ -126,14 +126,18 @@ function ThemedApp() {
             </View>
             {__DEV__ && <PermissionsOverlay />}
           </NavigationHandler>
+          {/* Renderizar los dialogs (ConfirmDialog, AlertSnackbar) al
+              FINAL del arbol, pero DENTRO de <AlertsProvider> para que
+              AlertsDialogs pueda leer las refs imperativas del provider
+              (si queda fuera, useContext(AlertsRefsContext) devuelve null
+              y AlertsDialogs retorna null — los portales nunca se montan
+              y todos los alerts.* se vuelven no-op silenciosos).
+              Como usan <Portal> de Paper, todos los portales viven en el
+              mismo host del PaperProvider; al estar al final del subarbol
+              quedan por encima de cualquier otro modal abierto (p. ej. el
+              ContextSwitcherModal del sidebar). */}
+          <AlertsDialogs />
         </AlertsProvider>
-        {/* Renderizar los dialogs (ConfirmDialog, AlertSnackbar) al
-            FINAL del arbol. Como usan <Portal> de Paper, todos los
-            portales viven en el mismo host; los que se montan al
-            final del arbol se renderizan al final de ese host y, por
-            tanto, quedan por encima de cualquier otro modal abierto
-            (p. ej. el ContextSwitcherModal del sidebar). */}
-        <AlertsDialogs />
       </SelectDataProvider>
     </PaperProvider>
   );

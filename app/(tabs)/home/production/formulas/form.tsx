@@ -29,15 +29,6 @@ const COLUMNS: EditableTableColumn[] = [
     type: "number",
     width: 160,
     required: true,
-    helperText: () => "Por cada unidad producida",
-  },
-  {
-    key: "expected_output_quantity",
-    label: "Rendimiento esperado",
-    type: "number",
-    width: 170,
-    required: false,
-    helperText: () => "Cantidad obtenida esperada (opcional)",
   },
   { key: "notes", label: "Notas", type: "text", width: 200 },
 ];
@@ -46,7 +37,6 @@ const DEFAULT_ROW = {
   product_id: 0,
   unit_id: 0,
   expected_quantity: 0,
-  expected_output_quantity: 0,
   notes: "",
 };
 
@@ -68,11 +58,14 @@ export default function FormulaForm() {
             description: f.description ?? "",
             is_active: f.is_active,
             notes: f.notes ?? "",
+            expected_output_quantity:
+              f.expected_output_quantity !== null && f.expected_output_quantity !== undefined
+                ? f.expected_output_quantity
+                : 0,
             items: (f.items ?? []).map((it: any) => ({
               product_id: it.product_id,
               unit_id: it.unit_id,
               expected_quantity: Number(it.expected_quantity) || 0,
-              expected_output_quantity: it.expected_output_quantity ?? 0,
               notes: it.notes ?? "",
               _key: `init-${Date.now()}-${Math.random()}`,
             })),
@@ -87,6 +80,7 @@ export default function FormulaForm() {
           description: "",
           is_active: true,
           notes: "",
+          expected_output_quantity: 0,
           items: [] as any[],
         });
       }
@@ -100,15 +94,12 @@ export default function FormulaForm() {
       api={Services.formulas}
       id={params.id ? parseInt(params.id, 10) : undefined}
       initialValues={initialValues}
-      style={{ backgroundColor: "transparent" as any }}
       onSuccess={() => {
         alerts.success("Fórmula guardada");
         router.push("/(tabs)/home/production/formulas" as any);
       }}
     >
-      <ScrollView
-        contentContainerStyle={{ padding: 12, paddingBottom: 60 }}
-      >
+      <ScrollView>
         <Text variant="titleMedium" style={{ color: palette.text, fontWeight: "700", marginBottom: 8 }}>
           Información de la fórmula
         </Text>
@@ -125,6 +116,27 @@ export default function FormulaForm() {
           <FormInput name="description" label="Descripción" multiline numberOfLines={2} />
           <FormInput name="notes" label="Notas internas" multiline numberOfLines={2} />
           <FormCheckBox name="is_active" label="Fórmula activa" />
+        </Card>
+
+        <View style={{ height: 12 }} />
+
+        <Text variant="titleMedium" style={{ color: palette.text, fontWeight: "700", marginBottom: 8 }}>
+          Rendimiento esperado
+        </Text>
+        <Card style={styles.card}>
+          <FormInput
+            name="expected_output_quantity"
+            label="Cantidad producida"
+            keyboardType="decimal-pad"
+            required
+          />
+          <Text
+            variant="bodySmall"
+            style={{ color: palette.textSecondary, marginTop: -8, marginBottom: 4 }}
+          >
+            Cantidad del producto final que se obtiene al ejecutar la fórmula una
+            vez. La unidad se toma del producto seleccionado arriba.
+          </Text>
         </Card>
 
         <View style={{ height: 12 }} />
@@ -148,6 +160,6 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: palette.card,
     borderRadius: 12,
-    padding: 4,
+    padding: 12,
   },
 });

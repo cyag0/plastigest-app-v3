@@ -618,6 +618,11 @@ namespace App {
       version: number;
       is_active: boolean;
       notes?: string | null;
+      /**
+       * Cantidad producida al ejecutar la fórmula una vez. La unidad se
+       * resuelve desde `product.unit_id` (no se almacena por separado).
+       */
+      expected_output_quantity?: number | null;
       items?: FormulaItem[];
       created_at?: string;
       updated_at?: string;
@@ -631,7 +636,6 @@ namespace App {
       unit_id: number;
       unit_name?: string;
       expected_quantity: number;
-      expected_output_quantity?: number | null;
       sort_order?: number;
       notes?: string | null;
     }

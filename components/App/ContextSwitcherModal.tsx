@@ -10,10 +10,18 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   View,
 } from "react-native";
 import { Modal, Portal } from "react-native-paper";
+
+// zIndex bajo para que este modal (cuyo Portal se monta mas tarde que
+// los de <AlertsDialogs /> en el PortalManager de Paper) quede DETRAS
+// del ConfirmDialog / AlertSnackbar. Sin esto, el ContextSwitcherModal
+// aparece por encima de los alerts porque su Portal se registra
+// despues en el array de portales (bottom-up componentDidMount).
+const SWITCHER_MODAL_Z_INDEX = 0;
 
 export interface ContextSwitcherModalProps {
   visible: boolean;
@@ -113,6 +121,14 @@ export default function ContextSwitcherModal({
   const styles = useThemedStyles((colors) => ({
     backdrop: {
       backgroundColor: colors.overlay,
+    },
+    // Wrapper que controla el zIndex del portal. Ver comentario en
+    // el JSX; este View se vuelve hijo del wrapper del PortalManager,
+    // asi que su zIndex es el que cuenta para el orden visual contra
+    // los portales de <AlertsDialogs />.
+    portalWrapper: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: SWITCHER_MODAL_Z_INDEX,
     },
     container: {
       backgroundColor: colors.surface,
@@ -261,19 +277,30 @@ export default function ContextSwitcherModal({
 
   return (
     <Portal>
-      <Modal
-        visible={visible}
-        onDismiss={onDismiss}
-        contentContainerStyle={[
-          styles.container,
-          {
-            width: Platform.OS === "web" ? 480 : "92%",
-            alignSelf: "center",
-            maxHeight: "85%",
-          },
-        ]}
-        style={styles.backdrop}
-      >
+      {/*
+        Envoltorio con zIndex explicito: el PortalManager de Paper
+        renderiza cada portal como hijo de un <View absoluteFill>; los
+        portales se montan en el orden de sus componentDidMount (bottom-up),
+        asi que el ContextSwitcherModal (anidado en AppBar dentro del Stack)
+        queda al final del array y termina visualmente encima de los
+        alerts (ConfirmDialog / AlertSnackbar) que monta <AlertsDialogs />
+        en la raiz. Forzando un zIndex igual o inferior al de los alerts
+        garantizamos que el confirm los tape cuando coincidan en pantalla.
+      */}
+      <View style={styles.portalWrapper} pointerEvents="box-none">
+        <Modal
+          visible={visible}
+          onDismiss={onDismiss}
+          contentContainerStyle={[
+            styles.container,
+            {
+              width: Platform.OS === "web" ? 480 : "92%",
+              alignSelf: "center",
+              maxHeight: "85%",
+            },
+          ]}
+          style={styles.backdrop}
+        >
         <View style={styles.header}>
           <View>
             <Text style={styles.headerTitle}>Cambiar de contexto</Text>
@@ -347,7 +374,8 @@ export default function ContextSwitcherModal({
             </Text>
           </View>
         </ScrollView>
-      </Modal>
+        </Modal>
+      </View>
     </Portal>
   );
 }

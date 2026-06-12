@@ -1,7 +1,7 @@
 import EmptyState from "@/components/App/EmptyState";
 import SearchInput from "@/components/App/SearchInput";
 import AppModal, { AppModalConfig } from "@/components/Feedback/Modal/AppModal";
-import { FormInput } from "@/components/Form/AppInput";
+import AppInput from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
 import useDebounce from "@/hooks/useDebounce";
 import Services from "@/utils/services";
@@ -311,13 +311,11 @@ const FormulaPickerModal = forwardRef<FormulaPickerModalRef>((_props, ref) => {
               Unidades producidas
             </Text>
             <View style={styles.unitsInputWrap}>
-              <FormInput
-                name="__units_produced__"
+              <AppInput
                 value={unitsProduced}
-                onChangeText={setUnitsProduced}
+                onChange={setUnitsProduced}
                 placeholder="1"
                 keyboardType="numeric"
-                hideLabel
               />
             </View>
           </View>

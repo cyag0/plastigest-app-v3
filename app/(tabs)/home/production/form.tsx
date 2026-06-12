@@ -107,17 +107,19 @@ function FormulaListener() {
             _key: `prefill-c-${Date.now()}-${Math.random()}`,
           })),
         );
-        if (formula.expected_output_quantity && items[0]?.expected_output_quantity) {
+        if (formula.expected_output_quantity) {
           setFieldValue(
             "outputs",
-            items.map((it: any) => ({
-              product_id: it.product_id,
-              unit_id: it.unit_id,
-              quantity: Number(it.expected_output_quantity) || 0,
-              expected_quantity: Number(it.expected_output_quantity) || 0,
-              notes: it.notes ?? "",
-              _key: `prefill-o-${Date.now()}-${Math.random()}`,
-            })),
+            [
+              {
+                product_id: formula.product_id,
+                unit_id: formula.product?.unit_id ?? 0,
+                quantity: Number(formula.expected_output_quantity) || 0,
+                expected_quantity: Number(formula.expected_output_quantity) || 0,
+                notes: "",
+                _key: `prefill-o-${Date.now()}-${Math.random()}`,
+              },
+            ],
           );
         }
       } catch (e) {
@@ -330,9 +332,9 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
    * - Cada `item` de la fórmula se suma a `consumptions` con
    *   `expected_quantity × unitsProduced` y la `unit_id` del item.
    * - El producto objetivo (`formula.product_id`) se agrega a `outputs` con
-   *   la suma de `expected_output_quantity` de todos los items, multiplicada
-   *   por `unitsProduced`. Si los items no traen `expected_output_quantity`,
-   *   se usa `1` como fallback por defecto (cantidad de unidades elaboradas).
+   *   la cantidad `formula.expected_output_quantity × unitsProduced`. Si la
+   *   fórmula no tiene rendimiento esperado, se usa `1 × unitsProduced` como
+   *   fallback (una unidad producida por lote).
    * - Si el mismo `product_id` ya existe en la tabla destino, `mergeProductRow`
    *   SUMA la cantidad y respeta la primera `unit_id` registrada
    *   (no se sobreescribe).
@@ -369,24 +371,14 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
         );
       }
 
-      // ── Output: producto objetivo. La cantidad es la suma de los
-      // expected_output_quantity de los items (× multiplier). Si ningún
-      // item trae expected_output_quantity, usamos 1 × multiplier.
+      // ── Output: producto objetivo. La cantidad es el rendimiento general
+      // de la fórmula (`expected_output_quantity`) × multiplier. Si la
+      // fórmula no tiene rendimiento, usamos 1 × multiplier.
       if (formula.product_id) {
-        const sumOutputQty = items.reduce(
-          (acc, it) => acc + (Number(it?.expected_output_quantity) || 0),
-          0,
-        );
-        const outputQty =
-          sumOutputQty > 0
-            ? sumOutputQty * multiplier
-            : 1 * multiplier;
-        // Para la unidad del output usamos la unidad del producto objetivo
-        // o, en su defecto, la del primer item que tenga output_quantity.
-        const outputUnitId =
-          formula.product?.unit_id ??
-          items.find((it) => (it?.expected_output_quantity ?? 0) > 0)?.unit_id ??
-          0;
+        const formulaYield = Number(formula.expected_output_quantity) || 0;
+        const outputQty = formulaYield > 0 ? formulaYield * multiplier : 1 * multiplier;
+        // La unidad del output se toma del producto objetivo de la fórmula.
+        const outputUnitId = formula.product?.unit_id ?? 0;
         nextOutputs = mergeProductRow(
           nextOutputs,
           {
