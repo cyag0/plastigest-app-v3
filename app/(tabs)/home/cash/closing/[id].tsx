@@ -197,7 +197,7 @@ export default function CashClosingDetail() {
 
       {/* ─── Desglose por método ─────────────────────────────────────── */}
       <Surface style={styles.section}>
-        <Text style={styles.sectionTitle}>Por Método de Pago</Text>
+        <Text style={styles.sectionTitle}>Saldo por Método de Pago</Text>
         <InfoRow
           label="Efectivo"
           value={formatCurrency(item.total_cash)}
@@ -277,7 +277,7 @@ export default function CashClosingDetail() {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: "transparent" as any },
-  container: { padding: 16, gap: 12, paddingBottom: 32 },
+  container: { padding: 16, gap: 12, paddingBottom: 32, maxWidth: 600, width: "100%", alignSelf: "center" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   headerCard: {
     borderRadius: 14,

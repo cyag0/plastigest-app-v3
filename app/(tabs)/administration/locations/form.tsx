@@ -3,7 +3,7 @@ import { FormInput } from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
-import { router, useLocalSearchParams } from "expo-router";
+import {  useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
@@ -39,6 +39,8 @@ export default function LocationFormScreen(props: LocationFormProps) {
   const isEditing = !!locationId;
   const { company: selectedCompany } = useSelectedCompany();
 
+const router = useRouter();
+
   if (selectedCompany == null) {
     return (
       <View style={styles.errorContainer}>
@@ -49,6 +51,7 @@ export default function LocationFormScreen(props: LocationFormProps) {
       </View>
     );
   }
+  
 
   return (
     <AppForm
@@ -70,6 +73,8 @@ export default function LocationFormScreen(props: LocationFormProps) {
       readonly={locationId ? props.readonly : false}
       validationSchema={validationSchema}
     >
+<View style={{ flex: 1, backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 } }}> 
+
       {/* Información básica */}
       <View style={styles.section}>
         <Text variant="titleMedium" style={styles.sectionTitle}>
@@ -160,6 +165,7 @@ export default function LocationFormScreen(props: LocationFormProps) {
           <FormCheckBox name="is_active" label="" text="Sucursal activa" />
         </View>
       </View> */}
+      </View>
     </AppForm>
   );
 }

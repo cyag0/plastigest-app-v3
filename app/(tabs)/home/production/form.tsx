@@ -343,7 +343,9 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
     picked: App.Entities.Formula[],
     unitsProduced: number,
   ) => {
-    const multiplier = Number(unitsProduced) > 0 ? Number(unitsProduced) : 1;
+    // desiredQty = cantidad de output que el usuario quiere producir.
+    // El multiplicador de lotes se calcula por fórmula: desiredQty / expected_output_quantity.
+    const desiredQty = Number(unitsProduced) > 0 ? Number(unitsProduced) : 1;
     const currentConsumptions: any[] = values.consumptions ?? [];
     const currentOutputs: any[] = values.outputs ?? [];
 
@@ -354,10 +356,17 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
       if (!formula?.id) continue;
       const items = formula.items ?? [];
 
+      const formulaYield = Number(formula.expected_output_quantity) || 0;
+      // multiplier = cuántas veces hay que correr la fórmula para llegar a desiredQty.
+      const multiplier = formulaYield > 0 ? desiredQty / formulaYield : desiredQty;
+
       // ── Consumos: cada item aporta expected_quantity × multiplier.
       for (const item of items) {
         if (!item?.product_id) continue;
-        const qty = (Number(item.expected_quantity) || 0) * multiplier;
+        const rawQty = (Number(item.expected_quantity) || 0) * multiplier;
+        const qty = item.unit_type === "quantity"
+          ? Math.round(rawQty)
+          : Math.round(rawQty * 100) / 100;
         if (qty <= 0) continue;
         nextConsumptions = mergeProductRow(
           nextConsumptions,
@@ -371,13 +380,9 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
         );
       }
 
-      // ── Output: producto objetivo. La cantidad es el rendimiento general
-      // de la fórmula (`expected_output_quantity`) × multiplier. Si la
-      // fórmula no tiene rendimiento, usamos 1 × multiplier.
+      // ── Output: siempre es la cantidad deseada por el usuario.
       if (formula.product_id) {
-        const formulaYield = Number(formula.expected_output_quantity) || 0;
-        const outputQty = formulaYield > 0 ? formulaYield * multiplier : 1 * multiplier;
-        // La unidad del output se toma del producto objetivo de la fórmula.
+        const outputQty = formulaYield > 0 ? desiredQty : Math.round(multiplier * 100) / 100;
         const outputUnitId = formula.product?.unit_id ?? 0;
         nextOutputs = mergeProductRow(
           nextOutputs,
@@ -410,7 +415,7 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
 
   return (
     <ScrollView
-      contentContainerStyle={{ padding: 12, paddingBottom: 100 }}
+      contentContainerStyle={{ padding: 12, paddingBottom: 100, maxWidth: 600, width: "100%", alignSelf: "center"}}
     >
       <FormulaListener />
 
@@ -430,14 +435,7 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
             model="users"
             required
           />
-          <FormProSelect
-            name="formula_id"
-            label="Fórmula (opcional)"
-            model="formulas"
-            fetchParams={{ is_active: true }}
-            placeholder="Sin fórmula"
-            clearable
-          />
+ 
           <FormInput name="notes" label="Observaciones" multiline numberOfLines={3} />
           <FormCheckBox
             name="affect_stock"

@@ -93,12 +93,25 @@ interface DashboardV2 {
   recent_activity: ActivityItem[];
 }
 
+interface ProductionLine {
+  product_id: number;
+  product_name: string;
+  product_code?: string | null;
+  unit_id: number;
+  unit_name?: string | null;
+  quantity: number;
+  lines_count: number;
+}
 interface ProductionToday {
   productions_count_today: number;
-  coconuts_processed_today: number;
-  water_liters_today: number;
-  pulp_kg_today: number;
-  waste_percentage_today: number;
+  total_consumed_quantity: number;
+  total_produced_quantity: number;
+  waste_percentage_today: number | null;
+  waste_percentage_available: boolean;
+  consumption_lines: number;
+  output_lines: number;
+  top_consumed: ProductionLine[];
+  top_produced: ProductionLine[];
 }
 
 function formatCurrency(value: number) {
@@ -113,6 +126,13 @@ function formatCurrency(value: number) {
 function formatNumber(value: number, suffix = "") {
   if (!value) return `0${suffix}`;
   return `${new Intl.NumberFormat("es-MX").format(value)}${suffix}`;
+}
+
+function formatQuantity(value: number, unit?: string | null) {
+  const num = new Intl.NumberFormat("es-MX", {
+    maximumFractionDigits: 2,
+  }).format(value || 0);
+  return unit ? `${num} ${unit}` : num;
 }
 
 function formatDate(dateString?: string | null) {
@@ -510,6 +530,9 @@ function makeReportsStyles(c: ReturnType<typeof useTheme>["colors"]) {
     },
     // Modal
     modalContainer: {
+      maxWidth: 400,
+      width: "100%",
+      alignSelf: "center",
       backgroundColor: c.surface,
       borderRadius: tokens.radius.lg,
       padding: tokens.spacing[5],
@@ -680,17 +703,6 @@ export default function ReportsScreen() {
         variant: "warning",
       });
     }
-    if (production && production.waste_percentage_today > 15) {
-      list.push({
-        id: "waste",
-        icon: "trash-can-outline",
-        label: `Merma de producción alta: ${production.waste_percentage_today.toFixed(
-          1
-        )}%`,
-        meta: "Revisa el rendimiento del lote",
-        variant: "warning",
-      });
-    }
     return list;
   }, [dashboard, auth.unreadNotificationsCount, production]);
 
@@ -818,7 +830,7 @@ export default function ReportsScreen() {
               />
             </View>
 
-            {/* Producción hoy — módulo nuevo */}
+            {/* Producción hoy — KPIs dinámicos basados en datos reales */}
             {production && (
               <View style={styles.section}>
                 <SectionHeader
@@ -831,48 +843,74 @@ export default function ReportsScreen() {
                     )
                   }
                 />
-                <View style={styles.productionGrid}>
-                  <ProductionStat
-                    icon="factory"
-                    label="Órdenes"
-                    value={String(production.productions_count_today)}
-                    tone="primary"
-                  />
-                  <ProductionStat
-                    icon="food-apple-outline"
-                    label="Cocos"
-                    value={formatNumber(
-                      production.coconuts_processed_today
-                    )}
-                    tone="info"
-                  />
-                  <ProductionStat
-                    icon="water-outline"
-                    label="Agua (L)"
-                    value={formatNumber(production.water_liters_today)}
-                    tone="info"
-                  />
-                  <ProductionStat
-                    icon="fruit-watermelon"
-                    label="Pulpa (kg)"
-                    value={formatNumber(production.pulp_kg_today)}
-                    tone="success"
-                  />
-                  <ProductionStat
-                    icon="trash-can-outline"
-                    label="% Merma"
-                    value={`${(production.waste_percentage_today || 0).toFixed(
-                      1
-                    )}%`}
-                    tone={
-                      production.waste_percentage_today > 15
-                        ? "error"
-                        : production.waste_percentage_today > 10
-                          ? "warning"
-                          : "success"
-                    }
-                  />
-                </View>
+                {production.productions_count_today > 0 ? (
+                  <>
+                    <View style={styles.productionGrid}>
+                      <ProductionStat
+                        icon="factory"
+                        label="Órdenes"
+                        value={String(production.productions_count_today)}
+                        tone="primary"
+                      />
+                      <ProductionStat
+                        icon="import"
+                        label="Insumos"
+                        value={String(production.consumption_lines)}
+                        tone="info"
+                      />
+                      <ProductionStat
+                        icon="export-variant"
+                        label="Productos"
+                        value={String(production.output_lines)}
+                        tone="success"
+                      />
+                      {production.waste_percentage_available && (
+                        <ProductionStat
+                          icon="delete-variant"
+                          label="Merma"
+                          value={`${formatNumber(
+                            production.waste_percentage_today ?? 0
+                          )}%`}
+                          tone="warning"
+                        />
+                      )}
+                    </View>
+
+                    <View
+                      style={[
+                        styles.bottomGrid,
+                        !isWide && { flexDirection: "column" },
+                        { marginTop: tokens.spacing[3] },
+                      ]}
+                    >
+                      <View style={styles.chartCard}>
+                        <Text style={styles.chartTitle}>Más producido</Text>
+                        <ProductionBreakdown
+                          rows={production.top_produced}
+                          tone="success"
+                          emptyText="Sin productos registrados hoy."
+                        />
+                      </View>
+                      <View style={styles.chartCard}>
+                        <Text style={styles.chartTitle}>Más consumido</Text>
+                        <ProductionBreakdown
+                          rows={production.top_consumed}
+                          tone="info"
+                          emptyText="Sin insumos registrados hoy."
+                        />
+                      </View>
+                    </View>
+                  </>
+                ) : (
+                  <View style={styles.chartCard}>
+                    <EmptyState
+                      icon="factory"
+                      title="Sin producción hoy"
+                      description="No se han completado órdenes de producción hoy"
+                      compact
+                    />
+                  </View>
+                )}
               </View>
             )}
 
@@ -1200,6 +1238,74 @@ function ProductionStat({ icon, label, value, tone }: ProductionStatProps) {
       <Text style={styles.prodStatValue}>{value}</Text>
       <Text style={styles.prodStatLabel}>{label}</Text>
     </View>
+  );
+}
+
+interface ProductionBreakdownProps {
+  rows: ProductionLine[];
+  tone: "primary" | "info" | "success" | "warning" | "error";
+  emptyText: string;
+}
+
+function ProductionBreakdown({ rows, tone, emptyText }: ProductionBreakdownProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeReportsStyles);
+  const toneColor = {
+    primary: colors.primary,
+    info: colors.info,
+    success: colors.success,
+    warning: colors.warning,
+    error: colors.error,
+  }[tone];
+
+  if (!rows || rows.length === 0) {
+    return (
+      <View style={styles.chartEmpty}>
+        <Text style={styles.emptyText}>{emptyText}</Text>
+      </View>
+    );
+  }
+
+  const max = Math.max(...rows.map((r) => r.quantity || 0), 1);
+
+  return (
+    <>
+      {rows.map((row, idx) => {
+        const widthPct = Math.max(
+          8,
+          Math.round(((row.quantity || 0) / max) * 100)
+        );
+        return (
+          <View key={`${row.product_id}-${idx}`} style={styles.productRow}>
+            <View
+              style={[styles.productRank, { backgroundColor: toneColor + "1A" }]}
+            >
+              <Text style={[styles.productRankText, { color: toneColor }]}>
+                {idx + 1}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={styles.productHeader}>
+                <Text style={styles.productLabel} numberOfLines={1}>
+                  {row.product_name}
+                </Text>
+                <Text style={styles.productValue}>
+                  {formatQuantity(row.quantity, row.unit_name)}
+                </Text>
+              </View>
+              <View style={styles.productBarTrack}>
+                <View
+                  style={[
+                    styles.productBarFill,
+                    { width: `${widthPct}%`, backgroundColor: toneColor },
+                  ]}
+                />
+              </View>
+            </View>
+          </View>
+        );
+      })}
+    </>
   );
 }
 

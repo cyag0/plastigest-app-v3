@@ -1,13 +1,15 @@
 import { useSale } from "./SaleContext";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
-import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button, Text } from "react-native-paper";
+
+const normalizeCode = (value: string) => (value || "").trim().toLowerCase();
 
 export default function ScannerScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -16,60 +18,35 @@ export default function ScannerScreen() {
   const alerts = useAlerts();
   const router = useRouter();
 
-  const handleBarCodeScanned = async ({ data }: { data: string }) => {
+  const handleBarCodeScanned = ({ data }: { data: string }) => {
     if (scanned) return;
 
     setScanned(true);
 
-    try {
-      console.log("Código escaneado:", data);
+    // Buscar localmente en los productos ya cargados. Cubre tanto
+    // productos como paquetes (cada paquete tiene su propio código de
+    // barras) y es instantáneo, sin ir a la red en cada escaneo.
+    const code = normalizeCode(data);
+    const match = saleContext.products.find(
+      (product) => normalizeCode(product.code) === code,
+    );
 
-      // Buscar el producto por código de barras
-      const response = await Services.products.index({
-        all: true,
-        search: data,
-      });
-
-      // Narrowing: el tipo es Product[] | { data: Product[] } | LaravelPaginatedResponse<Product>
-      const respBody = response.data as any;
-      const products: any[] = Array.isArray(respBody)
-        ? respBody
-        : respBody?.data ?? [];
-
-      if (products.length > 0) {
-        const product = products[0];
-
-        // Buscar el producto en el listado expandido del contexto (que ya tiene id "product_X")
-        const expandedProduct = saleContext.products.find(p => p.id === `product_${product.id}`);
-        if (expandedProduct) {
-          saleContext.handleAddProduct(expandedProduct, expandedProduct.unit_id);
-        } else {
-          alerts.error("Producto no disponible en este inventario");
-          setTimeout(() => setScanned(false), 1000);
-          return;
-        }
-
-        alerts.success(`${product.name} agregado al carrito`);
-
-        // Esperar un momento y permitir escanear de nuevo
-        setTimeout(() => {
-          setScanned(false);
-        }, 1500);
-      } else {
-        alerts.error("Producto no encontrado");
-        // Permitir escanear de nuevo inmediatamente
-        setTimeout(() => {
-          setScanned(false);
-        }, 1000);
-      }
-    } catch (error: any) {
-      console.error("Error al buscar producto:", error);
-      alerts.error("Error al buscar el producto");
-      // Permitir escanear de nuevo inmediatamente
-      setTimeout(() => {
-        setScanned(false);
-      }, 1000);
+    if (match) {
+      Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      ).catch(() => {});
+      // handleAddProduct valida el stock y muestra su propia alerta de
+      // éxito o de stock insuficiente.
+      saleContext.handleAddProduct(match, match.unit_id);
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(
+        () => {},
+      );
+      alerts.error(`Código no encontrado: ${data}`);
     }
+
+    // Pequeña pausa para evitar lecturas duplicadas del mismo código.
+    setTimeout(() => setScanned(false), 1200);
   };
 
   // Requesting permission

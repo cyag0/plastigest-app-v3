@@ -1,4 +1,5 @@
 import AppList, { FilterConfig } from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import AppModal, { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
@@ -15,6 +16,75 @@ import { View } from "react-native";
 import { ProgressChart } from "react-native-chart-kit";
 import { Text } from "react-native-paper";
 import * as Yup from "yup";
+
+const statusLabels: Record<string, string> = {
+  planning: "Planificación",
+  counting: "Contando",
+  completed: "Completado",
+  cancelled: "Cancelado",
+};
+
+const statusColors: Record<string, string> = {
+  planning: palette.textSecondary,
+  counting: palette.warning,
+  completed: palette.success,
+  cancelled: palette.textMuted,
+};
+
+const inventoryColumns: AppListColumn<App.Entities.InventoryCount.InventoryCount>[] = [
+  {
+    title: "Nombre",
+    dataIndex: "name",
+    key: "name",
+    width: 240,
+  },
+  {
+    title: "Fecha",
+    dataIndex: "count_date",
+    key: "count_date",
+    width: 130,
+    render: (value) => formatDate(value) || "-",
+  },
+  {
+    title: "Estado",
+    dataIndex: "status",
+    key: "status",
+    width: 130,
+    render: (value) => (
+      <View
+        style={{
+          backgroundColor: statusColors[value] || palette.textSecondary,
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          borderRadius: 12,
+          alignSelf: "flex-start",
+        }}
+      >
+        <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "bold", fontSize: 10 }}>
+          {statusLabels[value] || value}
+        </Text>
+      </View>
+    ),
+  },
+  {
+    title: "Usuario",
+    dataIndex: "user.name",
+    key: "user",
+    width: 160,
+  },
+  {
+    title: "Progreso",
+    key: "progress",
+    width: 120,
+    render: (_value, record) => {
+      const progress = (record as any).progress;
+      if (!progress) return "-";
+      const total = (progress.counted ?? 0) + (progress.pending ?? 0);
+      const pct = total > 0 ? Math.round((progress.counted / total) * 100) : 0;
+      return `${pct}% (${progress.counted}/${total})`;
+    },
+  },
+];
 
 const inventoryValidationSchema = Yup.object().shape({
   name: Yup.string().required("El nombre del inventario es requerido"),
@@ -85,21 +155,8 @@ export default function InventoryIndex() {
             width: "90%",
           })
         }
+        columns={inventoryColumns}
         renderCard={({ item }: { item: any }) => {
-          const statusLabels: Record<string, string> = {
-            planning: "Planificación",
-            counting: "Contando",
-            completed: "Completado",
-            cancelled: "Cancelado",
-          };
-
-          const statusColors: Record<string, string> = {
-            planning: palette.textSecondary,
-            counting: palette.warning,
-            completed: palette.success,
-            cancelled: palette.textMuted,
-          };
-
           return {
             title: (
               <AppList.Title
@@ -232,7 +289,7 @@ export default function InventoryIndex() {
             }}
             onSubmit={(values, form) => {
               console.log("Submitting form with values:", values);
-              handleCreateInventory(values);
+              return handleCreateInventory(values);
             }}
           >
             <FormInput

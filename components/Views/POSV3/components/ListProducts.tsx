@@ -371,6 +371,10 @@ export interface ProductListItem {
   unit_type?: string | null;
   available_units?: Unit[];
   is_package?: boolean;
+  // Campos presentes cuando el item representa un paquete (is_package).
+  package_id?: number;
+  base_product_id?: number;
+  quantity_per_package?: number;
 }
 
 export interface ProductCategory {
@@ -389,6 +393,12 @@ interface ListProductsProps {
     action: "increment" | "decrement" | "unit",
     data?: any,
   ) => void;
+  /**
+   * Se invoca cuando se confirma una búsqueda/escaneo (Enter) y NO hay
+   * ningún producto que coincida con el código. Útil para dar feedback
+   * cuando se usa un lector de código de barras tipo teclado (USB/BT).
+   */
+  onScanNotFound?: (code: string) => void;
   loading?: boolean;
   showSearch?: boolean;
   showCategories?: boolean;
@@ -407,6 +417,7 @@ export default function ListProducts({
   onAddProduct = () => {},
   onRemoveProduct = () => {},
   onItemChange = () => {},
+  onScanNotFound,
   loading = false,
   showSearch = true,
   showCategories = true,
@@ -492,25 +503,38 @@ export default function ListProducts({
   const isHidingOutOfStock =
     showOutOfStockFilter && stockFilter === "available";
 
+  // Se ejecuta al presionar Enter en el buscador. Hace las veces de
+  // "scanner" para lectores de código de barras tipo teclado (USB/BT):
+  // el lector escribe el código y envía Enter, lo que agrega el producto
+  // al carrito sin tocar la pantalla.
   const handleSubmitSearch = () => {
-    const normalizedQuery = normalizeText(searchQuery.trim());
+    const rawQuery = searchQuery.trim();
+    const normalizedQuery = normalizeText(rawQuery);
 
     if (!normalizedQuery) {
       return;
     }
 
-    const exactCodeMatch = products.find(
+    // 1) Coincidencia exacta por código (cubre productos y paquetes, que
+    //    tienen su propio código de barras).
+    let match = products.find(
       (product) => normalizeText(product.code || "") === normalizedQuery,
     );
 
-    if (!exactCodeMatch || Number(exactCodeMatch.current_stock || 0) <= 0) {
+    // 2) Si no hay match exacto pero el filtro dejó un único producto,
+    //    asumimos que es ese.
+    if (!match && filteredProducts.length === 1) {
+      match = filteredProducts[0];
+    }
+
+    if (!match) {
+      onScanNotFound?.(rawQuery);
       return;
     }
 
-    onAddProduct(
-      exactCodeMatch,
-      exactCodeMatch.available_units?.[0]?.id || exactCodeMatch.unit_id || 0,
-    );
+    // onAddProduct (handleAddProduct) valida stock y muestra su propia
+    // alerta de éxito o de stock insuficiente.
+    onAddProduct(match, match.available_units?.[0]?.id || match.unit_id || 0);
     setSearchQuery("");
     setDebouncedSearchQuery("");
   };
@@ -545,6 +569,10 @@ export default function ListProducts({
                 runSearchDebounce(text);
               }}
               onSubmitEditing={handleSubmitSearch}
+              // Mantener el foco para permitir escanear varios códigos
+              // seguidos con un lector tipo teclado (USB/Bluetooth).
+              blurOnSubmit={false}
+              returnKeyType="search"
               showShortcut={false}
               containerStyle={styles.searchInput}
             />

@@ -33,7 +33,7 @@ export default function EditProduction() {
 
   if (allowed !== true) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", maxWidth: 600, width: "100%", alignSelf: "center" }}>
         <ActivityIndicator color={palette.primary} />
         <Text style={{ marginTop: 8, color: palette.textSecondary }}>
           Verificando producción…

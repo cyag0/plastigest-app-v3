@@ -1,12 +1,15 @@
-import palette from "@/constants/palette";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { ScrollView, StyleSheet, View } from "react-native";
-import { Button, Card, Chip, Divider, IconButton, Text } from "react-native-paper";
+import NotificationBadge from "@/components/Notifications/NotificationBadge";
 import {
+  eventTypeToTypeKey,
   formatNotificationDate,
-  getNotificationEventConfig,
-  getNotificationSeverityConfig,
-} from "./notificationPresentation";
+  getTypeTokens,
+  resolveNotificationStatus,
+} from "@/components/Notifications/notificationPresentation";
+import {
+  NOTIFICATION_NEUTRAL,
+} from "@/components/Notifications/notificationTheme";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Button, Icon, Text } from "react-native-paper";
 
 type DetailRow = {
   label: string;
@@ -56,46 +59,12 @@ function buildDataRows(
   return rows;
 }
 
-function DataSection({ notification }: { notification: App.Entities.Notification }) {
-  const rows = notification.data
-    ? buildDataRows(notification.event_type, notification.data)
-    : [];
-
-  if (rows.length === 0) {
-    return null;
-  }
-
-  return (
-    <Card style={styles.card} mode="elevated">
-      <Card.Content>
-        <View style={styles.sectionHeader}>
-          <MaterialCommunityIcons
-            name="file-document-outline"
-            size={20}
-            color={palette.primary}
-          />
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Informacion adicional
-          </Text>
-        </View>
-        <Divider style={styles.divider} />
-        <View style={styles.dataGrid}>
-          {rows.map((row) => (
-            <View key={`${row.label}-${row.value}`} style={styles.dataRow}>
-              <Text variant="labelSmall" style={styles.dataLabel}>
-                {row.label}
-              </Text>
-              <Text variant="bodyMedium" style={styles.dataValue}>
-                {row.value}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </Card.Content>
-    </Card>
-  );
-}
-
+/**
+ * Detalle de una notificacion. Adopta el lenguaje visual del popover/lista
+ * (tokens neutros, blanco puro, badge de tipo a color y badge de estado)
+ * para que la superficie se sienta limpia y consistente. Sin tarjetas
+ * crema ni iconos decorativos en los encabezados de seccion.
+ */
 export default function NotificationDetailContent({
   notification,
   onBack,
@@ -107,8 +76,11 @@ export default function NotificationDetailContent({
   onDelete?: () => void;
   compact?: boolean;
 }) {
-  const severityConfig = getNotificationSeverityConfig(notification.severity);
-  const eventConfig = getNotificationEventConfig(notification.event_type);
+  const typeTokens = getTypeTokens(eventTypeToTypeKey(notification.event_type));
+  const status = resolveNotificationStatus(notification);
+  const dataRows = notification.data
+    ? buildDataRows(notification.event_type, notification.data)
+    : [];
 
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
@@ -119,90 +91,80 @@ export default function NotificationDetailContent({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <Card style={styles.heroCard} mode="elevated">
-          <Card.Content style={styles.heroContent}>
-            <View style={[styles.heroIcon, { backgroundColor: eventConfig.softBg }]}>
-              <MaterialCommunityIcons
-                name={eventConfig.icon as any}
-                size={30}
-                color={eventConfig.color}
-              />
-            </View>
-            <View style={styles.heroText}>
-              <View style={styles.chipsRow}>
-                <Chip
-                  compact
-                  mode="flat"
-                  style={[styles.chip, { backgroundColor: eventConfig.softBg }]}
-                  textStyle={[styles.chipText, { color: eventConfig.color }]}
-                >
-                  {eventConfig.label}
-                </Chip>
-                <Chip
-                  compact
-                  mode="flat"
-                  style={[styles.chip, { backgroundColor: severityConfig.softBg }]}
-                  textStyle={[styles.chipText, { color: severityConfig.color }]}
-                >
-                  {severityConfig.label}
-                </Chip>
-                {!notification.is_read && (
-                  <Chip
-                    compact
-                    mode="flat"
-                    style={styles.unreadChip}
-                    textStyle={styles.unreadChipText}
-                  >
-                    Nueva
-                  </Chip>
-                )}
-              </View>
-              <Text variant="headlineSmall" style={styles.title}>
-                {notification.title}
-              </Text>
-              <View style={styles.dateRow}>
-                <MaterialCommunityIcons
-                  name="clock-outline"
-                  size={15}
-                  color={palette.textSecondary}
-                />
-                <Text variant="bodySmall" style={styles.dateText}>
-                  {formatNotificationDate(notification.created_at, true)}
+        {/* Hero: badge de tipo, etiquetas de tipo/estado, titulo y fecha. */}
+        <View style={styles.hero}>
+          <View style={[styles.iconBadge, { backgroundColor: typeTokens.bgMedium }]}>
+            <Icon source={typeTokens.icon} size={22} color={typeTokens.text} />
+          </View>
+
+          <View style={styles.heroText}>
+            <View style={styles.chipsRow}>
+              <View style={[styles.typeChip, { backgroundColor: typeTokens.bgSoft }]}>
+                <Text style={[styles.typeChipText, { color: typeTokens.text }]}>
+                  {typeTokens.label}
                 </Text>
               </View>
+              <NotificationBadge status={status} hideDot />
             </View>
-            {onDelete && (
-              <IconButton
-                icon="delete-outline"
-                size={21}
-                iconColor={palette.error}
-                onPress={onDelete}
-                style={styles.deleteButton}
-              />
-            )}
-          </Card.Content>
-        </Card>
 
-        <Card style={styles.card} mode="elevated">
-          <Card.Content>
-            <View style={styles.sectionHeader}>
-              <MaterialCommunityIcons
-                name={severityConfig.icon as any}
-                size={20}
-                color={severityConfig.color}
+            <Text style={styles.title}>{notification.title}</Text>
+
+            <View style={styles.dateRow}>
+              <Icon
+                source="clock-outline"
+                size={13}
+                color={NOTIFICATION_NEUTRAL.textTertiary}
               />
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Mensaje
+              <Text style={styles.dateText}>
+                {formatNotificationDate(notification.created_at, true)}
               </Text>
             </View>
-            <Divider style={styles.divider} />
-            <Text variant="bodyLarge" style={styles.message}>
-              {notification.message}
-            </Text>
-          </Card.Content>
-        </Card>
+          </View>
 
-        <DataSection notification={notification} />
+          {onDelete && (
+            <Pressable
+              onPress={onDelete}
+              hitSlop={8}
+              accessibilityLabel="Eliminar notificacion"
+              style={({ pressed }) => [
+                styles.deleteButton,
+                pressed && styles.deleteButtonPressed,
+              ]}
+            >
+              <Icon
+                source="trash-can-outline"
+                size={18}
+                color={NOTIFICATION_NEUTRAL.textTertiary}
+              />
+            </Pressable>
+          )}
+        </View>
+
+        <View style={styles.divider} />
+
+        {/* Mensaje */}
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Mensaje</Text>
+          <Text style={styles.message}>{notification.message}</Text>
+        </View>
+
+        {/* Detalles */}
+        {dataRows.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Detalles</Text>
+            <View style={styles.dataCard}>
+              {dataRows.map((row, index) => (
+                <View
+                  key={`${row.label}-${row.value}`}
+                  style={[styles.dataRow, index > 0 && styles.dataRowBordered]}
+                >
+                  <Text style={styles.dataLabel}>{row.label}</Text>
+                  <Text style={styles.dataValue}>{row.value}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       {onBack && (
@@ -212,7 +174,7 @@ export default function NotificationDetailContent({
             onPress={onBack}
             style={styles.backButton}
             icon="arrow-left"
-            textColor={palette.textSecondary}
+            textColor={NOTIFICATION_NEUTRAL.textSecondary}
           >
             Volver
           </Button>
@@ -225,129 +187,162 @@ export default function NotificationDetailContent({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: NOTIFICATION_NEUTRAL.background,
   },
   containerCompact: {
     minHeight: 0,
     backgroundColor: "transparent",
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 120,
-    gap: 14,
+    padding: 20,
+    paddingBottom: 96,
+    gap: 20,
   },
   scrollContentCompact: {
     padding: 0,
-    paddingBottom: 0,
+    paddingBottom: 4,
+    gap: 18,
   },
-  heroCard: {
-    borderRadius: 8,
-    backgroundColor: "#F8F5EF",
-  },
-  heroContent: {
+
+  // ── Hero ──────────────────────────────────────────────────────────────
+  hero: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: 14,
+    gap: 12,
   },
-  heroIcon: {
-    width: 58,
-    height: 58,
-    borderRadius: 8,
+  iconBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 2,
   },
   heroText: {
     flex: 1,
-    gap: 9,
+    minWidth: 0,
+    gap: 8,
   },
   chipsRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 7,
+    alignItems: "center",
+    gap: 6,
   },
-  chip: {
-    borderRadius: 8,
+  typeChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    alignSelf: "flex-start",
   },
-  chipText: {
-    fontSize: 11,
+  typeChipText: {
+    fontSize: 10.5,
+    lineHeight: 13,
     fontWeight: "700",
-  },
-  unreadChip: {
-    borderRadius: 8,
-    backgroundColor: palette.primary,
-  },
-  unreadChipText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "700",
+    letterSpacing: 0.3,
+    textTransform: "uppercase",
   },
   title: {
-    color: palette.text,
-    fontWeight: "800",
-    lineHeight: 30,
+    fontSize: 18,
+    lineHeight: 25,
+    fontWeight: "700",
+    color: NOTIFICATION_NEUTRAL.textPrimary,
   },
   dateRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 5,
   },
   dateText: {
-    color: palette.textSecondary,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: "500",
+    color: NOTIFICATION_NEUTRAL.textTertiary,
   },
   deleteButton: {
-    margin: 0,
-    backgroundColor: palette.error + "12",
-  },
-  card: {
+    width: 32,
+    height: 32,
     borderRadius: 8,
-    backgroundColor: "#F8F5EF",
-  },
-  sectionHeader: {
-    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  deleteButtonPressed: {
+    backgroundColor: NOTIFICATION_NEUTRAL.borderSubtle,
+  },
+
+  // ── Secciones ─────────────────────────────────────────────────────────
+  divider: {
+    height: 1,
+    backgroundColor: NOTIFICATION_NEUTRAL.borderSubtle,
+  },
+  section: {
     gap: 8,
   },
-  sectionTitle: {
-    color: palette.text,
+  sectionLabel: {
+    fontSize: 11,
+    lineHeight: 14,
     fontWeight: "700",
-  },
-  divider: {
-    marginVertical: 12,
-    backgroundColor: palette.border,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color: NOTIFICATION_NEUTRAL.textSecondary,
   },
   message: {
-    color: palette.text,
-    lineHeight: 24,
+    fontSize: 14.5,
+    lineHeight: 22,
+    color: NOTIFICATION_NEUTRAL.textPrimary,
   },
-  dataGrid: {
-    gap: 10,
+
+  // ── Detalles ──────────────────────────────────────────────────────────
+  dataCard: {
+    borderWidth: 1,
+    borderColor: NOTIFICATION_NEUTRAL.border,
+    borderRadius: 12,
+    backgroundColor: NOTIFICATION_NEUTRAL.surface,
+    overflow: "hidden",
   },
   dataRow: {
-    padding: 11,
-    borderRadius: 8,
-    backgroundColor: palette.surface,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
+  },
+  dataRowBordered: {
+    borderTopWidth: 1,
+    borderTopColor: NOTIFICATION_NEUTRAL.borderSubtle,
   },
   dataLabel: {
-    color: palette.textSecondary,
-    fontWeight: "700",
-    marginBottom: 3,
+    fontSize: 12.5,
+    lineHeight: 17,
+    fontWeight: "500",
+    color: NOTIFICATION_NEUTRAL.textSecondary,
+    flexShrink: 0,
   },
   dataValue: {
-    color: palette.text,
+    flex: 1,
+    fontSize: 13.5,
+    lineHeight: 18,
     fontWeight: "600",
+    color: NOTIFICATION_NEUTRAL.textPrimary,
+    textAlign: "right",
   },
+
+  // ── Acciones ──────────────────────────────────────────────────────────
   bottomActions: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     padding: 16,
-    backgroundColor: "#F8F5EF",
+    backgroundColor: NOTIFICATION_NEUTRAL.background,
     borderTopWidth: 1,
-    borderTopColor: palette.border,
+    borderTopColor: NOTIFICATION_NEUTRAL.borderSubtle,
   },
   backButton: {
-    borderColor: palette.textSecondary,
-    borderRadius: 8,
+    borderColor: NOTIFICATION_NEUTRAL.border,
+    borderRadius: 10,
   },
 });

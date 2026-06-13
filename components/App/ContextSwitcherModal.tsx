@@ -10,18 +10,10 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
 import { Modal, Portal } from "react-native-paper";
-
-// zIndex bajo para que este modal (cuyo Portal se monta mas tarde que
-// los de <AlertsDialogs /> en el PortalManager de Paper) quede DETRAS
-// del ConfirmDialog / AlertSnackbar. Sin esto, el ContextSwitcherModal
-// aparece por encima de los alerts porque su Portal se registra
-// despues en el array de portales (bottom-up componentDidMount).
-const SWITCHER_MODAL_Z_INDEX = 0;
 
 export interface ContextSwitcherModalProps {
   visible: boolean;
@@ -61,6 +53,13 @@ export default function ContextSwitcherModal({
   } = auth;
   const [loadingCompanyId, setLoadingCompanyId] = useState<number | null>(null);
   const [loadingLocationId, setLoadingLocationId] = useState<number | null>(null);
+  // Mientras un confirm de alerts esta abierto ocultamos este modal. Los
+  // portales de Paper se apilan por orden de montaje (no por zIndex: el
+  // PortalManager envuelve cada portal en un <View absoluteFill> sin zIndex,
+  // y zIndex en RN solo afecta hermanos directos), asi que el confirm —
+  // montado antes, en la raiz — quedaria DETRAS del switcher. Ocultarlo
+  // garantiza que el confirm se vea al frente sin pelear con el z-index.
+  const [confirming, setConfirming] = useState(false);
 
   // Cargar companias al abrir si aun no estan
   useEffect(() => {
@@ -76,11 +75,15 @@ export default function ContextSwitcherModal({
       onDismiss();
       return;
     }
+    setConfirming(true);
     const confirmed = await alerts.confirm(
       `¿Cambiar a ${companyToSelect.name}?`,
       { title: "Confirmar Cambio", okText: "Cambiar", cancelText: "Cancelar" }
     );
-    if (!confirmed) return;
+    if (!confirmed) {
+      setConfirming(false);
+      return;
+    }
     try {
       setLoadingCompanyId(companyId);
       // Limpiar ubicacion antes de cambiar de compania para forzar
@@ -93,6 +96,7 @@ export default function ContextSwitcherModal({
       alerts.error("No se pudo cambiar de compania. Intenta nuevamente.");
     } finally {
       setLoadingCompanyId(null);
+      setConfirming(false);
     }
   };
 
@@ -101,11 +105,15 @@ export default function ContextSwitcherModal({
       onDismiss();
       return;
     }
+    setConfirming(true);
     const confirmed = await alerts.confirm(
       `¿Cambiar a ${loc.name}?`,
       { title: "Confirmar Cambio", okText: "Cambiar", cancelText: "Cancelar" }
     );
-    if (!confirmed) return;
+    if (!confirmed) {
+      setConfirming(false);
+      return;
+    }
     try {
       setLoadingLocationId(loc.id);
       await selectLocation(loc);
@@ -115,20 +123,13 @@ export default function ContextSwitcherModal({
       alerts.error("No se pudo cambiar de ubicacion. Intenta nuevamente.");
     } finally {
       setLoadingLocationId(null);
+      setConfirming(false);
     }
   };
 
   const styles = useThemedStyles((colors) => ({
     backdrop: {
       backgroundColor: colors.overlay,
-    },
-    // Wrapper que controla el zIndex del portal. Ver comentario en
-    // el JSX; este View se vuelve hijo del wrapper del PortalManager,
-    // asi que su zIndex es el que cuenta para el orden visual contra
-    // los portales de <AlertsDialogs />.
-    portalWrapper: {
-      ...StyleSheet.absoluteFillObject,
-      zIndex: SWITCHER_MODAL_Z_INDEX,
     },
     container: {
       backgroundColor: colors.surface,
@@ -278,18 +279,14 @@ export default function ContextSwitcherModal({
   return (
     <Portal>
       {/*
-        Envoltorio con zIndex explicito: el PortalManager de Paper
-        renderiza cada portal como hijo de un <View absoluteFill>; los
-        portales se montan en el orden de sus componentDidMount (bottom-up),
-        asi que el ContextSwitcherModal (anidado en AppBar dentro del Stack)
-        queda al final del array y termina visualmente encima de los
-        alerts (ConfirmDialog / AlertSnackbar) que monta <AlertsDialogs />
-        en la raiz. Forzando un zIndex igual o inferior al de los alerts
-        garantizamos que el confirm los tape cuando coincidan en pantalla.
+        Ocultamos el modal mientras un confirm de alerts esta abierto
+        (`!confirming`). El PortalManager de Paper apila los portales por
+        orden de montaje, no por zIndex, asi que no se puede empujar este
+        modal por detras del confirm con estilos; ocultarlo deja el confirm
+        visible al frente y lo restaura si el usuario cancela.
       */}
-      <View style={styles.portalWrapper} pointerEvents="box-none">
         <Modal
-          visible={visible}
+          visible={visible && !confirming}
           onDismiss={onDismiss}
           contentContainerStyle={[
             styles.container,
@@ -375,7 +372,6 @@ export default function ContextSwitcherModal({
           </View>
         </ScrollView>
         </Modal>
-      </View>
     </Portal>
   );
 }

@@ -102,8 +102,8 @@ export default function AdjustmentDetailScreen() {
     detail.evidence_files || detail.content?.evidence_files || [];
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-      <Card>
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 12,  }}>
+      <Card style={{backgroundColor: "white", maxWidth: "600px", alignSelf: "center", width: "100%", padding: 24, shadowOffset: { width: 0, height: 0 }}}>
         <Card.Content style={{ gap: 12 }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <Text variant="titleMedium" style={{ fontWeight: "700" }}>

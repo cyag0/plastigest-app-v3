@@ -96,14 +96,6 @@ export default function InventorySummaryPanel({
     [outputs, cache],
   );
 
-  const totalConsumed = groupedConsumed.reduce((acc, r) => acc + r.quantity, 0);
-  const totalProduced = groupedProduced.reduce((acc, r) => acc + r.quantity, 0);
-  const wastePct = totalConsumed > 0
-    ? ((totalConsumed - totalProduced) / totalConsumed) * 100
-    : 0;
-  const wasteColor =
-    wastePct > 20 ? palette.error : wastePct > 10 ? palette.warning : palette.success;
-
   return (
     <Card style={[styles.card, { backgroundColor: palette.surface, shadowOffset: { width: 0, height: 0 },}]}>
       <Card.Content>
@@ -181,17 +173,6 @@ export default function InventorySummaryPanel({
             )}
           </View>
         </ScrollView>
-
-        <View style={[styles.wasteRow, { backgroundColor: wasteColor + "22" }]}>
-          <MaterialCommunityIcons
-            name="trash-can-outline"
-            size={16}
-            color={wasteColor}
-          />
-          <Text style={{ color: wasteColor, marginLeft: 6, fontWeight: "600" }}>
-            Merma estimada: {wastePct.toFixed(1)}%
-          </Text>
-        </View>
       </Card.Content>
     </Card>
   );
@@ -245,12 +226,5 @@ const styles = StyleSheet.create({
     color: "#9CA3AF",
     fontSize: 12,
     fontStyle: "italic",
-  },
-  wasteRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 8,
-    borderRadius: 8,
-    marginTop: 4,
   },
 });

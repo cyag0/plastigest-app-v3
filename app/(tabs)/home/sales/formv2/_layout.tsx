@@ -9,22 +9,19 @@ function StackContent() {
   const pathname = usePathname();
 
   const handleBack = () => {
-    const isIndexOrProductsRoute =
-      pathname.includes("/productos") || pathname.endsWith("/formv2");
-
-    if (isIndexOrProductsRoute) {
-      // Si está en index o productos, volver al índice de ventas
+    // En la pantalla principal del POS (termina en /formv2) volver al
+    // índice de ventas; en cualquier otra ruta (p. ej. scanner) hacer
+    // back normal.
+    if (pathname.endsWith("/formv2")) {
       router.replace("/(tabs)/home/sales/index" as any);
     } else {
-      // En cualquier otra ruta, hacer back normal
       router.back();
     }
   };
 
   const getHeaderRight = () => {
-    const isProductsRoute = pathname.includes("/productos");
-
-    if (isProductsRoute) {
+    // Mostrar el acceso al scanner en la pantalla principal del POS.
+    if (pathname.endsWith("/formv2")) {
       return () => (
         <AppBar.Action
           icon="barcode-scan"
@@ -61,18 +58,6 @@ function StackContent() {
         name="index"
         options={{
           title: "POS - Nueva Venta",
-        }}
-      />
-      <Stack.Screen
-        name="productos"
-        options={{
-          title: "Productos",
-        }}
-      />
-      <Stack.Screen
-        name="carrito"
-        options={{
-          title: "Carrito de Ventas",
         }}
       />
       <Stack.Screen

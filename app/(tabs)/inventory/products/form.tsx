@@ -14,7 +14,7 @@ import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { IconButton } from "react-native-paper";
+import { Card, IconButton } from "react-native-paper";
 
 interface ProductFormData {
   name: string;
@@ -105,8 +105,10 @@ export default function ProductsForm(props: ProductsFormProps) {
         minimum_stock: "0", // Stock mínimo por defecto
         maximum_stock: "", // Stock máximo opcional
       }}
+    
     >
-      <FormInput
+     <Card style={{backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 },}}>
+       <FormInput
         name="name"
         label="Nombre del Producto"
         placeholder="Ej: Bolsa Plástica 20x30cm"
@@ -292,6 +294,7 @@ export default function ProductsForm(props: ProductsFormProps) {
         placeholder="0.00"
         keyboardType="numeric"
       />
+     </Card>
     </AppForm>
   );
 }

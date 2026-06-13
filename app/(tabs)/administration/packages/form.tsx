@@ -57,7 +57,6 @@ export default function PackagesForm(props: PackagesFormProps) {
   const { company } = useSelectedCompany();
   const alerts = useAlerts();
 
-  console.log("PackagesForm packageId", packageId);
 
   // Función para generar código de barras aleatorio en el frontend
   const generateRandomBarcode = () => {
@@ -170,9 +169,7 @@ export default function PackagesForm(props: PackagesFormProps) {
         label="Unidad de Medida"
         model="home.unidades"
         placeholder="Seleccione una unidad"
-        fetchParams={{
-          company_id: company.id,
-        }}
+        
       />
 
       {/* Precios */}

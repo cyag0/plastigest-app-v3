@@ -76,7 +76,7 @@ export default function ProductionDetail() {
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: "transparent" as any }}
-      contentContainerStyle={{ padding: 12, paddingBottom: 80 }}
+      contentContainerStyle={{ padding: 12, paddingBottom: 80, maxWidth: 600, width: "100%", alignSelf: "center" }}
     >
       <Card style={styles.card}>
         <Card.Content>
@@ -103,17 +103,7 @@ export default function ProductionDetail() {
             <MetaItem icon="account" label="Responsable" value={order.responsible_name ?? "—"} />
             <MetaItem icon="map-marker" label="Sucursal" value={order.location_name ?? "—"} />
           </View>
-          <View style={styles.metaRow}>
-            <MetaItem icon="flask" label="Fórmula" value={order.formula_name ?? "Sin fórmula"} />
-            <MetaItem
-              icon="trash-can-outline"
-              label="Merma"
-              value={`${Number(order.waste_percentage ?? 0).toFixed(1)}%`}
-              valueColor={
-                (order.waste_percentage ?? 0) > 15 ? palette.error : palette.success
-              }
-            />
-          </View>
+  
           {order.notes ? (
             <View style={styles.notesBlock}>
               <Text style={{ color: palette.textSecondary, fontSize: 12, marginBottom: 2 }}>
@@ -131,24 +121,16 @@ export default function ProductionDetail() {
           <DataTable.Header>
             <DataTable.Title>Producto</DataTable.Title>
             <DataTable.Title numeric>Cantidad</DataTable.Title>
-            <DataTable.Title numeric>Esperado</DataTable.Title>
           </DataTable.Header>
           {(order.consumptions ?? []).map((c: any, i: number) => (
             <DataTable.Row key={i}>
               <DataTable.Cell>
                 <Text style={{ color: palette.text }}>{c.product_name}</Text>
-                <Text style={{ color: palette.textSecondary, fontSize: 11 }}>{c.unit_name}</Text>
+                <Text style={{ color: palette.textSecondary, fontSize: 11 }}>{" " + c.unit_name}</Text>
               </DataTable.Cell>
               <DataTable.Cell numeric>
                 <Text style={{ color: palette.error, fontWeight: "600" }}>
                   −{Number(c.quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })}
-                </Text>
-              </DataTable.Cell>
-              <DataTable.Cell numeric>
-                <Text style={{ color: palette.textSecondary }}>
-                  {c.expected_quantity != null
-                    ? Number(c.expected_quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })
-                    : "—"}
                 </Text>
               </DataTable.Cell>
             </DataTable.Row>
@@ -165,26 +147,19 @@ export default function ProductionDetail() {
           <DataTable.Header>
             <DataTable.Title>Producto</DataTable.Title>
             <DataTable.Title numeric>Cantidad</DataTable.Title>
-            <DataTable.Title numeric>Esperado</DataTable.Title>
           </DataTable.Header>
           {(order.outputs ?? []).map((o: any, i: number) => (
             <DataTable.Row key={i}>
               <DataTable.Cell>
                 <Text style={{ color: palette.text }}>{o.product_name}</Text>
-                <Text style={{ color: palette.textSecondary, fontSize: 11 }}>{o.unit_name}</Text>
+                <Text style={{ color: palette.textSecondary, fontSize: 11 }}>{" " + o.unit_name}</Text>
               </DataTable.Cell>
               <DataTable.Cell numeric>
                 <Text style={{ color: palette.success, fontWeight: "600" }}>
                   +{Number(o.quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })}
                 </Text>
               </DataTable.Cell>
-              <DataTable.Cell numeric>
-                <Text style={{ color: palette.textSecondary }}>
-                  {o.expected_quantity != null
-                    ? Number(o.expected_quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })
-                    : "—"}
-                </Text>
-              </DataTable.Cell>
+       
             </DataTable.Row>
           ))}
           {(!order.outputs || order.outputs.length === 0) ? (
@@ -288,18 +263,7 @@ export default function ProductionDetail() {
             Editar
           </Button>
         ) : null}
-        {order.status !== "cancelled" ? (
-          <Button
-            mode="contained"
-            onPress={handleCancel}
-            buttonColor={palette.error}
-            textColor="#fff"
-            icon="close-circle"
-            style={{ flex: 1 }}
-          >
-            Cancelar producción
-          </Button>
-        ) : null}
+  
       </View>
     </ScrollView>
   );

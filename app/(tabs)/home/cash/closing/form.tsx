@@ -39,6 +39,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 
 interface DateStats {
   date: string;
+  opening_balance: number;
   date_income: number;
   date_expense: number;
   date_count: number;
@@ -46,6 +47,7 @@ interface DateStats {
     string,
     { total_income: number; total_expense: number }
   >;
+  opening_by_method: Record<string, number>;
 }
 
 interface FullStats {
@@ -138,18 +140,32 @@ export default function CashClosingForm() {
   // ── Derived values ──────────────────────────────────────────────────────────
 
   const ds = stats?.date_stats;
-  const openingBalance = stats?.balance_actual ?? 0;
+  // Saldo de apertura real (balance ANTES del día). No usar balance_actual:
+  // ese ya incluye los movimientos del día y provocaba doble conteo.
+  const openingBalance = ds?.opening_balance ?? 0;
   const dayIncome   = ds?.date_income ?? 0;
   const dayExpense  = ds?.date_expense ?? 0;
   const movCount    = ds?.date_count ?? 0;
 
-  // By payment method for the selected day
+  // Saldo de fin de día por método = apertura del método + neto del día.
+  // Así la suma de los métodos cuadra con el saldo esperado.
   const byMethod = ds?.by_payment_method ?? {};
-  const totalCash     = (byMethod.cash?.total_income     ?? 0) - (byMethod.cash?.total_expense     ?? 0);
-  const totalCard     = (byMethod.card?.total_income     ?? 0) - (byMethod.card?.total_expense     ?? 0);
-  const totalTransfer = (byMethod.transfer?.total_income ?? 0) - (byMethod.transfer?.total_expense ?? 0);
-  const totalOther    = (byMethod.other?.total_income    ?? 0) - (byMethod.other?.total_expense    ?? 0);
-  const suggestedPhysicalCount = totalCash.toFixed(2);
+  const openingByMethod = ds?.opening_by_method ?? {};
+  const methodBalance = (m: string) =>
+    (openingByMethod[m] ?? 0) +
+    ((byMethod[m]?.total_income ?? 0) - (byMethod[m]?.total_expense ?? 0));
+
+  const totalCash     = methodBalance("cash");
+  const totalCard     = methodBalance("card");
+  const totalTransfer = methodBalance("transfer");
+  const totalOther    = methodBalance("other");
+
+  const activeMethods = (["cash", "card", "transfer", "other"] as const).filter(
+    (m) => byMethod[m] || (openingByMethod[m] ?? 0) !== 0
+  );
+
+  // El efectivo esperado en caja no puede ser negativo: no sugerir conteos < 0.
+  const suggestedPhysicalCount = totalCash >= 0 ? totalCash.toFixed(2) : "";
 
   const expectedBalance = openingBalance + dayIncome - dayExpense;
   const physCount = physicalCount !== "" ? parseFloat(physicalCount) || 0 : null;
@@ -259,7 +275,7 @@ export default function CashClosingForm() {
         <StatRow
           label="Egresos del día"
           value={formatCurrency(dayExpense)}
-          color={palette.warning}
+          color={palette.error}
           icon="arrow-up-circle"
         />
         <View style={styles.divider} />
@@ -276,21 +292,18 @@ export default function CashClosingForm() {
         />
       </Surface>
 
-      {/* ─── Desglose por método de pago ─────────────────────────────── */}
-      {Object.keys(byMethod).length > 0 && (
+      {/* ─── Saldo por método de pago ────────────────────────────────── */}
+      {activeMethods.length > 0 && (
         <Surface style={styles.section}>
-          <Text style={styles.sectionTitle}>Por Método de Pago</Text>
-          {(["cash", "card", "transfer", "other"] as const).map((m) => {
-            const entry = byMethod[m];
-            if (!entry) return null;
-            const net =
-              (entry.total_income ?? 0) - (entry.total_expense ?? 0);
+          <Text style={styles.sectionTitle}>Saldo por Método de Pago</Text>
+          {activeMethods.map((m) => {
+            const bal = methodBalance(m);
             return (
               <StatRow
                 key={m}
                 label={PAYMENT_LABELS[m]}
-                value={formatCurrency(net)}
-                color={net >= 0 ? palette.success : palette.error}
+                value={formatCurrency(bal)}
+                color={bal >= 0 ? palette.success : palette.error}
               />
             );
           })}
@@ -378,7 +391,7 @@ export default function CashClosingForm() {
 
 const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: "transparent" as any },
-  container: { padding: 16, gap: 12, paddingBottom: 32 },
+  container: { padding: 16, gap: 12, paddingBottom: 32, maxWidth: 600, width: "100%", alignSelf: "center" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   section: {
     borderRadius: 12,

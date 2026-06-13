@@ -1,4 +1,3 @@
-import Breadcrumb from "@/components/Transfers/Breadcrumb";
 import {
   getCurrentStepFromTransfer,
   TransferWizardStatusCard,
@@ -190,14 +189,6 @@ export default function TransferDetailWizardScreen() {
 
   return (
     <>
-      <Breadcrumb
-        items={[
-          { label: "Transferencias", route: "/(tabs)/home/transfers" },
-          { label: "Pendientes", route: "/(tabs)/home/transfers/pending" },
-          { label: `#${transfer.id}` },
-        ]}
-        currentIndex={2}
-      />
 
       <ScrollView
         style={styles.container}

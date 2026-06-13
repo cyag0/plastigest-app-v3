@@ -716,36 +716,42 @@ function DetailModal({
   onDelete: () => void;
 }) {
   return (
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalCard}>
-        <View style={styles.modalHeader}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.modalEyebrow}>Detalle de notificacion</Text>
-            <Text style={styles.modalTitle} numberOfLines={1}>
-              {notification.title}
-            </Text>
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={onClose}
+        style={styles.modalOverlay}
+      >
+        <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.modalEyebrow}>Detalle de notificacion</Text>
+              <Text style={styles.modalTitle} numberOfLines={1}>
+                {notification.title}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={onClose}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              style={styles.modalCloseBtn}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={18}
+                color={palette.textSecondary}
+              />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            onPress={onClose}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={styles.modalCloseBtn}
-          >
-            <MaterialCommunityIcons
-              name="close"
-              size={18}
-              color={palette.textSecondary}
+          <View style={[styles.modalBody, { padding: 24 }]}>
+            <NotificationDetailContent
+              notification={notification}
+              compact
+              onDelete={onDelete}
             />
-          </TouchableOpacity>
-        </View>
-        <View style={styles.modalBody}>
-          <NotificationDetailContent
-            notification={notification}
-            compact
-            onDelete={onDelete}
-          />
-        </View>
-      </View>
-    </View>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 

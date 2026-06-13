@@ -4,7 +4,7 @@ import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useRef } from "react";
 import { ScrollView, View } from "react-native";
 import * as yup from "yup";
@@ -86,6 +86,8 @@ export default function ClientsForm(props: ClientsFormProps) {
 
   const { company } = useSelectedCompany();
 
+  const router = useRouter();
+
   return (
     <AppForm
       ref={formRef}
@@ -95,9 +97,13 @@ export default function ClientsForm(props: ClientsFormProps) {
       initialValues={{
         company_id: company?.id || undefined,
       }}
+      onSuccess={() => {
+        router.replace("/administration/clientes");
+      }}
       validationSchema={validationSchema}
     >
-      <ScrollView style={{ flex: 1 }}>
+      
+      <ScrollView style={{ flex: 1, backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 }}}>
         <View style={{ padding: 16 }}>
           <FormInput
             name="name"

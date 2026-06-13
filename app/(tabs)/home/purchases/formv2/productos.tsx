@@ -78,9 +78,7 @@ export default function ProductosScreen() {
           <View style={{ padding: 16 }}>
             <Button
               mode="contained"
-              onPress={() =>
-                router.navigate("/(tabs)/home/purchases/formv2" as any)
-              }
+              onPress={() => router.back()}
               style={{ marginTop: 8 }}
               icon="arrow-left"
             >

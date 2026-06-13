@@ -170,7 +170,7 @@ export default function TransferStepThreeReceive({
     const filesFromWorkflow = Array.isArray(step3Content?.workflow?.step_3?.evidence)
       ? step3Content.workflow.step_3.evidence
       : [];
-    const sourceFiles = filesFromWorkflow.length > 0 ? filesFromWorkflow : filesFromStep;
+    const sourceFiles = filesFromStep.length > 0 ? filesFromStep : filesFromWorkflow;
 
     if (Array.isArray(sourceFiles)) {
       existingFiles.push(

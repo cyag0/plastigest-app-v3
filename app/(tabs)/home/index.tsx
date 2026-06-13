@@ -65,13 +65,13 @@ const QUICK_ACCESS: QuickAccess[] = [
     icon: "cash-register",
     link: "/(tabs)/home/sales",
   },
-  {
+/*   {
     key: "pedidos",
     label: "Pedidos",
     description: "Órdenes de venta",
     icon: "clipboard-list-outline",
     link: "/(tabs)/home/sales-orders",
-  },
+  }, */
   {
     key: "transferencias",
     label: "Transferencias",
@@ -158,11 +158,15 @@ export default function HomeScreen() {
     comprasHoy: number;
     ordenesActivas: number;
     tareasPendientes: number;
+    ventasDelta: number | null;
+    comprasDelta: number | null;
   }>({
     ventasHoy: 0,
     comprasHoy: 0,
     ordenesActivas: 0,
     tareasPendientes: 0,
+    ventasDelta: null,
+    comprasDelta: null,
   });
   const [kpisLoading, setKpisLoading] = useState(true);
 
@@ -179,31 +183,49 @@ export default function HomeScreen() {
     if (!auth.selectedCompany) return;
     setKpisLoading(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
-      const [salesRes, purchasesRes, tasksRes] = await Promise.all([
-        (Services.sales as any).stats
-          ? (Services.sales as any).stats({
-              start_date: today,
-              end_date: today,
-            })
-          : Promise.resolve(null),
+      const now = new Date();
+      const today = toLocalDate(now);
+      const yesterday = toLocalDate(new Date(now.getTime() - 86_400_000));
+
+      // Hoy y ayer en paralelo, para poder calcular el delta vs. ayer.
+      const [
+        salesToday,
+        salesYesterday,
+        purchasesToday,
+        purchasesYesterday,
+        tasksRes,
+      ] = await Promise.all([
+        Services.sales
+          .stats({ start_date: today, end_date: today })
+          .catch(() => null),
+        Services.sales
+          .stats({ start_date: yesterday, end_date: yesterday })
+          .catch(() => null),
         Services.purchases
           .getStats({ start_date: today, end_date: today })
+          .catch(() => null),
+        Services.purchases
+          .getStats({ start_date: yesterday, end_date: yesterday })
           .catch(() => null),
         Services.tasks
           .index({ assigned_to: "me", status: "pending", per_page: 1 })
           .catch(() => null),
       ]);
 
-      const ventasHoy = extractTotal(salesRes) ?? 0;
-      const comprasHoy = extractTotal(purchasesRes) ?? 0;
+      const ventasHoy = extractSalesTotal(salesToday);
+      const comprasHoy = extractPurchasesTotal(purchasesToday);
       const tareasPendientes = extractTotal(tasksRes) ?? 0;
 
       setKpis({
         ventasHoy,
         comprasHoy,
-        ordenesActivas: 0, // TODO: agregar cuando exista endpoint
+        ordenesActivas: 0, // Pedidos: pendiente de endpoint
         tareasPendientes,
+        ventasDelta: computeDelta(ventasHoy, extractSalesTotal(salesYesterday)),
+        comprasDelta: computeDelta(
+          comprasHoy,
+          extractPurchasesTotal(purchasesYesterday),
+        ),
       });
     } catch (err) {
       console.warn("Error cargando KPIs:", err);
@@ -233,6 +255,8 @@ export default function HomeScreen() {
       setTasksLoading(false);
     }
   }
+
+  console.log("KPIs:", kpis);
 
   const firstName = auth.user?.name?.split(" ")[0] || "";
   const companyName = auth.selectedCompany?.name;
@@ -267,14 +291,22 @@ export default function HomeScreen() {
             label="Ventas hoy"
             value={formatCurrency(kpis.ventasHoy)}
             loading={kpisLoading}
-            delta={{ value: 12, period: "vs ayer" }}
+            delta={
+              kpis.ventasDelta !== null
+                ? { value: kpis.ventasDelta, period: "vs ayer" }
+                : undefined
+            }
           />
           <KpiCard
             icon="cart-outline"
             label="Compras hoy"
             value={formatCurrency(kpis.comprasHoy)}
             loading={kpisLoading}
-            delta={{ value: -4, period: "vs ayer" }}
+            delta={
+              kpis.comprasDelta !== null
+                ? { value: kpis.comprasDelta, period: "vs ayer" }
+                : undefined
+            }
             inverseDelta
           />
           <KpiCard
@@ -370,6 +402,45 @@ function extractTotal(res: any): number | undefined {
   if (Array.isArray(data)) return data.length;
   if (Array.isArray(data?.data)) return data.data.length;
   return undefined;
+}
+
+/**
+ * Fecha local en formato YYYY-MM-DD. Se usa en vez de toISOString()
+ * (que devuelve UTC) para evitar un desfase de un día en zonas horarias
+ * detrás de UTC, p. ej. México (UTC-6): de noche toISOString() ya marca
+ * el día siguiente y "hoy" saldría en cero.
+ */
+function toLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Total de ventas del periodo. sales.stats devuelve
+ * { success, data: { overview: { total_amount } } }.
+ */
+function extractSalesTotal(res: any): number {
+  return res?.data?.overview?.total_amount ?? 0;
+}
+
+/**
+ * Total de compras del periodo. purchases.getStats devuelve
+ * { success, data: { total_amount } }.
+ */
+function extractPurchasesTotal(res: any): number {
+  return res?.data?.total_amount ?? 0;
+}
+
+/**
+ * Variación porcentual respecto al periodo anterior. Devuelve null cuando
+ * no hay base de comparación (ayer en cero) para no mostrar un delta
+ * engañoso; en ese caso la tarjeta omite el chip.
+ */
+function computeDelta(current: number, previous: number): number | null {
+  if (!previous) return null;
+  return ((current - previous) / previous) * 100;
 }
 
 /**

@@ -1,3 +1,11 @@
+// Determina si una uri corresponde a un archivo que YA existe en el servidor
+// (las que devuelve la API son absolutas http/https). Estas no deben re-subirse
+// como archivo: se mandan como metadata para que el backend las conserve.
+// Las imágenes nuevas usan esquemas locales (file://, content://, blob:, ph://, etc).
+const isExistingRemoteFile = (uri: unknown): boolean =>
+  typeof uri === "string" &&
+  (uri.startsWith("http://") || uri.startsWith("https://"));
+
 // Función auxiliar para convertir blob URL a File
 const blobUrlToFile = async (
   blobUrl: string,
@@ -33,7 +41,7 @@ export const objectToFormDataWithNestedInputsAsync = async (
             console.log("Appending file:", item);
             formData.append(arrayKey, item);
           } else if (typeof item === "object" && !Array.isArray(item)) {
-            if (item.uri) {
+            if (item.uri && !isExistingRemoteFile(item.uri)) {
               if (item.uri.startsWith("blob:")) {
                 // Para blob URLs (Expo Web), convertir a File real
                 try {
@@ -64,6 +72,10 @@ export const objectToFormDataWithNestedInputsAsync = async (
                 } as any);
               }
             } else {
+              // Archivo ya existente en el servidor (uri remota http/https) o
+              // sub-objeto anidado: se serializa como campos anidados
+              // (ej. campo[0][name]=...) para que el backend lo conserve en
+              // lugar de re-subirlo o, peor, borrarlo al no reconocerlo.
               await objectToFormDataWithNestedInputsAsync(
                 item,
                 formData,
@@ -112,7 +124,7 @@ export const objectToFormDataWithNestedInputs = (
 
             formData.append(arrayKey, item);
           } else if (typeof item === "object" && !Array.isArray(item)) {
-            if (item.uri) {
+            if (item.uri && !isExistingRemoteFile(item.uri)) {
               // Manejar diferentes tipos de URIs
               if (item.uri.startsWith("blob:")) {
                 // Para blob URLs (Expo Web), crear un File real

@@ -195,7 +195,7 @@ export default function NotificationBell({
             <View
               style={[
                 styles.detailModalBody,
-                { height: Math.min(height - 200, 720) },
+                { maxHeight: Math.min(height - 160, 680) },
               ]}
             >
               <NotificationDetailContent

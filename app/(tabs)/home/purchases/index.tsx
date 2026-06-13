@@ -231,6 +231,9 @@ export default function PurchasesIndex() {
           showDelete(item) {
             return item.status === "draft";
           },
+          async onDelete(item) {
+            await Services.purchasesV2.delete(item.id);
+          },
           customActions: [
             {
               title: isDownloading ? "Descargando..." : "Imprimir PDF",

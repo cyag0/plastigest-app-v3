@@ -138,7 +138,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
               name: product.name,
               current_stock:
                 product.locations && product.locations[0]
-                  ? product.locations[0].pivot?.current_stock
+                  ? product.locations[0].pivot?.current_stock ?? undefined
                   : undefined,
               category_id: product.category_id || undefined,
               main_image: product.main_image,
@@ -416,7 +416,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
         }
 
         // Calcular el nuevo precio basado en el precio base del producto y el factor de conversión
-        const basePrice = parseFloat(productData?.price || "0");
+        const basePrice = parseFloat(String(productData?.price ?? "0"));
         const newPrice =
           newUnit?.is_base_unit || !newUnit?.factor_to_base
             ? basePrice

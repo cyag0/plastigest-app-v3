@@ -121,7 +121,7 @@ export default function SuppliersIndex() {
           router.push(`/(tabs)/home/suppliers/${entity.id}` as any);
         }}
         onPressCreate={() => {
-          router.push("/(tabs)/home/suppliers/form" as any);
+          router.push("/(tabs)/administration/suppliers/form" as any);
         }}
         fabLabel="Nuevo Proveedor"
       />

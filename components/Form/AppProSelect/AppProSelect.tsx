@@ -29,6 +29,10 @@ export interface AppProSelectProps {
   // Parámetros adicionales para el fetch
   fetchParams?: IndexParams;
 
+  // Filtro client-side opcional sobre los items ya cargados (p. ej. mostrar
+  // sólo unidades coherentes con el tipo de medida del producto seleccionado).
+  filterItem?: (item: any) => boolean;
+
   // Props del select base
   multiple?: boolean;
   hideSearchBox?: boolean;
@@ -56,6 +60,7 @@ export default function AppProSelect(props: AppProSelectProps) {
     searchFields = ["name"],
     dependsOn,
     fetchParams,
+    filterItem,
     multiple = false,
     hideSearchBox = false,
     placeholder,
@@ -162,11 +167,13 @@ export default function AppProSelect(props: AppProSelectProps) {
 
   // Convertir datos internos al formato esperado por AppSelect
   const selectData = useMemo(() => {
-    return (internalData || []).map((item) => ({
-      value: String(item[valueField]),
-      label: String(item[labelField] || item[valueField] || "Sin nombre"),
-    }));
-  }, [internalData, valueField, labelField]);
+    return (internalData || [])
+      .filter((item) => (filterItem ? filterItem(item) : true))
+      .map((item) => ({
+        value: String(item[valueField]),
+        label: String(item[labelField] || item[valueField] || "Sin nombre"),
+      }));
+  }, [internalData, valueField, labelField, filterItem]);
 
   // Manejar cambio de valor
   const handleChange = (newValue: string[] | number[]) => {

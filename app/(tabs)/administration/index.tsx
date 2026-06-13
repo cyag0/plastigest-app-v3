@@ -112,16 +112,6 @@ export default function AdministrationScreen() {
       requiredPermission: "locations_update",
     },
     {
-      id: "location-settings",
-      title: "Configuracion",
-      description: "Ajustes y preferencias de tu sucursal",
-      icon: "cog",
-      route: `/(tabs)/administration/settings`,
-      color: palette.textSecondary,
-      category: "location",
-      requiredPermission: "locations_update",
-    },
-    {
       id: "current-workers",
       title: "Personal de mi sucursal",
       description: "Gestiona solo trabajadores de tu sucursal actual",

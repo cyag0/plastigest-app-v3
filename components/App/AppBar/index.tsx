@@ -21,6 +21,11 @@ export interface AppBarProps {
   onProfilePress?: () => void;
   rightActions?: React.ReactNode;
   leftActions?: React.ReactNode;
+  /**
+   * Handler personalizado para el botón de retroceso. Si se omite, se
+   * usa el comportamiento por defecto (router.back()).
+   */
+  onBack?: () => void;
   showBreadcrumb?: boolean;
   backgroundColor?: string;
   titleColor?: string;
@@ -45,6 +50,7 @@ export default function AppBar({
   onSearchPress,
   rightActions,
   leftActions,
+  onBack,
   showBreadcrumb = true,
   backgroundColor,
   titleColor,
@@ -88,9 +94,15 @@ export default function AppBar({
     avatarIcon: { margin: 0 },
   }));
 
-  const canShowBack = showBackButton && router.canGoBack();
+  // Con un onBack personalizado mostramos el botón aunque no haya
+  // historial de navegación (el handler decide a dónde ir).
+  const canShowBack = showBackButton && (!!onBack || router.canGoBack());
 
   const handleBack = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
     if (router.canGoBack()) {
       router.back();
     }

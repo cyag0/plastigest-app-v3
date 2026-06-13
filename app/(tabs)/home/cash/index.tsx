@@ -7,7 +7,7 @@ import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, TouchableOpacity, View } from "react-native";
 import { Chip, Text } from "react-native-paper";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -19,7 +19,7 @@ const formatCurrency = (value: number) =>
 
 const TYPE_COLORS: Record<string, string> = {
   income: palette.success,
-  expense: palette.warning,
+  expense: palette.error,
   adjustment: palette.blue,
 };
 
@@ -101,10 +101,10 @@ function CashStatsBanner() {
           </View>
           <View style={[styles.sideStat, { borderTopWidth: 1, borderTopColor: palette.border }]}>
             <View style={styles.sideStatHeader}>
-              <MaterialCommunityIcons name="arrow-up-circle" size={14} color={palette.warning} />
+              <MaterialCommunityIcons name="arrow-up-circle" size={14} color={palette.error} />
               <Text style={styles.sideStatLabel}>Egresos mes</Text>
             </View>
-            <Text style={[styles.sideStatValue, { color: palette.warning }]}>
+            <Text style={[styles.sideStatValue, { color: palette.error }]}>
               {formatCurrency(stats.total_expense)}
             </Text>
           </View>
@@ -134,16 +134,17 @@ function CashStatsBanner() {
             })}
           </View>
 
-          <View
+          <TouchableOpacity
             style={styles.closingButton}
-            onTouchEnd={() => router.push("/(tabs)/home/cash/closing/index")}
+            onPress={() => router.push("/(tabs)/home/cash/closing")}
+            activeOpacity={0.7}
           >
             <MaterialCommunityIcons name="cash-register" size={14} color={palette.primary} />
             <Text style={styles.closingButtonText} numberOfLines={1}>
               Cierres de Caja
             </Text>
             <MaterialCommunityIcons name="chevron-right" size={14} color={palette.primary} />
-          </View>
+          </TouchableOpacity>
         </View>
       )}
     </View>

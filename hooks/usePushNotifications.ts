@@ -64,6 +64,39 @@ export function usePushNotifications({
     onForegroundMessageRef.current = onForegroundMessage;
   }, [onForegroundMessage]);
 
+  // Refs del setup web. Evitan suscribir listeners (onMessage / service worker)
+  // o pedir el token dos veces cuando el effect y requestPermission intentan
+  // correr el setup al mismo tiempo. Guardamos el cleanup para liberar los
+  // listeners en logout / cuando el hook se deshabilita.
+  const webCleanupRef = useRef<(() => void) | null>(null);
+  const webSetupStartedRef = useRef(false);
+
+  // Corre el setup web (registra el SW, pide el token FCM y lo manda al
+  // backend) UNA sola vez. Lo invocan tanto el effect (cuando el permiso ya
+  // estaba concedido al cargar) como requestPermission (justo despues de que
+  // el usuario concede el permiso desde el banner).
+  const ensureWebPush = useCallback(async () => {
+    if (Platform.OS !== "web") return;
+    if (webSetupStartedRef.current) return;
+    webSetupStartedRef.current = true;
+    try {
+      const result = await setupWebPushNotifications(setNotification);
+      if (result) {
+        webCleanupRef.current = result.cleanup ?? null;
+        if (result.token) {
+          setFcmToken(result.token);
+        }
+      } else {
+        // El setup no completo (sin HTTPS/localhost, faltan vars de Firebase,
+        // getToken fallo...). Liberamos el guard para poder reintentar luego.
+        webSetupStartedRef.current = false;
+      }
+    } catch (error) {
+      webSetupStartedRef.current = false;
+      throw error;
+    }
+  }, []);
+
   // Lee el estado actual del permiso (solo web). En native no usamos este
   // estado; RNFirebase resuelve internamente.
   useEffect(() => {
@@ -80,27 +113,42 @@ export function usePushNotifications({
   // "denied", esperamos a que la UI llame a requestPermission().
   useEffect(() => {
     if (!enabled) {
+      // Logout o sesion expirada: liberamos los listeners web y reseteamos el
+      // guard para que el proximo usuario que inicie sesion vuelva a registrar
+      // su propio token FCM.
+      if (Platform.OS === "web") {
+        webCleanupRef.current?.();
+        webCleanupRef.current = null;
+        webSetupStartedRef.current = false;
+      }
       return;
     }
 
+    // WEB: solo auto-corremos el setup si el permiso ya estaba concedido al
+    // cargar (sesion previa). Si esta en "default"/"denied", la UI muestra el
+    // banner y al conceder, requestPermission() llama a ensureWebPush().
+    if (Platform.OS === "web") {
+      if (permissionStatus === "granted") {
+        ensureWebPush().catch((error) => {
+          console.error("Error configurando Firebase web push:", error);
+        });
+      }
+      // Los listeners web persisten entre renders (se liberan en logout); no
+      // retornamos cleanup aqui para no re-suscribirlos en cada cambio de deps.
+      return;
+    }
+
+    // NATIVE (iOS/Android): RNFirebase maneja su propio dialog de permiso al
+    // llamar getToken, asi que corremos el setup directamente.
     let isMounted = true;
     let cleanup: (() => void) | undefined;
 
     const runSetup = async () => {
-      if (Platform.OS === "web" && permissionStatus !== "granted") {
-        // En web solo auto-corremos setup si ya tenemos permiso. Si no, la
-        // UI mostrara un banner con el boton que dispara requestPermission().
-        return;
-      }
-
-      const setupResult =
-        Platform.OS === "web"
-          ? await setupWebPushNotifications(setNotification)
-          : await setupNativePushNotifications(
-              setNotification,
-              setFcmToken,
-              (message) => onForegroundMessageRef.current?.(message),
-            );
+      const setupResult = await setupNativePushNotifications(
+        setNotification,
+        setFcmToken,
+        (message) => onForegroundMessageRef.current?.(message),
+      );
 
       if (!isMounted) {
         setupResult?.cleanup?.();
@@ -122,7 +170,7 @@ export function usePushNotifications({
       isMounted = false;
       cleanup?.();
     };
-  }, [enabled, permissionStatus]);
+  }, [enabled, permissionStatus, ensureWebPush]);
 
   // Pide permiso al usuario y, si lo concede, dispara el setup. ESTA funcion
   // debe llamarse desde un user gesture (onClick, onPress) porque los
@@ -136,9 +184,22 @@ export function usePushNotifications({
       const result = await Notification.requestPermission();
       console.log("[web-push] Permiso resultado:", result);
       setPermissionStatus(result);
-      // No llamamos a setup aca: el useEffect anterior esta observando
-      // permissionStatus, asi que al cambiar a "granted" correra el setup
-      // automaticamente.
+
+      if (result === "granted") {
+        // Registramos el token FCM de inmediato, dentro del mismo user-gesture,
+        // en vez de depender solo de que el effect se vuelva a disparar al
+        // cambiar permissionStatus. El guard en ensureWebPush evita un registro
+        // doble si el effect tambien llega a correr.
+        try {
+          await ensureWebPush();
+        } catch (error) {
+          console.error(
+            "Error registrando el token FCM web tras conceder el permiso:",
+            error,
+          );
+        }
+      }
+
       return result;
     }
 
@@ -149,7 +210,7 @@ export function usePushNotifications({
     // dispara su propio dialog la primera vez que se llama getToken().
     setPermissionStatus("granted");
     return "granted";
-  }, []);
+  }, [ensureWebPush]);
 
   // Desactiva el token actual en el backend. Se invoca desde el logout para
   // no seguir recibiendo pushes de la cuenta anterior.
@@ -340,7 +401,7 @@ async function setupWebPushNotifications(
     (payload) => {
       console.log("Notificacion FCM web en primer plano:", payload);
       setNotification(payload);
-      showWebForegroundNotification(payload);
+      showWebForegroundNotification(payload, serviceWorkerRegistration);
     },
   );
 
@@ -419,10 +480,11 @@ async function sendConfigToServiceWorker(
 
   if (!worker) {
     try {
-      // navigator.serviceWorker.ready resuelve con un ServiceWorker (no la
-      // registration). Lo usamos para postMessage directamente.
-      const readyWorker = await navigator.serviceWorker.ready;
-      worker = readyWorker;
+      // navigator.serviceWorker.ready resuelve con un ServiceWorkerRegistration
+      // (NO con un ServiceWorker), una vez que el SW del scope ya tiene un
+      // worker activo. El worker real para postMessage esta en .active.
+      const readyRegistration = await navigator.serviceWorker.ready;
+      worker = readyRegistration.active;
     } catch {
       worker = null;
     }
@@ -540,15 +602,56 @@ async function showNativeForegroundNotification(
   });
 }
 
-function showWebForegroundNotification(payload: MessagePayload) {
+function showWebForegroundNotification(
+  payload: MessagePayload,
+  registration?: ServiceWorkerRegistration,
+) {
   if (Notification.permission !== "granted") {
     return;
   }
 
-  new Notification(payload.notification?.title || "PlastiGest", {
-    body: payload.notification?.body,
-    data: payload.data,
-  });
+  // En web los mensajes llegan data-only (sin `notification` payload, para
+  // evitar duplicados en segundo plano), asi que tomamos titulo/cuerpo de
+  // `data`. Mantenemos el fallback a `notification` por compatibilidad.
+  const data = payload.data ?? {};
+  const title = data.title || payload.notification?.title || "PlastiGest";
+  const options: NotificationOptions = {
+    body: data.body || payload.notification?.body,
+    icon: "/favicon.ico",
+    data,
+  };
+
+  // Preferimos showNotification() del Service Worker: en varios navegadores
+  // (Chrome en Android, y segun configuracion tambien en desktop) el
+  // constructor `new Notification()` esta restringido y lanza "Illegal
+  // constructor". El SW funciona de forma consistente y ademas permite
+  // acciones/click handling desde el propio SW.
+  if (registration) {
+    registration.showNotification(title, options).catch((error) => {
+      console.warn(
+        "[web-push] showNotification del SW fallo, intentando new Notification():",
+        error,
+      );
+      try {
+        new Notification(title, options);
+      } catch (fallbackError) {
+        console.error(
+          "[web-push] No se pudo mostrar la notificacion en primer plano:",
+          fallbackError,
+        );
+      }
+    });
+    return;
+  }
+
+  try {
+    new Notification(title, options);
+  } catch (error) {
+    console.error(
+      "[web-push] No se pudo mostrar la notificacion en primer plano:",
+      error,
+    );
+  }
 }
 
 function handleNotificationAction(remoteMessage: PushNotification) {

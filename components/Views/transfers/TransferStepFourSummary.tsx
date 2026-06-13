@@ -88,11 +88,11 @@ export default function TransferStepFourSummary({
   const progress = content?.progress || {};
 
   const normalizeEvidence = (files: any[] | undefined, workflowFiles: any[] | undefined) => {
-    const fromWorkflow = Array.isArray(workflowFiles) ? workflowFiles : [];
-    if (fromWorkflow.length > 0) return fromWorkflow;
-
     const fromFiles = Array.isArray(files) ? files : [];
-    return fromFiles;
+    if (fromFiles.length > 0) return fromFiles;
+
+    const fromWorkflow = Array.isArray(workflowFiles) ? workflowFiles : [];
+    return fromWorkflow;
   };
 
   const getProgressResult = (stepKey: "step_1" | "step_2" | "step_3") => {

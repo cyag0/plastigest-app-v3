@@ -1,7 +1,7 @@
 import palette from "@/constants/palette";
 import * as React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
-import { DataTable, Text } from "react-native-paper";
+import { LayoutChangeEvent, ScrollView, StyleSheet, View } from "react-native";
+import { Text } from "react-native-paper";
 
 export type AppListColumn<T> = {
   title: React.ReactNode;
@@ -70,30 +70,46 @@ export default function AppListDataTable<T extends { id: number | string }>({
   renderActionsCell,
   onRowPress,
 }: AppListDataTableProps<T>) {
-  // Calcular el ancho total para que el scroll horizontal mantenga la
-  // alineación entre la tabla principal y la columna de acciones.
+  const [containerWidth, setContainerWidth] = React.useState(0);
+
+  const handleLayout = (event: LayoutChangeEvent) => {
+    setContainerWidth(event.nativeEvent.layout.width);
+  };
+
   const totalColumnsWidth = columns.reduce(
     (acc, column) => acc + (column.width || DEFAULT_COLUMN_WIDTH),
     0,
   );
   const totalWidth = totalColumnsWidth + actionColumnWidth;
 
+  // Cuando el contenido cabe en pantalla, escalar columnas para llenar el ancho.
+  const scaleFactor =
+    containerWidth > 0 && totalWidth < containerWidth
+      ? containerWidth / totalWidth
+      : 1;
+
+  const colWidth = (col: AppListColumn<any>) =>
+    Math.floor((col.width || DEFAULT_COLUMN_WIDTH) * scaleFactor);
+  const actWidth = Math.floor(actionColumnWidth * scaleFactor);
+  const effectiveColumnsWidth = columns.reduce((acc, col) => acc + colWidth(col), 0);
+  const effectiveTotal = effectiveColumnsWidth + actWidth;
+
   return (
-    <View style={styles.wrapper}>
+    <View style={styles.wrapper} onLayout={handleLayout}>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator
-        contentContainerStyle={[styles.tableLayout, { width: totalWidth }]}
+        contentContainerStyle={[styles.tableLayout, { minWidth: totalWidth, width: effectiveTotal || totalWidth }]}
       >
         {/* Tabla principal (columnas) */}
         <View style={styles.mainTable}>
-          <View style={[styles.headerRow, { width: totalColumnsWidth }]}>
+          <View style={[styles.headerRow, { width: effectiveColumnsWidth }]}>
             {columns.map((column, columnIndex) => (
               <View
                 key={column.key || String(column.dataIndex || columnIndex)}
                 style={[
                   styles.headerCell,
-                  { width: column.width || DEFAULT_COLUMN_WIDTH },
+                  { width: colWidth(column) },
                 ]}
               >
                 <Text numberOfLines={1} style={styles.headerText}>
@@ -108,7 +124,7 @@ export default function AppListDataTable<T extends { id: number | string }>({
               key={String(item.id)}
               style={[
                 styles.dataRow,
-                { width: totalColumnsWidth },
+                { width: effectiveColumnsWidth },
                 onRowPress ? styles.rowPressable : null,
               ]}
               onTouchEnd={onRowPress ? () => onRowPress(item) : undefined}
@@ -129,7 +145,7 @@ export default function AppListDataTable<T extends { id: number | string }>({
                     }
                     style={[
                       styles.dataCell,
-                      { width: column.width || DEFAULT_COLUMN_WIDTH },
+                      { width: colWidth(column) },
                       { alignItems: getCellAlignment(column.align) as any },
                     ]}
                   >
@@ -143,16 +159,16 @@ export default function AppListDataTable<T extends { id: number | string }>({
 
         {/* Columna de Acciones (siempre visible, alineada con las filas) */}
         <View
-          style={[styles.actionsColumn, { width: actionColumnWidth }]}
+          style={[styles.actionsColumn, { width: actWidth }]}
         >
           <View
             style={[
               styles.headerRow,
               styles.actionsHeader,
-              { width: actionColumnWidth },
+              { width: actWidth },
             ]}
           >
-            <View style={[styles.headerCell, { width: actionColumnWidth }]}>
+            <View style={[styles.headerCell, { width: actWidth }]}>
               <Text numberOfLines={1} style={styles.headerText}>
                 {actionColumnTitle}
               </Text>
@@ -162,10 +178,10 @@ export default function AppListDataTable<T extends { id: number | string }>({
           {data.map((item, rowIndex) => (
             <View
               key={`actions-${item.id}`}
-              style={[styles.dataRow, { width: actionColumnWidth }]}
+              style={[styles.dataRow, { width: actWidth }]}
             >
               <View
-                style={[styles.dataCell, { width: actionColumnWidth }]}
+                style={[styles.dataCell, { width: actWidth }]}
               >
                 <View style={styles.actionsCell}>
                   {renderActionsCell(item, rowIndex)}

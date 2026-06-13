@@ -219,6 +219,20 @@ const Services = {
       );
       return response.data as { url: string; expires_at: string };
     },
+    async delete(id: number) {
+      const response = await axiosClient.delete(
+        `/auth/admin/purchases-v2/${id}`,
+      );
+      return response.data;
+    },
+    async getStats(params?: {
+      location_id?: number;
+      start_date?: string;
+      end_date?: string;
+    }) {
+      const response = await axiosClient.get("/auth/admin/purchases-v2/stats", { params });
+      return response.data;
+    },
   },
   sales: {
     ...createCrudService<App.Entities.Sale>("/auth/admin/sales"),

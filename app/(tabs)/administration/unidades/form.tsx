@@ -83,6 +83,10 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
         router.back();
       }}
     >
+
+      <View style={{ backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 } }}>
+
+  
       <FormInput
         name="name"
         label="Nombre *"
@@ -95,7 +99,7 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
         placeholder="Ej: pz, cj, m"
       />
 
-      <FormCheckBox name="conversion" label="¿Es una unidad de conversión?" />
+      <FormCheckBox name="conversion" text="¿Es una unidad de conversión?" />
 
       <AppDependency name="conversion">
         {(value = false) => {
@@ -119,6 +123,7 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
           );
         }}
       </AppDependency>
+          </View>
     </AppForm>
   );
 };

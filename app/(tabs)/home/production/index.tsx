@@ -74,27 +74,6 @@ const PRODUCTION_COLUMNS: AppListColumn<any>[] = [
     width: 110,
     align: "center",
   },
-  {
-    title: "Merma %",
-    dataIndex: "summary.waste_percentage",
-    key: "waste_percentage",
-    width: 110,
-    align: "right",
-    render: (value: any) => {
-      if (value === null || value === undefined) {
-        return (
-          <Text style={{ color: palette.textSecondary, fontSize: 13 }}>—</Text>
-        );
-      }
-      const num = Number(value);
-      const color = num > 15 ? palette.error : palette.success;
-      return (
-        <Text style={{ color, fontSize: 13, fontWeight: "600" }}>
-          {num.toFixed(1)}%
-        </Text>
-      );
-    },
-  },
 ];
 
 export default function ProductionIndex() {
@@ -257,19 +236,6 @@ export default function ProductionIndex() {
             right: (
               <View style={{ alignItems: "flex-end" }}>
                 <ProductionStatusBadge status={item.status} />
-                <Text
-                  style={{
-                    color:
-                      (item.waste_percentage ?? 0) > 15
-                        ? palette.error
-                        : palette.success,
-                    fontSize: 11,
-                    marginTop: 4,
-                    fontWeight: "600",
-                  }}
-                >
-                  Merma: {Number(item.waste_percentage ?? 0).toFixed(1)}%
-                </Text>
               </View>
             ),
             bottom: [
@@ -290,6 +256,8 @@ export default function ProductionIndex() {
             onView: (item: any) => router.push(`/(tabs)/home/production/${item.id}` as any),
             onEdit: handleEdit,
             onDelete: undefined,
+            showEdit: (item: any) => item.status === "draft",
+            showDelete: (item: any) =>  item.status === "draft",
           }}
           onMenuAction={async (action: string, item: any) => {
             if (action === "cancel") {
@@ -301,21 +269,6 @@ export default function ProductionIndex() {
               } as any);
             }
           }}
-          menuExtraActions={[
-            {
-              key: "cancel",
-              label: "Cancelar producción",
-              icon: "close-circle",
-              destructive: true,
-              showWhen: (item: any) => item.status !== "cancelled",
-            },
-            {
-              key: "duplicate",
-              label: "Duplicar",
-              icon: "content-copy",
-              showWhen: (item: any) => item.status === "completed",
-            },
-          ]}
           onPressCreate={() => router.push("/(tabs)/home/production/form" as any)}
           fabLabel="Nueva Producción"
         />

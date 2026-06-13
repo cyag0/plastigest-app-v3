@@ -60,6 +60,12 @@ const pathLabels: Record<string, string> = {
   "/inventory/weekly-inventory/form": "Crear inventario",
 };
 
+// Algunos segmentos no tienen ruta index propia, por lo que su href intermedio
+// debe redirigir a la pantalla real (ej. el menu de transferencias).
+const hrefOverrides: Record<string, string> = {
+  "/home/transfers": "/home/transfers-menu",
+};
+
 const hiddenSegments = new Set(["", "(tabs)", "(stacks)", "index"]);
 
 function isDynamicSegment(segment: string) {
@@ -107,7 +113,7 @@ function buildBreadcrumbs(pathname: string): BreadcrumbItem[] {
 
     items.push({
       label,
-      href,
+      href: hrefOverrides[href] ?? href,
       current: isLastVisibleSegment || index === rawSegments.length - 1,
     });
   });

@@ -1,7 +1,6 @@
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PermissionGate from "@/components/App/PermissionGate";
-import CashRegister from "@/components/Dashboard/CashRegister";
 import SaleStats from "@/components/Dashboard/SaleStats";
 import palette from "@/constants/palette";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
@@ -22,7 +21,6 @@ export default function SalesIndex() {
   const [routes] = useState([
     { key: "list", title: "Ventas" },
     { key: "stats", title: "Estadísticas" },
-    { key: "cashRegister", title: "Corte de Caja" },
   ]);
 
   const { downloadPdfFromApi, isDownloading } = usePdfDownload({
@@ -391,16 +389,13 @@ export default function SalesIndex() {
 
   const renderStatsRoute = useMemo(() => () => <SaleStats />, []);
 
-  const renderCashRegisterRoute = useMemo(() => () => <CashRegister />, []);
-
   const renderScene = useMemo(
     () =>
       SceneMap({
         list: renderListRoute,
         stats: renderStatsRoute,
-        cashRegister: renderCashRegisterRoute,
       }),
-    [renderListRoute, renderStatsRoute, renderCashRegisterRoute],
+    [renderListRoute, renderStatsRoute],
   );
 
   return (
@@ -422,14 +417,6 @@ export default function SalesIndex() {
         >
           <Text style={[styles.tabText, index === 1 && styles.tabTextActive]}>
             Estadísticas
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tab, index === 2 && styles.tabActive]}
-          onPress={() => setIndex(2)}
-        >
-          <Text style={[styles.tabText, index === 2 && styles.tabTextActive]}>
-            Corte de Caja
           </Text>
         </Pressable>
       </View>

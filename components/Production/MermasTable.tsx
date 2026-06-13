@@ -4,9 +4,11 @@ import EditableTable, {
 import React from "react";
 
 const WASTE_REASONS = [
-  { value: "coconut_no_water", label: "Coco sin agua" },
-  { value: "coconut_no_pulp", label: "Coco sin pulpa" },
-  { value: "damaged_coconut", label: "Coco dañado" },
+  { value: "damage", label: "Producto dañado" },
+  { value: "quality", label: "Defecto de calidad" },
+  { value: "expired", label: "Caducado / Vencido" },
+  { value: "process_loss", label: "Merma de proceso" },
+  { value: "spill", label: "Derrame / Desperdicio" },
   { value: "other", label: "Otro" },
 ];
 

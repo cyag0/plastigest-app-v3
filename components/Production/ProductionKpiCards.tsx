@@ -21,8 +21,6 @@ interface KpiData {
   productions_count_today: number;
   total_consumed_quantity: number;
   total_produced_quantity: number;
-  waste_percentage_today: number | null;
-  waste_percentage_available: boolean;
   consumption_lines: number;
   output_lines: number;
   top_consumed: TopProduct[];
@@ -33,8 +31,6 @@ const DEFAULT: KpiData = {
   productions_count_today: 0,
   total_consumed_quantity: 0,
   total_produced_quantity: 0,
-  waste_percentage_today: null,
-  waste_percentage_available: false,
   consumption_lines: 0,
   output_lines: 0,
   top_consumed: [],
@@ -109,10 +105,6 @@ export default function ProductionKpiCards() {
     );
   }
 
-  const wasteValue = stats.waste_percentage_today === null
-    ? "N/D"
-    : `${stats.waste_percentage_today.toFixed(1)}%`;
-
   const hasTop = stats.top_consumed.length > 0 || stats.top_produced.length > 0;
 
   if (isMobile) {
@@ -141,13 +133,6 @@ export default function ProductionKpiCards() {
             icon="export-variant"
             label="Productos Generados"
             value={String(stats.output_lines)}
-          />
-        </View>
-        <View style={styles.mobileKpi}>
-          <KpiCard
-            icon="trash-can-outline"
-            label="% Merma"
-            value={wasteValue}
           />
         </View>
         {hasTop && (
@@ -209,13 +194,6 @@ export default function ProductionKpiCards() {
             icon="export-variant"
             label="Productos Generados"
             value={String(stats.output_lines)}
-          />
-        </View>
-        <View style={isDesktop ? styles.kpiFlex : undefined}>
-          <KpiCard
-            icon="trash-can-outline"
-            label="% Merma"
-            value={wasteValue}
           />
         </View>
       </View>

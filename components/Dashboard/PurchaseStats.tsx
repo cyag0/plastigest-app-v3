@@ -52,7 +52,7 @@ export default function PurchaseStats() {
   const loadStats = async () => {
     try {
       setLoading(true);
-      const response = await Services.purchases.getStats();
+      const response = await Services.purchasesV2.getStats();
       setStats(response.data);
     } catch (error) {
       console.error("Error loading purchase stats:", error);

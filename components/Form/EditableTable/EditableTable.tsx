@@ -1,9 +1,10 @@
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
+import { useSelectData } from "@/components/Form/AppProSelect/context";
 import palette from "@/constants/palette";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { FieldArray, useFormikContext, getIn } from "formik";
-import React from "react";
+import React, { useEffect, useMemo } from "react";
 import {
   LayoutAnimation,
   Platform,
@@ -14,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { Button, Card, Text } from "react-native-paper";
+import { FormSelectSimple } from "../AppSelect/AppSelect";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -203,25 +205,23 @@ export default function EditableTable({
       );
     }
     if (col.type === "unit") {
+      const productCol = columns.find((c) => c.type === "product");
       return (
-        <FormProSelect
-          name={fieldName}
-          model="home.unidades"
-          placeholder="Unidad"
+        <UnitCell
+          fieldName={fieldName}
+          productId={productCol ? row[productCol.key] : 0}
+          productParams={productCol?.productFetchParams}
           required={col.required}
-          hideLabel
         />
       );
     }
     if (col.type === "select") {
       return (
-        <FormProSelect
+        <FormSelectSimple
           name={fieldName}
-          model="__static__"
-          options={col.options ?? []}
+          data={col.options ?? []}
           placeholder="Seleccionar"
           required={col.required}
-          hideLabel
         />
       );
     }
@@ -259,6 +259,88 @@ export default function EditableTable({
       />
     );
   }
+}
+
+/**
+ * Celda de unidad que muestra únicamente las unidades coherentes con el tipo
+ * de medida (masa / volumen / cantidad) del producto seleccionado en la misma
+ * fila. Si la unidad elegida deja de ser compatible (o está vacía), se ajusta
+ * a la unidad propia del producto.
+ */
+function UnitCell({
+  fieldName,
+  productId,
+  productParams,
+  required,
+}: {
+  fieldName: string;
+  productId: any;
+  productParams?: Record<string, any>;
+  required?: boolean;
+}) {
+  const { values, setFieldValue } = useFormikContext<any>();
+  const selectData = useSelectData();
+  const paramsKey = JSON.stringify(productParams ?? null);
+
+  // Garantizamos que el catálogo de productos esté cargado para resolver el
+  // tipo de medida del producto seleccionado.
+  useEffect(() => {
+    selectData.fetchData("products", productParams);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsKey]);
+
+  const product = useMemo(() => {
+    if (!productId) return null;
+    const products = selectData.getCachedData("products", productParams).data ?? [];
+    return products.find((p: any) => String(p.id) === String(productId)) ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId, paramsKey, selectData]);
+
+  const allowedType: string | null = product?.unit?.unit_type ?? null;
+
+  const filterItem = useMemo(() => {
+    if (!allowedType) return undefined;
+    return (u: any) => !u.unit_type || u.unit_type === allowedType;
+  }, [allowedType]);
+
+  // Auto-corrección: si la unidad actual no es coherente con el producto (o no
+  // hay unidad), la ajustamos a la unidad propia del producto para no dejar una
+  // selección inválida oculta tras el filtrado.
+  const currentValue = getIn(values, fieldName);
+  useEffect(() => {
+    if (!product || !allowedType) return;
+    const productUnitId = product.unit_id ?? product.unit?.id;
+    if (!productUnitId) return;
+
+    const units = selectData.getCachedData("home.unidades").data ?? [];
+    if (units.length === 0) return; // esperar a que carguen las unidades
+
+    const currentUnit = units.find(
+      (u: any) => String(u.id) === String(currentValue),
+    );
+    const isCompatible = currentUnit
+      ? currentUnit.unit_type === allowedType
+      : false;
+
+    if ((!currentValue || !isCompatible) && String(currentValue) !== String(productUnitId)) {
+      setFieldValue(fieldName, Number(productUnitId));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product, allowedType, currentValue, fieldName]);
+
+  return (
+    <FormProSelect
+      // El `key` fuerza el remount cuando cambia el tipo de medida permitido,
+      // único caso en que FastField no propagaría el nuevo `filterItem`.
+      key={`unit-${allowedType ?? "all"}`}
+      name={fieldName}
+      model="home.unidades"
+      placeholder="Unidad"
+      required={required}
+      hideLabel
+      filterItem={filterItem}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

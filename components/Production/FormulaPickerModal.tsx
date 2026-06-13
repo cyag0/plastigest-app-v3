@@ -244,6 +244,18 @@ const FormulaPickerModal = forwardRef<FormulaPickerModalRef>((_props, ref) => {
     return Number.isFinite(n) && n > 0 ? n : 1;
   }, [unitsProduced]);
 
+  // Abreviatura de la unidad de output: solo se muestra cuando todas las
+  // fórmulas seleccionadas tienen el mismo unit_type del producto de salida.
+  const unitHint = useMemo(() => {
+    if (selected.size === 0) return null;
+    const abbreviations = new Set<string>();
+    for (const f of selected.values()) {
+      const abbr = f.product?.unit?.abbreviation;
+      if (abbr) abbreviations.add(abbr);
+    }
+    return abbreviations.size === 1 ? Array.from(abbreviations)[0] : null;
+  }, [selected]);
+
   const handleConfirm = useCallback(() => {
     if (!config) return;
     const selectedArray = Array.from(selected.values());
@@ -308,15 +320,22 @@ const FormulaPickerModal = forwardRef<FormulaPickerModalRef>((_props, ref) => {
 
           <View style={styles.unitsRow}>
             <Text style={{ color: palette.text, fontWeight: "600", flex: 1 }}>
-              Unidades producidas
+              Cantidad a producir
             </Text>
-            <View style={styles.unitsInputWrap}>
-              <AppInput
-                value={unitsProduced}
-                onChange={setUnitsProduced}
-                placeholder="1"
-                keyboardType="numeric"
-              />
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <View style={styles.unitsInputWrap}>
+                <AppInput
+                  value={unitsProduced}
+                  onChange={setUnitsProduced}
+                  placeholder="1"
+                  keyboardType="numeric"
+                />
+              </View>
+              {unitHint && (
+                <Text style={{ color: palette.textSecondary, marginLeft: 6, minWidth: 28 }}>
+                  {unitHint}
+                </Text>
+              )}
             </View>
           </View>
 
@@ -346,9 +365,7 @@ const FormulaPickerModal = forwardRef<FormulaPickerModalRef>((_props, ref) => {
             <Text style={{ color: palette.textSecondary, flex: 1 }}>
               {selectedCount === 0
                 ? "Selecciona una o más fórmulas"
-                : `${selectedCount} fórmula${selectedCount === 1 ? "" : "s"} · ${parsedUnits} unidad${
-                    parsedUnits === 1 ? "" : "es"
-                  }`}
+                : `${selectedCount} fórmula${selectedCount === 1 ? "" : "s"} · producir ${parsedUnits}`}
             </Text>
             <Button
               mode="outlined"

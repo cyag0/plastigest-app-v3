@@ -107,6 +107,14 @@ namespace App {
         notes?: string | null;
       }>;
       active_packages?: ProductPackage[];
+      // Ubicaciones donde existe el producto, con el stock por ubicación
+      // en el pivot (relación many-to-many product <-> location).
+      locations?: Array<{
+        id: number;
+        pivot?: {
+          current_stock?: number | null;
+        };
+      }>;
     }
 
     interface ProductPackage {
@@ -611,6 +619,12 @@ namespace App {
         code?: string | null;
         product_type?: string | number | null;
         unit_id?: number | null;
+        unit?: {
+          id: number;
+          name: string;
+          abbreviation: string;
+          unit_type?: "mass" | "volume" | "quantity";
+        } | null;
         main_image?: { uri: string; name?: string; type?: string; size?: number | null } | null;
       } | null;
       name: string;
@@ -635,6 +649,8 @@ namespace App {
       product_code?: string;
       unit_id: number;
       unit_name?: string;
+      unit_abbreviation?: string;
+      unit_type?: "mass" | "volume" | "quantity";
       expected_quantity: number;
       sort_order?: number;
       notes?: string | null;

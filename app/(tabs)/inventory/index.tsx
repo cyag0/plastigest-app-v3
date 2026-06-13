@@ -158,6 +158,49 @@ export default function InventoryScreen() {
         </View>
       </View>
 
+            {/* ============== ACCIONES RAPIDAS ============== */}
+      <View style={styles.section}>
+        <SectionHeader title="Acciones rapidas" />
+        <View style={styles.actionsGrid}>
+          <QuickAccessCard
+            icon="package-variant"
+            label="Ver inventario"
+            description="Stock de todos los productos"
+            onPress={() => router.push("/(tabs)/inventory/products" as any)}
+          />
+          <QuickAccessCard
+            icon="package-variant-closed"
+            label="Paquetes"
+            description="Empaques y presentaciones"
+            onPress={() => router.push("/(tabs)/inventory/packages" as any)}
+          />
+          <QuickAccessCard
+            icon="clipboard-check-outline"
+            label="Inventario semanal"
+            description="Verificacion fisica"
+            onPress={() =>
+              router.push("/(tabs)/inventory/weekly-inventory" as any)
+            }
+          />
+          <QuickAccessCard
+            icon="tune-variant"
+            label="Ajustes"
+            description="Mermas o perdidas"
+            onPress={() => router.push("/(tabs)/inventory/adjustment" as any)}
+          />
+          <QuickAccessCard
+            icon="alert-circle-outline"
+            label="Stock bajo"
+            description="Productos a reponer"
+            onPress={() =>
+              router.push(
+                "/(tabs)/inventory/products?filter=low_stock" as any,
+              )
+            }
+          />
+        </View>
+      </View>
+
       {/* ============== SALUD DEL STOCK ============== */}
       {stockHealth && totalForHealth > 0 && (
         <View style={styles.section}>
@@ -242,48 +285,7 @@ export default function InventoryScreen() {
         </View>
       )}
 
-      {/* ============== ACCIONES RAPIDAS ============== */}
-      <View style={styles.section}>
-        <SectionHeader title="Acciones rapidas" />
-        <View style={styles.actionsGrid}>
-          <QuickAccessCard
-            icon="package-variant"
-            label="Ver inventario"
-            description="Stock de todos los productos"
-            onPress={() => router.push("/(tabs)/inventory/products" as any)}
-          />
-          <QuickAccessCard
-            icon="package-variant-closed"
-            label="Paquetes"
-            description="Empaques y presentaciones"
-            onPress={() => router.push("/(tabs)/inventory/packages" as any)}
-          />
-          <QuickAccessCard
-            icon="clipboard-check-outline"
-            label="Inventario semanal"
-            description="Verificacion fisica"
-            onPress={() =>
-              router.push("/(tabs)/inventory/weekly-inventory" as any)
-            }
-          />
-          <QuickAccessCard
-            icon="tune-variant"
-            label="Ajustes"
-            description="Mermas o perdidas"
-            onPress={() => router.push("/(tabs)/inventory/adjustment" as any)}
-          />
-          <QuickAccessCard
-            icon="alert-circle-outline"
-            label="Stock bajo"
-            description="Productos a reponer"
-            onPress={() =>
-              router.push(
-                "/(tabs)/inventory/products?filter=low_stock" as any,
-              )
-            }
-          />
-        </View>
-      </View>
+
 
       {/* ============== ALERTA ============== */}
       {lowStockCount > 0 && (

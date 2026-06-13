@@ -96,12 +96,12 @@ const MODULE_SECTIONS: ModuleSection[] = [
         icon: "cash-register",
         route: "/(tabs)/home/sales",
       },
-      {
+/*       {
         label: "Pedidos",
         description: "Órdenes de venta",
         icon: "clipboard-list-outline",
         route: "/(tabs)/home/sales-orders",
-      },
+      }, */
       {
         label: "Caja",
         description: "Cierre y movimientos",

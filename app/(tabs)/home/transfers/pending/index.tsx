@@ -2,7 +2,6 @@ import AppList from "@/components/App/AppList/AppList";
 import type { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import type { VariantMatchMap } from "@/components/App/StatusBadge";
 import StatusBadge from "@/components/App/StatusBadge";
-import Breadcrumb from "@/components/Transfers/Breadcrumb";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import type { InventoryTransfer } from "@/utils/services/transferService";
@@ -173,13 +172,7 @@ export default function PendingTransfersScreen() {
 
   return (
     <>
-      <Breadcrumb
-        items={[
-          { label: "Transferencias", route: "/(tabs)/home/transfers" },
-          { label: "Pendientes" },
-        ]}
-        currentIndex={1}
-      />
+      
       <AppList<InventoryTransfer>
         key={refreshKey}
         title="Solicitudes Pendientes"

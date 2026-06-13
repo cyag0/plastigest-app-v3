@@ -6,6 +6,7 @@ import Services from "@/utils/services";
 import { router, useLocalSearchParams } from "expo-router";
 import React from "react";
 import * as Yup from "yup";
+import { View } from "react-native";
 
 const TYPE_OPTIONS = [
   { label: "Ingreso", value: "income" },
@@ -50,7 +51,8 @@ export default function CashMovementForm() {
       validationSchema={validationSchema}
       onSuccess={() => router.back()}
     >
-      <FormSelectSimple name="type" label="Tipo" data={TYPE_OPTIONS} />
+     <View style={{ backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 } }}>
+       <FormSelectSimple name="type" label="Tipo" data={TYPE_OPTIONS} />
       <FormInput
         name="concept"
         label="Concepto"
@@ -75,6 +77,7 @@ export default function CashMovementForm() {
         multiline
         numberOfLines={3}
       />
+     </View>
     </AppForm>
   );
 }
