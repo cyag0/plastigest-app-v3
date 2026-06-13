@@ -41,7 +41,7 @@ export interface AppBarProps {
  * (headerShown de expo-router) para no romper la navegación.
  */
 export default function AppBar({
-  title = "Plastigest",
+  title = "GCStock",
   subtitle,
   showBackButton = true,
   showSearchButton = true,
@@ -172,14 +172,14 @@ export default function AppBar({
         )}
 
         {/* Search global (centro en desktop) */}
-        {showSearchButton && isWeb && (
+        {/* {showSearchButton && isWeb && (
           <View style={styles.searchSlot}>
             <SearchInput
               placeholder="Buscar productos, clientes, pedidos..."
               onChangeText={onSearchPress}
             />
           </View>
-        )}
+        )} */}
 
         {/* Spacer flexible */}
         <View style={styles.spacer} />

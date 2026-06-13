@@ -490,7 +490,7 @@ export default function ProfileScreen() {
                   color={colors.textMuted}
                 />
                 <Text style={styles.email} numberOfLines={1}>
-                  {user?.email || "sin-correo@plastigest.com"}
+                  {user?.email || "sin-correo@gcstock.com"}
                 </Text>
               </View>
             </View>
@@ -720,7 +720,7 @@ export default function ProfileScreen() {
         {/* ============== FOOTER ============== */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            PlastiGest v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
+            GCStock v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
           </Text>
           <Text style={styles.footerSubtext}>
             Hecho con {"\u{1F33F}"} para la gestion de tu negocio

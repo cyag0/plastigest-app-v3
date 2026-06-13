@@ -1,8 +1,8 @@
+import Logo from "@/components/App/Logo";
 import LocationSelector from "@/components/LocationSelector";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { notificationOpenedBus } from "@/utils/notificationEvents";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useSegments } from "expo-router";
 import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
@@ -173,20 +173,17 @@ function LoaderWithLogo({ message }: { message: string }) {
           },
         ]}
       >
-        <MaterialCommunityIcons
-          name="package-variant"
-          size={80}
-          color={palette.primary}
-        />
+        <Logo variant="mark" size={80} />
 
         <Text
           variant="displaySmall"
           style={{
             color: palette.primary,
             fontWeight: "bold",
+            marginTop: 12,
           }}
         >
-          PlastiGest
+          GCStock
         </Text>
 
         <Text variant="bodyLarge" style={styles.loadingText}>

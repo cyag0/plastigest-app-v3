@@ -1,3 +1,4 @@
+import Logo from "@/components/App/Logo";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/contexts/ThemeContext";
@@ -325,17 +326,12 @@ export default function LoginScreen() {
           <View style={styles.content}>
             {/* Header con logo */}
             <View style={styles.header}>
-              <View style={styles.logoBox}>
-                <MaterialCommunityIcons
-                  name="package-variant"
-                  size={32}
-                  color={colors.primary}
-                />
-              </View>
-              <RNText style={styles.title}>PlastiGest</RNText>
-              <RNText style={styles.subtitle}>
-                Gestión integral de plásticos
-              </RNText>
+              <Logo
+                variant="full"
+                size={260}
+                wordmarkColor={colors.text}
+                taglineColor={colors.textSecondary}
+              />
             </View>
 
             {/* Formulario de login */}
@@ -501,7 +497,7 @@ export default function LoginScreen() {
                 color={colors.textMuted}
               />
               <RNText style={styles.footerText}>
-                PlastiGest v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
+                GCStock v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
               </RNText>
             </View>
           </View>

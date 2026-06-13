@@ -594,7 +594,7 @@ async function showNativeForegroundNotification(
 
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: title || "PlastiGest",
+      title: title || "GCStock",
       body,
       data: remoteMessage.data || {},
     },
@@ -614,7 +614,7 @@ function showWebForegroundNotification(
   // evitar duplicados en segundo plano), asi que tomamos titulo/cuerpo de
   // `data`. Mantenemos el fallback a `notification` por compatibilidad.
   const data = payload.data ?? {};
-  const title = data.title || payload.notification?.title || "PlastiGest";
+  const title = data.title || payload.notification?.title || "GCStock";
   const options: NotificationOptions = {
     body: data.body || payload.notification?.body,
     icon: "/favicon.ico",

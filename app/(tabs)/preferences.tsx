@@ -338,7 +338,7 @@ export default function PreferencesScreen() {
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <AboutRow
               icon="information-outline"
-              label="PlastiGest"
+              label="GCStock"
               value={`v${appVersion}`}
             />
             <DividerLine />

@@ -36,7 +36,7 @@ messaging.onBackgroundMessage((payload) => {
   // asi que tomamos titulo/cuerpo de `data`. Dejamos el fallback a
   // `notification` por si llega un mensaje con ese formato.
   const data = payload.data || {};
-  const title = data.title || payload.notification?.title || "PlastiGest";
+  const title = data.title || payload.notification?.title || "GCStock";
   const options = {
     body: data.body || payload.notification?.body || "",
     icon: "/favicon.ico",

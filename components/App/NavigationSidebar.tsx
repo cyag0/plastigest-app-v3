@@ -4,6 +4,7 @@ import UserMenu from "@/components/App/UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
+import Logo from "@/components/App/Logo";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useFocusEffect, usePathname } from "expo-router";
@@ -102,13 +103,30 @@ const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-export default function NavigationSidebar() {
+type SidebarVariant = "inline" | "overlay";
+
+interface NavigationSidebarProps {
+  /** "inline" participa del layout (desktop/tablet); "overlay" se
+   *  dibuja sobre el contenido en pantallas angostas. */
+  variant?: SidebarVariant;
+  /** Fuerza el rail de iconos y deshabilita el toggle manual
+   *  (modo tablet). */
+  forceCollapsed?: boolean;
+  /** En modo overlay: cerrar el drawer (al navegar o tocar la X). */
+  onRequestClose?: () => void;
+}
+
+export default function NavigationSidebar({
+  variant = "inline",
+  forceCollapsed = false,
+  onRequestClose,
+}: NavigationSidebarProps) {
   const pathname = usePathname();
   const { loadUnreadNotificationsCount, unreadNotificationsCount, location } =
     useAuth();
   const { mode } = useTheme();
 
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsedPref, setCollapsedPref] = useState(false);
   const [userMenuVisible, setUserMenuVisible] = useState(false);
   // Controla el modal de cambio de empresa/sucursal. Lo abrimos
   // desde el bloque de sucursal del sidebar y desde el menu de
@@ -128,12 +146,12 @@ export default function NavigationSidebar() {
   // Cargar estado de colapsado persistido
   React.useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY_COLLAPSED).then((value) => {
-      if (value === "1") setCollapsed(true);
+      if (value === "1") setCollapsedPref(true);
     });
   }, []);
 
   const toggleCollapsed = useCallback(() => {
-    setCollapsed((prev) => {
+    setCollapsedPref((prev) => {
       const next = !prev;
       AsyncStorage.setItem(STORAGE_KEY_COLLAPSED, next ? "1" : "0");
       return next;
@@ -142,9 +160,14 @@ export default function NavigationSidebar() {
 
   const isActive = (route: string) => pathname === routeToPathname(route);
 
-  const handleNavigation = useCallback((route: string) => {
-    router.push(route as any);
-  }, []);
+  const handleNavigation = useCallback(
+    (route: string) => {
+      router.push(route as any);
+      // En overlay (móvil) cerramos el drawer tras navegar.
+      onRequestClose?.();
+    },
+    [onRequestClose]
+  );
 
   const handleSwitchLocation = useCallback(() => {
     // Antes: router.push("/(stacks)/selectLocation") -> sacaba al
@@ -155,9 +178,6 @@ export default function NavigationSidebar() {
     setSwitcherVisible(true);
   }, []);
 
-  // Color del logo: blanco si el primary es oscuro (light), oscuro
-  // si el primary es claro (dark). Lo derivamos del mode.
-  const logoForeground = mode === "dark" ? "#0F172A" : "#FFFFFF";
   // Color del icono de texto (chevron, map-marker): del theme
   const iconMuted = mode === "dark" ? "#64748B" : "#94A3B8";
   const iconSecondary = mode === "dark" ? "#CBD5E1" : "#475569";
@@ -174,6 +194,10 @@ export default function NavigationSidebar() {
     },
     containerExpanded: {
       backgroundColor: colors.surfaceMuted,
+    },
+    containerOverlay: {
+      backgroundColor: colors.surface,
+      ...tokens.shadow.lg,
     },
     header: {
       padding: 12,
@@ -279,6 +303,17 @@ export default function NavigationSidebar() {
     },
   }));
 
+  // Estado efectivo de colapsado según el modo:
+  // - overlay (móvil): siempre expandido (260px) sobre el contenido.
+  // - forceCollapsed (tablet): rail de iconos bloqueado.
+  // - inline (desktop): respeta la preferencia manual del usuario.
+  const effectiveCollapsed =
+    variant === "overlay" ? false : forceCollapsed ? true : collapsedPref;
+  // Alias usado en el resto del render para no tocar el JSX existente.
+  const collapsed = effectiveCollapsed;
+  // El toggle manual solo aplica en desktop (inline sin forzar).
+  const canToggle = variant === "inline" && !forceCollapsed;
+
   const width = collapsed ? COLLAPSED_WIDTH : EXPANDED_WIDTH;
 
   return (
@@ -286,6 +321,7 @@ export default function NavigationSidebar() {
       style={[
         styles.container,
         collapsed ? styles.containerCollapsed : styles.containerExpanded,
+        variant === "overlay" && styles.containerOverlay,
         { width },
       ]}
     >
@@ -293,43 +329,50 @@ export default function NavigationSidebar() {
       <View style={styles.header}>
         {!collapsed ? (
           <View style={styles.logoRow}>
-            <View style={styles.logoBox}>
-              <MaterialCommunityIcons
-                name="package-variant"
-                size={20}
-                color={logoForeground}
-              />
-            </View>
+            <Logo variant="mark" size={32} />
             <Text style={styles.appName} numberOfLines={1}>
-              PlastiGest
+              GCStock
             </Text>
-            <TouchableOpacity
-              onPress={toggleCollapsed}
-              style={styles.collapseButton}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              accessibilityLabel="Colapsar sidebar"
-            >
-              <MaterialCommunityIcons
-                name="chevron-left"
-                size={18}
-                color={iconMuted}
-              />
-            </TouchableOpacity>
+            {variant === "overlay" ? (
+              <TouchableOpacity
+                onPress={onRequestClose}
+                style={styles.collapseButton}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Cerrar menú"
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={18}
+                  color={iconMuted}
+                />
+              </TouchableOpacity>
+            ) : canToggle ? (
+              <TouchableOpacity
+                onPress={toggleCollapsed}
+                style={styles.collapseButton}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Colapsar sidebar"
+              >
+                <MaterialCommunityIcons
+                  name="chevron-left"
+                  size={18}
+                  color={iconMuted}
+                />
+              </TouchableOpacity>
+            ) : null}
           </View>
-        ) : (
+        ) : canToggle ? (
           <TouchableOpacity
             onPress={toggleCollapsed}
             style={styles.collapsedLogoButton}
             accessibilityLabel="Expandir sidebar"
           >
-            <View style={styles.logoBox}>
-              <MaterialCommunityIcons
-                name="package-variant"
-                size={20}
-                color={logoForeground}
-              />
-            </View>
+            <Logo variant="mark" size={32} />
           </TouchableOpacity>
+        ) : (
+          <View style={styles.collapsedLogoButton}>
+            <Logo variant="mark" size={32} />
+          </View>
         )}
       </View>
 
