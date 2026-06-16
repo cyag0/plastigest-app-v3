@@ -217,7 +217,8 @@ function NativeTabLayout() {
           header: ({ options, route }) => (
             <AppBar
               title={options.title || route.name}
-              onSearchPress={() => console.log("Search pressed")}
+              showBackButton={false}
+              showSearchButton={false}
               onNotificationPress={() => console.log("Notifications pressed")}
               onProfilePress={() => console.log("Profile pressed")}
             />
@@ -249,6 +250,16 @@ function NativeTabLayout() {
         name="profile"
         options={{
           title: "Perfil",
+          headerShown: true,
+          header: ({ options, route }) => (
+            <AppBar
+              title={options.title || route.name}
+              showBackButton={false}
+              showSearchButton={false}
+              onNotificationPress={() => console.log("Notifications pressed")}
+              onProfilePress={() => console.log("Profile pressed")}
+            />
+          ),
           tabBarIcon: ({ color, focused }) => (
             <Appbar.Action icon="account" iconColor={color} size={24} />
           ),

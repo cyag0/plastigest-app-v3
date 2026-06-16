@@ -6,7 +6,7 @@ import { notificationOpenedBus } from "@/utils/notificationEvents";
 import { useRouter, useSegments } from "expo-router";
 import React, { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
-import { Text } from "react-native-paper";
+import { ActivityIndicator, Text } from "react-native-paper";
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -186,9 +186,7 @@ function LoaderWithLogo({ message }: { message: string }) {
           GCStock
         </Text>
 
-        <Text variant="bodyLarge" style={styles.loadingText}>
-          {message}
-        </Text>
+        <ActivityIndicator size="large" color={palette.primary} style={{ marginTop: 24 }} />
       </Animated.View>
     </View>
   );

@@ -261,7 +261,7 @@ export default function CashClosingDetail() {
       <Button
         mode="outlined"
         onPress={() =>
-          router.push(`/(tabs)/home/cash/closing/form?id=${item.id}`)
+          router.push(`/(tabs)/home/cash/closing/${item.id}/edit` as any)
         }
         style={{ borderRadius: 10 }}
       >

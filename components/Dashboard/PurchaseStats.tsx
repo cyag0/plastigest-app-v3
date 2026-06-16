@@ -2,20 +2,19 @@ import EmptyState from "@/components/App/EmptyState";
 import KpiCard from "@/components/Dashboard/KpiCard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useResponsive } from "@/hooks/useResponsive";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
-
-const screenWidth = Dimensions.get("window").width;
 
 interface PurchaseStatsData {
   total_purchases: number;
@@ -42,8 +41,12 @@ interface PurchaseStatsData {
 }
 
 export default function PurchaseStats() {
+  const { isMobile } = useResponsive();
+  const { width: screenWidth } = useWindowDimensions();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<PurchaseStatsData | null>(null);
+  const kpiStyle = isMobile ? { flexBasis: "47%" as const } : undefined;
+  const chartWidth = screenWidth - (tokens.spacing[5] + tokens.spacing[4]) * 2;
 
   useEffect(() => {
     loadStats();
@@ -128,21 +131,25 @@ export default function PurchaseStats() {
           icon="cart"
           label="Total Compras"
           value={String(stats.total_purchases)}
+          style={kpiStyle}
         />
         <KpiCard
           icon="cash"
           label="Monto Total"
           value={`$${(stats.total_amount || 0).toFixed(0)}`}
+          style={kpiStyle}
         />
         <KpiCard
           icon="package-variant-closed"
           label="Recibidas"
           value={String(stats.received_count)}
+          style={kpiStyle}
         />
         <KpiCard
           icon="clock-outline"
           label="Pendientes"
           value={String(stats.pending_count)}
+          style={kpiStyle}
         />
       </View>
 
@@ -153,7 +160,7 @@ export default function PurchaseStats() {
           {hasTrend ? (
             <LineChart
               data={trendData}
-              width={screenWidth - 64}
+              width={chartWidth}
               height={220}
               chartConfig={{
                 backgroundColor: palette.surface,
@@ -192,7 +199,7 @@ export default function PurchaseStats() {
           {hasSuppliers ? (
             <BarChart
               data={suppliersData}
-              width={screenWidth - 64}
+              width={chartWidth}
               height={220}
               chartConfig={{
                 backgroundColor: palette.surface,

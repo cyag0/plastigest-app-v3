@@ -9,7 +9,7 @@ import { useAlerts } from "@/hooks/useAlerts";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import { IconButton, Text } from "react-native-paper";
 import * as Yup from "yup";
@@ -57,6 +57,15 @@ export default function PackagesForm(props: PackagesFormProps) {
   const { company } = useSelectedCompany();
   const alerts = useAlerts();
 
+  const initialValues = useMemo(
+    () => ({
+      company_id: company?.id,
+      is_active: true,
+      is_default: false,
+      sort_order: 0,
+    }),
+    [company?.id]
+  );
 
   // Función para generar código de barras aleatorio en el frontend
   const generateRandomBarcode = () => {
@@ -90,9 +99,7 @@ export default function PackagesForm(props: PackagesFormProps) {
       onSuccess={() => {
         router.back();
       }}
-      initialValues={{
-        company_id: company.id,
-      }}
+      initialValues={initialValues}
     >
       {/* Información básica del paquete */}
       <Text

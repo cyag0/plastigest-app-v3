@@ -1,11 +1,13 @@
 import NotificationBell from "@/components/Notifications/NotificationBell";
 import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
 import UserMenu from "@/components/App/UserMenu";
+import { tokens } from "@/constants/tokens";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { Platform, TouchableOpacity, View } from "react-native";
 import { Appbar } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import SearchInput from "../SearchInput";
 import WebBreadcrumb from "../WebBreadcrumb";
 
@@ -57,6 +59,7 @@ export default function AppBar({
   iconColor,
 }: AppBarProps) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const useBreadcrumbTitle = showBreadcrumb && isWeb;
   const [userMenuVisible, setUserMenuVisible] = useState(false);
@@ -73,7 +76,7 @@ export default function AppBar({
       borderBottomColor: colors.border,
       backgroundColor: backgroundColor ?? colors.surface,
     },
-    header: { backgroundColor: "transparent", justifyContent: "space-between", paddingHorizontal: 16 },
+    header: { height: 'auto', padding: 4, backgroundColor: "transparent", justifyContent: "space-between" },
     titleSlot: { flexShrink: 1 },
     searchSlot: {
       flex: 1,
@@ -92,6 +95,7 @@ export default function AppBar({
     },
     avatarInner: { margin: 0, padding: 0 },
     avatarIcon: { margin: 0 },
+    title: { ...tokens.typography.h3, color: colors.text },
   }));
 
   // Con un onBack personalizado mostramos el botón aunque no haya
@@ -134,12 +138,19 @@ export default function AppBar({
 
   const resolvedTitleColor = titleColor ?? styles.container.backgroundColor;
   const resolvedIconColor = iconColor;
+  
 
   return (
-    <View style={styles.container}>
+
+
+    <>
+      <View style={{ height: insets.top }} />
+ <View style={styles.container}>
+      
+
       <Appbar.Header
         style={styles.header}
-        statusBarHeight={0}
+        statusBarHeight={0} // Ya manejamos el safe area con un View separado, evitamos padding extra.
       >
         {/* Botón de retroceso */}
         {!useBreadcrumbTitle && canShowBack && (
@@ -162,30 +173,16 @@ export default function AppBar({
           <Appbar.Content
             title={title}
             subtitle={subtitle}
-            titleStyle={[
-              { color: resolvedTitleColor, fontSize: 18, fontWeight: "600" },
-            ]}
-            subtitleStyle={[
-              { color: resolvedIconColor, opacity: 0.8, fontSize: 12 },
-            ]}
+            titleStyle={styles.title}
           />
         )}
 
-        {/* Search global (centro en desktop) */}
-        {/* {showSearchButton && isWeb && (
-          <View style={styles.searchSlot}>
-            <SearchInput
-              placeholder="Buscar productos, clientes, pedidos..."
-              onChangeText={onSearchPress}
-            />
-          </View>
-        )} */}
 
         {/* Spacer flexible */}
         <View style={styles.spacer} />
 
        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        {/* Acciones del lado derecho */} {/* Botón de búsqueda (mobile: abre modal) */}
+        {/* Botón de búsqueda (mobile: abre modal) */}
         {showSearchButton && !isWeb && (
           <Appbar.Action
             icon="magnify"
@@ -226,6 +223,8 @@ export default function AppBar({
         initialView={switcherInitialView}
       />
     </View>
+    </>
+   
   );
 }
 

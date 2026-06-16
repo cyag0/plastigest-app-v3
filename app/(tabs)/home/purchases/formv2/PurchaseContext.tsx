@@ -44,7 +44,7 @@ interface PurchaseContextType {
   supplierId: number | null;
 
   // Actions
-  loadData: (supplierId?: number | null) => Promise<void>;
+  loadData: (supplierId?: number | string | null) => Promise<void>;
   handleAddProduct: (product: ProductListItem, unitId: number) => void;
   handleRemoveProduct: (productId: number | string) => void;
   handleItemChange: (
@@ -99,9 +99,16 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
     loadData(res.supplier_id);
   }
 
-  const loadData = async (supplier_id?: number | null) => {
+  const loadData = async (supplier_id?: number | string | null) => {
+    const numericSupplierId =
+      typeof supplier_id === "string" ? parseInt(supplier_id, 10) || null : supplier_id ?? null;
+
     try {
       setLoading(true);
+
+      if (numericSupplierId) {
+        setSupplierId(numericSupplierId);
+      }
 
       // Cargar unidades y categorías siempre (no dependen del proveedor)
       const [unitsResponse, categoriesResponse] = await Promise.all([
@@ -110,11 +117,11 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
       ]);
 
       // Solo cargar productos si hay un proveedor seleccionado
-      if (supplier_id) {
+      if (numericSupplierId) {
         const productsResponse = await Services.products.index({
           product_type: ["raw_material", "commercial"],
           is_active: "1",
-          supplier_id: supplier_id,
+          supplier_id: numericSupplierId,
         });
 
         if (

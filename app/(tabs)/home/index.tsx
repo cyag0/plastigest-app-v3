@@ -14,11 +14,15 @@
 import EmptyState from "@/components/App/EmptyState";
 import SectionHeader from "@/components/App/SectionHeader";
 import NotificationPermissionBanner from "@/components/Notifications/NotificationPermissionBanner";
+import NotificationBell from "@/components/Notifications/NotificationBell";
+import UserMenu from "@/components/App/UserMenu";
+import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
 import KpiCard from "@/components/Dashboard/KpiCard";
 import QuickAccessCard from "@/components/Dashboard/QuickAccessCard";
 import TaskRow, { TaskRowStatus } from "@/components/Dashboard/TaskRow";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
@@ -26,10 +30,13 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
+  Platform,
   ScrollView,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Services from "@/utils/services";
 
 interface QuickAccess {
@@ -91,8 +98,11 @@ const QUICK_ACCESS: QuickAccess[] = [
 export default function HomeScreen() {
   const router = useRouter();
   const auth = useAuth();
+  const { colors } = useTheme();
   const { selectedLocation } = useSelectedLocation();
   const { isMobile } = useResponsive();
+  const insets = useSafeAreaInsets();
+
 
   const styles = useThemedStyles((c) => ({
     container: {
@@ -114,8 +124,32 @@ export default function HomeScreen() {
     contentMobile: {
       padding: 16,
     },
-    welcome: {
+    welcomeRow: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 12,
       marginTop: 4,
+    },
+    welcomeTextCol: {
+      flex: 1,
+      minWidth: 0,
+    },
+    welcomeActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    avatarTrigger: {
+      padding: 2,
+    },
+    avatar: {
+      width: 36,
+      height: 36,
+      borderRadius: 9999,
+      backgroundColor: c.primary,
+      alignItems: "center",
+      justifyContent: "center",
     },
     welcomeTitle: {
       ...tokens.typography.h1,
@@ -131,10 +165,49 @@ export default function HomeScreen() {
       flexWrap: "wrap",
       gap: 12,
     },
+    // En mobile las 4 KPIs no caben en una fila (se truncan a "V…", "C…").
+    // Forzamos 2 columnas con flexBasis ~47% para que envuelvan en 2x2.
+    kpiItemMobile: {
+      flexBasis: "47%",
+    },
     quickGrid: {
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 12,
+    },
+    // Mobile: scroll horizontal de tarjetas compactas (ícono + título)
+    quickScroll: {
+      marginHorizontal: -16,
+    },
+    quickScrollContent: {
+      paddingHorizontal: 16,
+      paddingBottom: 4,
+      flexDirection: "row",
+      gap: 10,
+    },
+    quickCompactCard: {
+      width: 82,
+      backgroundColor: c.surface,
+      borderRadius: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+      alignItems: "center",
+      gap: 8,
+      ...tokens.shadow.sm,
+    },
+    quickCompactIconBox: {
+      width: 42,
+      height: 42,
+      borderRadius: 10,
+      backgroundColor: c.surfaceMuted,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    quickCompactLabel: {
+      ...tokens.typography.caption,
+      color: c.text,
+      fontWeight: "600" as const,
+      textAlign: "center" as const,
     },
     taskList: {
       gap: 8,
@@ -274,14 +347,20 @@ export default function HomeScreen() {
       >
         <NotificationPermissionBanner />
 
-        {/* Nivel 1: Bienvenida */}
-        <View style={styles.welcome}>
-          <Text style={styles.welcomeTitle}>Hola, {firstName} 👋</Text>
-          {(companyName || locationName) && (
-            <Text style={styles.welcomeSubtitle}>
-              {[locationName, companyName].filter(Boolean).join(" · ")}
+        {/* Nivel 1: Bienvenida + acciones inline (campana, avatar) */}
+        <View style={styles.welcomeRow}>
+          <View style={styles.welcomeTextCol}>
+            <Text style={styles.welcomeTitle} numberOfLines={1}>
+              Hola, {firstName} 👋
             </Text>
-          )}
+            {(companyName || locationName) && (
+              <Text style={styles.welcomeSubtitle} numberOfLines={1}>
+                {[locationName, companyName].filter(Boolean).join(" · ")}
+              </Text>
+            )}
+          </View>
+
+
         </View>
 
         {/* Nivel 2: KPIs */}
@@ -291,6 +370,7 @@ export default function HomeScreen() {
             label="Ventas hoy"
             value={formatCurrency(kpis.ventasHoy)}
             loading={kpisLoading}
+            style={isMobile ? styles.kpiItemMobile : undefined}
             delta={
               kpis.ventasDelta !== null
                 ? { value: kpis.ventasDelta, period: "vs ayer" }
@@ -302,6 +382,7 @@ export default function HomeScreen() {
             label="Compras hoy"
             value={formatCurrency(kpis.comprasHoy)}
             loading={kpisLoading}
+            style={isMobile ? styles.kpiItemMobile : undefined}
             delta={
               kpis.comprasDelta !== null
                 ? { value: kpis.comprasDelta, period: "vs ayer" }
@@ -314,12 +395,14 @@ export default function HomeScreen() {
             label="Órdenes activas"
             value={String(kpis.ordenesActivas || 0)}
             loading={kpisLoading}
+            style={isMobile ? styles.kpiItemMobile : undefined}
           />
           <KpiCard
             icon="checkbox-marked-circle-outline"
             label="Tareas pendientes"
             value={String(kpis.tareasPendientes)}
             loading={kpisLoading}
+            style={isMobile ? styles.kpiItemMobile : undefined}
           />
         </View>
 
@@ -330,17 +413,46 @@ export default function HomeScreen() {
             actionLabel="Ver todos"
             onAction={() => router.push("/(tabs)/home/all-modules" as any)}
           />
-          <View style={styles.quickGrid}>
-            {QUICK_ACCESS.map((item) => (
-              <QuickAccessCard
-                key={item.key}
-                icon={item.icon}
-                label={item.label}
-                description={item.description}
-                onPress={() => router.push(item.link as any)}
-              />
-            ))}
-          </View>
+          {isMobile ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.quickScroll}
+              contentContainerStyle={styles.quickScrollContent}
+            >
+              {QUICK_ACCESS.map((item) => (
+                <TouchableOpacity
+                  key={item.key}
+                  style={styles.quickCompactCard}
+                  onPress={() => router.push(item.link as any)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.quickCompactIconBox}>
+                    <MaterialCommunityIcons
+                      name={item.icon}
+                      size={24}
+                      color={colors.text}
+                    />
+                  </View>
+                  <Text style={styles.quickCompactLabel} numberOfLines={2}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.quickGrid}>
+              {QUICK_ACCESS.map((item) => (
+                <QuickAccessCard
+                  key={item.key}
+                  icon={item.icon}
+                  label={item.label}
+                  description={item.description}
+                  onPress={() => router.push(item.link as any)}
+                />
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Nivel 4: Tareas pendientes */}

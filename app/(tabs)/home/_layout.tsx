@@ -10,6 +10,7 @@ export default function _layout() {
         headerShown: true,
         header: (props) => {
           const { options, route } = props;
+          const isIndex = route.name === "index";
           const right = options.headerRight;
 
           function rightActions() {
@@ -20,6 +21,7 @@ export default function _layout() {
             <AppBar
               title={options.title || route.name}
               showSearchButton={false}
+              showBackButton={!isIndex}
               onProfilePress={() => console.log("Profile pressed")}
               rightActions={rightActions()}
             />
@@ -103,8 +105,12 @@ export default function _layout() {
         options={{ title: "Nuevo Cierre" }}
       />
       <Stack.Screen
-        name="cash/closing/[id]"
+        name="cash/closing/[id]/index"
         options={{ title: "Detalle de Cierre" }}
+      />
+      <Stack.Screen
+        name="cash/closing/[id]/edit"
+        options={{ title: "Editar Cierre" }}
       />
       <Stack.Screen name="workers" />
       <Stack.Screen name="categories" />
@@ -133,7 +139,7 @@ export default function _layout() {
       <Stack.Screen
         name="purchases/formv2"
         options={{
-          title: "Nueva Compra",
+          headerShown: false,
         }}
       />
       <Stack.Screen

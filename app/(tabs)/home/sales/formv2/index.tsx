@@ -1,10 +1,13 @@
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useResponsive } from "@/hooks/useResponsive";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useMemo, useState } from "react";
-import { Modal, StyleSheet, TextInput, View } from "react-native";
-import { Button, RadioButton, Text } from "react-native-paper";
+import { useNavigation } from "@react-navigation/native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Modal, StyleSheet, Text as RNText, TouchableOpacity, View } from "react-native";
+import { Button, RadioButton, Text, TextInput } from "react-native-paper";
 import { useSale } from "./SaleContext";
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -22,14 +25,47 @@ interface SaleSummary {
   method: string;
 }
 
+function CartHeaderButton({ count, onPress }: { count: number; onPress: () => void }) {
+  return (
+    <TouchableOpacity onPress={onPress} style={cartBtnStyles.btn} activeOpacity={0.7}>
+      <MaterialCommunityIcons name="cart-outline" size={24} color={palette.text} />
+      {count > 0 && (
+        <View style={cartBtnStyles.badge}>
+          <RNText style={cartBtnStyles.badgeText}>{count > 99 ? "99+" : count}</RNText>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+const cartBtnStyles = StyleSheet.create({
+  btn: { padding: 8, marginRight: 4 },
+  badge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: palette.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  badgeText: { color: "#fff", fontSize: 10, fontWeight: "700" as const },
+});
+
 export default function SaleFormScreen() {
   const alerts = useAlerts();
   const saleContext = useSale();
+  const navigation = useNavigation();
+  const { isMobile } = useResponsive();
 
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastSale, setLastSale] = useState<SaleSummary | null>(null);
+  const [cartVisible, setCartVisible] = useState(false);
 
   // El contexto ya expone los items del carrito con el formato de Cart.
   const cartItems = saleContext.cartItems;
@@ -38,6 +74,21 @@ export default function SaleFormScreen() {
     () => cartItems.reduce((sum, item) => sum + item.total, 0),
     [cartItems],
   );
+
+  const itemCount = useMemo(
+    () => cartItems.reduce((sum, item) => sum + item.quantity, 0),
+    [cartItems],
+  );
+
+  // En mobile inyectamos el botón del carrito en el AppBar.
+  useEffect(() => {
+    if (!isMobile) return;
+    navigation.setOptions({
+      headerRight: () => (
+        <CartHeaderButton count={itemCount} onPress={() => setCartVisible(true)} />
+      ),
+    });
+  }, [isMobile, itemCount]);
 
   const handleConfirmSale = async () => {
     if (isSubmitting) return;
@@ -80,7 +131,8 @@ export default function SaleFormScreen() {
         paid_amount: paidAmount > 0 ? paidAmount : undefined,
       });
 
-      // Limpiar formulario y mostrar el modal de éxito
+      // Cerrar carrito y mostrar modal de éxito
+      setCartVisible(false);
       setPaymentAmount("");
       setPaymentMethod("cash");
       setLastSale(summary);
@@ -102,39 +154,14 @@ export default function SaleFormScreen() {
     setPaymentMethod("cash");
   };
 
-  return (
-    <View style={styles.container}>
-      {/* Lista de productos a la izquierda */}
-      <View style={styles.productsSection}>
-        <ListProducts
-          loading={saleContext.loading}
-          categories={saleContext.categories}
-          products={saleContext.products}
-          selectedProducts={saleContext.selectedProducts}
-          onAddProduct={saleContext.handleAddProduct}
-          onRemoveProduct={saleContext.handleRemoveProduct}
-          onItemChange={saleContext.handleItemChange}
-          onScanNotFound={(code) =>
-            alerts.error(`Código no encontrado: ${code}`)
-          }
-          showOutOfStockFilter
-        />
-      </View>
-
-      {/* Carrito y pago a la derecha */}
-      <View style={styles.cartSection}>
-        <Cart
-          items={cartItems}
-          onRemoveItem={(itemId) => {
-            saleContext.handleRemoveProduct(itemId);
-          }}
-          onItemChange={(item, action, data) => {
-            saleContext.handleItemChange(item, action, data);
-          }}
-          onClearCart={saleContext.clearCart}
-        >
-          {/* Información de pago dentro del carrito */}
-          <View style={styles.paymentSection}>
+  const cartContent = (
+    <Cart
+      items={cartItems}
+      onRemoveItem={(itemId) => saleContext.handleRemoveProduct(itemId)}
+      onItemChange={(item, action, data) => saleContext.handleItemChange(item, action, data)}
+      onClearCart={saleContext.clearCart}
+    >
+      <View style={styles.paymentSection}>
             <Text style={styles.paymentTitle}>Información de Pago</Text>
 
             {/* Método de pago */}
@@ -198,7 +225,52 @@ export default function SaleFormScreen() {
             </Button>
           </View>
         </Cart>
+  );
+
+  return (
+    <View style={styles.container}>
+      {/* Lista de productos */}
+      <View style={styles.productsSection}>
+        <ListProducts
+          loading={saleContext.loading}
+          categories={saleContext.categories}
+          products={saleContext.products}
+          selectedProducts={saleContext.selectedProducts}
+          onAddProduct={saleContext.handleAddProduct}
+          onRemoveProduct={saleContext.handleRemoveProduct}
+          onItemChange={saleContext.handleItemChange}
+          onScanNotFound={(code) => alerts.error(`Código no encontrado: ${code}`)}
+          showOutOfStockFilter
+        />
       </View>
+
+      {/* Carrito lateral — solo desktop */}
+      {!isMobile && (
+        <View style={styles.cartSection}>{cartContent}</View>
+      )}
+
+      {/* Modal carrito — solo mobile */}
+      {isMobile && (
+        <Modal
+          visible={cartVisible}
+          animationType="slide"
+          onRequestClose={() => setCartVisible(false)}
+        >
+          <View style={styles.cartModal}>
+            <View style={styles.cartModalHeader}>
+              <Text style={styles.cartModalTitle}>Carrito</Text>
+              <TouchableOpacity
+                onPress={() => setCartVisible(false)}
+                style={styles.cartModalClose}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="close" size={24} color={palette.text} />
+              </TouchableOpacity>
+            </View>
+            {cartContent}
+          </View>
+        </Modal>
+      )}
 
       {/* Modal de éxito al registrar la venta */}
       <Modal
@@ -230,9 +302,7 @@ export default function SaleFormScreen() {
             {!!lastSale && lastSale.change > 0 && (
               <View style={styles.modalRow}>
                 <Text style={styles.modalRowLabel}>Cambio</Text>
-                <Text
-                  style={[styles.modalRowValue, { color: palette.success }]}
-                >
+                <Text style={[styles.modalRowValue, { color: palette.success }]}>
                   ${lastSale.change.toFixed(2)}
                 </Text>
               </View>
@@ -241,9 +311,7 @@ export default function SaleFormScreen() {
             {!!lastSale && lastSale.pending > 0 && (
               <View style={styles.modalRow}>
                 <Text style={styles.modalRowLabel}>Pendiente</Text>
-                <Text
-                  style={[styles.modalRowValue, { color: palette.warning }]}
-                >
+                <Text style={[styles.modalRowValue, { color: palette.warning }]}>
                   ${lastSale.pending.toFixed(2)}
                 </Text>
               </View>
@@ -278,6 +346,28 @@ const styles = StyleSheet.create({
     width: 400,
     borderLeftWidth: 1,
     borderLeftColor: palette.border,
+  },
+  // Modal del carrito en mobile
+  cartModal: {
+    flex: 1,
+    backgroundColor: palette.background,
+  },
+  cartModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: tokens.spacing[4],
+    paddingVertical: tokens.spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+    backgroundColor: palette.surface,
+  },
+  cartModalTitle: {
+    ...tokens.typography.h3,
+    color: palette.text,
+  },
+  cartModalClose: {
+    padding: tokens.spacing[2],
   },
   paymentSection: {
     padding: 16,

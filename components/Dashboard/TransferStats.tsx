@@ -3,14 +3,13 @@ import EmptyState from "@/components/App/EmptyState";
 import KpiCard from "@/components/Dashboard/KpiCard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useResponsive } from "@/hooks/useResponsive";
 import axios from "@/utils/axios";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { Dimensions, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
-import { ActivityIndicator, Card, SegmentedButtons, Text } from "react-native-paper";
-
-const screenWidth = Dimensions.get("window").width;
+import { ActivityIndicator, SegmentedButtons, Text } from "react-native-paper";
 
 interface TransferStatsData {
   total_transfers: number;
@@ -47,9 +46,13 @@ const STATUS_META: Record<
 };
 
 export default function TransferStats() {
+  const { isMobile } = useResponsive();
+  const { width: screenWidth } = useWindowDimensions();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<TransferStatsData | null>(null);
   const [period, setPeriod] = useState("month");
+  const kpiStyle = isMobile ? { flexBasis: "47%" as const } : undefined;
+  const chartWidth = screenWidth - (tokens.spacing[5] + tokens.spacing[4]) * 2;
 
   useEffect(() => {
     loadStats();
@@ -105,21 +108,25 @@ export default function TransferStats() {
           icon="swap-horizontal"
           label="Total"
           value={String(stats.total_transfers)}
+          style={kpiStyle}
         />
         <KpiCard
           icon="package-variant"
           label="Enviados"
           value={String(stats.transfers_sent)}
+          style={kpiStyle}
         />
         <KpiCard
           icon="truck-delivery"
           label="Recibidos"
           value={String(stats.transfers_received)}
+          style={kpiStyle}
         />
         <KpiCard
           icon="clock-outline"
           label="Tiempo Prom."
           value={`${stats.avg_processing_time_hours}h`}
+          style={kpiStyle}
         />
       </View>
 
@@ -191,7 +198,7 @@ export default function TransferStats() {
                   },
                 ],
               }}
-              width={screenWidth - 64}
+              width={chartWidth}
               height={220}
               chartConfig={{
                 backgroundColor: palette.surface,
@@ -266,7 +273,7 @@ export default function TransferStats() {
                   },
                 ],
               }}
-              width={screenWidth - 64}
+              width={chartWidth}
               height={220}
               chartConfig={{
                 backgroundColor: palette.surface,

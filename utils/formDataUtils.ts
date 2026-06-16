@@ -90,6 +90,9 @@ export const objectToFormDataWithNestedInputsAsync = async (
           }
         }
       } else {
+        // Skip undefined and NaN — don't send invalid strings to the backend.
+        if (value === undefined) continue;
+        if (typeof value === "number" && isNaN(value)) continue;
         // Convertir booleanos a 0 o 1
         const finalValue =
           typeof value === "boolean" ? (value ? "1" : "0") : value;

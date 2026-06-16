@@ -3,24 +3,27 @@ import EmptyState from "@/components/App/EmptyState";
 import KpiCard from "@/components/Dashboard/KpiCard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useResponsive } from "@/hooks/useResponsive";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
 
-const screenWidth = Dimensions.get("window").width;
-
 export default function SaleStats() {
+  const { isMobile } = useResponsive();
+  const { width: screenWidth } = useWindowDimensions();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
+  const kpiStyle = isMobile ? { flexBasis: "47%" as const } : undefined;
+  const chartWidth = screenWidth - (tokens.spacing[5] + tokens.spacing[4]) * 2;
 
   useEffect(() => {
     loadStats();
@@ -115,31 +118,37 @@ export default function SaleStats() {
           icon="cart"
           label="Total Ventas"
           value={String(stats.overview?.total_sales || 0)}
+          style={kpiStyle}
         />
         <KpiCard
           icon="cash-multiple"
           label="Monto Total"
           value={`$${formatCurrency(stats.overview?.total_amount || 0)}`}
+          style={kpiStyle}
         />
         <KpiCard
           icon="chart-line"
           label="Promedio Venta"
           value={`$${formatCurrency(stats.overview?.average_amount || 0)}`}
+          style={kpiStyle}
         />
         <KpiCard
           icon="calendar-today"
           label="Promedio Diario"
           value={`$${formatCurrency(stats.overview?.average_per_day || 0)}`}
+          style={kpiStyle}
         />
         <KpiCard
           icon="calendar-check"
           label="Ventas Hoy"
           value={String(stats.overview?.today_sales || 0)}
+          style={kpiStyle}
         />
         <KpiCard
           icon="cash-check"
           label="Monto Hoy"
           value={`$${formatCurrency(stats.overview?.today_amount || 0)}`}
+          style={kpiStyle}
         />
       </View>
 
@@ -180,7 +189,7 @@ export default function SaleStats() {
           <View style={styles.card}>
             <BarChart
               data={paymentMethodData}
-              width={screenWidth - 64}
+              width={chartWidth}
               height={220}
               chartConfig={{
                 backgroundColor: palette.surface,
@@ -245,7 +254,7 @@ export default function SaleStats() {
           <View style={styles.card}>
             <LineChart
               data={trendData}
-              width={screenWidth - 64}
+              width={chartWidth}
               height={220}
               chartConfig={{
                 backgroundColor: palette.surface,

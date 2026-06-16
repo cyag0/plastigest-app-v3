@@ -223,6 +223,7 @@ function makeReportsStyles(c: ReturnType<typeof useTheme>["colors"]) {
     periodRow: {
       flexDirection: "row",
       gap: 6,
+      marginBottom: tokens.spacing[2],
     },
     periodChip: {
       paddingHorizontal: tokens.spacing[3],
@@ -256,6 +257,7 @@ function makeReportsStyles(c: ReturnType<typeof useTheme>["colors"]) {
     chartCard: {
       flex: 1,
       minWidth: 320,
+      width: "100%",
       backgroundColor: c.surface,
       borderRadius: tokens.radius.lg,
       padding: tokens.spacing[4],
@@ -971,42 +973,51 @@ export default function ReportsScreen() {
             >
               <View style={styles.chartCard}>
                 <Text style={styles.chartTitle}>Tendencia de Ventas</Text>
-                <LineChart
-                  data={{
-                    labels:
-                      (dashboard?.sales_trend || []).map((point) =>
-                        normalizeDayLabel(point.period)
-                      ) || [],
-                    datasets: [
-                      {
-                        data:
-                          (dashboard?.sales_trend || []).map((point) =>
-                            Number(point.total || 0)
-                          ) || [0],
-                      },
-                    ],
-                  }}
-                  width={chartWidth}
-                  height={220}
-                  yAxisLabel="$"
-                  yAxisSuffix=""
-                  fromZero
-                  chartConfig={{
-                    backgroundColor: "transparent",
-                    backgroundGradientFrom: "transparent",
-                    backgroundGradientTo: "transparent",
-                    decimalPlaces: 0,
-                    color: () => colors.primary,
-                    labelColor: () => colors.textMuted,
-                    propsForDots: {
-                      r: "4",
-                      strokeWidth: "2",
-                      stroke: colors.primary,
-                    },
-                  }}
-                  bezier
-                  style={styles.chart}
-                />
+                {(() => {
+                  const trendValues = (dashboard?.sales_trend || []).map(
+                    (p) => Number(p.total || 0),
+                  );
+                  const trendLabels = (dashboard?.sales_trend || []).map((p) =>
+                    normalizeDayLabel(p.period),
+                  );
+                  if (!trendValues.length) {
+                    return (
+                      <View style={styles.chartEmpty}>
+                        <Text style={styles.emptyText}>
+                          No hay datos de tendencia.
+                        </Text>
+                      </View>
+                    );
+                  }
+                  return (
+                    <LineChart
+                      data={{
+                        labels: trendLabels,
+                        datasets: [{ data: trendValues }],
+                      }}
+                      width={chartWidth}
+                      height={220}
+                      yAxisLabel="$"
+                      yAxisSuffix=""
+                      fromZero
+                      chartConfig={{
+                        backgroundColor: colors.surface,
+                        backgroundGradientFrom: colors.surface,
+                        backgroundGradientTo: colors.surface,
+                        decimalPlaces: 0,
+                        color: () => colors.primary,
+                        labelColor: () => colors.textMuted,
+                        propsForDots: {
+                          r: "4",
+                          strokeWidth: "2",
+                          stroke: colors.primary,
+                        },
+                      }}
+                      bezier
+                      style={styles.chart}
+                    />
+                  );
+                })()}
               </View>
 
               <View style={styles.chartCard}>

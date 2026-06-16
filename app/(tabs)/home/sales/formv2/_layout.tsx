@@ -2,6 +2,7 @@ import AppBar from "@/components/App/AppBar";
 import palette from "@/constants/palette";
 import { Stack, usePathname, useRouter } from "expo-router";
 import React from "react";
+import { View } from "react-native";
 import { SaleProvider } from "./SaleContext";
 
 function StackContent() {
@@ -13,7 +14,7 @@ function StackContent() {
     // índice de ventas; en cualquier otra ruta (p. ej. scanner) hacer
     // back normal.
     if (pathname.endsWith("/formv2")) {
-      router.replace("/(tabs)/home/sales/index" as any);
+      router.replace("/(tabs)/home/sales" as any);
     } else {
       router.back();
     }
@@ -42,13 +43,19 @@ function StackContent() {
         headerShown: true,
         header: (props) => {
           const { options, route } = props;
+          const screenRight = options.headerRight;
 
           return (
             <AppBar
               title={options.title || route.name}
               showSearchButton={false}
               onBack={handleBack}
-              rightActions={getHeaderRight()?.()}
+              rightActions={
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  {getHeaderRight()?.()}
+                  {screenRight?.({} as any)}
+                </View>
+              }
             />
           );
         },

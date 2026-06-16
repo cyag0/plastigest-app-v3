@@ -3,7 +3,14 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { Platform, Text, TouchableOpacity, View } from "react-native";
+import {
+  Platform,
+  StyleProp,
+  Text,
+  TouchableOpacity,
+  View,
+  ViewStyle,
+} from "react-native";
 
 export interface QuickAccessCardProps {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -11,6 +18,9 @@ export interface QuickAccessCardProps {
   description: string;
   onPress: () => void;
   disabled?: boolean;
+  /** Estilo extra para el contenedor; usado para controlar el ancho/columnas
+   * de forma responsiva desde el padre (p. ej. flexBasis en mobile). */
+  style?: StyleProp<ViewStyle>;
 }
 
 /**
@@ -24,12 +34,15 @@ export default function QuickAccessCard({
   description,
   onPress,
   disabled = false,
+  style,
 }: QuickAccessCardProps) {
   const { colors } = useTheme();
 
   const styles = useThemedStyles((c) => ({
     card: {
-      flex: 1,
+      flexGrow: 1,
+      flexShrink: 1,
+      flexBasis: 0,
       minWidth: 0,
       flexDirection: "row",
       alignItems: "center",
@@ -80,7 +93,7 @@ export default function QuickAccessCard({
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.7}
-      style={[styles.card, disabled && styles.disabled]}
+      style={[styles.card, disabled && styles.disabled, style]}
     >
       <View style={styles.iconBox}>
         <MaterialCommunityIcons name={icon} size={20} color={colors.text} />

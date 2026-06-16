@@ -17,32 +17,39 @@ interface AppInputProps
 }
 
 export default function AppNumeric(props: AppInputProps) {
-  const { value = 0, onChange, onBlur, hasError, ...restProps } = props;
+  const { value, onChange, onBlur, hasError, ...restProps } = props;
 
   const readonly = props.readonly || false;
+
+  // Show empty string when null/undefined so the placeholder is visible.
+  const displayValue = value == null ? "" : String(value);
 
   return (
     <View>
       {!readonly ? (
         <TextInput
           mode="outlined"
-          value={value.toString()}
+          value={displayValue}
           keyboardType="numeric"
-          onChangeText={(value: string) => {
-            // Quitar todo excepto dígitos, punto y guion
-            let numericValue = value.replace(/[^0-9.-]/g, "");
-
-            // Convertir a número
-            const valueAsNumber = parseFloat(numericValue);
-
-            onChange && onChange(valueAsNumber);
+          onChangeText={(raw: string) => {
+            const digits = raw.replace(/[^0-9.-]/g, "");
+            if (digits === "" || digits === "." || digits === "-") {
+              // Empty input — emit null so formDataUtils skips the field
+              // rather than sending "NaN" which fails backend validation.
+              onChange && onChange(null as any);
+              return;
+            }
+            const n = parseFloat(digits);
+            if (!isNaN(n)) {
+              onChange && onChange(n);
+            }
           }}
           onBlur={onBlur}
           error={hasError}
           {...restProps}
         />
       ) : (
-        <ReadonlyText text={value.toString()} />
+        <ReadonlyText text={displayValue} />
       )}
     </View>
   );

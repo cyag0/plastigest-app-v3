@@ -8,6 +8,7 @@ import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Camera } from "expo-camera";
@@ -62,6 +63,7 @@ export default function ProfileScreen() {
   const { user, logout, isLoading, selectedCompany, location, permissions: userPermissions } =
     useAuth();
   const { colors } = useTheme();
+  const { isMobile } = useResponsive();
   const [permissions, setPermissions] = useState<AppPermissions | null>(null);
   const [loadingPermissions, setLoadingPermissions] = useState(true);
   // Modal de cambio de empresa/sucursal. Antes estos botones
@@ -412,6 +414,39 @@ export default function ProfileScreen() {
       flexWrap: "wrap",
       gap: tokens.spacing[3],
     },
+    actionsScroll: {
+      marginHorizontal: -tokens.spacing[5],
+    },
+    actionsScrollContent: {
+      paddingHorizontal: tokens.spacing[5],
+      paddingBottom: 4,
+      flexDirection: "row",
+      gap: tokens.spacing[2] + 2,
+    },
+    actionCompactCard: {
+      width: 82,
+      backgroundColor: c.surface,
+      borderRadius: tokens.radius.lg,
+      paddingVertical: tokens.spacing[3],
+      paddingHorizontal: tokens.spacing[2],
+      alignItems: "center",
+      gap: tokens.spacing[2],
+      ...tokens.shadow.sm,
+    },
+    actionCompactIconBox: {
+      width: 42,
+      height: 42,
+      borderRadius: tokens.radius.md,
+      backgroundColor: c.surfaceMuted,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    actionCompactLabel: {
+      ...tokens.typography.caption,
+      color: c.text,
+      fontWeight: "600" as const,
+      textAlign: "center" as const,
+    },
     logoutButton: {
       flexDirection: "row",
       alignItems: "center",
@@ -451,8 +486,7 @@ export default function ProfileScreen() {
   }));
 
   return (
-    <SafeAreaView style={styles.safe}>
-
+    <>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
@@ -657,38 +691,61 @@ export default function ProfileScreen() {
         {/* ============== ACCIONES RAPIDAS ============== */}
         <View style={styles.section}>
           <SectionHeader title="Acciones rapidas" />
-          <View style={styles.actionsGrid}>
-            <QuickAccessCard
-              icon="office-building-outline"
-              label="Cambiar empresa"
-              description="Selecciona otra compania"
-              onPress={() => {
-                setSwitcherInitialView("company");
-                setSwitcherVisible(true);
-              }}
-            />
-            <QuickAccessCard
-              icon="map-marker-outline"
-              label="Cambiar sucursal"
-              description="Ubicacion activa"
-              onPress={() => {
-                setSwitcherInitialView("location");
-                setSwitcherVisible(true);
-              }}
-            />
-            <QuickAccessCard
-              icon="cog-outline"
-              label="Preferencias"
-              description="Tema, densidad y comportamiento"
-              onPress={() => router.push("/(tabs)/preferences" as any)}
-            />
-            <QuickAccessCard
-              icon="lock-reset"
-              label="Cambiar contrasena"
-              description="Actualiza tu clave"
-              onPress={() => router.push("/(stacks)/change-password" as any)}
-            />
-          </View>
+          {isMobile ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.actionsScroll}
+              contentContainerStyle={styles.actionsScrollContent}
+            >
+              {[
+                { key: "company", label: "Empresa", icon: "office-building-outline" as const, onPress: () => { setSwitcherInitialView("company"); setSwitcherVisible(true); } },
+                { key: "location", label: "Sucursal", icon: "map-marker-outline" as const, onPress: () => { setSwitcherInitialView("location"); setSwitcherVisible(true); } },
+                { key: "prefs", label: "Preferencias", icon: "cog-outline" as const, onPress: () => router.push("/(tabs)/preferences" as any) },
+                { key: "password", label: "Contraseña", icon: "lock-reset" as const, onPress: () => router.push("/(stacks)/change-password" as any) },
+              ].map((item) => (
+                <TouchableOpacity key={item.key} style={styles.actionCompactCard} onPress={item.onPress} activeOpacity={0.7}>
+                  <View style={styles.actionCompactIconBox}>
+                    <MaterialCommunityIcons name={item.icon} size={24} color={colors.text} />
+                  </View>
+                  <Text style={styles.actionCompactLabel} numberOfLines={2}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.actionsGrid}>
+              <QuickAccessCard
+                icon="office-building-outline"
+                label="Cambiar empresa"
+                description="Selecciona otra compania"
+                onPress={() => {
+                  setSwitcherInitialView("company");
+                  setSwitcherVisible(true);
+                }}
+              />
+              <QuickAccessCard
+                icon="map-marker-outline"
+                label="Cambiar sucursal"
+                description="Ubicacion activa"
+                onPress={() => {
+                  setSwitcherInitialView("location");
+                  setSwitcherVisible(true);
+                }}
+              />
+              <QuickAccessCard
+                icon="cog-outline"
+                label="Preferencias"
+                description="Tema, densidad y comportamiento"
+                onPress={() => router.push("/(tabs)/preferences" as any)}
+              />
+              <QuickAccessCard
+                icon="lock-reset"
+                label="Cambiar contrasena"
+                description="Actualiza tu clave"
+                onPress={() => router.push("/(stacks)/change-password" as any)}
+              />
+            </View>
+          )}
         </View>
 
         {/* ============== CERRAR SESION ============== */}
@@ -736,7 +793,7 @@ export default function ProfileScreen() {
         onDismiss={() => setSwitcherVisible(false)}
         initialView={switcherInitialView}
       />
-    </SafeAreaView>
+    </>
   );
 }
 

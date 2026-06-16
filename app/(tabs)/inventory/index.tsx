@@ -4,6 +4,7 @@ import KpiCard from "@/components/Dashboard/KpiCard";
 import QuickAccessCard from "@/components/Dashboard/QuickAccessCard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useResponsive } from "@/hooks/useResponsive";
 import Services from "@/utils/services";
 import { Href, useRouter } from "expo-router";
 import React from "react";
@@ -32,8 +33,47 @@ interface InventoryStats {
   };
 }
 
+const INVENTORY_ACTIONS = [
+  {
+    key: "products",
+    label: "Ver inventario",
+    description: "Stock de todos los productos",
+    icon: "package-variant" as const,
+    route: "/(tabs)/inventory/products",
+  },
+  {
+    key: "packages",
+    label: "Paquetes",
+    description: "Empaques y presentaciones",
+    icon: "package-variant-closed" as const,
+    route: "/(tabs)/inventory/packages",
+  },
+  {
+    key: "weekly",
+    label: "Inv. semanal",
+    description: "Verificacion fisica",
+    icon: "clipboard-check-outline" as const,
+    route: "/(tabs)/inventory/weekly-inventory",
+  },
+  {
+    key: "adjustment",
+    label: "Ajustes",
+    description: "Mermas o perdidas",
+    icon: "tune-variant" as const,
+    route: "/(tabs)/inventory/adjustment",
+  },
+  {
+    key: "low-stock",
+    label: "Stock bajo",
+    description: "Productos a reponer",
+    icon: "alert-circle-outline" as const,
+    route: "/(tabs)/inventory/products?filter=low_stock",
+  },
+];
+
 export default function InventoryScreen() {
   const router = useRouter();
+  const { isMobile } = useResponsive();
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [stats, setStats] = React.useState<InventoryStats | null>(null);
@@ -158,47 +198,49 @@ export default function InventoryScreen() {
         </View>
       </View>
 
-            {/* ============== ACCIONES RAPIDAS ============== */}
+      {/* ============== ACCIONES RAPIDAS ============== */}
       <View style={styles.section}>
         <SectionHeader title="Acciones rapidas" />
-        <View style={styles.actionsGrid}>
-          <QuickAccessCard
-            icon="package-variant"
-            label="Ver inventario"
-            description="Stock de todos los productos"
-            onPress={() => router.push("/(tabs)/inventory/products" as any)}
-          />
-          <QuickAccessCard
-            icon="package-variant-closed"
-            label="Paquetes"
-            description="Empaques y presentaciones"
-            onPress={() => router.push("/(tabs)/inventory/packages" as any)}
-          />
-          <QuickAccessCard
-            icon="clipboard-check-outline"
-            label="Inventario semanal"
-            description="Verificacion fisica"
-            onPress={() =>
-              router.push("/(tabs)/inventory/weekly-inventory" as any)
-            }
-          />
-          <QuickAccessCard
-            icon="tune-variant"
-            label="Ajustes"
-            description="Mermas o perdidas"
-            onPress={() => router.push("/(tabs)/inventory/adjustment" as any)}
-          />
-          <QuickAccessCard
-            icon="alert-circle-outline"
-            label="Stock bajo"
-            description="Productos a reponer"
-            onPress={() =>
-              router.push(
-                "/(tabs)/inventory/products?filter=low_stock" as any,
-              )
-            }
-          />
-        </View>
+        {isMobile ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.actionsScroll}
+            contentContainerStyle={styles.actionsScrollContent}
+          >
+            {INVENTORY_ACTIONS.map((item) => (
+              <TouchableOpacity
+                key={item.key}
+                style={styles.actionCompactCard}
+                onPress={() => router.push(item.route as any)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.actionCompactIconBox}>
+                  <MaterialCommunityIcons
+                    name={item.icon}
+                    size={24}
+                    color={palette.text}
+                  />
+                </View>
+                <Text style={styles.actionCompactLabel} numberOfLines={2}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={styles.actionsGrid}>
+            {INVENTORY_ACTIONS.map((item) => (
+              <QuickAccessCard
+                key={item.key}
+                icon={item.icon}
+                label={item.label}
+                description={item.description}
+                onPress={() => router.push(item.route as any)}
+              />
+            ))}
+          </View>
+        )}
       </View>
 
       {/* ============== SALUD DEL STOCK ============== */}
@@ -570,12 +612,45 @@ const styles = StyleSheet.create({
     color: palette.primary,
   },
 
-  // --- Actions grid ---
+  // --- Actions grid / scroll ---
   actionsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: tokens.spacing[3],
   },
+  actionsScroll: {
+    marginHorizontal: -tokens.spacing[5],
+  },
+  actionsScrollContent: {
+    paddingHorizontal: tokens.spacing[5],
+    paddingBottom: 4,
+    flexDirection: "row",
+    gap: tokens.spacing[2] + 2,
+  },
+  actionCompactCard: {
+    width: 82,
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.lg,
+    paddingVertical: tokens.spacing[3],
+    paddingHorizontal: tokens.spacing[2],
+    alignItems: "center",
+    gap: tokens.spacing[2],
+    ...tokens.shadow.sm,
+  },
+  actionCompactIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: tokens.radius.md,
+    backgroundColor: palette.surfaceMuted,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionCompactLabel: {
+    ...tokens.typography.caption,
+    color: palette.text,
+    fontWeight: "600",
+    textAlign: "center",
+  } as const,
 
   // --- Alert ---
   alertCard: {

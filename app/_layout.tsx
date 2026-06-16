@@ -16,7 +16,7 @@ import {
 import { es, registerTranslation } from "react-native-paper-dates";
 import PermissionsOverlay from "@/components/Debug/PermissionsOverlay";
 import React from "react";
-import { View } from "react-native";
+import { StatusBar, View } from "react-native";
 
 registerTranslation("es", es);
 
@@ -32,6 +32,10 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary>
+      <StatusBar
+        barStyle="dark-content" // texto blanco
+      />
+
       {/* AuthProvider DEBE estar arriba de PaperProvider porque el
           <Portal> de react-native-paper renderiza su contenido fuera del
           subarbol de children del PaperProvider, pero dentro del PortalHost

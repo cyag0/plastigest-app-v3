@@ -6,15 +6,18 @@ export default function TasksLayout() {
   return (
     <Stack
       screenOptions={{
-        header: ({ options, route }) => (
-          <AppBar
-            title={options.title || route.name}
-            showBackButton
-            showSearchButton={false}
-            showNotificationButton={false}
-            showProfileButton={false}
-          />
-        ),
+        header: ({ options, route }) => {
+          const isIndex = route.name === "index";
+          return (
+            <AppBar
+              title={options.title || route.name}
+              showBackButton={!isIndex}
+              showSearchButton={false}
+              showNotificationButton={false}
+              showProfileButton={false}
+            />
+          );
+        },
       }}
     >
       <Stack.Screen name="index" options={{ title: "Tareas" }} />

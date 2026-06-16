@@ -1,5 +1,6 @@
 import AppBar from "@/components/App/AppBar";
 import { SkeletonListLoader } from "@/components/SkeletonLoader";
+import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import useDebounce from "@/hooks/useDebounce";
@@ -22,7 +23,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import {
-  Divider,
   IconButton,
   Menu,
   Searchbar,
@@ -713,50 +713,38 @@ function AppList<T extends { id: number | string }>({
                 })}
               </View>
             ) : (
-              // List layout
+              // List layout — card-based modern design
               (data || []).map((item, index) => {
                 const cardProps = renderCard({ item, index });
-
                 const showView = getMenuFlag(menu?.showView, item, true);
                 const showEdit = getMenuFlag(menu?.showEdit, item, true);
                 const showDelete = getMenuFlag(menu?.showDelete, item, true);
+                const hasBottom = cardProps.bottom && cardProps.bottom.length > 0;
 
                 return (
-                  <React.Fragment key={item.id}>
-                    <AppListCard /* onPress={() => handleItemPress(item)} */>
-                      <View
-                        style={[
-                          styles.cardMain,
-                          {
-                            alignItems: "center",
-                            gap: 8,
-                          },
-                        ]}
-                      >
+                  <TouchableRipple
+                    key={item.id}
+                    onPress={() => handleItemPress(item)}
+                    style={styles.listCard}
+                  >
+                    <View style={styles.listCardInner}>
+                      <View style={styles.cardMain}>
                         {cardProps.left && (
-                          <View style={[styles.cardLeft]}>
-                            {cardProps.left}
-                          </View>
+                          <View style={styles.cardLeft}>{cardProps.left}</View>
                         )}
-
-                        <View style={[styles.cardCenter]}>
+                        <View style={styles.cardCenter}>
                           {cardProps.title && (
                             <AppListTitle>{cardProps.title}</AppListTitle>
                           )}
-
                           {cardProps.description && (
                             <AppListDescription>
                               {cardProps.description}
                             </AppListDescription>
                           )}
                         </View>
-
                         {cardProps.right && (
-                          <View style={styles.cardRight}>
-                            {cardProps.right}
-                          </View>
+                          <View style={styles.cardRight}>{cardProps.right}</View>
                         )}
-
                         <ItemMenu
                           item={item}
                           onEdit={handleEdit}
@@ -768,86 +756,19 @@ function AppList<T extends { id: number | string }>({
                           customActions={menu?.customActions}
                         />
                       </View>
-                    </AppListCard>
-                    {showDivider && (
-                      <Divider
-                        style={{
-                          height: 2,
-                          backgroundColor: colors.border,
-                        }}
-                      />
-                    )}
 
-                    {cardProps.bottom ? (
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          padding: 4,
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 8,
-                          //flexWrap: "wrap",
-                        }}
-                      >
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            padding: 4,
-                            alignItems: "center",
-                          }}
-                        >
-                          <AppList.Description>ID: </AppList.Description>
-                          <AppList.Description
-                            style={{
-                              color: colors.textSecondary,
-                              fontWeight: "bold",
-                            }}
-                          >
-                            {(item.id || "").toString()}
-                          </AppList.Description>
+                      {hasBottom && (
+                        <View style={styles.bottomRow}>
+                          {cardProps.bottom!.map((b, idx) => (
+                            <View key={idx} style={styles.bottomMeta}>
+                              <Text style={styles.bottomLabel}>{b.label}:</Text>
+                              <Text style={styles.bottomValue}>{b.value.toString()}</Text>
+                            </View>
+                          ))}
                         </View>
-                        {cardProps.bottom.map((item, idx) => (
-                          <View
-                            key={item.value.toString() + idx}
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                            }}
-                          >
-                            <AppList.Description>
-                              {item.label + ": "}
-                            </AppList.Description>
-                            <AppList.Description
-                              style={{
-                                color: colors.textSecondary,
-                                fontWeight: "bold",
-                              }}
-                            >
-                              {item.value.toString()}
-                            </AppList.Description>
-                          </View>
-                        ))}
-                      </View>
-                    ) : (
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          padding: 4,
-                          alignItems: "center",
-                        }}
-                      >
-                        <AppList.Description>ID: </AppList.Description>
-                        <AppList.Description
-                          style={{
-                            color: colors.textSecondary,
-                            fontWeight: "bold",
-                          }}
-                        >
-                          {(item.id || "").toString()}
-                        </AppList.Description>
-                      </View>
-                    )}
-                  </React.Fragment>
+                      )}
+                    </View>
+                  </TouchableRipple>
                 );
               })
             )}
@@ -983,8 +904,9 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
       backgroundColor: c.background,
     },
     scrollContainer: {
-      padding: 16,
-      gap: 8,
+      padding: tokens.spacing[3],
+      paddingBottom: tokens.spacing[6],
+      gap: tokens.spacing[2],
     },
     tableScrollContainer: {
       padding: 16,
@@ -1015,34 +937,66 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
     cardContent: {
       padding: 0,
     },
+    listCard: {
+      backgroundColor: c.surface,
+      borderRadius: tokens.radius.lg,
+      ...tokens.shadow.sm,
+      overflow: "hidden" as const,
+    },
+    listCardInner: {
+      padding: tokens.spacing[4],
+    },
     cardMain: {
       flexDirection: "row" as const,
-      alignItems: "flex-start",
+      alignItems: "center" as const,
+      gap: tokens.spacing[3],
     },
     cardLeft: {
-      justifyContent: "center",
+      justifyContent: "center" as const,
+      flexShrink: 0,
     },
     cardCenter: {
       flex: 1,
+      minWidth: 0,
     },
     cardRight: {
-      justifyContent: "center",
+      justifyContent: "center" as const,
+      flexShrink: 0,
+    },
+    bottomRow: {
+      flexDirection: "row" as const,
+      flexWrap: "wrap" as const,
+      gap: tokens.spacing[3],
+      marginTop: tokens.spacing[3],
+      paddingTop: tokens.spacing[3],
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    bottomMeta: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      gap: 4,
+    },
+    bottomLabel: {
+      ...tokens.typography.caption,
+      color: c.textMuted,
+    },
+    bottomValue: {
+      ...tokens.typography.caption,
+      color: c.textSecondary,
+      fontWeight: "600" as const,
     },
     titleContainer: {
-      marginBottom: 4,
+      marginBottom: 2,
     },
     cardTitle: {
-      fontWeight: "bold" as const,
+      ...tokens.typography.bodyMd,
       color: c.text,
-      lineHeight: 16,
     },
-    descriptionContainer: {
-      marginBottom: 0,
-    },
+    descriptionContainer: {},
     cardDescription: {
+      ...tokens.typography.caption,
       color: c.textSecondary,
-      opacity: 0.75,
-      lineHeight: 14,
     },
     loadingText: {
       marginTop: 16,

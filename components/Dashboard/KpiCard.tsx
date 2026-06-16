@@ -4,7 +4,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { Text, View } from "react-native";
+import { StyleProp, Text, View, ViewStyle } from "react-native";
 
 export interface KpiCardProps {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -16,6 +16,9 @@ export interface KpiCardProps {
   };
   loading?: boolean;
   inverseDelta?: boolean;
+  /** Estilo extra para el contenedor; usado para controlar el ancho/columnas
+   * de forma responsiva desde el padre (p. ej. flexBasis en mobile). */
+  style?: StyleProp<ViewStyle>;
 }
 
 /**
@@ -29,6 +32,7 @@ export default function KpiCard({
   delta,
   loading = false,
   inverseDelta = false,
+  style,
 }: KpiCardProps) {
   // IMPORTANTE: useTheme() debe ir ANTES de cualquier return temprano
   // para cumplir con las Rules of Hooks.
@@ -36,7 +40,9 @@ export default function KpiCard({
 
   const styles = useThemedStyles((c) => ({
     card: {
-      flex: 1,
+      flexGrow: 1,
+      flexShrink: 1,
+      flexBasis: 0,
       minWidth: 0,
       backgroundColor: c.surface,
       borderRadius: 16,
@@ -100,7 +106,7 @@ export default function KpiCard({
 
   if (loading) {
     return (
-      <View style={styles.card}>
+      <View style={[styles.card, style]}>
         <View style={styles.header}>
           <View style={styles.iconBox} />
           <View style={styles.labelSkeleton} />
@@ -129,7 +135,7 @@ export default function KpiCard({
   }
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, style]}>
       <View style={styles.header}>
         <View style={styles.iconBox}>
           <MaterialCommunityIcons

@@ -1,11 +1,15 @@
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useResponsive } from "@/hooks/useResponsive";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Modal, ScrollView, StyleSheet, Text as RNText, TextInput, TouchableOpacity, View } from "react-native";
 import { Button, Card, Menu, Text } from "react-native-paper";
 import { TransferProvider, useTransferContext } from "./TransferContext";
 
@@ -16,16 +20,49 @@ type ListSelectedProduct = {
   price: number;
 };
 
+function CartHeaderButton({ count, onPress }: { count: number; onPress: () => void }) {
+  return (
+    <TouchableOpacity onPress={onPress} style={cartBtnStyles.btn} activeOpacity={0.7}>
+      <MaterialCommunityIcons name="cart-outline" size={24} color={palette.text} />
+      {count > 0 && (
+        <View style={cartBtnStyles.badge}>
+          <RNText style={cartBtnStyles.badgeText}>{count > 99 ? "99+" : count}</RNText>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+const cartBtnStyles = StyleSheet.create({
+  btn: { padding: 8, marginRight: 4 },
+  badge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: palette.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  badgeText: { color: "#fff", fontSize: 10, fontWeight: "700" as const },
+});
+
 function TransferFormContent() {
   const router = useRouter();
   const alerts = useAlerts();
   const transferContext = useTransferContext();
   const auth = useAuth();
+  const navigation = useNavigation();
+  const { isMobile } = useResponsive();
 
   const [locations, setLocations] = useState<App.Entities.Location[]>([]);
   const [notes, setNotes] = useState("");
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [fromMenuVisible, setFromMenuVisible] = useState(false);
+  const [cartVisible, setCartVisible] = useState(false);
 
   const company = auth.selectedCompany;
   const currentLocation = auth.location;
@@ -102,6 +139,18 @@ function TransferFormContent() {
     return cartItems.reduce((sum, item) => sum + item.total, 0);
   }, [cartItems]);
 
+  const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+
+  // En mobile inyectamos el botón del carrito en el AppBar.
+  useEffect(() => {
+    if (!isMobile) return;
+    navigation.setOptions({
+      headerRight: () => (
+        <CartHeaderButton count={itemCount} onPress={() => setCartVisible(true)} />
+      ),
+    });
+  }, [isMobile, itemCount]);
+
   const selectedProductsForList = transferContext.selectedProducts as Record<
     number | string,
     ListSelectedProduct
@@ -149,33 +198,13 @@ function TransferFormContent() {
     (loc) => loc.id !== transferContext.toLocationId,
   );
 
-  return (
-    <View style={styles.container}>
-      {/* Lista de productos a la izquierda */}
-      <View style={styles.productsSection}>
-        <ListProducts
-          loading={transferContext.loading || loadingLocations}
-          categories={transferContext.categories}
-          products={transferContext.products}
-          selectedProducts={selectedProductsForList}
-          onAddProduct={transferContext.handleAddProduct}
-          onRemoveProduct={transferContext.handleRemoveProduct}
-          onItemChange={transferContext.handleItemChange}
-        />
-      </View>
-
-      {/* Carrito y configuración a la derecha */}
-      <View style={styles.cartSection}>
-        <Cart
-          items={cartItems}
-          onRemoveItem={(itemId) => {
-            transferContext.handleRemoveProduct(itemId);
-          }}
-          onItemChange={(item, action, data) => {
-            transferContext.handleItemChange(item, action, data);
-          }}
-        >
-           <ScrollView style={{ maxHeight: 400}} contentContainerStyle={{padding: 16}}>
+  const cartContent = (
+    <Cart
+      items={cartItems}
+      onRemoveItem={(itemId) => transferContext.handleRemoveProduct(itemId)}
+      onItemChange={(item, action, data) => transferContext.handleItemChange(item, action, data)}
+    >
+      <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ padding: 16 }}>
           {/* Información de transferencia dentro del carrito */}
           <Text style={styles.sectionTitle}>
             Configuración de Transferencia
@@ -291,7 +320,50 @@ function TransferFormContent() {
             Crear Solicitud de Transferencia
           </Button>
         </Cart>
+  );
+
+  return (
+    <View style={styles.container}>
+      {/* Lista de productos */}
+      <View style={styles.productsSection}>
+        <ListProducts
+          loading={transferContext.loading || loadingLocations}
+          categories={transferContext.categories}
+          products={transferContext.products}
+          selectedProducts={selectedProductsForList}
+          onAddProduct={transferContext.handleAddProduct}
+          onRemoveProduct={transferContext.handleRemoveProduct}
+          onItemChange={transferContext.handleItemChange}
+        />
       </View>
+
+      {/* Carrito lateral — solo desktop */}
+      {!isMobile && (
+        <View style={styles.cartSection}>{cartContent}</View>
+      )}
+
+      {/* Modal carrito — solo mobile */}
+      {isMobile && (
+        <Modal
+          visible={cartVisible}
+          animationType="slide"
+          onRequestClose={() => setCartVisible(false)}
+        >
+          <View style={styles.cartModal}>
+            <View style={styles.cartModalHeader}>
+              <Text style={styles.cartModalTitle}>Carrito</Text>
+              <TouchableOpacity
+                onPress={() => setCartVisible(false)}
+                style={styles.cartModalClose}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons name="close" size={24} color={palette.text} />
+              </TouchableOpacity>
+            </View>
+            {cartContent}
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -312,6 +384,28 @@ const styles = StyleSheet.create({
   },
   productsSection: {
     flex: 1,
+  },
+  // Modal del carrito en mobile
+  cartModal: {
+    flex: 1,
+    backgroundColor: palette.background,
+  },
+  cartModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: tokens.spacing[4],
+    paddingVertical: tokens.spacing[3],
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+    backgroundColor: palette.surface,
+  },
+  cartModalTitle: {
+    ...tokens.typography.h3,
+    color: palette.text,
+  },
+  cartModalClose: {
+    padding: tokens.spacing[2],
   },
   cartSection: {
     width: 420,

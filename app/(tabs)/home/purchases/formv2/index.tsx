@@ -6,13 +6,14 @@ import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAlerts } from "@/hooks/useAlerts";
-import Services from "@/utils/services";
+import { useResponsive } from "@/hooks/useResponsive";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useNavigation, useLocalSearchParams, useRouter } from "expo-router";
 import { useFormikContext } from "formik";
-import React, { useMemo } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import React, { useEffect, useMemo } from "react";
+import { Image, StyleSheet, Text as RNText, TouchableOpacity, View } from "react-native";
 import { Button, Text } from "react-native-paper";
+import Services from "@/utils/services";
 import { usePurchase } from "./PurchaseContext";
 
 interface PurchasesFormProps {
@@ -20,15 +21,62 @@ interface PurchasesFormProps {
   readonly?: boolean;
 }
 
+function CartHeaderButton({ count, onPress }: { count: number; onPress: () => void }) {
+  return (
+    <TouchableOpacity onPress={onPress} style={cartBtnStyles.btn} activeOpacity={0.7}>
+      <MaterialCommunityIcons name="cart-outline" size={24} color={palette.text} />
+      {count > 0 && (
+        <View style={cartBtnStyles.badge}>
+          <RNText style={cartBtnStyles.badgeText}>{count > 99 ? "99+" : count}</RNText>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+const cartBtnStyles = StyleSheet.create({
+  btn: { padding: 8, marginRight: 4 },
+  badge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: palette.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  badgeText: { color: "#fff", fontSize: 10, fontWeight: "700" as const },
+});
+
 export default function PurchaseFormScreen(props: PurchasesFormProps) {
   const router = useRouter();
   const alerts = useAlerts();
+  const navigation = useNavigation();
+  const { isMobile } = useResponsive();
 
   const purchaseContext = usePurchase();
 
   const id = useLocalSearchParams().id
     ? parseInt(useLocalSearchParams().id as string)
     : undefined;
+
+  const cartItemCount = purchaseContext.cartItems?.length ?? 0;
+
+  // En mobile inyectamos botón del carrito en el AppBar.
+  useEffect(() => {
+    if (!isMobile) return;
+    navigation.setOptions({
+      headerRight: () => (
+        <CartHeaderButton
+          count={cartItemCount}
+          onPress={() => router.push("/(tabs)/home/purchases/formv2/carrito" as any)}
+        />
+      ),
+    });
+  }, [isMobile, cartItemCount]);
 
   const initialFormValues = useMemo(() => ({
     supplier_id: "",

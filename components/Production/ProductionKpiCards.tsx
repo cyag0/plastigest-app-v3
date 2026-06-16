@@ -5,7 +5,7 @@ import { useResponsive } from "@/hooks/useResponsive";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 interface TopProduct {
   product_id: number;
@@ -109,61 +109,54 @@ export default function ProductionKpiCards() {
 
   if (isMobile) {
     return (
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.mobileScroll}
-      >
-        <View style={styles.mobileKpi}>
+      <View style={styles.mobileWrap}>
+        <View style={styles.mobileKpiGrid}>
           <KpiCard
             icon="counter"
             label="Producciones"
             value={String(stats.productions_count_today)}
+            style={styles.mobileKpiCard}
           />
-        </View>
-        <View style={styles.mobileKpi}>
           <KpiCard
             icon="import"
             label="Insumos Consumidos"
             value={String(stats.consumption_lines)}
+            style={styles.mobileKpiCard}
           />
-        </View>
-        <View style={styles.mobileKpi}>
           <KpiCard
             icon="export-variant"
             label="Productos Generados"
             value={String(stats.output_lines)}
+            style={styles.mobileKpiCard}
           />
         </View>
         {hasTop && (
-          <View style={styles.mobileTop}>
-            <View style={styles.topCard}>
-              <View style={styles.topCardHeader}>
-                <MaterialCommunityIcons
-                  name="chart-bar"
-                  size={16}
-                  color={palette.textMuted}
-                />
-                <Text style={styles.topCardTitle}>TOP DEL DÍA</Text>
-              </View>
-              {stats.top_consumed.map((p) => (
-                <TopRow
-                  key={`c-${p.product_id}-${p.unit_id}`}
-                  product={p}
-                  type="in"
-                />
-              ))}
-              {stats.top_produced.map((p) => (
-                <TopRow
-                  key={`o-${p.product_id}-${p.unit_id}`}
-                  product={p}
-                  type="out"
-                />
-              ))}
+          <View style={styles.topCard}>
+            <View style={styles.topCardHeader}>
+              <MaterialCommunityIcons
+                name="chart-bar"
+                size={16}
+                color={palette.textMuted}
+              />
+              <Text style={styles.topCardTitle}>TOP DEL DÍA</Text>
             </View>
+            {stats.top_consumed.map((p) => (
+              <TopRow
+                key={`c-${p.product_id}-${p.unit_id}`}
+                product={p}
+                type="in"
+              />
+            ))}
+            {stats.top_produced.map((p) => (
+              <TopRow
+                key={`o-${p.product_id}-${p.unit_id}`}
+                product={p}
+                type="out"
+              />
+            ))}
           </View>
         )}
-      </ScrollView>
+      </View>
     );
   }
 
@@ -258,17 +251,18 @@ const styles = StyleSheet.create({
     color: palette.textSecondary,
   },
 
-  // --- Mobile scroll ---
-  mobileScroll: {
-    paddingHorizontal: tokens.spacing[3],
-    paddingVertical: tokens.spacing[2],
+  // --- Mobile grid ---
+  mobileWrap: {
+    padding: tokens.spacing[3],
     gap: tokens.spacing[3],
   },
-  mobileKpi: {
-    width: 200,
+  mobileKpiGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: tokens.spacing[3],
   },
-  mobileTop: {
-    width: 260,
+  mobileKpiCard: {
+    flexBasis: "47%",
   },
 
   // --- Desktop/tablet wrap ---

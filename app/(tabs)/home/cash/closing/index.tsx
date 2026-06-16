@@ -79,12 +79,9 @@ export default function CashClosingIndex() {
       onPressCreate={() => router.push("/(tabs)/home/cash/closing/form" as any)}
       fabLabel="Nuevo Cierre"
       menu={generateCrudMenu("/(tabs)/home/cash/closing" as any, {
-        showDelete(item) {
-            return false
+        showDelete() {
+          return false;
         },
-        showEdit(item) {
-            return false
-        }
       })}
       renderCard={({ item }: { item: any }) => {
         const diff = parseFloat(item.difference ?? "0");

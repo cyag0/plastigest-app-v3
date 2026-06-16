@@ -218,27 +218,23 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         // Si initialValues es una función
         if (typeof props.initialValues === "function") {
           const result = await props.initialValues();
-          formInstance.setValues(result);
+          formInstance.resetForm({ values: result });
 
           return;
         }
         // Si initialValues es un objeto
         else {
           const checkIdAndApi = Boolean(props.id && props.api);
-          console.log(checkIdAndApi, "Checking for ID and API");
 
           // Si hay ID y API, hacer petición automática
           if (checkIdAndApi) {
             //@ts-ignore
             const response = await props.api.show(props.id);
-            console.log("Fetched data for ID:", response.data);
             const data = { ...props.initialValues, ...response.data.data };
 
-            console.log("Merging initial values with fetched data:", data);
-
-            formInstance.setValues(data);
+            formInstance.resetForm({ values: data });
           } else {
-            formInstance.setValues(props.initialValues);
+            formInstance.resetForm({ values: props.initialValues });
           }
 
           return;
@@ -247,13 +243,13 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       // Si no hay initialValues pero hay ID y API
       else if (props.id && props.api) {
         const response = await props.api.show(props.id);
-        formInstance.setValues(response.data.data);
+        formInstance.resetForm({ values: response.data.data });
 
         return;
       }
       // Si no hay nada, usar objeto vacío
       else {
-        formInstance.setValues({} as T);
+        formInstance.resetForm({ values: {} as T });
         return;
       }
     } catch (error) {
