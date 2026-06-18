@@ -36,18 +36,25 @@ export default function NavigationHandler({
   useEffect(() => {
     if (isLoading || isSwitchingLocation) return; // No hacer nada mientras carga autenticación o cambia sucursal
 
-    const inAuthGroup = segments[0] === "(tabs)" || segments[0] === "(stacks)";
     const inLogin = segments[0] === "login" || !segments[0];
 
-    // 1. Verificar autenticación
-    if (!user && inAuthGroup) {
-      // Usuario no autenticado intentando acceder a rutas protegidas
-      router.replace("/login");
-      return;
-    }
+    // Rutas públicas accesibles sin sesión (login y flujo de recuperación
+    // de contraseña). El resto de rutas redirige a /login cuando no hay
+    // usuario autenticado.
+    const publicRoutes = [
+      "login",
+      "forgot-password",
+      "reset-password-code",
+      "reset-password-confirm",
+    ];
+    const inPublicRoute = !segments[0] || publicRoutes.includes(segments[0]);
 
-    if (!user && !inAuthGroup) {
-      router.replace("/login");
+    // 1. Verificar autenticación
+    if (!user) {
+      if (!inPublicRoute) {
+        // Usuario no autenticado intentando acceder a rutas protegidas
+        router.replace("/login");
+      }
       return;
     }
 

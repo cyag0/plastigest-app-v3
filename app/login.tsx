@@ -5,6 +5,7 @@ import { useColors } from "@/contexts/ThemeContext";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { useAlerts } from "@/hooks/useAlerts";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -24,6 +25,7 @@ export default function LoginScreen() {
   const { login, isLoading } = useAuth();
   const alerts = useAlerts();
   const colors = useColors();
+  const router = useRouter();
 
   // Estados del formulario
   const [email, setEmail] = useState("");
@@ -224,6 +226,10 @@ export default function LoginScreen() {
     },
     submitButtonContent: {
       height: 48,
+    },
+    forgotPassword: {
+      marginTop: tokens.spacing[3],
+      alignSelf: "center",
     },
     footer: {
       flexDirection: "row",
@@ -486,6 +492,18 @@ export default function LoginScreen() {
                   : isBlocked
                     ? `Bloqueado (${retryCountdown}s)`
                     : "Iniciar Sesión"}
+              </Button>
+
+              {/* Enlace al flujo de recuperación de contraseña */}
+              <Button
+                mode="text"
+                onPress={() => router.push("/forgot-password" as any)}
+                style={styles.forgotPassword}
+                textColor={colors.primary}
+                disabled={isLoading}
+                compact
+              >
+                ¿Olvidaste tu contraseña?
               </Button>
             </View>
 

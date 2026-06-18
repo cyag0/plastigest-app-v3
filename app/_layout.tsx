@@ -118,6 +118,18 @@ function ThemedApp() {
                   options={{ headerShown: false }}
                 />
                 <Stack.Screen
+                  name="forgot-password"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="reset-password-code"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="reset-password-confirm"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
                   name="(stacks)"
                   options={{ headerShown: false }}
                 />

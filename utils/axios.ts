@@ -219,6 +219,20 @@ export const authAPI = {
     password: string;
     password_confirmation: string;
   }) => axiosClient.post("/auth/change-password", passwordData),
+
+  // Recuperación de contraseña (flujo "olvidé mi contraseña") vía código OTP.
+  forgotPassword: (email: string) =>
+    axiosClient.post("/auth/forgot-password", { email }),
+
+  verifyResetCode: (email: string, code: string) =>
+    axiosClient.post("/auth/verify-reset-code", { email, code }),
+
+  resetPassword: (data: {
+    email: string;
+    code: string;
+    password: string;
+    password_confirmation: string;
+  }) => axiosClient.post("/auth/reset-password", data),
 };
 
 // Función para obtener el usuario autenticado

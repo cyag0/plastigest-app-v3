@@ -168,27 +168,21 @@ export default function ProductionKpiCards() {
           isTablet && styles.kpiRowTablet,
         ]}
       >
-        <View style={isDesktop ? styles.kpiFlex : undefined}>
           <KpiCard
             icon="counter"
             label="Producciones"
             value={String(stats.productions_count_today)}
           />
-        </View>
-        <View style={isDesktop ? styles.kpiFlex : undefined}>
           <KpiCard
             icon="import"
             label="Insumos Consumidos"
             value={String(stats.consumption_lines)}
           />
-        </View>
-        <View style={isDesktop ? styles.kpiFlex : undefined}>
           <KpiCard
             icon="export-variant"
             label="Productos Generados"
             value={String(stats.output_lines)}
           />
-        </View>
       </View>
 
       {hasTop && (
