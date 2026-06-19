@@ -4,7 +4,7 @@ import { tokens } from "@/constants/tokens";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useResponsive } from "@/hooks/useResponsive";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal, StyleSheet, Text as RNText, TouchableOpacity, View } from "react-native";
 import { Button, RadioButton, Text, TextInput } from "react-native-paper";

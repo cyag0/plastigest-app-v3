@@ -12,7 +12,7 @@ import {
   handleApiError,
 } from "@/utils/services/crudService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "expo-router";
 import { router } from "expo-router";
 import * as React from "react";
 import { useCallback, useEffect, useState } from "react";

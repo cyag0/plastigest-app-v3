@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useResponsive } from "@/hooks/useResponsive";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation } from "expo-router";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
