@@ -222,6 +222,7 @@ function TransferFormContent() {
               <Menu
                 visible={fromMenuVisible}
                 onDismiss={() => setFromMenuVisible(false)}
+                contentStyle={styles.menuContent}
                 anchor={
                   <Button
                     mode="outlined"
@@ -449,6 +450,9 @@ const styles = StyleSheet.create({
   },
   selectButtonContent: {
     justifyContent: "flex-start",
+  },
+  menuContent: {
+    backgroundColor: palette.surface,
   },
   notesInput: {
     borderWidth: 1,
