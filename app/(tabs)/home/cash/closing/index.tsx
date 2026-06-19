@@ -1,5 +1,7 @@
 import AppList from "@/components/App/AppList/AppList";
 import palette from "@/constants/palette";
+import { useAlerts } from "@/hooks/useAlerts";
+import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { generateCrudMenu } from "@/utils/routes";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -35,6 +37,23 @@ const formatDate = (dateStr: string) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function CashClosingIndex() {
+  const alerts = useAlerts();
+  const { downloadPdfFromApi } = usePdfDownload({
+    onError: (error) => alerts.error("Error al descargar el PDF: " + error.message),
+  });
+
+  const handleDownloadPdf = async (item: any) => {
+    try {
+      const { url } = await Services.cashClosings.pdfUrl(item.id);
+      const date = (item.closing_date ?? "").split("T")[0];
+      await downloadPdfFromApi(url, { fileName: `corte-caja-${date}.pdf` });
+    } catch (error: any) {
+      alerts.error(
+        error?.response?.data?.message || "Error al generar el PDF del corte",
+      );
+    }
+  };
+
   return (
     <AppList
       title="Cierres de Caja"
@@ -82,6 +101,16 @@ export default function CashClosingIndex() {
         showDelete() {
           return false;
         },
+        showEdit(item) {
+          return false;
+        },
+        customActions: [
+          {
+            title: "Descargar PDF",
+            icon: "file-pdf-box",
+            onPress: handleDownloadPdf,
+          },
+        ],
       })}
       renderCard={({ item }: { item: any }) => {
         const diff = parseFloat(item.difference ?? "0");

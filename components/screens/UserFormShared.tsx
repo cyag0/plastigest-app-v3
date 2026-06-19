@@ -94,14 +94,20 @@ export default function UserFormShared(props: UserFormSharedProps) {
     });
   };
 
-  // Valores iniciales según el modo
-  const getInitialValues = () => ({
-    name: "",
-    email: "",
-    password: "",
-    is_active: true,
-    avatar: [],
-  });
+  // Valores iniciales según el modo. Se memoiza para mantener una
+  // referencia estable: AppForm hace resetForm() cada vez que cambia la
+  // referencia de initialValues, así que un objeto nuevo en cada render
+  // borraría los datos ya escritos al asignar una sucursal.
+  const initialValues = useMemo(
+    () => ({
+      name: "",
+      email: "",
+      password: "",
+      is_active: true,
+      avatar: [],
+    }),
+    []
+  );
 
   return (
     <AppForm
@@ -110,9 +116,7 @@ export default function UserFormShared(props: UserFormSharedProps) {
       id={id}
       readonly={readonly}
       validationSchema={validationSchema}
-      initialValues={{
-        ...getInitialValues(),
-      }}
+      initialValues={initialValues}
       onSuccess={async (response) => {
         const savedUserId = response?.data?.id ?? id;
         if (savedUserId) {

@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React, { useState } from "react";
 import {
   Image,
+  Modal,
   ScrollView,
   StyleSheet,
   TextInput,
@@ -14,9 +15,7 @@ import {
 import {
   Button,
   Chip,
-  Dialog,
   Divider,
-  Portal,
   RadioButton,
   Surface,
   Text,
@@ -57,6 +56,10 @@ export default function SaleDetail() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentNotes, setPaymentNotes] = useState("");
+  // El error se muestra dentro del modal: los alerts globales quedarían
+  // ocultos detrás del Modal nativo mientras está abierto.
+  const [paymentError, setPaymentError] = useState("");
+  const [savingPayment, setSavingPayment] = useState(false);
   const alerts = useAlerts();
 
   React.useEffect(() => {
@@ -97,39 +100,39 @@ export default function SaleDetail() {
   };
 
   const handleAddPayment = async () => {
+    if (savingPayment) return;
     if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
-      alerts.error("Ingresa un monto válido");
+      setPaymentError("Ingresa un monto válido");
       return;
     }
     const amount = parseFloat(paymentAmount);
     const pending = toNum(sale?.total) - toNum(sale?.paid_amount);
     if (amount > pending) {
-      alerts.error(
+      setPaymentError(
         `El monto no puede ser mayor al saldo pendiente (${fmt(pending)})`,
       );
       return;
     }
-    if (
-      !await alerts.confirm(`¿Registrar pago de ${fmt(amount)}?`, {
-        title: "Confirmar Pago",
-        okText: "Confirmar",
-        cancelText: "Cancelar",
-      })
-    )
-      return;
+    setPaymentError("");
+    setSavingPayment(true);
     try {
       await (Services.sales as any).addPayment(id, {
         amount,
         payment_method: paymentMethod,
         notes: paymentNotes || undefined,
       });
-      alerts.success("Pago registrado correctamente");
       setShowPaymentDialog(false);
       setPaymentAmount("");
       setPaymentNotes("");
+      // El alert de éxito ya es visible porque el modal se cerró.
+      alerts.success("Pago registrado correctamente");
       loadSale();
     } catch (e: any) {
-      alerts.error(e.response?.data?.message || "Error al registrar el pago");
+      setPaymentError(
+        e.response?.data?.message || "Error al registrar el pago",
+      );
+    } finally {
+      setSavingPayment(false);
     }
   };
 
@@ -356,7 +359,10 @@ export default function SaleDetail() {
         {sale.payment_status !== "paid" && sale.status !== "cancelled" && (
           <Button
             mode="contained"
-            onPress={() => setShowPaymentDialog(true)}
+            onPress={() => {
+              setPaymentError("");
+              setShowPaymentDialog(true);
+            }}
             icon="cash-plus"
             buttonColor={palette.primary}
             style={{ marginTop: 16, borderRadius: 10 }}
@@ -584,76 +590,102 @@ export default function SaleDetail() {
         </Button>
       </View>
 
-      {/* ── Dialog pago ── */}
-      <Portal>
-        <Dialog
-          visible={showPaymentDialog}
-          onDismiss={() => setShowPaymentDialog(false)}
-          style={{ borderRadius: 16 }}
-        >
-          <Dialog.Title>Agregar Pago</Dialog.Title>
-          <Dialog.Content>
-            <Text variant="bodyMedium" style={{ marginBottom: 16 }}>
-              Saldo pendiente:{" "}
-              <Text style={{ fontWeight: "bold", color: "#dc3545" }}>
-                {fmt(toNum(sale?.total) - toNum(sale?.paid_amount))}
-              </Text>
+      {/* ── Modal pago ── */}
+      <Modal
+        visible={showPaymentDialog}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPaymentDialog(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text variant="titleLarge" style={styles.modalTitle}>
+              Agregar Pago
             </Text>
 
-            <Text style={styles.inputLabel}>Monto a pagar *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="0.00"
-              value={paymentAmount}
-              onChangeText={setPaymentAmount}
-              keyboardType="decimal-pad"
-            />
-
-            <Text style={styles.inputLabel}>Método de Pago</Text>
-            <RadioButton.Group
-              onValueChange={setPaymentMethod}
-              value={paymentMethod}
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={{ paddingTop: 4 }}
+              showsVerticalScrollIndicator={false}
             >
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
-                {[
-                  ["cash", "Efectivo"],
-                  ["card", "Tarjeta"],
-                  ["transfer", "Transferencia"],
-                  ["credit", "Crédito"],
-                ].map(([val, label]) => (
-                  <View
-                    key={val}
-                    style={{ flexDirection: "row", alignItems: "center" }}
-                  >
-                    <RadioButton value={val} />
-                    <Text>{label}</Text>
-                  </View>
-                ))}
-              </View>
-            </RadioButton.Group>
+              <Text variant="bodyMedium" style={{ marginBottom: 16 }}>
+                Saldo pendiente:{" "}
+                <Text style={{ fontWeight: "bold", color: "#dc3545" }}>
+                  {fmt(toNum(sale?.total) - toNum(sale?.paid_amount))}
+                </Text>
+              </Text>
 
-            <Text style={[styles.inputLabel, { marginTop: 16 }]}>
-              Notas (opcional)
-            </Text>
-            <TextInput
-              style={[styles.input, { minHeight: 72, textAlignVertical: "top" }]}
-              placeholder="Notas adicionales..."
-              value={paymentNotes}
-              onChangeText={setPaymentNotes}
-              multiline
-              numberOfLines={3}
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setShowPaymentDialog(false)}>
-              Cancelar
-            </Button>
-            <Button onPress={handleAddPayment} buttonColor={palette.primary}>
-              Confirmar
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+              <Text style={styles.inputLabel}>Monto a pagar *</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="0.00"
+                value={paymentAmount}
+                onChangeText={(t) => {
+                  setPaymentAmount(t);
+                  if (paymentError) setPaymentError("");
+                }}
+                keyboardType="decimal-pad"
+              />
+
+              <Text style={styles.inputLabel}>Método de Pago</Text>
+              <RadioButton.Group
+                onValueChange={setPaymentMethod}
+                value={paymentMethod}
+              >
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
+                  {[
+                    ["cash", "Efectivo"],
+                    ["card", "Tarjeta"],
+                    ["transfer", "Transferencia"],
+                    ["credit", "Crédito"],
+                  ].map(([val, label]) => (
+                    <View
+                      key={val}
+                      style={{ flexDirection: "row", alignItems: "center" }}
+                    >
+                      <RadioButton value={val} />
+                      <Text>{label}</Text>
+                    </View>
+                  ))}
+                </View>
+              </RadioButton.Group>
+
+              <Text style={[styles.inputLabel, { marginTop: 16 }]}>
+                Notas (opcional)
+              </Text>
+              <TextInput
+                style={[styles.input, { minHeight: 72, textAlignVertical: "top" }]}
+                placeholder="Notas adicionales..."
+                value={paymentNotes}
+                onChangeText={setPaymentNotes}
+                multiline
+                numberOfLines={3}
+              />
+              {!!paymentError && (
+                <Text style={styles.modalError}>{paymentError}</Text>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <Button
+                onPress={() => setShowPaymentDialog(false)}
+                disabled={savingPayment}
+              >
+                Cancelar
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleAddPayment}
+                buttonColor={palette.primary}
+                loading={savingPayment}
+                disabled={savingPayment}
+              >
+                Confirmar
+              </Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -703,6 +735,32 @@ const styles = StyleSheet.create({
 
   // Actions
   actionBtn: { borderRadius: 10 },
+
+  // Modal pago
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 480,
+    maxHeight: "85%",
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalTitle: { fontWeight: "700", marginBottom: 16 },
+  modalError: { color: "#dc3545", fontSize: 13, marginTop: 4, fontWeight: "600" },
+  modalScroll: { flexGrow: 0 },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginTop: 16,
+  },
 
   // Dialog
   inputLabel: { marginBottom: 6, fontWeight: "600", fontSize: 14 },

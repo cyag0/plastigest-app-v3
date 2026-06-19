@@ -63,6 +63,9 @@ export default function SaleFormScreen() {
 
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentAmount, setPaymentAmount] = useState("");
+  // Indica si el usuario editó manualmente el monto a pagar. Mientras sea
+  // false, el input se mantiene sincronizado con el total de la venta.
+  const [paymentTouched, setPaymentTouched] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [lastSale, setLastSale] = useState<SaleSummary | null>(null);
   const [cartVisible, setCartVisible] = useState(false);
@@ -79,6 +82,16 @@ export default function SaleFormScreen() {
     () => cartItems.reduce((sum, item) => sum + item.quantity, 0),
     [cartItems],
   );
+
+  // Pre-rellenar el monto a pagar con el total de la venta. Así, por defecto,
+  // la venta queda pagada por completo y el usuario solo cambia el monto (p. ej.
+  // a 0 para crédito) si lo desea. Mientras no haya editado el campo a mano,
+  // se mantiene sincronizado con el total.
+  useEffect(() => {
+    if (!paymentTouched) {
+      setPaymentAmount(totalAmount > 0 ? totalAmount.toFixed(2) : "");
+    }
+  }, [totalAmount, paymentTouched]);
 
   // En mobile inyectamos el botón del carrito en el AppBar.
   useEffect(() => {
@@ -108,7 +121,20 @@ export default function SaleFormScreen() {
 
       setIsSubmitting(true);
 
-      const paidAmount = paymentAmount ? parseFloat(paymentAmount) : 0;
+      // Si el usuario no editó el monto, se paga el total completo: enviamos
+      // `undefined` para que el backend use el total exacto (evita problemas de
+      // redondeo). Si lo editó, enviamos el monto explícito —incluido 0, que
+      // deja la venta como pendiente/crédito en lugar de marcarla como pagada.
+      let paidAmountForApi: number | undefined;
+      let paidAmountForSummary: number;
+      if (!paymentTouched) {
+        paidAmountForApi = undefined;
+        paidAmountForSummary = totalAmount;
+      } else {
+        const parsed = parseFloat(paymentAmount.trim());
+        paidAmountForSummary = Number.isFinite(parsed) ? parsed : 0;
+        paidAmountForApi = paidAmountForSummary;
+      }
 
       // Capturar el resumen ANTES de confirmar, porque confirmSale limpia
       // el carrito (clearCart) y perderíamos los datos para el modal.
@@ -117,23 +143,24 @@ export default function SaleFormScreen() {
         itemCount: cartItems.reduce((sum, item) => sum + item.quantity, 0),
         method: paymentMethod,
         change:
-          paymentMethod === "cash" && paidAmount > totalAmount
-            ? paidAmount - totalAmount
+          paymentMethod === "cash" && paidAmountForSummary > totalAmount
+            ? paidAmountForSummary - totalAmount
             : 0,
         pending:
-          paidAmount > 0 && paidAmount < totalAmount
-            ? totalAmount - paidAmount
+          paidAmountForSummary < totalAmount
+            ? totalAmount - paidAmountForSummary
             : 0,
       };
 
       await saleContext.confirmSale({
         payment_method: paymentMethod,
-        paid_amount: paidAmount > 0 ? paidAmount : undefined,
+        paid_amount: paidAmountForApi,
       });
 
       // Cerrar carrito y mostrar modal de éxito
       setCartVisible(false);
       setPaymentAmount("");
+      setPaymentTouched(false);
       setPaymentMethod("cash");
       setLastSale(summary);
     } catch (error: any) {
@@ -151,6 +178,7 @@ export default function SaleFormScreen() {
   const handleStartAnotherSale = () => {
     setLastSale(null);
     setPaymentAmount("");
+    setPaymentTouched(false);
     setPaymentMethod("cash");
   };
 
@@ -200,13 +228,16 @@ export default function SaleFormScreen() {
                 Monto Total: ${totalAmount.toFixed(2)}
               </Text>
               <Text style={styles.sublabel}>
-                Monto a pagar ahora (deja vacío para pagar completo)
+                Monto a pagar ahora (cámbialo a 0 para dejarlo a crédito)
               </Text>
               <TextInput
                 style={styles.input}
                 placeholder="0.00"
                 value={paymentAmount}
-                onChangeText={setPaymentAmount}
+                onChangeText={(text) => {
+                  setPaymentTouched(true);
+                  setPaymentAmount(text);
+                }}
                 keyboardType="decimal-pad"
               />
             </View>

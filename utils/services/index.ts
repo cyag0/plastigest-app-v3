@@ -649,6 +649,12 @@ const Services = {
   },
   cashClosings: {
     ...createCrudService<any>("/auth/admin/cash-closings"),
+    async pdfUrl(id: number) {
+      const response = await axiosClient.get(
+        `/auth/admin/cash-closings/${id}/pdf-url`,
+      );
+      return response.data as { url: string; expires_at: string };
+    },
   },
   home: {
     clientes: createCrudService<any>("/auth/admin/customers"),
