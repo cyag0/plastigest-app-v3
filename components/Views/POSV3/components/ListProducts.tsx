@@ -449,7 +449,11 @@ export default function ListProducts({
 
   const updateColumns = () => {
     const width = Dimensions.get("window").width;
-    if (width >= 1200) {
+    if (width >= 2200) {
+      setNumColumns(6);
+    } else if (width >= 1700) {
+      setNumColumns(5);
+    } else if (width >= 1200) {
       setNumColumns(4);
     } else if (width >= 768) {
       setNumColumns(3);

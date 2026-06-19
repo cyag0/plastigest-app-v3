@@ -29,13 +29,28 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 // Importaciones dinamicas para evitar errores de tipos
 const Location = require("expo-location");
-const MediaLibrary = require("expo-media-library");
+// expo-media-library NO tiene implementacion web: el cuerpo de su modulo
+// declara `class Asset extends <modulo nativo>`, y ese modulo nativo es
+// `undefined` en web, por lo que el simple `require` lanza
+// "Class extends value undefined" en tiempo de import. Como expo-router
+// evalua TODAS las rutas al construir el arbol, eso tumbaba toda la app web
+// (incluido /login). Solo lo cargamos en nativo.
+const MediaLibrary =
+  Platform.OS === "web" ? null : require("expo-media-library");
 
 interface PermissionStatus {
   granted: boolean;
   canAskAgain: boolean;
   status: string;
 }
+
+// Estado por defecto para permisos que no aplican en la plataforma actual
+// (p. ej. galeria en web, donde expo-media-library no esta disponible).
+const UNSUPPORTED_PERMISSION: PermissionStatus = {
+  granted: false,
+  canAskAgain: false,
+  status: "unsupported",
+};
 
 interface AppPermissions {
   camera: PermissionStatus;
@@ -91,7 +106,9 @@ export default function ProfileScreen() {
         Camera.getCameraPermissionsAsync(),
         Notifications.getPermissionsAsync(),
         Location.getForegroundPermissionsAsync(),
-        MediaLibrary.getPermissionsAsync(),
+        MediaLibrary
+          ? MediaLibrary.getPermissionsAsync()
+          : Promise.resolve(UNSUPPORTED_PERMISSION),
       ]);
 
       setPermissions({
@@ -138,7 +155,9 @@ export default function ProfileScreen() {
           result = await Location.requestForegroundPermissionsAsync();
           break;
         case "mediaLibrary":
-          result = await MediaLibrary.requestPermissionsAsync();
+          result = MediaLibrary
+            ? await MediaLibrary.requestPermissionsAsync()
+            : UNSUPPORTED_PERMISSION;
           break;
       }
 

@@ -73,14 +73,10 @@ export default function ProductsForm(props: ProductsFormProps) {
 
   useEffect(() => {
     setTimeout(() => {
-      console.log("Selected Location ID:", selectedLocation?.id);
-
       formRef.current?.setFieldValue(
         "current_location_id",
         selectedLocation?.id || ""
       );
-
-      console.log("values", formRef.current?.getValues());
     }, 500);
   }, []);
 
@@ -158,7 +154,6 @@ export default function ProductsForm(props: ProductsFormProps) {
       <BarcodeScanner
         ref={scannerRef}
         onScanned={(code) => {
-          console.log("Scanned code:", code);
           formRef.current?.setFieldValue("code", code);
         }}
       />

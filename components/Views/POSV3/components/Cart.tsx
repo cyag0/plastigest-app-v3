@@ -2,8 +2,8 @@ import EmptyState from "@/components/App/EmptyState";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Divider, FAB, Menu } from "react-native-paper";
 
 export interface CartItemData {
@@ -34,7 +34,7 @@ interface CartProps {
   onRemoveItem?: (itemId: number | string) => void;
   onItemChange?: (
     itemId: number | string,
-    action: "increment" | "decrement" | "unit",
+    action: "increment" | "decrement" | "unit" | "set",
     data?: any,
   ) => void;
   onClearCart?: () => void;
@@ -49,7 +49,7 @@ interface CartItemComponentProps {
   onRemove: (itemId: number | string) => void;
   onItemChange: (
     itemId: number | string,
-    action: "increment" | "decrement" | "unit",
+    action: "increment" | "decrement" | "unit" | "set",
     data?: any,
   ) => void;
 }
@@ -60,12 +60,30 @@ function CartItemComponent({
   onItemChange,
 }: CartItemComponentProps) {
   const [unitMenuVisible, setUnitMenuVisible] = useState(false);
+  const [qtyText, setQtyText] = useState(String(item.quantity));
+
+  // Sincronizar el input cuando la cantidad cambia desde fuera (+/-)
+  useEffect(() => {
+    setQtyText(String(item.quantity));
+  }, [item.quantity]);
 
   const handleQuantityChange = (delta: number) => {
     if (delta > 0) {
       onItemChange(item.id, "increment");
     } else {
       onItemChange(item.id, "decrement");
+    }
+  };
+
+  const commitQuantity = () => {
+    const parsed = parseInt(qtyText, 10);
+    if (isNaN(parsed) || parsed < 1) {
+      // Valor inválido: restaurar la cantidad actual
+      setQtyText(String(item.quantity));
+      return;
+    }
+    if (parsed !== item.quantity) {
+      onItemChange(item.id, "set", parsed);
     }
   };
 
@@ -109,51 +127,46 @@ function CartItemComponent({
 
             {/* Selector de unidad */}
             {item.available_units && item.available_units.length > 1 && (
-              <View>
-                <TouchableOpacity
-                  style={styles.unitChip}
-                  onPress={() => setUnitMenuVisible(true)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.unitChipText} numberOfLines={1}>
-                    {item.unit_abbreviation ||
-                      item.unit_name ||
-                      item.unit ||
-                      "Unidad"}
-                  </Text>
-                  <MaterialCommunityIcons
-                    name="chevron-down"
-                    size={12}
-                    color={palette.textSecondary}
-                  />
-                </TouchableOpacity>
-                <Menu
-                  visible={unitMenuVisible}
-                  onDismiss={() => setUnitMenuVisible(false)}
-                  anchor={
-                    <View style={styles.menuAnchor}>
-                      <Text>·</Text>
-                    </View>
-                  }
-                  contentStyle={styles.unitMenu}
-                >
-                  {item.available_units.map((unit) => (
-                    <Menu.Item
-                      key={unit.id}
-                      onPress={() => handleUnitChange(unit.id)}
-                      title={`${unit.name} (${unit.abbreviation})`}
-                      leadingIcon={
-                        unit.id === item.unit_id ? "check" : undefined
-                      }
-                      titleStyle={
-                        unit.id === item.unit_id
-                          ? styles.unitMenuItemTextSelected
-                          : undefined
-                      }
+              <Menu
+                visible={unitMenuVisible}
+                onDismiss={() => setUnitMenuVisible(false)}
+                anchor={
+                  <TouchableOpacity
+                    style={styles.unitChip}
+                    onPress={() => setUnitMenuVisible(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.unitChipText} numberOfLines={1}>
+                      {item.unit_abbreviation ||
+                        item.unit_name ||
+                        item.unit ||
+                        "Unidad"}
+                    </Text>
+                    <MaterialCommunityIcons
+                      name={unitMenuVisible ? "chevron-up" : "chevron-down"}
+                      size={12}
+                      color={palette.textSecondary}
                     />
-                  ))}
-                </Menu>
-              </View>
+                  </TouchableOpacity>
+                }
+                contentStyle={styles.unitMenu}
+              >
+                {item.available_units.map((unit) => (
+                  <Menu.Item
+                    key={unit.id}
+                    onPress={() => handleUnitChange(unit.id)}
+                    title={`${unit.name} (${unit.abbreviation})`}
+                    leadingIcon={
+                      unit.id === item.unit_id ? "check" : undefined
+                    }
+                    titleStyle={
+                      unit.id === item.unit_id
+                        ? styles.unitMenuItemTextSelected
+                        : undefined
+                    }
+                  />
+                ))}
+              </Menu>
             )}
           </View>
 
@@ -185,7 +198,17 @@ function CartItemComponent({
               color={palette.textSecondary}
             />
           </TouchableOpacity>
-          <Text style={styles.quantityText}>{item.quantity}</Text>
+          <TextInput
+            style={styles.quantityInput}
+            value={qtyText}
+            onChangeText={setQtyText}
+            onEndEditing={commitQuantity}
+            onBlur={commitQuantity}
+            keyboardType="number-pad"
+            selectTextOnFocus
+            maxLength={6}
+            returnKeyType="done"
+          />
           <TouchableOpacity
             style={[styles.qtyButton, styles.qtyButtonPrimary]}
             onPress={() => handleQuantityChange(1)}
@@ -512,12 +535,6 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     elevation: 8,
   },
-  menuAnchor: {
-    width: 0,
-    height: 0,
-    opacity: 0,
-    position: "absolute",
-  },
   unitMenuItemTextSelected: {
     color: palette.primary,
     fontWeight: "600",
@@ -549,13 +566,18 @@ const styles = StyleSheet.create({
   qtyButtonPrimary: {
     backgroundColor: palette.primary,
   },
-  quantityText: {
+  quantityInput: {
     ...tokens.typography.bodyMd,
-    minWidth: 28,
+    minWidth: 48,
+    height: 28,
+    paddingVertical: 0,
+    paddingHorizontal: 4,
     textAlign: "center",
     fontWeight: "700",
     color: palette.text,
     fontVariant: ["tabular-nums"],
+    backgroundColor: palette.surface,
+    borderRadius: tokens.radius.sm,
   },
   itemRight: {
     flexDirection: "row",

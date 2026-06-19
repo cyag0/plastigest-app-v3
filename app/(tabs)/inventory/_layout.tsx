@@ -58,10 +58,6 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
-        name="weekly-inventory"
-        options={{ title: "Inventario", headerShown: true }}
-      />
-      <Stack.Screen
         name="weekly-inventory/index"
         options={{ title: "Inventario", headerShown: true }}
       />
@@ -78,7 +74,6 @@ export default function _layout() {
         options={{ title: "Detalle Inventario", headerShown: true }}
       />
 
-      <Stack.Screen name="products" options={{ title: "Productos" }} />
       <Stack.Screen name="products/index" options={{ title: "Productos" }} />
       <Stack.Screen
         name="products/form"
@@ -91,10 +86,6 @@ export default function _layout() {
       <Stack.Screen
         name="products/[id]/edit"
         options={{ title: "Editar Producto" }}
-      />
-      <Stack.Screen
-        name="packages"
-        options={{ title: "Paquetes" }}
       />
       <Stack.Screen
         name="packages/index"

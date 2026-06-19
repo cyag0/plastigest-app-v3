@@ -13,6 +13,7 @@ export default function CarritoScreen() {
         items={cartItems}
         onRemoveItem={handleRemoveProduct}
         onItemChange={handleItemChange}
+        isScreen
       >
         <View style={{ padding: 16 }}>
           <Button mode="contained">Finalizar Compra</Button>

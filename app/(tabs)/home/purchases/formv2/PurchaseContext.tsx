@@ -49,7 +49,7 @@ interface PurchaseContextType {
   handleRemoveProduct: (productId: number | string) => void;
   handleItemChange: (
     productId: number | string,
-    action: "increment" | "decrement" | "unit",
+    action: "increment" | "decrement" | "unit" | "set",
     data?: any,
   ) => void;
   clearCart: () => void;
@@ -373,7 +373,7 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
 
   const handleItemChange = async (
     productId: number | string,
-    action: "increment" | "decrement" | "unit",
+    action: "increment" | "decrement" | "unit" | "set",
     data?: any,
   ) => {
     const current = selectedProducts[productId];
@@ -407,6 +407,19 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
         };
         updateData = { quantity: newQuantity };
         break;
+
+      case "set": {
+        const qty =
+          typeof data === "number" ? data : parseInt(String(data), 10);
+        if (isNaN(qty) || qty < 1) return;
+        newQuantity = qty;
+        newSelectedProducts[productId] = {
+          ...current,
+          quantity: newQuantity,
+        };
+        updateData = { quantity: newQuantity };
+        break;
+      }
 
       case "unit":
         const unitId = typeof data === "number" ? data : (data as Unit)?.id;

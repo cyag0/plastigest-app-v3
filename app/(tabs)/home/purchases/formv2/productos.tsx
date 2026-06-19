@@ -123,6 +123,7 @@ export default function ProductosScreen() {
             items={cartItems}
             onRemoveItem={handleRemoveProduct}
             onItemChange={handleItemChange}
+            isScreen
           >
             <View style={{ padding: 16 }}>
               <Button

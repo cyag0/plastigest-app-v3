@@ -115,7 +115,7 @@ export default function FormulaForm() {
           />
           <FormInput name="description" label="Descripción" multiline numberOfLines={2} />
           <FormInput name="notes" label="Notas internas" multiline numberOfLines={2} />
-          <FormCheckBox name="is_active" label="Fórmula activa" />
+          <FormCheckBox name="is_active" text="Fórmula activa" />
         </Card>
 
         <View style={{ height: 12 }} />
