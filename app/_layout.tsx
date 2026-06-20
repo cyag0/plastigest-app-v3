@@ -1,5 +1,4 @@
 import { useFonts } from "expo-font";
-import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
 import "react-native-reanimated";
 
@@ -24,10 +23,12 @@ registerTranslation("es", es);
 export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
-    // Pre-cargar las fuentes de iconos para que el export web (Cloudflare
-    // Pages) incluya los .ttf en el bundle y se rendericen en navegador.
-    ...MaterialCommunityIcons.font,
-    ...Ionicons.font,
+    // Fuentes de iconos cargadas desde assets/fonts (copia local) en vez de
+    // node_modules/@expo/...: Cloudflare Pages no sirve rutas con "@", por lo
+    // que los .ttf de los iconos no cargaban en web. Estos nombres de familia
+    // ("material-community", "ionicons") son los que usa @expo/vector-icons.
+    "material-community": require("../assets/fonts/MaterialCommunityIcons.ttf"),
+    ionicons: require("../assets/fonts/Ionicons.ttf"),
   });
 
   if (!loaded) {
