@@ -1,4 +1,5 @@
 import { useFonts } from "expo-font";
+import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { Stack } from "expo-router";
 import "react-native-reanimated";
 
@@ -23,6 +24,10 @@ registerTranslation("es", es);
 export default function RootLayout() {
   const [loaded] = useFonts({
     SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
+    // Pre-cargar las fuentes de iconos para que el export web (Cloudflare
+    // Pages) incluya los .ttf en el bundle y se rendericen en navegador.
+    ...MaterialCommunityIcons.font,
+    ...Ionicons.font,
   });
 
   if (!loaded) {
