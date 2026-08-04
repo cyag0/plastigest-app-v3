@@ -44,6 +44,12 @@ const CONSUMPTION_COLUMNS: EditableTableColumn[] = [
     width: 110,
     required: true,
   },
+  {
+    key: "available_stock",
+    label: "Disponible",
+    type: "stock",
+    width: 120,
+  },
   { key: "notes", label: "Notas", type: "text", width: 180 },
 ];
 
@@ -270,9 +276,27 @@ export default function ProductionForm() {
 
         // AppForm NO llama a la API cuando se le pasa onSubmit, así que la
         // invocamos manualmente aquí con los valores convertidos a FormData.
-        const apiResponse = editingId
-          ? await Services.productionOrders.update(editingId, values)
-          : await Services.productionOrders.store(values);
+        // Cuando affect_stock está activo, el backend crea Y descuenta el
+        // stock en una sola transacción: si el stock es insuficiente, NO se
+        // crea ninguna orden (ni borrador) y aquí caemos en el catch.
+        let apiResponse;
+        try {
+          apiResponse = editingId
+            ? await Services.productionOrders.update(editingId, values)
+            : await Services.productionOrders.store(values);
+        } catch (e: any) {
+          const data = e?.response?.data;
+          const detail =
+            data?.error ||
+            (data?.errors ? Object.values(data.errors).flat()[0] : null) ||
+            data?.message ||
+            e?.message ||
+            "Error desconocido";
+          alerts.error("No se pudo registrar la producción. " + detail);
+          // Nos quedamos en el formulario (no navegamos) para que el usuario
+          // ajuste las cantidades y reintente.
+          return;
+        }
 
         // store/update regresan AxiosResponse<LaravelResponse<T>>, donde el
         // body tiene la forma { data: T, message?: string }. Extraemos la
@@ -281,23 +305,11 @@ export default function ProductionForm() {
           | { id?: number; folio?: string }
           | undefined;
 
-        // Si es una orden nueva y debe afectar stock, la marcamos como
-        // completada para que el inventario se actualice.
-        if (originalValues.affect_stock && !editingId) {
-          const orderId = order?.id;
-          if (orderId) {
-            try {
-              await Services.productionOrders.complete(orderId);
-              alerts.success(
-                `Producción ${order?.folio ?? ""} registrada · Stock actualizado`,
-              );
-            } catch (e: any) {
-              alerts.error(
-                "Guardada pero no se pudo afectar el stock: " + (e?.message ?? ""),
-              );
-            }
-          }
-        } else if (!originalValues.affect_stock) {
+        if (!editingId && originalValues.affect_stock) {
+          alerts.success(
+            `Producción ${order?.folio ?? ""} registrada · Stock actualizado`,
+          );
+        } else if (!editingId) {
           alerts.success("Borrador guardado");
         } else {
           alerts.success("Producción actualizada");

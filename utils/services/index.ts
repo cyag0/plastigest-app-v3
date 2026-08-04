@@ -560,6 +560,20 @@ const Services = {
   },
   inventory: {
     ...createCrudService<any>("/auth/admin/inventory"),
+    async getCurrentStock(params: {
+      product_id: number;
+      location_id: number;
+      company_id: number;
+    }) {
+      const response = await axiosClient.get(
+        "/auth/admin/inventory/stock/current",
+        { params },
+      );
+      return response.data as {
+        success: boolean;
+        data: { current_stock: number };
+      };
+    },
   },
   inventoryCounts: {
     ...createCrudService<App.Entities.InventoryCount.InventoryCount>(

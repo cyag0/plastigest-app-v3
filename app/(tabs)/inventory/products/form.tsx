@@ -1,4 +1,4 @@
-import { FormCheckBox } from "@/components/Form/AppCheckBox";
+import { FormSwitch } from "@/components/Form/AppSwitch";
 import AppDependency from "@/components/Form/AppDependency";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
@@ -226,7 +226,7 @@ export default function ProductsForm(props: ProductsFormProps) {
         }}
       </AppDependency>
 
-      <FormCheckBox name="for_sale" text="Producto Disponible para Venta" />
+      <FormSwitch name="for_sale" text="Producto Disponible para Venta" />
 
       <FormUpload
         name="product_images"
@@ -262,7 +262,7 @@ export default function ProductsForm(props: ProductsFormProps) {
         />
       </View>
 
-      <FormCheckBox
+      <FormSwitch
         name="is_active"
         text={`Producto Activo en ${selectedLocation?.name || "esta sucursal"}`}
       />

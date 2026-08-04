@@ -8,7 +8,7 @@ import axios from "@/utils/axios";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Href, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 
@@ -23,6 +23,28 @@ export default function ProductsIndex(props: ProductsIndexProps) {
 
   const [printModalVisible, setPrintModalVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>(
+    [],
+  );
+
+  // Cargamos las categorías para poblar las opciones del filtro "Categoría".
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res: any = await Services.categories.index({ all: true });
+        const data = Array.isArray(res)
+          ? res
+          : res?.data?.data || res?.data || [];
+        if (!cancelled) setCategories(data);
+      } catch {
+        // Si falla, el filtro de categoría simplemente queda sin opciones.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const { downloadPdfFromApi, isDownloading } = usePdfDownload({
     onSuccess: (uri) => {
@@ -195,6 +217,48 @@ export default function ProductsIndex(props: ProductsIndexProps) {
               { label: "Todos", value: "" },
               { label: "Activos", value: "1" },
               { label: "Inactivos", value: "0" },
+            ],
+          },
+          {
+            type: "simple",
+            name: "category_id",
+            label: "Categoría",
+            options: [
+              { label: "Todas", value: "" },
+              ...categories.map((c) => ({
+                label: c.name,
+                value: String(c.id),
+              })),
+            ],
+          },
+          {
+            type: "multiple",
+            name: "product_type",
+            label: "Tipo",
+            options: [
+              { label: "Materia prima", value: "raw_material" },
+              { label: "Procesado", value: "processed" },
+              { label: "Comercial", value: "commercial" },
+            ],
+          },
+          {
+            type: "simple",
+            name: "for_sale",
+            label: "Para venta",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Sí", value: "1" },
+              { label: "No", value: "0" },
+            ],
+          },
+          {
+            type: "simple",
+            name: "in_stock",
+            label: "Existencia",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Con stock", value: "1" },
+              { label: "Sin stock", value: "0" },
             ],
           },
           {

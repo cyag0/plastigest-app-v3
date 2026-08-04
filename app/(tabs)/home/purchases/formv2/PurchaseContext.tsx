@@ -499,7 +499,11 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
       );
 
       return {
-        id: item.product_id,
+        // Usamos la llave de selectedProducts ("product_68" / "package_5"),
+        // que es única por línea. Con item.product_id un producto base y su
+        // paquete colisionaban (mismo product_id) → llave duplicada en React
+        // y los handlers de quitar/editar (que indexan por esta llave) fallaban.
+        id: productId,
         product_id: item.product_id,
         code: product?.code || "",
         name: product?.name || "",

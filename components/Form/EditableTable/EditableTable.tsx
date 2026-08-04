@@ -2,10 +2,14 @@ import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { useSelectData } from "@/components/Form/AppProSelect/context";
 import palette from "@/constants/palette";
+import useSelectedCompany from "@/hooks/useSelectedCompany";
+import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { FieldArray, useFormikContext, getIn } from "formik";
+import { useFormikContext, getIn } from "formik";
 import React, { useEffect, useMemo } from "react";
 import {
+  ActivityIndicator,
   LayoutAnimation,
   Platform,
   ScrollView,
@@ -21,7 +25,13 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-export type ColumnType = "product" | "unit" | "number" | "text" | "select";
+export type ColumnType =
+  | "product"
+  | "unit"
+  | "number"
+  | "text"
+  | "select"
+  | "stock";
 
 export interface EditableTableColumn {
   key: string;
@@ -215,6 +225,19 @@ export default function EditableTable({
         />
       );
     }
+    if (col.type === "stock") {
+      const productCol = columns.find((c) => c.type === "product");
+      const unitCol = columns.find((c) => c.type === "unit");
+      const quantityCol = columns.find((c) => c.type === "number");
+      return (
+        <StockCell
+          productId={productCol ? row[productCol.key] : 0}
+          unitId={unitCol ? row[unitCol.key] : 0}
+          quantity={quantityCol ? row[quantityCol.key] : 0}
+          productParams={productCol?.productFetchParams}
+        />
+      );
+    }
     if (col.type === "select") {
       return (
         <FormSelectSimple
@@ -340,6 +363,113 @@ function UnitCell({
       hideLabel
       filterItem={filterItem}
     />
+  );
+}
+
+/**
+ * Celda de solo lectura que muestra el stock disponible del producto
+ * seleccionado en la fila, dentro de la ubicación y compañía actuales.
+ * Se actualiza cada vez que cambia el producto y advierte (en rojo) cuando la
+ * cantidad solicitada supera lo disponible, siempre que la unidad de la fila
+ * coincida con la unidad base del producto (para no comparar magnitudes
+ * distintas, p. ej. g vs kg).
+ */
+function StockCell({
+  productId,
+  unitId,
+  quantity,
+  productParams,
+}: {
+  productId: any;
+  unitId: any;
+  quantity: any;
+  productParams?: Record<string, any>;
+}) {
+  const { companyId } = useSelectedCompany();
+  const { selectedLocation } = useSelectedLocation();
+  const locationId = selectedLocation?.id;
+  const selectData = useSelectData();
+  const paramsKey = JSON.stringify(productParams ?? null);
+
+  const [stock, setStock] = React.useState<number | null>(null);
+  const [loading, setLoading] = React.useState(false);
+
+  // Catálogo de productos para resolver la unidad base del seleccionado.
+  useEffect(() => {
+    selectData.fetchData("products", productParams);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramsKey]);
+
+  const product = useMemo(() => {
+    if (!productId) return null;
+    const products = selectData.getCachedData("products", productParams).data ?? [];
+    return products.find((p: any) => String(p.id) === String(productId)) ?? null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId, paramsKey, selectData]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!productId || !locationId || !companyId) {
+      setStock(null);
+      return;
+    }
+    setLoading(true);
+    (async () => {
+      try {
+        const r = await Services.inventory.getCurrentStock({
+          product_id: Number(productId),
+          location_id: Number(locationId),
+          company_id: Number(companyId),
+        });
+        const value = r?.data?.current_stock;
+        if (!cancelled) setStock(value == null ? null : Number(value));
+      } catch {
+        if (!cancelled) setStock(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [productId, locationId, companyId]);
+
+  if (!productId) {
+    return <Text style={{ color: palette.textSecondary, fontSize: 12 }}>—</Text>;
+  }
+
+  if (loading && stock === null) {
+    return <ActivityIndicator size="small" color={palette.primary} />;
+  }
+
+  const baseUnitName: string = product?.unit?.name ?? "";
+  const baseUnitId = product?.unit_id ?? product?.unit?.id;
+  const sameUnit =
+    baseUnitId != null && String(baseUnitId) === String(unitId);
+  const qty = Number(quantity) || 0;
+  const insufficient = stock !== null && sameUnit && qty > stock;
+
+  const color =
+    stock === null
+      ? palette.textSecondary
+      : insufficient
+        ? palette.error
+        : palette.success;
+
+  return (
+    <View>
+      <Text style={{ color, fontWeight: "700", fontSize: 13 }}>
+        {stock === null
+          ? "—"
+          : stock.toLocaleString("es-MX", { maximumFractionDigits: 2 })}
+        {baseUnitName ? ` ${baseUnitName}` : ""}
+      </Text>
+      {insufficient ? (
+        <Text style={{ fontSize: 10, color: palette.error, marginTop: 2 }}>
+          Stock insuficiente
+        </Text>
+      ) : null}
+    </View>
   );
 }
 
