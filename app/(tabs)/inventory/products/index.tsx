@@ -1,488 +1,245 @@
-import AppList from "@/components/App/AppList/AppList";
-import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
-import PrintLabelsModal from "@/components/Products/PrintLabelsModal";
 import palette from "@/constants/palette";
-import { useAlerts } from "@/hooks/useAlerts";
-import { usePdfDownload } from "@/hooks/usePdfDownload";
-import axios from "@/utils/axios";
-import Services from "@/utils/services";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Href, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
-import { Text } from "react-native-paper";
+import useInventoryTypes, {
+  ALL_INVENTORY_TYPES,
+} from "@/hooks/useInventoryTypes";
+import { useRouter } from "expo-router";
+import React from "react";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
+import { Divider, IconButton, Text, TouchableRipple } from "react-native-paper";
 
-interface ProductsIndexProps {
-  route?: Href;
-}
+type InventoryType = App.Entities.InventoryType;
 
-export default function ProductsIndex(props: ProductsIndexProps) {
+/**
+ * Paso previo al listado de productos: se elige primero el tipo de inventario.
+ * El tipo elegido queda en la ruta como slug (/inventory/products/type/materia-prima).
+ */
+export default function ProductsIndex() {
   const router = useRouter();
-  const params = useLocalSearchParams();
-  const alerts = useAlerts();
+  const { types, loading, error, reload } = useInventoryTypes({
+    withCounts: true,
+  });
+  const [refreshing, setRefreshing] = React.useState(false);
 
-  const [printModalVisible, setPrintModalVisible] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  const [categories, setCategories] = useState<{ id: number; name: string }[]>(
-    [],
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await reload();
+    setRefreshing(false);
+  };
+
+  const openType = (slug: string) => {
+    router.push(`/(tabs)/inventory/products/type/${slug}` as any);
+  };
+
+  const totalProducts = types.reduce(
+    (total, type) => total + (type.products_count || 0),
+    0,
   );
 
-  // Cargamos las categorías para poblar las opciones del filtro "Categoría".
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res: any = await Services.categories.index({ all: true });
-        const data = Array.isArray(res)
-          ? res
-          : res?.data?.data || res?.data || [];
-        if (!cancelled) setCategories(data);
-      } catch {
-        // Si falla, el filtro de categoría simplemente queda sin opciones.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const { downloadPdfFromApi, isDownloading } = usePdfDownload({
-    onSuccess: (uri) => {
-      setPrintModalVisible(false);
-      setSelectedProduct(null);
-    },
-    onError: (error) => {
-      alerts.error("Error al descargar el PDF: " + error.message);
-    },
-  });
-
-  const route: Href = "/(tabs)/inventory/products";
-
-  const columns: AppListColumn<any>[] = [
-    {
-      title: "Imagen",
-      key: "image",
-      width: 96,
-      render: (_, item) => {
-        if (item.main_image?.uri) {
-          return (
-            <Image
-              source={{ uri: item.main_image.uri }}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: "#E5E7EB",
-                backgroundColor: "#F3F4F6",
-              }}
-            />
-          );
-        }
-
-        return (
-          <View
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: "#E5E7EB",
-              backgroundColor: "#F9FAFB",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <MaterialCommunityIcons
-              name="image-off-outline"
-              size={16}
-              color="#6B7280"
-            />
-          </View>
-        );
-      },
-    },
-    {
-      title: "Producto",
-      key: "name",
-      dataIndex: "name",
-      width: 240,
-    },
-    {
-      title: "Estado",
-      key: "is_active",
-      width: 130,
-      render: (_, item) => (
-        <View
-          style={{
-            alignSelf: "flex-start",
-            backgroundColor: item.is_active ? "#2E7D32" : "#B3261E",
-            borderRadius: 999,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-          }}
-        >
-          <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
-            {item.is_active ? "Activo" : "Inactivo"}
-          </Text>
-        </View>
-      ),
-    },
-    {
-      title: "Stock",
-      key: "stock",
-      width: 170,
-      render: (_, item) => {
-        const stock =
-          item.current_stock !== null && item.current_stock !== undefined
-            ? Number(item.current_stock)
-            : 0;
-        const minStock = Number(item.minimum_stock || 0);
-        const isHealthy = minStock > 0 ? stock > minStock : stock > 0;
-        const stockColor = isHealthy ? "#2E7D32" : "#B3261E";
-
-        return (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <MaterialCommunityIcons
-              name={isHealthy ? "arrow-up-bold" : "arrow-down-bold"}
-              size={14}
-              color={stockColor}
-            />
-            <Text style={{ color: stockColor, fontWeight: "700" }}>{stock}</Text>
-          </View>
-        );
-      },
-    },
-    {
-      title: "Precio",
-      key: "sale_price",
-      width: 120,
-      align: "right",
-      render: (_, item) =>
-        item.sale_price
-          ? `$${Number(item.sale_price).toFixed(2)}`
-          : "-",
-    },
-    {
-      title: "Creado",
-      key: "created_at",
-      width: 120,
-      render: (_, item) => formatDate(item.created_at),
-    },
-  ];
-
-  // Determinar filtros iniciales basados en parámetros
-  const getDefaultFilters = () => {
-    const filters: any = {};
-
-    // Si viene el parámetro filter=low_stock, agregar el filtro
-    if (params.filter === "low_stock") {
-      filters.low_stock = "1";
-    }
-
-    return filters;
-  };
-
-  const handlePrintLabels = async (quantity: number) => {
-    if (!selectedProduct) return;
-
-    // Primero obtener la URL firmada
-    const response = await axios.get(
-      `/auth/admin/products/${selectedProduct.id}/labels/pdf-url`,
-      {
-        params: { quantity },
-      }
+  if (loading) {
+    return (
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color={palette.primary} />
+      </View>
     );
-
-    if (response.data?.url) {
-      // Descargar usando la URL firmada (pública)
-      await downloadPdfFromApi(response.data.url, {
-        fileName: `etiquetas-${selectedProduct.code}.pdf`,
-      });
-    }
-  };
+  }
 
   return (
-    <>
-      <AppList
-        title="Productos"
-        service={Services.products}
-        defaultFilters={getDefaultFilters()}
-        filters={[
-          {
-            type: "simple",
-            name: "is_active",
-            label: "Estado",
-            options: [
-              { label: "Todos", value: "" },
-              { label: "Activos", value: "1" },
-              { label: "Inactivos", value: "0" },
-            ],
-          },
-          {
-            type: "simple",
-            name: "category_id",
-            label: "Categoría",
-            options: [
-              { label: "Todas", value: "" },
-              ...categories.map((c) => ({
-                label: c.name,
-                value: String(c.id),
-              })),
-            ],
-          },
-          {
-            type: "multiple",
-            name: "product_type",
-            label: "Tipo",
-            options: [
-              { label: "Materia prima", value: "raw_material" },
-              { label: "Procesado", value: "processed" },
-              { label: "Comercial", value: "commercial" },
-            ],
-          },
-          {
-            type: "simple",
-            name: "for_sale",
-            label: "Para venta",
-            options: [
-              { label: "Todos", value: "" },
-              { label: "Sí", value: "1" },
-              { label: "No", value: "0" },
-            ],
-          },
-          {
-            type: "simple",
-            name: "in_stock",
-            label: "Existencia",
-            options: [
-              { label: "Todos", value: "" },
-              { label: "Con stock", value: "1" },
-              { label: "Sin stock", value: "0" },
-            ],
-          },
-          {
-            type: "simple",
-            name: "low_stock",
-            label: "Stock",
-            options: [
-              { label: "Todos", value: "" },
-              { label: "Stock bajo", value: "1" },
-              { label: "Stock normal", value: "0" },
-            ],
-          },
-        ]}
-        renderCard={({ item }: { item: any }) => ({
-          title: item.name,
-          description: (
-            <>
-              <AppList.Description
-                numberOfLines={1}
-                style={{ color: palette.textSecondary }}
-              >
-                {item.description || "Sin descripción"}
-              </AppList.Description>
-            </>
-          ),
-          left: (
-            <View
-              style={{
-                justifyContent: "center",
-                height: "100%",
-                flex: 1,
-              }}
-            >
-              {item.main_image?.uri && (
-                <Image
-                  source={{ uri: item.main_image.uri }}
-                  style={{
-                    width: 50,
-                    height: 50,
-                    backgroundColor: "#ccc",
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: "#eee",
-                  }}
-                />
-              )}
-            </View>
-          ),
-          right: (
-            <View
-              style={{
-                justifyContent: "flex-end",
-                alignItems: "flex-end",
-              }}
-            >
-              {item.sale_price && (
-                <AppList.Title
-                  style={{
-                    color: palette.text,
-                  }}
-                >
-                  {"$" + item.sale_price}
-                </AppList.Title>
-              )}
+    <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        <View style={styles.header}>
+          <Text variant="titleMedium" style={styles.headerTitle}>
+            Tipos de inventario
+          </Text>
+          <Text variant="bodySmall" style={styles.headerSubtitle}>
+            Elige un tipo para ver sólo esos productos
+          </Text>
+        </View>
 
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 8,
-                  alignItems: "center",
-                }}
-              >
-                {item.current_stock !== null &&
-                  item.current_stock !== undefined &&
-                  item.current_stock <= (item.minimum_stock || 0) &&
-                  item.minimum_stock > 0 && (
-                    <AppList.Description
-                      style={{
-                        fontWeight: "bold",
-                        color: palette.warning,
-                      }}
-                    >
-                      Stock bajo
-                    </AppList.Description>
-                  )}
+        {error && (
+          <Text variant="bodySmall" style={styles.error}>
+            {error}
+          </Text>
+        )}
 
-                {item.sale_price && (
-                  <AppList.Description
-                    style={{
-                      fontWeight: "bold",
-                      color: item.is_active ? palette.success : palette.error,
-                    }}
-                  >
-                    {item.is_active ? "Activo" : "Inactivo"}
-                  </AppList.Description>
-                )}
-              </View>
-              {/* <Chip
-                mode="flat"
-                style={[
-                  styles.statusChip,
-                  {
-                    backgroundColor: item.is_active
-                      ? palette.success + "20"
-                      : palette.warning,
-                    borderColor: item.is_active
-                      ? palette.success
-                      : palette.error,
-                  },
-                ]}
-                textStyle={[
-                  styles.statusText,
-                  {
-                    color: item.is_active ? palette.success : palette.error,
-                  },
-                ]}
-                compact
-              >
-                {item.is_active ? "ACTIVO" : "INACTIVO"}
-              </Chip> */}
+        <View style={styles.list}>
+          <Option
+            icon="format-list-bulleted"
+            color={palette.primary}
+            title="Todos los productos"
+            description="El catálogo completo, sin filtrar"
+            badge={totalProducts}
+            onPress={() => openType(ALL_INVENTORY_TYPES)}
+          />
 
-              {/*  {item.current_stock !== null &&
-                item.current_stock !== undefined && (
-                  <View style={styles.stockInfo}>
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "600",
-                        color:
-                          item.current_stock <= (item.minimum_stock || 0)
-                            ? palette.error
-                            : palette.textSecondary,
-                      }}
-                    >
-                      Stock: {item.current_stock}
-                    </Text>
-                    {item.current_stock <= (item.minimum_stock || 0) &&
-                      item.minimum_stock > 0 && (
-                        <Chip
-                          mode="flat"
-                          style={{
-                            borderColor: palette.warning,
-                            borderWidth: 1,
-                            marginTop: 4,
-                            backgroundColor: "transparent" as any,
-                          }}
-                          textStyle={{
-                            fontSize: 10,
-                            color: palette.error,
-                            fontWeight: "bold",
-                          }}
-                          compact
-                        >
-                          BAJO
-                        </Chip>
-                      )}
-                  </View>
-                )} */}
-            </View>
-          ),
-          bottom: [
-            {
-              label: "Stock",
-              value:
-                item.current_stock !== null && item.current_stock !== undefined
-                  ? item.current_stock
-                  : 0,
-            },
-            {
-              label: "Creado en",
-              value: formatDate(item.created_at),
-            },
-          ],
-        })}
-        onItemPress={(entity: any) => {
-          router.push(`${route}/${entity.id}` as any);
-        }}
-        menu={{
-          onEdit(item) {
-            router.push(`${route}/${item.id}/edit` as any);
-          },
-          customActions: [
-            {
-              title: "Ver Paquetes",
-              icon: "package-variant-closed",
-              onPress: (item) => {
-                router.push(
-                  `/(tabs)/inventory/packages?product_id=${item.id}` as any
-                );
-              },
-            },
-            {
-              title: "Imprimir Etiquetas",
-              icon: "barcode",
-              onPress: (item) => {
-                setSelectedProduct(item);
-                setPrintModalVisible(true);
-              },
-            },
-          ],
-        }}
-        onPressCreate={() => {
-          router.push(`${route}/form` as any);
-        }}
-        fabLabel="Nuevo Producto"
-        columns={columns}
-      />
+          <Divider style={styles.divider} />
 
-      <PrintLabelsModal
-        visible={printModalVisible}
-        onDismiss={() => {
-          setPrintModalVisible(false);
-          setSelectedProduct(null);
-        }}
-        onConfirm={handlePrintLabels}
-        productName={selectedProduct?.name || ""}
-        loading={isDownloading}
-      />
-    </>
+          {types.map((type: InventoryType, index: number) => (
+            <React.Fragment key={type.id}>
+              <Option
+                icon={type.icon || "shape-outline"}
+                color={type.color || palette.primary}
+                title={type.name}
+                description={type.description || ""}
+                badge={type.products_count}
+                onPress={() => openType(type.slug)}
+              />
+
+              {index < types.length - 1 && <Divider style={styles.divider} />}
+            </React.Fragment>
+          ))}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
-function formatDate(dateString: string) {
-  const date = new Date(dateString);
-  return date.toLocaleDateString();
+interface OptionProps {
+  icon: string;
+  color: string;
+  title: string;
+  description: string;
+  badge?: number;
+  onPress: () => void;
 }
 
+function Option({
+  icon,
+  color,
+  title,
+  description,
+  badge,
+  onPress,
+}: OptionProps) {
+  return (
+    <TouchableRipple onPress={onPress} style={styles.optionItem}>
+      <View style={styles.optionContent}>
+        <View style={[styles.optionIcon, { backgroundColor: color + "20" }]}>
+          <IconButton
+            icon={icon}
+            size={28}
+            iconColor={color}
+            style={{ margin: 0 }}
+          />
+        </View>
+
+        <View style={styles.optionText}>
+          <Text variant="titleMedium" style={styles.optionTitle}>
+            {title}
+          </Text>
+          {!!description && (
+            <Text
+              variant="bodySmall"
+              style={styles.optionDescription}
+              numberOfLines={2}
+            >
+              {description}
+            </Text>
+          )}
+        </View>
+
+        {badge !== undefined && (
+          <View style={[styles.badge, { backgroundColor: color }]}>
+            <Text variant="labelSmall" style={styles.badgeText}>
+              {badge}
+            </Text>
+          </View>
+        )}
+
+        <IconButton
+          icon="chevron-right"
+          size={24}
+          iconColor={palette.textSecondary}
+          style={{ margin: 0 }}
+        />
+      </View>
+    </TouchableRipple>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: palette.background,
+  },
+  centered: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  scrollContent: {
+    paddingBottom: 32,
+    maxWidth: 800,
+    width: "100%",
+    alignSelf: "center",
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  headerTitle: {
+    fontWeight: "700",
+    color: palette.text,
+  },
+  headerSubtitle: {
+    color: palette.textSecondary,
+  },
+  error: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    color: palette.error,
+  },
+  list: {
+    backgroundColor: palette.surface,
+    borderRadius: 12,
+    marginHorizontal: 8,
+    overflow: "hidden",
+  },
+  divider: {
+    marginLeft: 80,
+  },
+  optionItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  optionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  optionIcon: {
+    borderRadius: 12,
+    marginRight: 12,
+  },
+  optionText: {
+    flex: 1,
+  },
+  optionTitle: {
+    fontWeight: "600",
+    color: palette.text,
+  },
+  optionDescription: {
+    color: palette.textSecondary,
+  },
+  badge: {
+    minWidth: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+});

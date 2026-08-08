@@ -19,7 +19,7 @@ const COLUMNS: EditableTableColumn[] = [
     type: "product",
     width: 220,
     required: true,
-    productFetchParams: { product_type: ["raw_material", "processed"] },
+    productFetchParams: { is_consumable: 1 },
   },
   {
     key: "unit_id",

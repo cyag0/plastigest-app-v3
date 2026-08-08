@@ -92,7 +92,9 @@ export const SalesProvider = ({
       };
 
       if (type === "purchases") {
-        productParams["product_type"] = ["raw_material", "commercial"];
+        // Todo lo que el tipo de inventario marca como comprable
+        // (materia prima, material de empaque, insumos, mercancía de reventa).
+        productParams["is_purchasable"] = 1;
       }
 
       const [categoriesRes, productsRes] = await Promise.all([
@@ -305,10 +307,8 @@ export const SalesProvider = ({
           // Para ventas: solo productos marcados para venta
           return product.for_sale === true || product.for_sale === 1;
         } else {
-          // Para compras: solo materias primas y comerciales (no procesados)
-          const allowedTypes = ["raw_material", "commercial"];
-          const productType = product.product_type;
-          const matchesType = allowedTypes.includes(productType);
+          // Para compras: lo que su tipo de inventario permite comprar
+          const matchesType = !!product.inventory_type?.is_purchasable;
 
           // Si hay supplier_id, filtrar también por proveedor
           if (supplierId) {
@@ -342,10 +342,8 @@ export const SalesProvider = ({
           // Para ventas: solo productos marcados para venta
           matchesType = product.for_sale === true || product.for_sale === 1;
         } else {
-          // Para compras: solo materias primas y comerciales (no procesados)
-          const allowedTypes = ["raw_material", "commercial"];
-          const productType = product.product_type;
-          matchesType = allowedTypes.includes(productType);
+          // Para compras: lo que su tipo de inventario permite comprar
+          matchesType = !!product.inventory_type?.is_purchasable;
 
           // Si hay supplier_id, filtrar también por proveedor
           if (supplierId) {

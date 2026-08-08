@@ -16,6 +16,11 @@ const Services = {
   categories: {
     ...createCrudService<App.Entities.Category>("/auth/admin/categories"),
   },
+  inventoryTypes: {
+    ...createCrudService<App.Entities.InventoryType>(
+      "/auth/admin/inventory-types",
+    ),
+  },
   products: {
     ...createCrudService<App.Entities.Product>("/auth/admin/products"),
     async printLabels(productId: number, quantity: number) {

@@ -67,7 +67,7 @@ const INVENTORY_ACTIONS = [
     label: "Stock bajo",
     description: "Productos a reponer",
     icon: "alert-circle-outline" as const,
-    route: "/(tabs)/inventory/products?filter=low_stock",
+    route: "/(tabs)/inventory/products/type/all?filter=low_stock",
   },
 ];
 
@@ -250,7 +250,9 @@ export default function InventoryScreen() {
             title="Salud del stock"
             badge={`${totalProducts}`}
             actionLabel="Detalles"
-            onAction={() => router.push("/(tabs)/inventory/products" as any)}
+            onAction={() =>
+              router.push("/(tabs)/inventory/products/type/all" as any)
+            }
           />
           <View style={styles.card}>
             <HealthRow
@@ -314,7 +316,9 @@ export default function InventoryScreen() {
             {categoryEntries.length > 6 && (
               <TouchableOpacity
                 style={styles.seeMore}
-                onPress={() => router.push("/(tabs)/inventory/products" as any)}
+                onPress={() =>
+                  router.push("/(tabs)/inventory/products/type/all" as any)
+                }
                 activeOpacity={0.7}
               >
                 <Text style={styles.seeMoreText}>
@@ -337,7 +341,7 @@ export default function InventoryScreen() {
             style={[styles.alertCard, { borderLeftColor: palette.error }]}
             onPress={() =>
               router.push(
-                "/(tabs)/inventory/products?filter=low_stock" as any,
+                "/(tabs)/inventory/products/type/all?filter=low_stock" as any,
               )
             }
           >

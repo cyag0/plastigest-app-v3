@@ -154,15 +154,15 @@ export default function IngredientsTable({
                   alignItems: "center",
                 }}
               >
-                {/* Selector de Materia Prima */}
+                {/* Selector de insumo (cualquier tipo consumible) */}
                 <View style={{ flex: 3, paddingRight: 8 }}>
                   <FormProSelect
                     name={`${name}.${index}.ingredient_id`}
                     model="products"
                     fetchParams={{
-                      product_type: ["raw_material"],
+                      is_consumable: 1,
                     }}
-                    placeholder="Seleccione materia prima"
+                    placeholder="Seleccione un insumo"
                   />
                 </View>
 

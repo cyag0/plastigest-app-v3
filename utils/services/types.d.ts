@@ -139,6 +139,33 @@ namespace App {
       updated_at: string;
     }
 
+    interface InventoryType {
+      id: number;
+      company_id?: number | null;
+      code: string;
+      /** Slug del nombre; es lo que viaja en la URL (materia-prima) */
+      slug: string;
+      name: string;
+      description?: string | null;
+      icon?: string | null;
+      color?: string | null;
+      /** Se puede comprar a un proveedor */
+      is_purchasable: boolean;
+      /** Se puede vender / aparece en el POS */
+      is_sellable: boolean;
+      /** Puede ser salida de una orden de producción */
+      is_producible: boolean;
+      /** Puede ser insumo de una fórmula */
+      is_consumable: boolean;
+      /** Se inventaría y entra en los conteos */
+      is_stockable: boolean;
+      is_system: boolean;
+      is_active: boolean;
+      sort_order: number;
+      /** Sólo cuando se pide with_counts=1 */
+      products_count?: number;
+    }
+
     namespace InventoryCount {
       interface Detail {
         id?: number;

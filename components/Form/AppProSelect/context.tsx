@@ -10,6 +10,7 @@ type ServicePath =
   | "products"
   | "products-raw-materials"
   | "categories"
+  | "inventoryTypes"
   | "units"
   | "customers"
   | "suppliers"

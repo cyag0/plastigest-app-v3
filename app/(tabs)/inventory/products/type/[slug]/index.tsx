@@ -1,0 +1,466 @@
+import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import PrintLabelsModal from "@/components/Products/PrintLabelsModal";
+import palette from "@/constants/palette";
+import { useAlerts } from "@/hooks/useAlerts";
+import useInventoryTypes, {
+  ALL_INVENTORY_TYPES,
+} from "@/hooks/useInventoryTypes";
+import { usePdfDownload } from "@/hooks/usePdfDownload";
+import axios from "@/utils/axios";
+import Services from "@/utils/services";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Href, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import { Image, View } from "react-native";
+import { Text } from "react-native-paper";
+
+/**
+ * Listado de productos de un tipo de inventario.
+ *
+ * El tipo viaja en la URL como slug: /inventory/products/type/materia-prima.
+ * `all` muestra el catálogo completo.
+ */
+export default function ProductsByTypeIndex() {
+  const router = useRouter();
+  const params = useLocalSearchParams();
+  const alerts = useAlerts();
+  const { bySlug } = useInventoryTypes();
+
+  const typeSlug = String(params.slug || ALL_INVENTORY_TYPES);
+  const inventoryType = bySlug[typeSlug];
+  const title =
+    typeSlug === ALL_INVENTORY_TYPES
+      ? "Todos los productos"
+      : inventoryType?.name || "Productos";
+
+  const [printModalVisible, setPrintModalVisible] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>(
+    [],
+  );
+
+  // Cargamos las categorías para poblar las opciones del filtro "Categoría".
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res: any = await Services.categories.index({ all: true });
+        const data = Array.isArray(res)
+          ? res
+          : res?.data?.data || res?.data || [];
+        if (!cancelled) setCategories(data);
+      } catch {
+        // Si falla, el filtro de categoría simplemente queda sin opciones.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const { downloadPdfFromApi, isDownloading } = usePdfDownload({
+    onSuccess: (uri) => {
+      setPrintModalVisible(false);
+      setSelectedProduct(null);
+    },
+    onError: (error) => {
+      alerts.error("Error al descargar el PDF: " + error.message);
+    },
+  });
+
+  // El detalle, la edición y el alta viven un nivel arriba, fuera de /type/[slug].
+  const route: Href = "/(tabs)/inventory/products";
+
+  const columns: AppListColumn<any>[] = [
+    {
+      title: "Imagen",
+      key: "image",
+      width: 96,
+      render: (_, item) => {
+        if (item.main_image?.uri) {
+          return (
+            <Image
+              source={{ uri: item.main_image.uri }}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                borderWidth: 1,
+                borderColor: "#E5E7EB",
+                backgroundColor: "#F3F4F6",
+              }}
+            />
+          );
+        }
+
+        return (
+          <View
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
+              backgroundColor: "#F9FAFB",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <MaterialCommunityIcons
+              name="image-off-outline"
+              size={16}
+              color="#6B7280"
+            />
+          </View>
+        );
+      },
+    },
+    {
+      title: "Producto",
+      key: "name",
+      dataIndex: "name",
+      width: 240,
+    },
+    {
+      title: "Tipo",
+      key: "inventory_type",
+      width: 170,
+      render: (_, item) => {
+        const type = item.inventory_type;
+        if (!type) return "-";
+
+        return (
+          <View
+            style={{
+              alignSelf: "flex-start",
+              backgroundColor: (type.color || palette.primary) + "20",
+              borderRadius: 999,
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+            }}
+          >
+            <Text
+              variant="labelSmall"
+              style={{ color: type.color || palette.primary, fontWeight: "700" }}
+            >
+              {type.name}
+            </Text>
+          </View>
+        );
+      },
+    },
+    {
+      title: "Estado",
+      key: "is_active",
+      width: 130,
+      render: (_, item) => (
+        <View
+          style={{
+            alignSelf: "flex-start",
+            backgroundColor: item.is_active ? "#2E7D32" : "#B3261E",
+            borderRadius: 999,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+          }}
+        >
+          <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
+            {item.is_active ? "Activo" : "Inactivo"}
+          </Text>
+        </View>
+      ),
+    },
+    {
+      title: "Stock",
+      key: "stock",
+      width: 170,
+      render: (_, item) => {
+        const stock =
+          item.current_stock !== null && item.current_stock !== undefined
+            ? Number(item.current_stock)
+            : 0;
+        const minStock = Number(item.minimum_stock || 0);
+        const isHealthy = minStock > 0 ? stock > minStock : stock > 0;
+        const stockColor = isHealthy ? "#2E7D32" : "#B3261E";
+
+        return (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <MaterialCommunityIcons
+              name={isHealthy ? "arrow-up-bold" : "arrow-down-bold"}
+              size={14}
+              color={stockColor}
+            />
+            <Text style={{ color: stockColor, fontWeight: "700" }}>{stock}</Text>
+          </View>
+        );
+      },
+    },
+    {
+      title: "Precio",
+      key: "sale_price",
+      width: 120,
+      align: "right",
+      render: (_, item) =>
+        item.sale_price
+          ? `$${Number(item.sale_price).toFixed(2)}`
+          : "-",
+    },
+    {
+      title: "Creado",
+      key: "created_at",
+      width: 120,
+      render: (_, item) => formatDate(item.created_at),
+    },
+  ];
+
+  // Determinar filtros iniciales basados en parámetros
+  const getDefaultFilters = () => {
+    const filters: any = {};
+
+    // Si viene el parámetro filter=low_stock, agregar el filtro
+    if (params.filter === "low_stock") {
+      filters.low_stock = "1";
+    }
+
+    // El tipo de inventario viene en la ruta, como slug
+    if (typeSlug !== ALL_INVENTORY_TYPES) {
+      filters.inventory_type_slug = typeSlug;
+    }
+
+    return filters;
+  };
+
+  const handlePrintLabels = async (quantity: number) => {
+    if (!selectedProduct) return;
+
+    // Primero obtener la URL firmada
+    const response = await axios.get(
+      `/auth/admin/products/${selectedProduct.id}/labels/pdf-url`,
+      {
+        params: { quantity },
+      }
+    );
+
+    if (response.data?.url) {
+      // Descargar usando la URL firmada (pública)
+      await downloadPdfFromApi(response.data.url, {
+        fileName: `etiquetas-${selectedProduct.code}.pdf`,
+      });
+    }
+  };
+
+  return (
+    <>
+      <AppList
+        title={title}
+        service={Services.products}
+        defaultFilters={getDefaultFilters()}
+        filters={[
+          {
+            type: "simple",
+            name: "is_active",
+            label: "Estado",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Activos", value: "1" },
+              { label: "Inactivos", value: "0" },
+            ],
+          },
+          {
+            type: "simple",
+            name: "category_id",
+            label: "Categoría",
+            options: [
+              { label: "Todas", value: "" },
+              ...categories.map((c) => ({
+                label: c.name,
+                value: String(c.id),
+              })),
+            ],
+          },
+          {
+            type: "simple",
+            name: "for_sale",
+            label: "Para venta",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Sí", value: "1" },
+              { label: "No", value: "0" },
+            ],
+          },
+          {
+            type: "simple",
+            name: "in_stock",
+            label: "Existencia",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Con stock", value: "1" },
+              { label: "Sin stock", value: "0" },
+            ],
+          },
+          {
+            type: "simple",
+            name: "low_stock",
+            label: "Stock",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Stock bajo", value: "1" },
+              { label: "Stock normal", value: "0" },
+            ],
+          },
+        ]}
+        renderCard={({ item }: { item: any }) => ({
+          title: item.name,
+          description: (
+            <>
+              <AppList.Description
+                numberOfLines={1}
+                style={{ color: palette.textSecondary }}
+              >
+                {item.description || "Sin descripción"}
+              </AppList.Description>
+            </>
+          ),
+          left: (
+            <View
+              style={{
+                justifyContent: "center",
+                height: "100%",
+                flex: 1,
+              }}
+            >
+              {item.main_image?.uri && (
+                <Image
+                  source={{ uri: item.main_image.uri }}
+                  style={{
+                    width: 50,
+                    height: 50,
+                    backgroundColor: "#ccc",
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: "#eee",
+                  }}
+                />
+              )}
+            </View>
+          ),
+          right: (
+            <View
+              style={{
+                justifyContent: "flex-end",
+                alignItems: "flex-end",
+              }}
+            >
+              {item.sale_price && (
+                <AppList.Title
+                  style={{
+                    color: palette.text,
+                  }}
+                >
+                  {"$" + item.sale_price}
+                </AppList.Title>
+              )}
+
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: 8,
+                  alignItems: "center",
+                }}
+              >
+                {item.current_stock !== null &&
+                  item.current_stock !== undefined &&
+                  item.current_stock <= (item.minimum_stock || 0) &&
+                  item.minimum_stock > 0 && (
+                    <AppList.Description
+                      style={{
+                        fontWeight: "bold",
+                        color: palette.warning,
+                      }}
+                    >
+                      Stock bajo
+                    </AppList.Description>
+                  )}
+
+                {item.sale_price && (
+                  <AppList.Description
+                    style={{
+                      fontWeight: "bold",
+                      color: item.is_active ? palette.success : palette.error,
+                    }}
+                  >
+                    {item.is_active ? "Activo" : "Inactivo"}
+                  </AppList.Description>
+                )}
+              </View>
+            </View>
+          ),
+          bottom: [
+            {
+              label: "Stock",
+              value:
+                item.current_stock !== null && item.current_stock !== undefined
+                  ? item.current_stock
+                  : 0,
+            },
+            {
+              label: "Creado en",
+              value: formatDate(item.created_at),
+            },
+          ],
+        })}
+        onItemPress={(entity: any) => {
+          router.push(`${route}/${entity.id}` as any);
+        }}
+        menu={{
+          onEdit(item) {
+            router.push(`${route}/${item.id}/edit` as any);
+          },
+          customActions: [
+            {
+              title: "Ver Paquetes",
+              icon: "package-variant-closed",
+              onPress: (item) => {
+                router.push(
+                  `/(tabs)/inventory/packages?product_id=${item.id}` as any
+                );
+              },
+            },
+            {
+              title: "Imprimir Etiquetas",
+              icon: "barcode",
+              onPress: (item) => {
+                setSelectedProduct(item);
+                setPrintModalVisible(true);
+              },
+            },
+          ],
+        }}
+        onPressCreate={() => {
+          // Se crea dentro del tipo actual: el formulario abre con el tipo puesto.
+          router.push(
+            `/(tabs)/inventory/products/type/${typeSlug}/form` as any
+          );
+        }}
+        fabLabel="Nuevo Producto"
+        columns={columns}
+      />
+
+      <PrintLabelsModal
+        visible={printModalVisible}
+        onDismiss={() => {
+          setPrintModalVisible(false);
+          setSelectedProduct(null);
+        }}
+        onConfirm={handlePrintLabels}
+        productName={selectedProduct?.name || ""}
+        loading={isDownloading}
+      />
+    </>
+  );
+}
+
+function formatDate(dateString: string) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString();
+}

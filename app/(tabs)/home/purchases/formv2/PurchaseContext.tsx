@@ -119,7 +119,7 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
       // Solo cargar productos si hay un proveedor seleccionado
       if (numericSupplierId) {
         const productsResponse = await Services.products.index({
-          product_type: ["raw_material", "commercial"],
+          is_purchasable: 1,
           is_active: "1",
           supplier_id: numericSupplierId,
         });

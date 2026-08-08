@@ -74,7 +74,18 @@ export default function _layout() {
         options={{ title: "Detalle Inventario", headerShown: true }}
       />
 
-      <Stack.Screen name="products/index" options={{ title: "Productos" }} />
+      <Stack.Screen
+        name="products/index"
+        options={{ title: "Tipos de Inventario" }}
+      />
+      <Stack.Screen
+        name="products/type/[slug]/index"
+        options={{ title: "Productos" }}
+      />
+      <Stack.Screen
+        name="products/type/[slug]/form"
+        options={{ title: "Nuevo Producto" }}
+      />
       <Stack.Screen
         name="products/form"
         options={{ title: "Nuevo Producto" }}

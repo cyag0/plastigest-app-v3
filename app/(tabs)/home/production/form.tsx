@@ -34,7 +34,7 @@ const CONSUMPTION_COLUMNS: EditableTableColumn[] = [
     type: "product",
     width: 230,
     required: true,
-    productFetchParams: { product_type: ["raw_material", "processed"] },
+    productFetchParams: { is_consumable: 1 },
   },
   { key: "unit_id", label: "Unidad", type: "unit", width: 110, required: true },
   {
