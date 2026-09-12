@@ -14,7 +14,7 @@ import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useFormikContext } from "formik";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View, ScrollView } from "react-native";
 import { Button, Card, Divider, IconButton, Text, Chip } from "react-native-paper";
 import * as Yup from "yup";
@@ -50,6 +50,31 @@ export default function AdjustmentForm(props: AdjustmentFormProps) {
   const { selectedLocation } = useSelectedLocation();
   const formRef = useRef<AppFormRef<AdjustmentFormData>>(null);
 
+  // AppForm vuelve a llamar loadInitialValues() —y por tanto resetForm()— cada
+  // vez que cambia la REFERENCIA de initialValues. Con un objeto literal inline
+  // eso pasaba en cada render del componente, así que los productos que ya
+  // habías agregado se borraban solos. Se memoiza para que la referencia sea
+  // estable (mismo patrón que UserFormShared).
+  const initialValues = useMemo(
+    () => ({
+      location_id: selectedLocation?.id || 0,
+      applied_at: new Date().toISOString().slice(0, 10),
+      notes: "",
+      details: [
+        {
+          product_id: 0,
+          direction: "out" as const,
+          quantity: "0",
+          unit_id: undefined,
+          reason_code: "other",
+          notes: undefined,
+          evidence: [],
+        },
+      ],
+    }),
+    [selectedLocation?.id]
+  );
+
   return (
     <AppForm
       readonly={props.readonly}
@@ -57,22 +82,7 @@ export default function AdjustmentForm(props: AdjustmentFormProps) {
       ref={formRef}
       showButtons={!readonly}
       api={Services.inventoryAdjustments}
-      initialValues={{
-        location_id: selectedLocation?.id || 0,
-        applied_at: new Date().toISOString().slice(0, 10),
-        notes: "",
-        details: [
-          {
-            product_id: 0,
-            direction: "out",
-            quantity: "0",
-            unit_id: undefined,
-            reason_code: "other",
-            notes: undefined,
-            evidence: [],
-          },
-        ],
-      }}
+      initialValues={initialValues}
       validationSchema={Yup.object().shape({
         location_id: Yup.number().required("La sucursal es obligatoria"),
         applied_at: Yup.string().required("La fecha es obligatoria"),
@@ -117,6 +127,12 @@ function ProductsList() {
   const form = useFormikContext<AdjustmentFormData>();
   const formContext = useAppForm();
 
+  // details puede no existir todavía: AppForm arranca formik con {} y solo
+  // aplica los initialValues dentro de un useEffect, y "Resetear" también deja
+  // los values vacíos. Sin esta guarda, agregar un producto reventaba con
+  // "can't access property Symbol.iterator, form.values.details is undefined".
+  const products = Array.isArray(form.values.details) ? form.values.details : [];
+
   function handleAddProduct() {
     const newProduct: AdjustmentDetailItem = {
       product_id: 0,
@@ -128,16 +144,14 @@ function ProductsList() {
       evidence: [],
     };
 
-    form.setFieldValue("details", [...form.values.details, newProduct]);
+    form.setFieldValue("details", [...products, newProduct]);
   }
 
   function handleRemoveProduct(index: number) {
-    const updatedProducts = [...form.values.details];
+    const updatedProducts = [...products];
     updatedProducts.splice(index, 1);
     form.setFieldValue("details", updatedProducts);
   }
-
-  const products = form.values.details || [];
 
   return (
     <ScrollView>
@@ -201,8 +215,11 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
   const [loading, setLoading] = useState(false);
   const formContext = useAppForm();
 
-  const productId = form.values.details[index]?.product_id;
-  const direction = form.values.details[index]?.direction || "out";
+  // Mismo motivo que en ProductsList: details puede estar vacío en el primer
+  // render o después de "Resetear", así que nunca se indexa directo.
+  const detail = form.values.details?.[index];
+  const productId = detail?.product_id;
+  const direction = detail?.direction || "out";
 
   // Cargar datos del producto cuando cambia el product_id
   useEffect(() => {
@@ -262,8 +279,8 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
     loadProductData();
   }, [productId]);
 
-  const quantity = parseFloat(form.values.details[index]?.quantity || "0");
-  const selectedUnitId = form.values.details[index]?.unit_id;
+  const quantity = parseFloat(detail?.quantity || "0");
+  const selectedUnitId = detail?.unit_id;
   const currentStock = productData?.current_stock || 0;
   const selectedUnit = availableUnits.find((u) => u.id === selectedUnitId);
   const baseUnit = productData?.unit;
@@ -395,7 +412,7 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
               size={24}
               onPress={() => {
                 const currentQuantity = parseFloat(
-                  form.values.details[index]?.quantity || "0"
+                  form.values.details?.[index]?.quantity || "0"
                 );
                 if (currentQuantity > 0) {
                   form.setFieldValue(
@@ -426,7 +443,7 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
               size={24}
               onPress={() => {
                 const currentQuantity = parseFloat(
-                  form.values.details[index]?.quantity || "0"
+                  form.values.details?.[index]?.quantity || "0"
                 );
                 form.setFieldValue(
                   `details.${index}.quantity`,
@@ -451,7 +468,7 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
             <AppUpload
               label="Evidencias del producto"
               placeholder="Subir imagenes para este producto"
-              value={form.values.details[index]?.evidence || []}
+              value={detail?.evidence || []}
               onChange={(files: UploadedFile[]) => form.setFieldValue(`details.${index}.evidence`, files)}
               multiple
               maxFiles={6}
@@ -549,7 +566,7 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
         )}
 
         {/* Vista readonly */}
-        {formContext.readonly && form.values.details[index]?.previous_stock !== undefined && (
+        {formContext.readonly && detail?.previous_stock !== undefined && (
           <View
             style={{
               backgroundColor: "transparent" as any,
@@ -581,7 +598,7 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
                 variant="bodyMedium"
                 style={{ fontWeight: "bold", color: palette.textSecondary }}
               >
-                {form.values.details[index].previous_stock}
+                {detail?.previous_stock}
               </Text>
             </View>
 
@@ -593,7 +610,7 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
                 variant="bodyMedium"
                 style={{ fontWeight: "bold", color: palette.textSecondary }}
               >
-                {form.values.details[index].new_stock}
+                {detail?.new_stock}
               </Text>
             </View>
           </View>

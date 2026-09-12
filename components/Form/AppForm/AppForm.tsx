@@ -210,6 +210,17 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     [formInstance, loadInitialValues],
   );
 
+  // Aplica los valores tanto al state que alimenta useFormik como al form.
+  // Antes solo se hacía resetForm(), así que el `initialValues` de useFormik se
+  // quedaba en {} para siempre: el primer render de CUALQUIER formulario tenía
+  // values = {} y los hijos que indexan campos de tipo array (details, items…)
+  // reventaban. Además resetForm() sin argumentos —el botón "Resetear"— volvía
+  // a ese objeto vacío.
+  function applyValues(values: T) {
+    setInitialValues(values);
+    formInstance.resetForm({ values });
+  }
+
   async function loadInitialValues() {
     try {
       setLoading(true);
@@ -218,7 +229,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         // Si initialValues es una función
         if (typeof props.initialValues === "function") {
           const result = await props.initialValues();
-          formInstance.resetForm({ values: result });
+          applyValues(result);
 
           return;
         }
@@ -232,9 +243,9 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
             const response = await props.api.show(props.id);
             const data = { ...props.initialValues, ...response.data.data };
 
-            formInstance.resetForm({ values: data });
+            applyValues(data);
           } else {
-            formInstance.resetForm({ values: props.initialValues });
+            applyValues(props.initialValues as T);
           }
 
           return;
@@ -243,13 +254,13 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       // Si no hay initialValues pero hay ID y API
       else if (props.id && props.api) {
         const response = await props.api.show(props.id);
-        formInstance.resetForm({ values: response.data.data });
+        applyValues(response.data.data as T);
 
         return;
       }
       // Si no hay nada, usar objeto vacío
       else {
-        formInstance.resetForm({ values: {} as T });
+        applyValues({} as T);
         return;
       }
     } catch (error) {
