@@ -106,6 +106,17 @@ namespace App {
         quantity: number;
         notes?: string | null;
       }>;
+      inventory_type_id?: number | null;
+      /**
+       * Empaque: el producto terminado se obtiene empacando un granel
+       * (`packaging_source_*`) y consumiendo material (`packaging_materials`).
+       * Sólo se ejecuta después de completar la producción.
+       */
+      requires_packaging?: boolean;
+      packaging_source_product_id?: number | null;
+      packaging_source_quantity?: number | null;
+      packaging_source_unit_id?: number | null;
+      packaging_materials?: ProductPackagingMaterial[];
       active_packages?: ProductPackage[];
       // Ubicaciones donde existe el producto, con el stock por ubicación
       // en el pivot (relación many-to-many product <-> location).
@@ -559,9 +570,37 @@ namespace App {
       updated_at: string;
     }
 
+    /**
+     * Material que consume UNA unidad del producto al empacarse
+     * (frasco, tapa, etiqueta). Distinto de `ProductPackage`, que es una
+     * presentación de venta.
+     */
+    interface ProductPackagingMaterial {
+      id?: number;
+      material_product_id: number;
+      material_name?: string;
+      material_code?: string;
+      unit_id: number;
+      unit_name?: string;
+      unit_abbreviation?: string;
+      quantity: number;
+      sort_order?: number;
+      notes?: string | null;
+    }
+
     // ============== Producción (nuevo módulo) ==============
 
-    type ProductionStatus = "draft" | "completed" | "cancelled";
+    /**
+     * El empaque es un paso posterior: hasta que la producción no se completa
+     * el granel no existe en inventario, así que `packaging` y `packed` sólo
+     * se alcanzan desde `completed`.
+     */
+    type ProductionStatus =
+      | "draft"
+      | "completed"
+      | "packaging"
+      | "packed"
+      | "cancelled";
 
     interface ProductionOrder {
       id: number;
@@ -577,23 +616,103 @@ namespace App {
       status: ProductionStatus;
       status_label: string;
       status_color: string;
+      status_icon?: string;
+      /** El backend habilita el empaque sólo en `completed` y `packaging`. */
+      can_pack?: boolean;
       notes?: string | null;
       wastes?: ProductionWaste[];
       total_consumed_quantity?: number | null;
       total_produced_quantity?: number | null;
       waste_percentage?: number | null;
       completed_at?: string | null;
+      packed_at?: string | null;
       cancelled_at?: string | null;
       consumptions?: ProductionOrderConsumption[];
       outputs?: ProductionOrderOutput[];
+      packagings?: ProductionOrderPackaging[];
       summary?: {
         consumption_count?: number;
         output_count?: number;
         waste_count?: number;
+        packaging_count?: number;
+        packaged_quantity?: number | null;
         waste_percentage?: number | null;
       };
       created_at?: string;
       updated_at?: string;
+    }
+
+    /** Una operación de empaque: granel + material → producto terminado. */
+    interface ProductionOrderPackaging {
+      id: number;
+      product_id: number;
+      product_name?: string;
+      product_code?: string;
+      unit_id: number;
+      unit_name?: string;
+      quantity: number;
+      source_product_id?: number | null;
+      source_product_name?: string | null;
+      source_unit_id?: number | null;
+      source_unit_name?: string | null;
+      source_quantity?: number | null;
+      packed_at?: string | null;
+      notes?: string | null;
+      materials?: Array<{
+        id?: number;
+        product_id: number;
+        product_name?: string;
+        unit_id: number;
+        unit_name?: string;
+        quantity: number;
+      }>;
+    }
+
+    /** Respuesta de GET /production-orders/{id}/packaging. */
+    interface PackagingPlan {
+      can_pack: boolean;
+      status: ProductionStatus;
+      status_label: string;
+      lines: PackagingPlanLine[];
+      packagings: ProductionOrderPackaging[];
+    }
+
+    /** Una salida de la orden y los productos que pueden empacarse de ella. */
+    interface PackagingPlanLine {
+      source_product_id: number;
+      source_product_name?: string;
+      source_unit_id: number;
+      source_unit_name?: string;
+      produced_quantity: number;
+      packed_quantity: number;
+      remaining_quantity: number;
+      available_stock: number;
+      products: PackagingPlanOption[];
+    }
+
+    interface PackagingPlanOption {
+      product_id: number;
+      product_name: string;
+      product_code?: string | null;
+      unit_id?: number | null;
+      unit_name?: string | null;
+      source_quantity_per_unit: number;
+      source_unit_id?: number | null;
+      source_unit_name?: string | null;
+      /** Techo real: lo marca el insumo más escaso (granel o material). */
+      max_units: number | null;
+      max_units_by_source: number | null;
+      materials: Array<{
+        product_id: number;
+        product_name?: string;
+        product_code?: string | null;
+        unit_id: number;
+        unit_name?: string;
+        quantity_per_unit: number;
+        available_stock: number;
+        max_units: number | null;
+        notes?: string | null;
+      }>;
     }
 
     interface ProductionOrderConsumption {
@@ -634,39 +753,70 @@ namespace App {
       notes?: string | null;
     }
 
+    /** Producto de una fórmula, con su imagen para los selectores. */
+    interface FormulaProduct {
+      id: number;
+      name: string;
+      code?: string | null;
+      product_type?: string | number | null;
+      inventory_type_id?: number | null;
+      unit_id?: number | null;
+      requires_packaging?: boolean;
+      unit?: {
+        id: number;
+        name: string;
+        abbreviation: string;
+        unit_type?: "mass" | "volume" | "quantity";
+      } | null;
+      main_image?: { uri: string; name?: string; type?: string; size?: number | null } | null;
+    }
+
+    /**
+     * Una fórmula es el proceso: qué consume (`items`) y qué entrega
+     * (`outputs`). Una misma corrida puede dar varios productos a la vez —
+     * de un lote de cocos salen agua, pulpa y fibra.
+     */
     interface Formula {
       id: number;
       company_id?: number;
-      product_id: number;
-      product_name?: string;
-      product_code?: string;
-      product?: {
-        id: number;
-        name: string;
-        code?: string | null;
-        product_type?: string | number | null;
-        unit_id?: number | null;
-        unit?: {
-          id: number;
-          name: string;
-          abbreviation: string;
-          unit_type?: "mass" | "volume" | "quantity";
-        } | null;
-        main_image?: { uri: string; name?: string; type?: string; size?: number | null } | null;
-      } | null;
       name: string;
       description?: string | null;
       version: number;
       is_active: boolean;
       notes?: string | null;
-      /**
-       * Cantidad producida al ejecutar la fórmula una vez. La unidad se
-       * resuelve desde `product.unit_id` (no se almacena por separado).
-       */
-      expected_output_quantity?: number | null;
       items?: FormulaItem[];
+      outputs?: FormulaOutput[];
+
+      /**
+       * Espejo de la salida principal que el backend sigue devolviendo por
+       * compatibilidad. Para leer todos los resultados, usa `outputs`.
+       */
+      product_id?: number | null;
+      product_name?: string;
+      product_code?: string;
+      product?: FormulaProduct | null;
+      expected_output_quantity?: number | null;
+
       created_at?: string;
       updated_at?: string;
+    }
+
+    /** Un resultado de la fórmula: qué producto sale y cuánto rinde. */
+    interface FormulaOutput {
+      id?: number;
+      product_id: number;
+      product_name?: string;
+      product_code?: string;
+      unit_id: number;
+      unit_name?: string;
+      unit_abbreviation?: string;
+      unit_type?: "mass" | "volume" | "quantity";
+      expected_quantity: number;
+      /** El resultado de referencia del proceso. Sólo uno por fórmula. */
+      is_primary?: boolean;
+      sort_order?: number;
+      notes?: string | null;
+      product?: FormulaProduct | null;
     }
 
     interface FormulaItem {

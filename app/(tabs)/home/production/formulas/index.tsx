@@ -8,6 +8,25 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 
+/**
+ * Todos los productos que entrega el proceso.
+ *
+ * Las fórmulas anteriores al rediseño multi-salida no traen `outputs`; el
+ * backend sigue exponiendo la salida principal suelta, y de ahí se toma.
+ */
+function formatOutputs(formula: any): string {
+  const outputs = formula?.outputs ?? [];
+
+  if (outputs.length > 0) {
+    return outputs
+      .map((o: any) => o.product_name ?? o.product?.name)
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  return formula?.product_name ?? "—";
+}
+
 const FORMULAS_COLUMNS: AppListColumn<any>[] = [
   {
     title: "Nombre",
@@ -16,10 +35,19 @@ const FORMULAS_COLUMNS: AppListColumn<any>[] = [
     width: 280,
   },
   {
-    title: "Producto",
-    dataIndex: "product_name",
-    key: "product_name",
-    width: 240,
+    title: "Resultados",
+    dataIndex: "outputs",
+    key: "outputs",
+    width: 260,
+    render: (_value: any, record: any) => (
+      <Text
+        numberOfLines={2}
+        ellipsizeMode="tail"
+        style={{ color: palette.text, fontSize: 13 }}
+      >
+        {formatOutputs(record)}
+      </Text>
+    ),
   },
   {
     title: "Versión",
@@ -115,7 +143,7 @@ export default function FormulasIndex() {
           description: (
             <View>
               <Text style={{ color: palette.textSecondary, fontSize: 12 }}>
-                {item.product_name ?? "—"}  ·  v{item.version}
+                {formatOutputs(item)}  ·  v{item.version}
               </Text>
               {item.description ? (
                 <Text
@@ -130,6 +158,9 @@ export default function FormulasIndex() {
                   style={{ color: palette.text, fontSize: 12, marginTop: 4 }}
                 >
                   {item.items.length} {item.items.length === 1 ? "ingrediente" : "ingredientes"}
+                  {(item.outputs?.length ?? 0) > 1
+                    ? ` · ${item.outputs.length} resultados`
+                    : ""}
                 </Text>
               ) : null}
             </View>

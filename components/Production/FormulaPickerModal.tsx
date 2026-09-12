@@ -60,11 +60,21 @@ interface FormulaListItemProps {
 }
 
 function FormulaListItem({ formula, selected, onToggle }: FormulaListItemProps) {
-  // La imagen de la fórmula es la del producto objetivo.
-  const imageUri = formula.product?.main_image?.uri;
-  const productName = formula.product?.name ?? formula.product_name ?? "—";
-  const productCode = formula.product?.code ?? formula.product_code ?? "";
+  const outputs = formula.outputs ?? [];
+  const primary = outputs.find((o) => o.is_primary) ?? outputs[0];
+
+  // La imagen de la fórmula es la del resultado principal.
+  const imageUri = primary?.product?.main_image?.uri ?? formula.product?.main_image?.uri;
   const itemCount = formula.items?.length ?? 0;
+
+  // Un proceso puede entregar varios productos; se listan todos porque es lo
+  // que de verdad distingue una fórmula de otra.
+  const resultLabel = outputs.length
+    ? outputs
+        .map((o) => o.product_name ?? o.product?.name)
+        .filter(Boolean)
+        .join(" · ")
+    : (formula.product?.name ?? formula.product_name ?? "—");
 
   return (
     <TouchableOpacity
@@ -104,17 +114,17 @@ function FormulaListItem({ formula, selected, onToggle }: FormulaListItemProps) 
         </Text>
         <Text
           variant="bodySmall"
-          numberOfLines={1}
+          numberOfLines={2}
           style={{ color: palette.textSecondary }}
         >
-          {productName}
-          {productCode ? ` · ${productCode}` : ""}
+          {resultLabel}
         </Text>
         <Text
           variant="bodySmall"
           style={{ color: palette.textMuted, fontSize: 11, marginTop: 2 }}
         >
           {itemCount} ingrediente{itemCount === 1 ? "" : "s"}
+          {outputs.length > 1 ? ` · ${outputs.length} resultados` : ""}
           {formula.version ? ` · v${formula.version}` : ""}
         </Text>
       </View>
@@ -244,13 +254,18 @@ const FormulaPickerModal = forwardRef<FormulaPickerModalRef>((_props, ref) => {
     return Number.isFinite(n) && n > 0 ? n : 1;
   }, [unitsProduced]);
 
-  // Abreviatura de la unidad de output: solo se muestra cuando todas las
-  // fórmulas seleccionadas tienen el mismo unit_type del producto de salida.
+  // Abreviatura de la unidad del resultado principal: sólo se muestra cuando
+  // todas las fórmulas seleccionadas coinciden, si no sería engañosa.
   const unitHint = useMemo(() => {
     if (selected.size === 0) return null;
     const abbreviations = new Set<string>();
     for (const f of selected.values()) {
-      const abbr = f.product?.unit?.abbreviation;
+      const outputs = f.outputs ?? [];
+      const primary = outputs.find((o) => o.is_primary) ?? outputs[0];
+      const abbr =
+        primary?.unit_abbreviation ??
+        primary?.product?.unit?.abbreviation ??
+        f.product?.unit?.abbreviation;
       if (abbr) abbreviations.add(abbr);
     }
     return abbreviations.size === 1 ? Array.from(abbreviations)[0] : null;
@@ -319,9 +334,14 @@ const FormulaPickerModal = forwardRef<FormulaPickerModalRef>((_props, ref) => {
           </View>
 
           <View style={styles.unitsRow}>
-            <Text style={{ color: palette.text, fontWeight: "600", flex: 1 }}>
-              Cantidad a producir
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: palette.text, fontWeight: "600" }}>
+                Cantidad a producir
+              </Text>
+              <Text style={{ color: palette.textMuted, fontSize: 11 }}>
+                Del resultado principal. Los demás salen en proporción.
+              </Text>
+            </View>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <View style={styles.unitsInputWrap}>
                 <AppInput

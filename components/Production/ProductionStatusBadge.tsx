@@ -3,11 +3,17 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 
-type Status = "draft" | "completed" | "cancelled";
+type Status = "draft" | "completed" | "packaging" | "packed" | "cancelled";
 
+/**
+ * El empaque es un paso posterior a la producción, con estado propio:
+ * borrador → producción terminada → en empaque → empacada.
+ */
 const COLORS: Record<Status, { bg: string; fg: string; label: string }> = {
   draft: { bg: "#F3F4F6", fg: "#6B7280", label: "Borrador" },
-  completed: { bg: "#D1FAE5", fg: "#065F46", label: "Completada" },
+  completed: { bg: "#D1FAE5", fg: "#065F46", label: "Producción terminada" },
+  packaging: { bg: "#DBEAFE", fg: "#1E40AF", label: "En empaque" },
+  packed: { bg: "#EDE9FE", fg: "#5B21B6", label: "Empacada" },
   cancelled: { bg: "#FEE2E2", fg: "#991B1B", label: "Cancelada" },
 };
 

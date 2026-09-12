@@ -87,6 +87,45 @@ const DEFAULT_OUTPUT = {
   notes: "",
 };
 
+/**
+ * Salidas de una fórmula, tolerando el formato anterior.
+ *
+ * Las fórmulas guardadas antes del rediseño multi-salida no traen `outputs`;
+ * el backend sigue exponiendo la salida principal suelta (`product_id` +
+ * `expected_output_quantity`), así que se reconstruye desde ahí.
+ */
+function resolveFormulaOutputs(
+  formula: App.Entities.Formula,
+): App.Entities.FormulaOutput[] {
+  if (formula.outputs?.length) return formula.outputs;
+  if (!formula.product_id) return [];
+
+  return [
+    {
+      product_id: formula.product_id,
+      unit_id: Number(formula.product?.unit_id) || 0,
+      expected_quantity: Number(formula.expected_output_quantity) || 0,
+      unit_type: formula.product?.unit?.unit_type,
+      is_primary: true,
+    },
+  ];
+}
+
+/**
+ * Escala una cantidad de la fórmula. Las unidades de conteo se redondean a
+ * enteros — no existen media botella ni 1.4 cocos en el almacén.
+ */
+function scaleQuantity(
+  quantity: number | string | undefined,
+  multiplier: number,
+  unitType?: string,
+): number {
+  const raw = (Number(quantity) || 0) * multiplier;
+  return unitType === "quantity"
+    ? Math.round(raw)
+    : Math.round(raw * 100) / 100;
+}
+
 /** Componente que escucha el cambio de formula y pre-rellena las tablas */
 function FormulaListener() {
   const { values, setFieldValue } = useFormikContext<any>();
@@ -99,12 +138,12 @@ function FormulaListener() {
     (async () => {
       try {
         const r: any = await Services.formulas.show(id);
-        const formula = r?.data?.data ?? r?.data;
+        const formula: App.Entities.Formula = r?.data?.data ?? r?.data;
         const items = formula?.items ?? [];
         if (items.length === 0) return;
         setFieldValue(
           "consumptions",
-          items.map((it: any) => ({
+          items.map((it) => ({
             product_id: it.product_id,
             unit_id: it.unit_id,
             quantity: Number(it.expected_quantity) || 0,
@@ -113,19 +152,21 @@ function FormulaListener() {
             _key: `prefill-c-${Date.now()}-${Math.random()}`,
           })),
         );
-        if (formula.expected_output_quantity) {
+
+        // Todas las salidas del proceso, no sólo la principal: una corrida de
+        // cocos entrega agua, pulpa y fibra a la vez.
+        const outputs = resolveFormulaOutputs(formula);
+        if (outputs.length > 0) {
           setFieldValue(
             "outputs",
-            [
-              {
-                product_id: formula.product_id,
-                unit_id: formula.product?.unit_id ?? 0,
-                quantity: Number(formula.expected_output_quantity) || 0,
-                expected_quantity: Number(formula.expected_output_quantity) || 0,
-                notes: "",
-                _key: `prefill-o-${Date.now()}-${Math.random()}`,
-              },
-            ],
+            outputs.map((o) => ({
+              product_id: o.product_id,
+              unit_id: o.unit_id,
+              quantity: Number(o.expected_quantity) || 0,
+              expected_quantity: Number(o.expected_quantity) || 0,
+              notes: o.notes ?? "",
+              _key: `prefill-o-${Date.now()}-${Math.random()}`,
+            })),
           );
         }
       } catch (e) {
@@ -336,17 +377,17 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
   };
 
   /**
-   * Recibe las fórmulas seleccionadas desde FormulaPickerModal junto con el
-   * multiplicador de unidades producidas, y reparte los items a las tablas
-   * `consumptions` y `outputs`.
+   * Recibe las fórmulas seleccionadas desde FormulaPickerModal junto con la
+   * cantidad deseada del resultado principal, y reparte ingredientes y
+   * resultados a las tablas `consumptions` y `outputs`.
    *
    * Reglas:
-   * - Cada `item` de la fórmula se suma a `consumptions` con
-   *   `expected_quantity × unitsProduced` y la `unit_id` del item.
-   * - El producto objetivo (`formula.product_id`) se agrega a `outputs` con
-   *   la cantidad `formula.expected_output_quantity × unitsProduced`. Si la
-   *   fórmula no tiene rendimiento esperado, se usa `1 × unitsProduced` como
-   *   fallback (una unidad producida por lote).
+   * - El multiplicador sale del resultado PRINCIPAL:
+   *   `desiredQty / expected_quantity de la salida principal`. Es la cantidad
+   *   de veces que hay que correr el proceso.
+   * - Cada ingrediente y cada resultado se escalan por ese multiplicador. Los
+   *   subproductos salen en proporción: si un lote de cocos da 7 L de agua y
+   *   3 kg de pulpa, pedir 14 L de agua trae 6 kg de pulpa.
    * - Si el mismo `product_id` ya existe en la tabla destino, `mergeProductRow`
    *   SUMA la cantidad y respeta la primera `unit_id` registrada
    *   (no se sobreescribe).
@@ -355,8 +396,6 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
     picked: App.Entities.Formula[],
     unitsProduced: number,
   ) => {
-    // desiredQty = cantidad de output que el usuario quiere producir.
-    // El multiplicador de lotes se calcula por fórmula: desiredQty / expected_output_quantity.
     const desiredQty = Number(unitsProduced) > 0 ? Number(unitsProduced) : 1;
     const currentConsumptions: any[] = values.consumptions ?? [];
     const currentOutputs: any[] = values.outputs ?? [];
@@ -366,19 +405,20 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
 
     for (const formula of picked) {
       if (!formula?.id) continue;
-      const items = formula.items ?? [];
 
-      const formulaYield = Number(formula.expected_output_quantity) || 0;
-      // multiplier = cuántas veces hay que correr la fórmula para llegar a desiredQty.
+      const items = formula.items ?? [];
+      const outputs = resolveFormulaOutputs(formula);
+
+      // El rendimiento de referencia es el de la salida principal (o la
+      // primera). De ahí sale cuántas veces hay que correr el proceso.
+      const primary = outputs.find((o) => o.is_primary) ?? outputs[0];
+      const formulaYield = Number(primary?.expected_quantity) || 0;
       const multiplier = formulaYield > 0 ? desiredQty / formulaYield : desiredQty;
 
-      // ── Consumos: cada item aporta expected_quantity × multiplier.
+      // ── Consumos: cada ingrediente aporta expected_quantity × multiplier.
       for (const item of items) {
         if (!item?.product_id) continue;
-        const rawQty = (Number(item.expected_quantity) || 0) * multiplier;
-        const qty = item.unit_type === "quantity"
-          ? Math.round(rawQty)
-          : Math.round(rawQty * 100) / 100;
+        const qty = scaleQuantity(item.expected_quantity, multiplier, item.unit_type);
         if (qty <= 0) continue;
         nextConsumptions = mergeProductRow(
           nextConsumptions,
@@ -392,17 +432,18 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
         );
       }
 
-      // ── Output: siempre es la cantidad deseada por el usuario.
-      if (formula.product_id) {
-        const outputQty = formulaYield > 0 ? desiredQty : Math.round(multiplier * 100) / 100;
-        const outputUnitId = formula.product?.unit_id ?? 0;
+      // ── Resultados: TODAS las salidas escalan con el mismo multiplicador.
+      for (const output of outputs) {
+        if (!output?.product_id) continue;
+        const qty = scaleQuantity(output.expected_quantity, multiplier, output.unit_type);
+        if (qty <= 0) continue;
         nextOutputs = mergeProductRow(
           nextOutputs,
           {
-            product_id: formula.product_id,
-            unit_id: Number(outputUnitId) || 0,
-            quantity: outputQty,
-            notes: "",
+            product_id: output.product_id,
+            unit_id: Number(output.unit_id) || 0,
+            quantity: qty,
+            notes: output.notes ?? "",
           },
           "formula-o",
         );

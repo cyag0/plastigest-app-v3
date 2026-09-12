@@ -168,6 +168,62 @@ export default function ProductionDetail() {
         </DataTable>
       </Card>
 
+      {/* ── Empaque: sólo tiene sentido con la producción ya terminada ── */}
+      {order.can_pack || (order.packagings?.length ?? 0) > 0 ? (
+        <>
+          <SectionTitle
+            icon="package-variant-closed"
+            title={`Empaque (${order.packagings?.length ?? 0})`}
+          />
+          <Card style={styles.card}>
+            <Card.Content>
+              {(order.packagings ?? []).map((p: any, i: number) => (
+                <View key={i} style={styles.packagingRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: palette.text, fontWeight: "600" }}>
+                      {Number(p.quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })}{" "}
+                      {p.unit_name} · {p.product_name}
+                    </Text>
+                    {p.source_product_name ? (
+                      <Text style={{ color: palette.textSecondary, fontSize: 11 }}>
+                        {Number(p.source_quantity ?? 0).toLocaleString("es-MX", {
+                          maximumFractionDigits: 2,
+                        })}{" "}
+                        {p.source_unit_name} de {p.source_product_name}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              ))}
+
+              {(order.packagings?.length ?? 0) === 0 ? (
+                <Text style={{ color: palette.textSecondary }}>
+                  La producción ya terminó: el granel está en inventario y se
+                  puede empacar.
+                </Text>
+              ) : null}
+
+              {order.can_pack ? (
+                <Button
+                  mode="contained"
+                  icon="package-variant-closed"
+                  onPress={() =>
+                    router.push(`/(tabs)/home/production/${order.id}/packaging` as any)
+                  }
+                  buttonColor={palette.primary}
+                  textColor="#fff"
+                  style={{ marginTop: 12 }}
+                >
+                  {(order.packagings?.length ?? 0) === 0
+                    ? "Empacar productos"
+                    : "Seguir empacando"}
+                </Button>
+              ) : null}
+            </Card.Content>
+          </Card>
+        </>
+      ) : null}
+
       {(order.wastes?.length ?? 0) > 0 ? (
         <>
           <SectionTitle icon="trash-can-outline" title={`Mermas (${order.wastes.length})`} />
@@ -304,5 +360,12 @@ const styles = StyleSheet.create({
   notesBlock: { marginTop: 12, padding: 8, backgroundColor: palette.surface, borderRadius: 8 },
   sectionTitle: { flexDirection: "row", alignItems: "center", marginTop: 12, marginBottom: 6 },
   empty: { padding: 12, alignItems: "center" },
+  packagingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+  },
   actionBar: { flexDirection: "row", marginTop: 16 },
 });

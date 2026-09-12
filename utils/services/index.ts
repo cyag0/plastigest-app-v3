@@ -417,6 +417,46 @@ const Services = {
       );
       return response.data;
     },
+
+    // ── Empaque: paso posterior, sólo habilitado con la producción completada.
+
+    /** Qué se puede empacar de cada salida y cuánto material haría falta. */
+    async getPackagingPlan(id: number) {
+      const response = await axiosClient.get(
+        `/auth/admin/production-orders/${id}/packaging`,
+      );
+      return response.data;
+    },
+    /** Registra empaques: descuenta granel + material y acredita el terminado. */
+    async pack(
+      id: number,
+      packagings: {
+        product_id: number;
+        quantity: number;
+        unit_id?: number | null;
+        notes?: string | null;
+      }[],
+    ) {
+      const response = await axiosClient.post(
+        `/auth/admin/production-orders/${id}/packaging`,
+        { packagings },
+      );
+      return response.data;
+    },
+    /** Deshace un empaque y devuelve el stock. */
+    async revertPackaging(id: number, packagingId: number) {
+      const response = await axiosClient.delete(
+        `/auth/admin/production-orders/${id}/packaging/${packagingId}`,
+      );
+      return response.data;
+    },
+    /** Cierra el empaque: la orden queda empacada y no admite más. */
+    async finishPackaging(id: number) {
+      const response = await axiosClient.post(
+        `/auth/admin/production-orders/${id}/packaging/finish`,
+      );
+      return response.data;
+    },
   },
   formulas: {
     ...createCrudService<any>("/auth/admin/formulas"),

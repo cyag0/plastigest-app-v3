@@ -5,6 +5,9 @@ import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { FormSwitch } from "@/components/Form/AppSwitch";
 import { FormUpload } from "@/components/Form/AppUpload";
 import BarcodeScanner from "@/components/Form/BarcodeScanner";
+import EditableTable, {
+  EditableTableColumn,
+} from "@/components/Form/EditableTable/EditableTable";
 import IngredientsTable from "@/components/Form/IngredientsTable/IngredientsTable";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -39,6 +42,18 @@ interface ProductFormData {
   attachments?: any[]; // Para documentos adicionales
   ingredients?: {
     ingredient_id: number;
+    quantity: number;
+    notes?: string;
+  }[];
+  // Receta de empaque: el producto se obtiene empacando un granel y
+  // consumiendo material. Se ejecuta en producción, ya terminado el proceso.
+  requires_packaging?: boolean;
+  packaging_source_product_id?: number;
+  packaging_source_quantity?: string;
+  packaging_source_unit_id?: number;
+  packaging_materials?: {
+    material_product_id: number;
+    unit_id: number;
     quantity: number;
     notes?: string;
   }[];
@@ -109,6 +124,8 @@ export default function ProductsForm(props: ProductsFormProps) {
       location_id: selectedLocation?.id || undefined,
       inventory_type_id: presetTypeId, // precargado desde la ruta, si viene
       ingredients: [], // Array vacío por defecto
+      requires_packaging: false, // El paso de empaque se activa por producto
+      packaging_materials: [], // Material que consume cada unidad al empacarse
       for_sale: true, // Por defecto disponible para venta
       current_location_id: selectedLocation?.id || undefined,
       is_active: true, // Por defecto activo en la sucursal
@@ -307,6 +324,38 @@ export default function ProductsForm(props: ProductsFormProps) {
         }}
       </AppDependency>
 
+      {/* ───────── Empaque: sólo lo que se fabrica y se empaca ───────── */}
+      <AppDependency name="inventory_type_id">
+        {(value) => {
+          const type = value ? inventoryTypesById[Number(value)] : undefined;
+
+          if (!type?.is_producible) return null;
+
+          return (
+            <Section
+              icon="package-variant-closed"
+              color={colors.info}
+              title="Empaque"
+              subtitle="Qué se consume al empacar una unidad. El empaque se registra en producción, después de terminar el proceso"
+            >
+              <FormSwitch
+                name="requires_packaging"
+                text="Este producto se empaca"
+              />
+
+              {/* El resto sólo aparece cuando hay algo que empacar. */}
+              <AppDependency name="requires_packaging">
+                {(requiresPackaging) =>
+                  requiresPackaging ? (
+                    <PackagingFields isWide={isWide} styles={styles} />
+                  ) : null
+                }
+              </AppDependency>
+            </Section>
+          );
+        }}
+      </AppDependency>
+
       {/* ───────────────── Imágenes ───────────────── */}
       <Section
         icon="image-multiple-outline"
@@ -376,6 +425,92 @@ export default function ProductsForm(props: ProductsFormProps) {
     </AppForm>
   );
 }
+
+/**
+ * Receta de empaque: de qué granel sale el producto, cuánto granel lleva cada
+ * unidad y qué material se consume (frasco, tapa, etiqueta).
+ *
+ * El granel se filtra por `is_producible` porque siempre es una salida de una
+ * fórmula, y el material por el tipo `packaging_material`.
+ */
+function PackagingFields({
+  isWide,
+  styles,
+}: {
+  isWide: boolean;
+  styles: FormStyles;
+}) {
+  return (
+    <View style={{ marginTop: tokens.spacing[3] }}>
+      <Row isWide={isWide} styles={styles}>
+        <Field isWide={isWide} styles={styles}>
+          <FormProSelect
+            name="packaging_source_product_id"
+            label="Se empaca a partir de"
+            model="products"
+            placeholder="Granel del que sale (opcional)"
+            fetchParams={{ is_producible: 1 }}
+          />
+        </Field>
+
+        <Field isWide={isWide} styles={styles} span="third">
+          <FormInput
+            name="packaging_source_quantity"
+            label="Granel por unidad"
+            placeholder="0.00"
+            keyboardType="numeric"
+          />
+        </Field>
+
+        <Field isWide={isWide} styles={styles} span="third">
+          <FormProSelect
+            name="packaging_source_unit_id"
+            label="Unidad del granel"
+            model="home.unidades"
+            placeholder="Unidad"
+          />
+        </Field>
+      </Row>
+
+      <EditableTable
+        name="packaging_materials"
+        label="Material de empaque"
+        columns={PACKAGING_MATERIAL_COLUMNS}
+        defaultRow={DEFAULT_PACKAGING_MATERIAL}
+        addLabel="Agregar material"
+        emptyMessage="Agrega el material que lleva cada unidad: frasco, tapa, etiqueta, caja…"
+      />
+    </View>
+  );
+}
+
+/** Sólo productos del tipo "Material de empaque". */
+const PACKAGING_MATERIAL_COLUMNS: EditableTableColumn[] = [
+  {
+    key: "material_product_id",
+    label: "Material",
+    type: "product",
+    width: 230,
+    required: true,
+    productFetchParams: { inventory_type_code: "packaging_material" },
+  },
+  { key: "unit_id", label: "Unidad", type: "unit", width: 110, required: true },
+  {
+    key: "quantity",
+    label: "Cantidad por unidad",
+    type: "number",
+    width: 160,
+    required: true,
+  },
+  { key: "notes", label: "Notas", type: "text", width: 180 },
+];
+
+const DEFAULT_PACKAGING_MATERIAL = {
+  material_product_id: 0,
+  unit_id: 0,
+  quantity: 0,
+  notes: "",
+};
 
 type FormStyles = ReturnType<typeof useFormStyles>;
 

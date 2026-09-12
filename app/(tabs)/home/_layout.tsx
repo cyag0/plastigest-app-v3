@@ -168,6 +168,12 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
+        name="production/[id]/packaging"
+        options={{
+          title: "Empacar Producción",
+        }}
+      />
+      <Stack.Screen
         name="production/formulas/index"
         options={{
           title: "Fórmulas",
