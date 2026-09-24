@@ -144,22 +144,18 @@ const MODULE_SECTIONS: ModuleSection[] = [
         route: "/(tabs)/home/companies",
       },
       {
+        // La gestión real de usuarios (sucursales y rol por sucursal) vive en
+        // Administración. /home/users era un formulario de solo nombre y correo.
         label: "Usuarios",
-        description: "Cuentas y permisos",
+        description: "Cuentas, sucursales y roles",
         icon: "account-multiple-outline",
-        route: "/(tabs)/home/users",
+        route: "/(tabs)/administration/company-users",
       },
       {
         label: "Roles",
         description: "Roles y permisos",
         icon: "shield-account-outline",
         route: "/(tabs)/home/roles",
-      },
-      {
-        label: "Trabajadores",
-        description: "Personal registrado",
-        icon: "account-hard-hat-outline",
-        route: "/(tabs)/home/workers",
       },
     ],
   },
