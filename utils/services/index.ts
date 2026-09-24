@@ -190,6 +190,8 @@ const Services = {
         expected_delivery_date?: string;
         document_number?: string;
         payment_method?: string;
+        /** ¿El dinero salió de la caja? Solo entonces se registra egreso. */
+        paid_from_cash?: boolean;
       },
     ) {
       const response = await axiosClient.post(

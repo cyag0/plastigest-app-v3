@@ -3,6 +3,7 @@ import AppDependency from "@/components/Form/AppDependency";
 import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormProSelect } from "@/components/Form/AppProSelect";
 import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
+import { FormSwitch } from "@/components/Form/AppSwitch";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -85,6 +86,7 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
     notes: "",
     document_number: "",
     payment_method: "other",
+    paid_from_cash: true,
   }), []);
 
   const handleSubmit = async (values: FormData) => {
@@ -112,9 +114,14 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
       }
 
       // Confirmar la compra usando el contexto
+      // Solo una compra en efectivo puede salir de la caja; con tarjeta,
+      // transferencia u otro medio nunca toca el corte.
+      const paymentMethod = values.get("payment_method")?.toString();
       await purchaseContext.confirmPurchase({
         document_number: values.get("document_number")?.toString(),
-        payment_method: values.get("payment_method")?.toString(),
+        payment_method: paymentMethod,
+        paid_from_cash:
+          paymentMethod === "cash" && values.get("paid_from_cash")?.toString() !== "0",
       });
 
       router.replace(`/(tabs)/home/purchases` as any);
@@ -221,6 +228,19 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
             { value: "other",    label: "Otro" },
           ]}
         />
+
+        {/* Una compra grande pagada por el dueño o desde el banco no debe
+            dejar la caja en negativo: solo se descuenta si salió de ella. */}
+        <AppDependency name="payment_method">
+          {(value) =>
+            value === "cash" ? (
+              <FormSwitch
+                name="paid_from_cash"
+                text="Pagado con dinero de la caja (se descuenta en el corte)"
+              />
+            ) : null
+          }
+        </AppDependency>
 
         <AppDependency name="supplier_id">
           {(value) => {

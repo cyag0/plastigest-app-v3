@@ -59,6 +59,7 @@ interface PurchaseContextType {
     expected_delivery_date?: string;
     document_number?: string;
     payment_method?: string;
+    paid_from_cash?: boolean;
   }) => Promise<void>;
 }
 
@@ -474,6 +475,7 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
     expected_delivery_date?: string;
     document_number?: string;
     payment_method?: string;
+    paid_from_cash?: boolean;
   }) => {
     if (!currentPurchaseId) {
       throw new Error("No hay compra para confirmar");

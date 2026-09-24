@@ -8,9 +8,11 @@ import {
   ActivityIndicator,
   Button,
   Card,
+  Switch,
   Text,
   TextInput,
 } from "react-native-paper";
+import { parseLocalDate, toLocalDateString } from "@/utils/dates";
 import palette from "@/constants/palette";
 import AppSelect from "@/components/Form/AppSelect";
 import { DatePickerInput } from "react-native-paper-dates";
@@ -36,6 +38,10 @@ export default function ExpenseForm(props: ExpenseFormProps) {
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("efectivo");
+  // ¿El efectivo salió de la caja de la sucursal? Si lo pagó el dueño de su
+  // bolsa, no debe descontarse en el corte. Tarjeta y transferencia nunca
+  // salen de la caja.
+  const [paidFromCash, setPaidFromCash] = useState(true);
   const [description, setDescription] = useState("");
   const [expenseDate, setExpenseDate] = useState<Date>(new Date());
 
@@ -76,8 +82,9 @@ export default function ExpenseForm(props: ExpenseFormProps) {
       setCategory(expense.category);
       setAmount(expense.amount.toString());
       setPaymentMethod(expense.payment_method);
+      setPaidFromCash(expense.paid_from_cash ?? true);
       setDescription(expense.description);
-      setExpenseDate(new Date(expense.expense_date));
+      setExpenseDate(parseLocalDate(expense.expense_date));
     } catch (error) {
       console.error("Error loading expense:", error);
       alerts.error("Error al cargar el gasto");
@@ -108,12 +115,9 @@ export default function ExpenseForm(props: ExpenseFormProps) {
         category,
         amount: parseFloat(amount),
         payment_method: paymentMethod,
+        paid_from_cash: paymentMethod === "efectivo" ? paidFromCash : false,
         description,
-        expense_date: new Date(
-          expenseDate.getTime() - expenseDate.getTimezoneOffset() * 60000
-        )
-          .toISOString()
-          .split("T")[0],
+        expense_date: toLocalDateString(expenseDate),
       };
 
       if (expenseId) {
@@ -206,6 +210,20 @@ export default function ExpenseForm(props: ExpenseFormProps) {
               ))}
             </View>
 
+            {paymentMethod === "efectivo" && (
+              <View style={styles.cashRow}>
+                <View style={{ flex: 1 }}>
+                  <Text variant="bodyMedium">Pagado con dinero de la caja</Text>
+                  <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
+                    {paidFromCash
+                      ? "Se descontará del efectivo en el corte de caja."
+                      : "No afecta el corte (lo pagó el dueño u otra fuente)."}
+                  </Text>
+                </View>
+                <Switch value={paidFromCash} onValueChange={setPaidFromCash} />
+              </View>
+            )}
+
             {/* Fecha */}
             <DatePickerInput
               locale="es"
@@ -295,6 +313,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 4,
     color: palette.text,
+  },
+  cashRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
   },
   paymentMethodsContainer: {
     flexDirection: "row",

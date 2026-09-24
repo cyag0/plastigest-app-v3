@@ -49,6 +49,8 @@ interface DateStats {
     { total_income: number; total_expense: number }
   >;
   opening_by_method: Record<string, number>;
+  /** Corte del que parte la apertura; null si no hay cortes anteriores. */
+  opening_source?: { closing_id: number; closing_date: string; counted: boolean } | null;
 }
 
 interface FullStats {
@@ -154,7 +156,14 @@ export default function CashClosingEdit() {
     (m) => byMethod[m] || (openingByMethod[m] ?? 0) !== 0
   );
 
-  const expectedBalance = openingBalance + dayIncome - dayExpense;
+  // Lo que debería haber en la caja: efectivo inicial + neto en efectivo del
+  // día. Tarjeta y transferencia no entran a la caja; sus totales se muestran
+  // aparte y los ingresos/egresos del día siguen incluyendo todos los métodos.
+  const expectedBalance = totalCash;
+  const openingSource = ds?.opening_source;
+  const openingLabel = openingSource
+    ? `Efectivo inicial (corte del ${openingSource.closing_date.split("-").reverse().join("/")}${openingSource.counted ? ", conteo físico" : ""})`
+    : "Efectivo inicial (sin cortes previos)";
   const physCount       = physicalCount !== "" ? parseFloat(physicalCount) || 0 : null;
   const difference      = physCount !== null ? physCount - totalCash : null;
 
@@ -228,7 +237,7 @@ export default function CashClosingEdit() {
         </View>
 
         <StatRow
-          label="Saldo inicial (apertura)"
+          label={openingLabel}
           value={formatCurrency(openingBalance)}
           icon="bank-outline"
         />
@@ -246,7 +255,7 @@ export default function CashClosingEdit() {
         />
         <View style={styles.divider} />
         <StatRow
-          label="Saldo esperado"
+          label="Efectivo esperado en caja"
           value={formatCurrency(expectedBalance)}
           color={expectedBalance >= 0 ? palette.success : palette.error}
           icon="calculator"
