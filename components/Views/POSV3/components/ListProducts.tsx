@@ -63,9 +63,17 @@ const ProductCard = React.memo(
   }: ProductCardProps) => {
     const [showUnitMenu, setShowUnitMenu] = useState(false);
 
+    // Unidad por defecto: la del producto. Antes era available_units[0], que
+    // viene en orden alfabético: para productos por pieza caía en "Decena" y
+    // agregar 1 al carrito eran 10 piezas (ventas, compras y transferencias).
+    const defaultUnitId =
+      item.available_units?.find((u) => u.id === item.unit_id)?.id ||
+      item.available_units?.[0]?.id ||
+      0;
+
     // Estado local para la unidad seleccionada, usa unit_id si existe en selectedProduct
     const [selectedUnitId, setSelectedUnitId] = useState<number>(
-      selectedProduct?.unit_id || item.available_units?.[0]?.id || 0,
+      selectedProduct?.unit_id || defaultUnitId,
     );
 
     // Sincronizar con selectedProduct cuando cambie
@@ -78,7 +86,7 @@ const ProductCard = React.memo(
       const availableUnitIds =
         item.available_units?.map((unit) => unit.id) || [];
       const hasCurrentUnit = availableUnitIds.includes(selectedUnitId);
-      const fallbackUnitId = item.available_units?.[0]?.id || 0;
+      const fallbackUnitId = defaultUnitId;
 
       if (!hasCurrentUnit && fallbackUnitId !== selectedUnitId) {
         setSelectedUnitId(fallbackUnitId);
@@ -88,6 +96,7 @@ const ProductCard = React.memo(
       item.id,
       item.available_units,
       selectedUnitId,
+      defaultUnitId,
     ]);
 
     const selectedUnit = item.available_units?.find(
