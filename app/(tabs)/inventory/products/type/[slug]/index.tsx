@@ -418,6 +418,13 @@ export default function ProductsByTypeIndex() {
           },
           customActions: [
             {
+              title: "Movimientos de Inventario",
+              icon: "history",
+              onPress: (item) => {
+                router.push(`${route}/${item.id}/movements` as any);
+              },
+            },
+            {
               title: "Ver Paquetes",
               icon: "package-variant-closed",
               onPress: (item) => {

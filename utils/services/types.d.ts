@@ -832,5 +832,50 @@ namespace App {
       sort_order?: number;
       notes?: string | null;
     }
+    /**
+     * Un renglón del historial de existencias de un producto.
+     * Lo sirve GET /products/{id}/movements.
+     */
+    interface StockMovement {
+      id: number;
+      date: string;
+      direction: "in" | "out";
+      reason: string;
+      reason_label: string;
+      reason_icon: string;
+      quantity: number;
+      /** Positiva en entradas, negativa en salidas. */
+      signed_quantity: number;
+      previous_stock: number;
+      new_stock: number;
+      unit_cost: number | null;
+      location: { id: number; name: string } | null;
+      /** La otra sucursal, en traspasos. */
+      counterpart_location: { id: number; name: string } | null;
+      user: { id: number; name: string } | null;
+      reference: { type: string; id: number } | null;
+      notes: string | null;
+    }
+
+    interface StockMovementsResponse {
+      data: StockMovement[];
+      meta: {
+        current_page: number;
+        last_page: number;
+        per_page: number;
+        total: number;
+      };
+      product: {
+        id: number;
+        name: string;
+        code?: string | null;
+        unit?: string | null;
+        unit_abbreviation?: string | null;
+        current_stock: number;
+      };
+      filters: {
+        reasons: { value: string; label: string }[];
+      };
+    }
   }
 }

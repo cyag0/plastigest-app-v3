@@ -99,6 +99,10 @@ export default function _layout() {
         options={{ title: "Editar Producto" }}
       />
       <Stack.Screen
+        name="products/[id]/movements"
+        options={{ title: "Movimientos de Inventario" }}
+      />
+      <Stack.Screen
         name="packages/index"
         options={{ title: "Paquetes" }}
       />

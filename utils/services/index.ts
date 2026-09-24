@@ -33,6 +33,25 @@ const Services = {
       );
       return response.data;
     },
+    /** Trazabilidad: historial de movimientos de existencias del producto. */
+    async movements(
+      productId: number,
+      params?: {
+        location_id?: number;
+        direction?: "in" | "out";
+        reason?: string;
+        start_date?: string;
+        end_date?: string;
+        page?: number;
+        per_page?: number;
+      },
+    ): Promise<App.Entities.StockMovementsResponse> {
+      const response = await axiosClient.get(
+        `/auth/admin/products/${productId}/movements`,
+        { params },
+      );
+      return response.data;
+    },
   },
   transfers: {
     ...createCrudService<App.Entities.Company>("/auth/admin/inventory-transfers"),
