@@ -7,6 +7,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { Button, Card, DataTable, Divider, Text } from "react-native-paper";
+import { parseLocalDate } from "@/utils/dates";
 
 export default function ProductionDetail() {
   const params = useLocalSearchParams<{ id: string }>();
@@ -114,7 +115,7 @@ export default function ProductionDetail() {
                 {order.folio}
               </Text>
               <Text style={{ color: palette.textSecondary, marginTop: 2 }}>
-                {new Date(order.production_date).toLocaleDateString("es-MX", {
+                {parseLocalDate(order.production_date).toLocaleDateString("es-MX", {
                   weekday: "long",
                   day: "numeric",
                   month: "long",

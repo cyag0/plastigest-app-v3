@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { Button, Surface, Text } from "react-native-paper";
+import { toLocalDateString } from "@/utils/dates";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -24,7 +25,7 @@ const formatCurrency = (value: number | string) => {
   })}`;
 };
 
-const today = () => new Date().toISOString().split("T")[0];
+const today = () => toLocalDateString();
 
 const PAYMENT_LABELS: Record<string, string> = {
   cash:     "Efectivo",

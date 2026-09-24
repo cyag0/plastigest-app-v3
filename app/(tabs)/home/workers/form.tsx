@@ -12,6 +12,7 @@ import { useFormikContext } from "formik";
 import React, { useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { ActivityIndicator, Card, Divider, Text } from "react-native-paper";
+import { toLocalDateString } from "@/utils/dates";
 
 interface WorkerFormData {
   position?: string;
@@ -86,7 +87,7 @@ export default function WorkersForm(props: WorkersFormProps) {
         company_id: company?.id || undefined,
         position: "Administrador",
         department: "Test",
-        hire_date: new Date().toISOString().split("T")[0],
+        hire_date: toLocalDateString(),
         salary: "50000.00",
         user: {
           name: "Juan Pérez",

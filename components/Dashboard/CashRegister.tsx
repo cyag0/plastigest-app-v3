@@ -11,6 +11,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import React, { useEffect, useState } from "react";
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { ActivityIndicator } from "react-native-paper";
+import { toLocalDateString } from "@/utils/dates";
 
 interface CashRegisterData {
   date: string;
@@ -87,7 +88,7 @@ export default function CashRegister() {
   const loadCashRegister = async () => {
     try {
       setLoading(true);
-      const dateStr = selectedDate.toISOString().split("T")[0];
+      const dateStr = toLocalDateString(selectedDate);
       const params: any = { date: dateStr };
 
       if (selectedLocation) {

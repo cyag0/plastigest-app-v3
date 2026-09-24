@@ -15,6 +15,7 @@ import React, {
   useRef,
   useState, 
 } from "react";
+import { toLocalDateString } from "@/utils/dates";
 
 type unitType = "mass" | "volume" | "quantity";
 type GroupedUnits = Record<unitType, Unit[]>;
@@ -243,7 +244,7 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
             supplier_id: response.data.supplier_id?.toString() || "",
             purchase_date:
               response.data.purchase_date ||
-              new Date().toISOString().split("T")[0],
+              toLocalDateString(),
             notes: response.data.notes || "",
             document_number: response.data.document_number || "",
           });

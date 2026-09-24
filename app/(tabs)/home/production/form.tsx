@@ -23,6 +23,7 @@ import { FormikProps, useFormikContext } from "formik";
 import React, { useEffect, useRef } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Button, Card, Text } from "react-native-paper";
+import { toLocalDateString } from "@/utils/dates";
 
 // Helpers de producto (resolución de unidades) — se usan desde el modal de
 // fórmulas para construir las filas de consumptions / outputs.
@@ -192,7 +193,7 @@ export default function ProductionForm() {
   useEffect(() => {
     (async () => {
       const baseValues = {
-        production_date: new Date().toISOString().split("T")[0],
+        production_date: toLocalDateString(),
         responsible_user_id: 0,
         formula_id: null,
         notes: "",
@@ -214,7 +215,7 @@ export default function ProductionForm() {
           if (params.duplicateFrom) {
             setInitialValues({
               ...baseValues,
-              production_date: new Date().toISOString().split("T")[0],
+              production_date: toLocalDateString(),
               formula_id: order.formula_id,
               responsible_user_id: order.responsible_user_id,
               notes: order.notes,

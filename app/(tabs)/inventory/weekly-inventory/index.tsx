@@ -16,6 +16,7 @@ import { View } from "react-native";
 import { ProgressChart } from "react-native-chart-kit";
 import { Text } from "react-native-paper";
 import * as Yup from "yup";
+import { toLocalDateString } from "@/utils/dates";
 
 const statusLabels: Record<string, string> = {
   planning: "Planificación",
@@ -283,7 +284,7 @@ export default function InventoryIndex() {
                 month: "short",
                 day: "numeric",
               })}`,
-              count_date: new Date().toISOString().split("T")[0],
+              count_date: toLocalDateString(),
               location_id: selectedLocation?.id || null,
               notes: "",
             }}

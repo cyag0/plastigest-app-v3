@@ -18,6 +18,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View, ScrollView } from "react-native";
 import { Button, Card, Divider, IconButton, Text, Chip } from "react-native-paper";
 import * as Yup from "yup";
+import { toLocalDateString } from "@/utils/dates";
 
 interface AdjustmentFormProps {
   id?: number;
@@ -58,7 +59,7 @@ export default function AdjustmentForm(props: AdjustmentFormProps) {
   const initialValues = useMemo(
     () => ({
       location_id: selectedLocation?.id || 0,
-      applied_at: new Date().toISOString().slice(0, 10),
+      applied_at: toLocalDateString(),
       notes: "",
       details: [
         {

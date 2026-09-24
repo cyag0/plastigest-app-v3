@@ -16,6 +16,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { Text } from "react-native-paper";
 import { SceneMap, TabView } from "react-native-tab-view";
+import { parseLocalDate } from "@/utils/dates";
 
 const PRODUCTION_COLUMNS: AppListColumn<any>[] = [
   {
@@ -249,7 +250,7 @@ export default function ProductionIndex() {
               {
                 label: "Fecha",
                 value: item.production_date
-                  ? new Date(item.production_date).toLocaleDateString("es-MX")
+                  ? parseLocalDate(item.production_date).toLocaleDateString("es-MX")
                   : "—",
               },
               { label: "Folio", value: item.folio },
@@ -399,7 +400,7 @@ export default function ProductionIndex() {
               {
                 label: "Fecha",
                 value: item.production_date
-                  ? new Date(item.production_date).toLocaleDateString("es-MX")
+                  ? parseLocalDate(item.production_date).toLocaleDateString("es-MX")
                   : "—",
               },
               { label: "Folio", value: item.folio },

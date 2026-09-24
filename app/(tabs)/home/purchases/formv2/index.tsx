@@ -15,6 +15,7 @@ import { Image, StyleSheet, Text as RNText, TouchableOpacity, View } from "react
 import { Button, Text } from "react-native-paper";
 import Services from "@/utils/services";
 import { usePurchase } from "./PurchaseContext";
+import { toLocalDateString } from "@/utils/dates";
 
 interface PurchasesFormProps {
   id?: number;
@@ -80,7 +81,7 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
 
   const initialFormValues = useMemo(() => ({
     supplier_id: "",
-    purchase_date: new Date().toISOString().split("T")[0],
+    purchase_date: toLocalDateString(),
     notes: "",
     document_number: "",
     payment_method: "other",

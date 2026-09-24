@@ -7,6 +7,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import React from "react";
 import * as Yup from "yup";
 import { View } from "react-native";
+import { toLocalDateString } from "@/utils/dates";
 
 const TYPE_OPTIONS = [
   { label: "Ingreso", value: "income" },
@@ -45,7 +46,7 @@ export default function CashMovementForm() {
         concept: "",
         amount: "",
         payment_method: "cash",
-        movement_date: new Date().toISOString().split("T")[0],
+        movement_date: toLocalDateString(),
         notes: "",
       }}
       validationSchema={validationSchema}

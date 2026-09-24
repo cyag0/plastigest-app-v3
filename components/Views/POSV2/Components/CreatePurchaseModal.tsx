@@ -14,6 +14,7 @@ import React, {
   useRef,
 } from "react";
 import * as Yup from "yup";
+import { toLocalDateString } from "@/utils/dates";
 
 // supplier_id NO es nullable: el usuario debe seleccionar un proveedor
 // para poder crear la compra. Sin esto, el form pasaba la validación
@@ -55,7 +56,7 @@ const CreatePurchaseModal = forwardRef<
       document_number: "",
       notes: "",
       payment_method: "other",
-      purchase_date: new Date().toISOString().split("T")[0],
+      purchase_date: toLocalDateString(),
     }),
     [],
   );

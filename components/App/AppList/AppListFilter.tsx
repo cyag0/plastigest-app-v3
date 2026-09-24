@@ -13,6 +13,7 @@ import {
   Text,
 } from "react-native-paper";
 import { DatePickerModal } from "react-native-paper-dates";
+import { toLocalDateString } from "@/utils/dates";
 
 export type FilterType = "simple" | "multiple" | "date" | "dateRange";
 
@@ -128,7 +129,7 @@ function FilterPopover({
 
   const handleSingleDateConfirm = (params: any) => {
     const date = params.date
-      ? new Date(params.date).toISOString().split("T")[0]
+      ? toLocalDateString(new Date(params.date))
       : "";
     setTempValue(date);
     setShowDatePicker(false);
@@ -136,7 +137,7 @@ function FilterPopover({
 
   const handleRangeDateConfirm = (params: any) => {
     const date = params.date
-      ? new Date(params.date).toISOString().split("T")[0]
+      ? toLocalDateString(new Date(params.date))
       : "";
 
     if (datePickerField === "from") {
