@@ -346,7 +346,9 @@ export default function ProductionForm() {
           | { id?: number; folio?: string }
           | undefined;
 
-        if (!editingId && originalValues.affect_stock) {
+        // Con affect_stock el backend guarda y completa, también al editar un
+        // borrador: la orden deja de ser borrador en ambos casos.
+        if (originalValues.affect_stock) {
           alerts.success(
             `Producción ${order?.folio ?? ""} registrada · Stock actualizado`,
           );

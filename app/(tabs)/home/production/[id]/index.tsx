@@ -15,6 +15,7 @@ export default function ProductionDetail() {
   const [order, setOrder] = useState<any | null>(null);
   const [variance, setVariance] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [completing, setCompleting] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -51,6 +52,33 @@ export default function ProductionDetail() {
       router.back();
     } catch (e: any) {
       alerts.error("No se pudo cancelar: " + e.message);
+    }
+  };
+
+  // Un borrador no afecta inventario hasta completarse: aquí se descuentan
+  // los consumos, se suman los resultados y se registran las mermas.
+  const handleComplete = async () => {
+    if (!order || completing) return;
+    const ok = await alerts.confirm(
+      `¿Completar la producción ${order.folio}? Se descontarán los insumos y se sumará lo producido al inventario.`,
+      { title: "Completar producción", okText: "Completar", cancelText: "Volver" },
+    );
+    if (!ok) return;
+    try {
+      setCompleting(true);
+      const r: any = await Services.productionOrders.complete(order.id);
+      setOrder(r?.data ?? order);
+      alerts.success(r?.message ?? "Producción completada");
+    } catch (e: any) {
+      const data = e?.response?.data;
+      const detail =
+        (data?.errors ? Object.values(data.errors).flat()[0] : null) ||
+        data?.error ||
+        data?.message ||
+        e?.message;
+      alerts.error("No se pudo completar la producción. " + detail);
+    } finally {
+      setCompleting(false);
     }
   };
 
@@ -319,7 +347,18 @@ export default function ProductionDetail() {
             Editar
           </Button>
         ) : null}
-  
+        {order.status === "draft" ? (
+          <Button
+            mode="contained"
+            onPress={handleComplete}
+            loading={completing}
+            disabled={completing}
+            style={{ flex: 1 }}
+            icon="check-circle"
+          >
+            Completar
+          </Button>
+        ) : null}
       </View>
     </ScrollView>
   );
