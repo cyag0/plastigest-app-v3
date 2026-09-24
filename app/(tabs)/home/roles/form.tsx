@@ -55,26 +55,35 @@ const ACTION_LABELS: Record<string, string> = {
   admin: "Administrar",
 };
 
-// Plantillas rápidas: aplican un conjunto de acciones a TODOS los módulos de
-// una sola vez para acelerar el llenado.
+// Módulos de administración. Las plantillas "Operativo" y "Solo lectura" no
+// los tocan: gestionar usuarios, roles o empresas no es operación diaria, y
+// locations_list es lo que el backend usa para decidir si alguien ve todas las
+// sucursales. Si se incluían, cualquier rol operativo quedaba como admin.
+const ADMIN_RESOURCES = ["users", "roles", "permissions", "companies", "locations"];
+
+// Plantillas rápidas: aplican un conjunto de acciones a los módulos de una
+// sola vez para acelerar el llenado.
 const PRESETS: {
   key: string;
   label: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  match: (action: string) => boolean;
+  match: (action: string, resource?: string) => boolean;
 }[] = [
   { key: "all", label: "Acceso total", icon: "shield-check", match: () => true },
   {
     key: "operativo",
     label: "Operativo",
     icon: "briefcase-outline",
-    match: (a) => ["create", "read", "update", "list", "view", "export"].includes(a),
+    match: (a, r) =>
+      !ADMIN_RESOURCES.includes(r ?? "") &&
+      ["create", "read", "update", "list", "view", "export"].includes(a),
   },
   {
     key: "lectura",
     label: "Solo lectura",
     icon: "eye-outline",
-    match: (a) => ["read", "list", "view"].includes(a),
+    match: (a, r) =>
+      !ADMIN_RESOURCES.includes(r ?? "") && ["read", "list", "view"].includes(a),
   },
 ];
 
@@ -224,14 +233,18 @@ function PermissionsManager({
   }, []);
 
   const applyPreset = useCallback(
-    (match: (action: string) => boolean) => {
+    (match: (action: string, resource?: string) => boolean) => {
       const map: Record<string, boolean> = {};
-      allPermissions.forEach((p) => {
-        map[p.id] = match(getAction(p));
+      // El módulo sale de la llave del grupo: los permisos del endpoint no
+      // siempre traen `resource`.
+      Object.entries(permissionsByResource).forEach(([resource, perms]) => {
+        perms.forEach((p) => {
+          map[p.id] = match(getAction(p), p.resource || resource);
+        });
       });
       setFieldValue("permissions", map);
     },
-    [allPermissions, setFieldValue],
+    [permissionsByResource, setFieldValue],
   );
 
   const clearAll = useCallback(() => {
