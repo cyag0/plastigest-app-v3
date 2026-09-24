@@ -317,8 +317,17 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       }
     } catch (error: any) {
       console.error("Error submitting form:", error);
+      // En un 422 el backend manda "Error de validación" en message y el
+      // detalle por campo en errors; sin él el usuario no sabe qué corregir.
+      const data = error?.response?.data;
+      const fieldError = data?.errors
+        ? (Object.values(data.errors).flat()[0] as string | undefined)
+        : undefined;
       const errorMessage =
-        error?.response?.data?.message || error?.message || "Error al guardar";
+        [data?.message, fieldError].filter(Boolean).join(": ") ||
+        data?.error ||
+        error?.message ||
+        "Error al guardar";
       alerts.error(errorMessage);
       props.onError?.(error, _values);
     } finally {
