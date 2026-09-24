@@ -3,6 +3,7 @@ import {
   getAuthToken,
   removeAuthToken,
   setAuthToken,
+  onLocationForbidden,
 } from "@/utils/axios";
 import Services from "@/utils/services";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -136,6 +137,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
     }
   }, [user, fcmToken]);
+
+  // Si el backend rechaza la sucursal guardada (se la quitaron al usuario o
+  // se forzó otra), se limpia la selección: la app muestra el selector de
+  // sucursal con las que sí tiene, en vez de fallar en cada pantalla.
+  useEffect(() => {
+    return onLocationForbidden(() => {
+      setLocation(null);
+      setPermissions([]);
+    });
+  }, []);
 
   // Sincronizar el badge del sistema operativo (iOS/Android) con el contador
   // de no leidas. En web no hay badge nativo asi que lo omitimos.
@@ -376,7 +387,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           setPermissions([]);
         }
 
-        if (parsedLocation) {
+        // loadPermissions pudo descubrir que la sucursal guardada ya no es
+        // válida (location_forbidden): el interceptor la borra del storage.
+        // Se relee para no restaurar una sucursal a la que ya no tiene acceso.
+        const stillStoredLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
+        if (parsedLocation && stillStoredLocation) {
           setLocation(parsedLocation);
         } else {
           setLocation(null);

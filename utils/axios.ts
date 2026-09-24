@@ -76,6 +76,19 @@ axiosClient.interceptors.request.use(
   },
 );
 
+// La sucursal guardada ya no es válida para el usuario (se la quitaron o se
+// forzó otra). AuthContext se suscribe para limpiar la selección y mostrar el
+// selector de sucursal en lugar de dejar la app rota o cerrar la sesión.
+type LocationForbiddenListener = () => void;
+const locationForbiddenListeners = new Set<LocationForbiddenListener>();
+
+export const onLocationForbidden = (listener: LocationForbiddenListener) => {
+  locationForbiddenListeners.add(listener);
+  return () => {
+    locationForbiddenListeners.delete(listener);
+  };
+};
+
 // Interceptor para responses - manejar errores globalmente
 axiosClient.interceptors.response.use(
   (response: AxiosResponse) => {
@@ -94,6 +107,18 @@ axiosClient.interceptors.response.use(
       } catch (storageError) {
         console.error("Error clearing storage:", storageError);
       }
+    }
+
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.code === "location_forbidden"
+    ) {
+      try {
+        await AsyncStorage.removeItem(SELECTED_LOCATION_KEY);
+      } catch (storageError) {
+        console.error("Error clearing location:", storageError);
+      }
+      locationForbiddenListeners.forEach((listener) => listener());
     }
 
     return Promise.reject(error);
