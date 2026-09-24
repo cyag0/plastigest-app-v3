@@ -21,8 +21,8 @@ import { tokens } from "@/constants/tokens";
 import { useAlerts } from "@/hooks/useAlerts";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import services from "@/utils/services";
-import { useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Modal,
   Platform,
@@ -262,9 +262,13 @@ export default function TasksScreen() {
     }
   }, [alerts, priorityFilter, statusFilter, typeFilter]);
 
-  useEffect(() => {
-    loadTasks();
-  }, [loadTasks]);
+  // Recarga al volver del detalle: una tarea completada allá no debe seguir
+  // apareciendo como pendiente aquí.
+  useFocusEffect(
+    useCallback(() => {
+      loadTasks();
+    }, [loadTasks]),
+  );
 
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase();

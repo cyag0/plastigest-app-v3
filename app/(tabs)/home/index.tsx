@@ -27,8 +27,8 @@ import { useResponsive } from "@/hooks/useResponsive";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
 import {
   Platform,
   ScrollView,
@@ -247,10 +247,16 @@ export default function HomeScreen() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
 
-  useEffect(() => {
-    loadKpis();
-    loadTasks();
-  }, [auth.selectedCompany, selectedLocation]);
+  // Se recarga cada vez que la pantalla recupera el foco: al volver de una
+  // venta, una compra o de completar una tarea, Inicio ya lo refleja. Antes
+  // solo cargaba al montarse y se quedaba con los números viejos.
+  useFocusEffect(
+    useCallback(() => {
+      loadKpis();
+      loadTasks();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [auth.selectedCompany, selectedLocation]),
+  );
 
   async function loadKpis() {
     if (!auth.selectedCompany) return;
@@ -274,10 +280,12 @@ export default function HomeScreen() {
         Services.sales
           .stats({ start_date: yesterday, end_date: yesterday })
           .catch(() => null),
-        Services.purchases
+        // Las compras viven en purchases-v2; /purchases/stats lee el sistema
+        // anterior (tabla movements) y ya no cambia.
+        Services.purchasesV2
           .getStats({ start_date: today, end_date: today })
           .catch(() => null),
-        Services.purchases
+        Services.purchasesV2
           .getStats({ start_date: yesterday, end_date: yesterday })
           .catch(() => null),
         Services.tasks
@@ -541,8 +549,16 @@ function extractSalesTotal(res: any): number {
  * Total de compras del periodo. purchases.getStats devuelve
  * { success, data: { total_amount } }.
  */
+/**
+ * Total comprado según purchases-v2/stats. Se suma por estado para dejar
+ * fuera borradores y canceladas, que no son compras hechas.
+ */
 function extractPurchasesTotal(res: any): number {
-  return res?.data?.total_amount ?? 0;
+  const byStatus = res?.data?.by_status ?? {};
+  return ["ordered", "in_transit", "received"].reduce(
+    (sum, status) => sum + (Number(byStatus[status]?.total) || 0),
+    0,
+  );
 }
 
 /**
