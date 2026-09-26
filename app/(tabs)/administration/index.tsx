@@ -112,16 +112,6 @@ export default function AdministrationScreen() {
       requiredPermission: "locations_update",
     },
     {
-      id: "current-workers",
-      title: "Personal de mi sucursal",
-      description: "Gestiona solo trabajadores de tu sucursal actual",
-      icon: "account-group-outline",
-      route: "/(tabs)/administration/current-workers",
-      color: palette.textSecondary,
-      category: "location",
-      requiredPermission: "workers_list",
-    },
-    {
       id: "recurring-tasks",
       title: "Tareas recurrentes",
       description: "Programa tareas automaticas (conteos, reportes)",

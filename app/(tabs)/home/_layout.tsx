@@ -73,18 +73,6 @@ export default function _layout() {
       />
       <Stack.Screen name="locations" />
       <Stack.Screen
-        name="users/index"
-        options={{
-          title: "Usuarios",
-        }}
-      />
-      <Stack.Screen
-        name="users/form"
-        options={{
-          title: "Nuevo Usuario",
-        }}
-      />
-      <Stack.Screen
         name="cash/index"
         options={{
           title: "Caja",
@@ -112,7 +100,6 @@ export default function _layout() {
         name="cash/closing/[id]/edit"
         options={{ title: "Editar Cierre" }}
       />
-      <Stack.Screen name="workers" />
       <Stack.Screen name="categories" />
       <Stack.Screen name="products" />
       <Stack.Screen name="suppliers" />

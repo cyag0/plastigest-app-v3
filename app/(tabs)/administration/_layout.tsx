@@ -304,13 +304,6 @@ export default function _layout() {
           title: "Editar Cliente",
         }}
       />
-      {/* Trabajadores actuales */}
-      <Stack.Screen
-        name="current-workers/form"
-        options={{
-          title: "Asignar Trabajador",
-        }}
-      />
     </Stack>
   );
 }

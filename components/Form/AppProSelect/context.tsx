@@ -20,7 +20,6 @@ type ServicePath =
   | "salesOrders"
   | "admin.roles"
   | "admin.permissions"
-  | "admin.workers"
   | "home.unidades"
   | "formulas"
   | "productionOrders";

@@ -2,12 +2,6 @@ import { default as api, default as axiosClient } from "../axios";
 import admin from "./admin/admin";
 import { createCrudService } from "./crudService";
 
-const movements = {
-  adjustments: createCrudService<App.Entities.Adjustment.Adjustment>(
-    "/auth/admin/adjustments",
-  ),
-};
-
 const Services = {
   admin,
   users: {
@@ -23,16 +17,6 @@ const Services = {
   },
   products: {
     ...createCrudService<App.Entities.Product>("/auth/admin/products"),
-    async printLabels(productId: number, quantity: number) {
-      const response = await axiosClient.post(
-        `/auth/admin/products/${productId}/print-labels`,
-        { quantity },
-        {
-          responseType: "blob",
-        },
-      );
-      return response.data;
-    },
     /** Trazabilidad: historial de movimientos de existencias del producto. */
     async movements(
       productId: number,
@@ -58,19 +42,6 @@ const Services = {
   },
   inventoryAdjustments: {
     ...createCrudService<any>("/auth/admin/inventory-adjustments"),
-    async apply(id: number) {
-      const response = await axiosClient.post(
-        `/auth/admin/inventory-adjustments/${id}/apply`,
-      );
-      return response.data;
-    },
-    async cancel(id: number, data?: { reason?: string }) {
-      const response = await axiosClient.post(
-        `/auth/admin/inventory-adjustments/${id}/cancel`,
-        data,
-      );
-      return response.data;
-    },
   },
   productPackages: {
     ...createCrudService<any>("/auth/admin/product-packages"),
@@ -91,38 +62,6 @@ const Services = {
   },
   companies: {
     ...createCrudService<App.Entities.Company>("/auth/admin/companies"),
-  },
-  purchases: {
-    ...createCrudService<App.Entities.Purchase>("/auth/admin/purchases"),
-    async getStats(params?: {
-      location_id?: number;
-      start_date?: string;
-      end_date?: string;
-    }) {
-      const response = await axiosClient.get("/auth/admin/purchases/stats", {
-        params,
-      });
-      return response.data;
-    },
-    async updateDetails(purchaseId: number, data: any) {
-      const response = await axiosClient.post(
-        `/auth/admin/purchases/${purchaseId}/details`,
-        data,
-      );
-      return response.data;
-    },
-    async startOrder(purchaseId: number) {
-      const response = await axiosClient.post(
-        `/auth/admin/purchases/${purchaseId}/start-order`,
-      );
-      return response.data;
-    },
-    async receivePurchase(purchaseId: number) {
-      const response = await axiosClient.post(
-        `/auth/admin/purchases/${purchaseId}/receive`,
-      );
-      return response.data;
-    },
   },
   purchasesV2: {
     async addDetail(data: {
@@ -625,7 +564,6 @@ const Services = {
     },
   },
   inventory: {
-    ...createCrudService<any>("/auth/admin/inventory"),
     async getCurrentStock(params: {
       product_id: number;
       location_id: number;
@@ -652,56 +590,9 @@ const Services = {
     ),
   },
   reports: {
-    dashboard: async (params?: any) => {
-      const response = await api.get("/auth/admin/reports/dashboard", {
-        params,
-      });
-      return response;
-    },
+    // Únicos reportes vigentes del esquema anterior; el dashboard es reportsV2.
     inventoryStats: async (params?: any) => {
       const response = await api.get("/auth/admin/reports/inventory-stats", {
-        params,
-      });
-      return response;
-    },
-    recentMovements: async (params?: any) => {
-      const response = await api.get("/auth/admin/reports/recent-movements", {
-        params,
-      });
-      return response;
-    },
-    movementsByType: async (params?: any) => {
-      const response = await api.get("/auth/admin/reports/movements-by-type", {
-        params,
-      });
-      return response;
-    },
-    topProducts: async (params?: any) => {
-      const response = await api.get("/auth/admin/reports/top-products", {
-        params,
-      });
-      return response;
-    },
-    salesTrend: async (params?: any) => {
-      const response = await api.get("/auth/admin/reports/sales-trend", {
-        params,
-      });
-      return response;
-    },
-    salesByLocation: async (params?: any) => {
-      const response = await api.get("/auth/admin/reports/sales-by-location", {
-        params,
-      });
-      return response;
-    },
-    lowStockProducts: async (params?: any) => {
-      const response = await api.get("/auth/admin/reports/low-stock-products", {
-        params,
-      });
-      return response;
-    },
-    paymentMethods: async (params?: any) => {
-      const response = await api.get("/auth/admin/reports/payment-methods", {
         params,
       });
       return response;
@@ -715,7 +606,6 @@ const Services = {
       return response;
     },
   },
-  movements,
   cashMovements: {
     ...createCrudService<any>("/auth/admin/cash-movements"),
     async stats(params?: {

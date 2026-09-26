@@ -48,7 +48,6 @@ const segmentLabels: Record<string, string> = {
   "transfers-menu": "Transferencias",
   users: "Usuarios",
   "weekly-inventory": "Inventario semanal",
-  workers: "Trabajadores",
 };
 
 const pathLabels: Record<string, string> = {
