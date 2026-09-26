@@ -4,7 +4,7 @@ import { tokens } from "@/constants/tokens";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { Divider, FAB, Menu } from "react-native-paper";
+import { Divider, Menu } from "react-native-paper";
 
 export interface CartItemData {
   id: number | string;
@@ -41,6 +41,14 @@ interface CartProps {
   onFinish?: () => void;
   isScreen?: boolean;
   showFooter?: boolean;
+  /**
+   * Todo el carrito (productos, contenido extra y total) se desplaza junto.
+   * Para celular: con la lista en su propio ScrollView flex:1, el contenido
+   * extra (forma de pago, origen de la transferencia) se quedaba con el
+   * espacio y la lista se aplastaba a una franja donde no se veían las
+   * cantidades ni los botones.
+   */
+  scrollAll?: boolean;
   children?: React.ReactNode;
 }
 
@@ -245,10 +253,63 @@ export default function Cart({
   onFinish,
   isScreen = false,
   showFooter = true,
+  scrollAll = false,
   children,
 }: CartProps) {
   const cartTotal = items.reduce((sum, item) => sum + item.total, 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+
+  const itemsContent =
+    items.length === 0 ? (
+      <View style={styles.emptyWrap}>
+        <EmptyState
+          icon="cart-outline"
+          title="El carrito está vacío"
+          description="Agrega productos para comenzar"
+          compact
+        />
+      </View>
+    ) : (
+      items.map((item, index) => (
+        <View key={item.id}>
+          <CartItemComponent
+            item={item}
+            onRemove={onRemoveItem}
+            onItemChange={onItemChange}
+          />
+          {index < items.length - 1 && <View style={styles.itemDivider} />}
+        </View>
+      ))
+    );
+
+  // Total y botón de finalizar
+  const footer =
+    showFooter && items.length > 0 ? (
+      <View style={styles.footer}>
+        <View style={styles.totalContainer}>
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>Items</Text>
+            <Text style={styles.totalValue}>{itemCount}</Text>
+          </View>
+
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabelStrong}>Total</Text>
+            <Text style={styles.totalAmount}>${cartTotal.toFixed(2)}</Text>
+          </View>
+        </View>
+
+        {onFinish && (
+          <TouchableOpacity
+            onPress={onFinish}
+            style={styles.finishButton}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.finishButtonText}>Finalizar</Text>
+            <MaterialCommunityIcons name="arrow-right" size={18} color="#fff" />
+          </TouchableOpacity>
+        )}
+      </View>
+    ) : null;
 
   return (
     <View style={[styles.container, isScreen && styles.screenContainer]}>
@@ -287,81 +348,20 @@ export default function Cart({
 
       <Divider style={styles.headerDivider} />
 
-      {/* Items */}
-      <ScrollView
-        style={styles.itemsList}
-        showsVerticalScrollIndicator={false}
-      >
-        {items.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <EmptyState
-              icon="cart-outline"
-              title="El carrito está vacío"
-              description="Agrega productos para comenzar"
-              compact
-            />
-          </View>
-        ) : (
-          items.map((item, index) => (
-            <View key={item.id}>
-              <CartItemComponent
-                item={item}
-                onRemove={onRemoveItem}
-                onItemChange={onItemChange}
-              />
-              {index < items.length - 1 && (
-                <View style={styles.itemDivider} />
-              )}
-            </View>
-          ))
-        )}
-      </ScrollView>
-
-      {/* Children - contenido adicional */}
-      {children}
-
-      {/* Footer - Total y botón de finalizar */}
-      {showFooter && items.length > 0 && (
-        <View style={styles.footer}>
-          <View style={styles.totalContainer}>
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Items</Text>
-              <Text style={styles.totalValue}>{itemCount}</Text>
-            </View>
-
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabelStrong}>Total</Text>
-              <Text style={styles.totalAmount}>
-                ${cartTotal.toFixed(2)}
-              </Text>
-            </View>
-          </View>
-
-          {onFinish && (
-            <TouchableOpacity
-              onPress={onFinish}
-              style={styles.finishButton}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.finishButtonText}>Finalizar</Text>
-              <MaterialCommunityIcons name="arrow-right" size={18} color="#fff" />
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
-      {/* FAB para mobile cuando no es screen */}
-      {!isScreen && items.length > 0 && (
-        <FAB
-          icon="cart"
-          label={`${itemCount} items - $${cartTotal.toFixed(2)}`}
-          style={styles.fab}
-          color="white"
-          onPress={() => {
-            // Se puede usar para navegar a la pantalla del carrito
-            // o simplemente mostrar el resumen
-          }}
-        />
+      {scrollAll ? (
+        <ScrollView style={styles.itemsList} showsVerticalScrollIndicator={false}>
+          {itemsContent}
+          {children}
+          {footer}
+        </ScrollView>
+      ) : (
+        <>
+          <ScrollView style={styles.itemsList} showsVerticalScrollIndicator={false}>
+            {itemsContent}
+          </ScrollView>
+          {children}
+          {footer}
+        </>
       )}
     </View>
   );
@@ -653,12 +653,5 @@ const styles = StyleSheet.create({
     ...tokens.typography.bodyMd,
     color: "#fff",
     fontWeight: "700",
-  },
-  fab: {
-    position: "absolute",
-    margin: tokens.spacing[4],
-    right: 0,
-    bottom: 0,
-    backgroundColor: palette.primary,
   },
 });

@@ -203,6 +203,8 @@ function TransferFormContent() {
       items={cartItems}
       onRemoveItem={(itemId) => transferContext.handleRemoveProduct(itemId)}
       onItemChange={(item, action, data) => transferContext.handleItemChange(item, action, data)}
+      // En celular el carrito es un modal: que todo se desplace junto.
+      scrollAll={isMobile}
     >
       <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ padding: 16 }}>
           {/* Información de transferencia dentro del carrito */}

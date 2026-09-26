@@ -188,6 +188,8 @@ export default function SaleFormScreen() {
       onRemoveItem={(itemId) => saleContext.handleRemoveProduct(itemId)}
       onItemChange={(item, action, data) => saleContext.handleItemChange(item, action, data)}
       onClearCart={saleContext.clearCart}
+      // En celular el carrito es un modal: que todo se desplace junto.
+      scrollAll={isMobile}
     >
       <View style={styles.paymentSection}>
             <Text style={styles.paymentTitle}>Información de Pago</Text>

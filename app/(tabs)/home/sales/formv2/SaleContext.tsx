@@ -49,7 +49,7 @@ interface SaleContextType {
   handleRemoveProduct: (productId: number | string) => void;
   handleItemChange: (
     productId: number | string,
-    action: "increment" | "decrement" | "unit",
+    action: "increment" | "decrement" | "unit" | "set",
     data?: any,
   ) => void;
   clearCart: () => void;
@@ -309,7 +309,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
 
   const handleItemChange = (
     productId: number | string,
-    action: "increment" | "decrement" | "unit",
+    action: "increment" | "decrement" | "unit" | "set",
     data?: any,
   ) => {
     setSelectedProducts((prev) => {
@@ -367,6 +367,50 @@ export function SaleProvider({ children }: SaleProviderProps) {
           delete updated[productId];
           alerts.success("Producto eliminado del carrito");
         }
+      } else if (action === "set") {
+        // Cantidad escrita a mano en el carrito. Antes esta acción no se
+        // manejaba y lo que el usuario tecleaba se ignoraba: solo +/-
+        // cambiaban la cantidad.
+        const qty = typeof data === "number" ? data : parseInt(String(data), 10);
+        if (isNaN(qty) || qty < 1) {
+          return prev;
+        }
+
+        const productData = products.find((p) => p.id === productId);
+        const baseProduct = products.find(
+          (p) => p.id === `product_${product.product_id}`,
+        );
+        const availableStock = Number(baseProduct?.current_stock || 0);
+
+        // Stock (en unidad base) que consume una unidad de este renglón.
+        let perUnit = 1;
+        if (productData?.is_package && productData.quantity_per_package) {
+          perUnit = Number(productData.quantity_per_package);
+        } else {
+          const selectedUnit = productData?.available_units?.find(
+            (u) => u.id === product.unit_id,
+          );
+          perUnit = Number(selectedUnit?.factor_to_base || 1);
+        }
+
+        const usedByOthers =
+          calculateUsedStock(product.product_id) - product.quantity * perUnit;
+
+        if (usedByOthers + qty * perUnit > availableStock) {
+          const maxQty = Math.max(
+            0,
+            Math.floor((availableStock - usedByOthers) / perUnit),
+          );
+          alerts.error(
+            `Stock insuficiente. Máximo disponible para este producto: ${maxQty}`,
+          );
+          return prev;
+        }
+
+        updated[productId] = {
+          ...product,
+          quantity: qty,
+        };
       } else if (action === "unit" && data) {
         const unitId =
           typeof data === "object" && data !== null
