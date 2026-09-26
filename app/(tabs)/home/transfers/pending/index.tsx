@@ -4,6 +4,7 @@ import type { VariantMatchMap } from "@/components/App/StatusBadge";
 import StatusBadge from "@/components/App/StatusBadge";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAlerts } from "@/hooks/useAlerts";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import transferService from "@/utils/services/transferService";
 import { useRouter } from "expo-router";
@@ -31,6 +32,7 @@ function DirectionBadge({ isSent }: { isSent: boolean }) {
 export default function PendingTransfersScreen() {
   const router = useRouter();
   const auth = useAuth();
+  const alerts = useAlerts();
   const [refreshKey, setRefreshKey] = useState(0);
 
   const company = auth.selectedCompany;
@@ -51,6 +53,31 @@ export default function PendingTransfersScreen() {
       </View>
     );
   }
+
+  // Una solicitud en curso se puede cancelar (no eliminar): queda en el
+  // historial como cancelada. Si ya iba en tránsito, el backend regresa lo
+  // enviado al stock de origen. Las finalizadas no se borran para no perder
+  // la trazabilidad del inventario.
+  const handleCancel = async (item: InventoryTransfer) => {
+    const inTransit = item.status === "in_transit";
+    const ok = await alerts.confirm(
+      `¿Cancelar la transferencia ${item.transfer_number || `#${item.id}`}?` +
+        (inTransit
+          ? " La mercancía enviada regresará al inventario de origen."
+          : ""),
+      { title: "Cancelar transferencia", okText: "Sí, cancelar", cancelText: "Volver" },
+    );
+    if (!ok) return;
+    try {
+      await transferService.destroy(item.id);
+      alerts.success("Transferencia cancelada");
+      setRefreshKey((k) => k + 1);
+    } catch (error: any) {
+      alerts.error(
+        error?.response?.data?.message || "No se pudo cancelar la transferencia",
+      );
+    }
+  };
 
   const formatDate = (dateString: string) => {
     if (!dateString) return "";
@@ -287,6 +314,25 @@ export default function PendingTransfersScreen() {
         }}
         onItemPress={(item: InventoryTransfer) => {
           router.push(`/(tabs)/home/transfers/${item.id}` as any);
+        }}
+        menu={{
+          onShow: (item: InventoryTransfer) =>
+            router.push(`/(tabs)/home/transfers/${item.id}` as any),
+          showView: true,
+          showEdit: false,
+          showDelete: false,
+          customActions: [
+            {
+              title: "Cancelar solicitud",
+              icon: "close-circle-outline",
+              color: palette.error,
+              // Solo quien la pidió o la sucursal de origen.
+              show: (item: InventoryTransfer) =>
+                (item.requested_by_user_id ?? item.requested_by) === auth.user?.id ||
+                item.from_location_id === location.id,
+              onPress: handleCancel,
+            },
+          ],
         }}
       />
     </>
