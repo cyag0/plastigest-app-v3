@@ -134,17 +134,30 @@ function CashStatsBanner() {
             })}
           </View>
 
-          <TouchableOpacity
-            style={styles.closingButton}
-            onPress={() => router.push("/(tabs)/home/cash/closing")}
-            activeOpacity={0.7}
-          >
-            <MaterialCommunityIcons name="cash-register" size={14} color={palette.primary} />
-            <Text style={styles.closingButtonText} numberOfLines={1}>
-              Cierres de Caja
-            </Text>
-            <MaterialCommunityIcons name="chevron-right" size={14} color={palette.primary} />
-          </TouchableOpacity>
+          <View style={styles.closingLinks}>
+            <TouchableOpacity
+              style={styles.closingButton}
+              onPress={() => router.push("/(tabs)/home/cash/sessions" as any)}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name="cash-register" size={14} color={palette.primary} />
+              <Text style={styles.closingButtonText} numberOfLines={1}>
+                Turnos de caja
+              </Text>
+              <MaterialCommunityIcons name="chevron-right" size={14} color={palette.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.closingButton}
+              onPress={() => router.push("/(tabs)/home/cash/closing")}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name="history" size={14} color={palette.primary} />
+              <Text style={styles.closingButtonText} numberOfLines={1}>
+                Cierres anteriores
+              </Text>
+              <MaterialCommunityIcons name="chevron-right" size={14} color={palette.primary} />
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </View>
@@ -374,6 +387,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     elevation: 1,
+  },
+  closingLinks: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
   },
   closingButton: {
     flexDirection: "row",

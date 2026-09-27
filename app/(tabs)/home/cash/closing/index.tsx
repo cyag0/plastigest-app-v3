@@ -5,7 +5,6 @@ import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { generateCrudMenu } from "@/utils/routes";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
 import React from "react";
 import { View } from "react-native";
 import { Chip, Text } from "react-native-paper";
@@ -56,7 +55,7 @@ export default function CashClosingIndex() {
 
   return (
     <AppList
-      title="Cierres de Caja"
+      title="Cierres anteriores"
       service={Services.cashClosings}
       columns={[
         {
@@ -95,9 +94,10 @@ export default function CashClosingIndex() {
           render: (value) => value ?? 0,
         },
       ]}
-      onPressCreate={() => router.push("/(tabs)/home/cash/closing/form" as any)}
-      fabLabel="Nuevo Cierre"
-      menu={generateCrudMenu("/(tabs)/home/cash/closing" as any, {
+      // El corte ahora se hace por turno de caja; aquí solo quedan los cierres anteriores.
+      showFab={false}
+      menu={{
+        ...generateCrudMenu("/(tabs)/home/cash/closing" as any, {
         showDelete() {
           return false;
         },
@@ -111,7 +111,9 @@ export default function CashClosingIndex() {
             onPress: handleDownloadPdf,
           },
         ],
-      })}
+      }),
+        onCreate: undefined,
+      }}
       renderCard={({ item }: { item: any }) => {
         const diff = parseFloat(item.difference ?? "0");
         const diffColor =

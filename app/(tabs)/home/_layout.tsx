@@ -85,20 +85,20 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
-        name="cash/closing/index"
-        options={{ title: "Cierres de Caja" }}
+        name="cash/sessions/index"
+        options={{ title: "Turnos de caja" }}
       />
       <Stack.Screen
-        name="cash/closing/form"
-        options={{ title: "Nuevo Cierre" }}
+        name="cash/sessions/[id]/index"
+        options={{ title: "Detalle de turno" }}
+      />
+      <Stack.Screen
+        name="cash/closing/index"
+        options={{ title: "Cierres anteriores" }}
       />
       <Stack.Screen
         name="cash/closing/[id]/index"
         options={{ title: "Detalle de Cierre" }}
-      />
-      <Stack.Screen
-        name="cash/closing/[id]/edit"
-        options={{ title: "Editar Cierre" }}
       />
       <Stack.Screen name="categories" />
       <Stack.Screen name="products" />

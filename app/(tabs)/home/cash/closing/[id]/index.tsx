@@ -1,10 +1,10 @@
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
-import { Button, Chip, Surface, Text } from "react-native-paper";
+import { Chip, Surface, Text } from "react-native-paper";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -257,16 +257,6 @@ export default function CashClosingDetail() {
         />
       </Surface>
 
-      {/* ─── Editar ──────────────────────────────────────────────────── */}
-      <Button
-        mode="outlined"
-        onPress={() =>
-          router.push(`/(tabs)/home/cash/closing/${item.id}/edit` as any)
-        }
-        style={{ borderRadius: 10 }}
-      >
-        Editar Cierre
-      </Button>
     </ScrollView>
   );
 }
