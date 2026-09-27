@@ -84,6 +84,10 @@ export default function _layout() {
         }}
       />
 
+      <Stack.Screen name="cash-registers/index" options={{ title: "Cajas" }} />
+      <Stack.Screen name="cash-registers/form" options={{ title: "Nueva Caja" }} />
+      <Stack.Screen name="cash-registers/[id]/index" options={{ title: "Ver Caja" }} />
+      <Stack.Screen name="cash-registers/[id]/edit" options={{ title: "Editar Caja" }} />
       <Stack.Screen
         name="locations/index"
         options={{

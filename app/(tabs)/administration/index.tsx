@@ -80,6 +80,16 @@ export default function AdministrationScreen() {
       requiredPermission: "locations_list",
     },
     {
+      id: "cash-registers",
+      title: "Cajas",
+      description: "Puntos de cobro de cada sucursal para abrir turnos",
+      icon: "cash-register",
+      route: "/(tabs)/administration/cash-registers",
+      color: palette.success,
+      category: "company",
+      requiredPermission: "cash_registers_list",
+    },
+    {
       id: "roles",
       title: "Roles y permisos",
       description: "Define roles y gestiona permisos de acceso",

@@ -617,6 +617,53 @@ const Services = {
       return response.data;
     },
   },
+  // Cajas por sucursal (catálogo) y turnos de cajero.
+  cashRegisters: {
+    ...createCrudService<App.Entities.CashRegister>("/auth/admin/cash-registers"),
+  },
+  cashRegisterSessions: {
+    async index(params?: Record<string, any>) {
+      const response = await axiosClient.get("/auth/admin/cash-register-sessions", { params });
+      return response.data as { data: App.Entities.CashRegisterSession[]; meta: any };
+    },
+    /** Turno abierto del usuario (null si no tiene) con sus totales en vivo. */
+    async current() {
+      const response = await axiosClient.get("/auth/admin/cash-register-sessions/current");
+      return response.data as {
+        data: App.Entities.CashRegisterSession | null;
+        summary: App.Entities.CashRegisterSessionSummary | null;
+      };
+    },
+    async open(payload: { cash_register_id: number; opening_amount: number }) {
+      const response = await axiosClient.post("/auth/admin/cash-register-sessions/open", payload);
+      return response.data as { data: App.Entities.CashRegisterSession };
+    },
+    async show(id: number) {
+      const response = await axiosClient.get(`/auth/admin/cash-register-sessions/${id}`);
+      return response.data as {
+        data: App.Entities.CashRegisterSession;
+        summary: App.Entities.CashRegisterSessionSummary | null;
+      };
+    },
+    async close(id: number, payload: { counted_cash: number; notes?: string }) {
+      const response = await axiosClient.post(`/auth/admin/cash-register-sessions/${id}/close`, payload);
+      return response.data as {
+        data: App.Entities.CashRegisterSession;
+        summary: App.Entities.CashRegisterSessionSummary;
+      };
+    },
+  },
+  // Punto de venta para cajeros.
+  pos: {
+    async catalog() {
+      const response = await axiosClient.get("/auth/admin/pos/catalog");
+      return response.data as { data: App.Entities.PosCatalogItem[] };
+    },
+    async sale(payload: App.Entities.PosSalePayload) {
+      const response = await axiosClient.post("/auth/admin/pos/sales", payload);
+      return response.data as { message: string; data: App.Entities.PosSaleResult };
+    },
+  },
   cashClosings: {
     ...createCrudService<any>("/auth/admin/cash-closings"),
     async pdfUrl(id: number) {

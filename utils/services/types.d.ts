@@ -1,6 +1,90 @@
 // Tipos para las entidades de la aplicación
 namespace App {
   namespace Entities {
+    // ─── Cajas, turnos y punto de venta ────────────────────────────────────
+    interface CashRegister {
+      id: number;
+      company_id: number;
+      location_id: number;
+      location_name?: string | null;
+      name: string;
+      code: string;
+      is_active: boolean;
+      notes?: string | null;
+      /** Turno abierto ahora en la caja (el POS ofrece solo cajas libres). */
+      open_session?: { id: number; user_id: number; user_name?: string | null; opened_at: string } | null;
+    }
+
+    type CashRegisterSessionStatus = "open" | "closed";
+
+    interface CashRegisterSession {
+      id: number;
+      status: CashRegisterSessionStatus;
+      location_id: number;
+      location_name?: string | null;
+      cash_register_id: number;
+      cash_register_name?: string | null;
+      cash_register_code?: string | null;
+      user_id: number;
+      user_name?: string | null;
+      opened_at: string;
+      opening_amount: number;
+      closed_at?: string | null;
+      closed_by_name?: string | null;
+      expected_cash?: number | null;
+      counted_cash?: number | null;
+      difference?: number | null;
+      totals?: CashRegisterSessionSummary | null;
+      notes?: string | null;
+    }
+
+    interface CashRegisterSessionSummary {
+      opening_amount: number;
+      sales_count: number;
+      sales_total: number;
+      cancelled_count: number;
+      by_method: Record<string, { income: number; expense: number; net: number }>;
+      expected_cash: number;
+    }
+
+    type PosPaymentMethod = "cash" | "card" | "transfer";
+
+    /** Renglón del catálogo del POS: producto suelto o paquete. */
+    interface PosCatalogItem {
+      key: string;
+      product_id: number;
+      package_id: number | null;
+      name: string;
+      code: string | null;
+      price: number;
+      unit: { id: number; abbreviation: string; type: string } | null;
+      stock: number;
+      per_package?: number;
+    }
+
+    interface PosSalePayload {
+      details: {
+        product_id: number;
+        package_id?: number | null;
+        quantity: number;
+        unit_price?: number;
+        discount?: number;
+      }[];
+      payments: { method: PosPaymentMethod; amount: number; tendered?: number }[];
+      customer_id?: number | null;
+      notes?: string;
+    }
+
+    interface PosSaleResult {
+      id: number;
+      sale_number: string;
+      total: number;
+      discount: number;
+      payment_method: PosPaymentMethod | "mixed";
+      payments: { method: PosPaymentMethod; amount: number; tendered: number | null; change: number | null }[];
+      change: number;
+    }
+
     interface User {
       id: number;
       name: string;
