@@ -25,7 +25,7 @@ export default function OpenShiftView({ locationName, onOpened }: Props) {
   useEffect(() => {
     (async () => {
       try {
-        const res: any = await Services.cashRegisters.index({ is_active: 1, per_page: 100 } as any);
+        const res: any = await Services.cashRegisters.index({ is_active: 1, current_location: 1, per_page: 100 } as any);
         const list: App.Entities.CashRegister[] = res?.data?.data ?? res?.data ?? [];
         setRegisters(list);
         const free = list.filter((r) => !r.open_session);
