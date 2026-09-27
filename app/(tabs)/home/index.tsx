@@ -45,6 +45,7 @@ interface QuickAccess {
   description: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   link: string;
+  permission?: string;
 }
 
 // Reducido de 10 a 6 accesos prioritarios. El resto se accede
@@ -64,6 +65,14 @@ const QUICK_ACCESS: QuickAccess[] = [
     description: "Compras a proveedores",
     icon: "cart-outline",
     link: "/(tabs)/home/purchases",
+  },
+  {
+    key: "pos",
+    label: "Punto de venta",
+    description: "Cobrar en caja",
+    icon: "point-of-sale",
+    link: "/(stacks)/pos",
+    permission: "sales_pos",
   },
   {
     key: "ventas",
@@ -98,6 +107,7 @@ const QUICK_ACCESS: QuickAccess[] = [
 export default function HomeScreen() {
   const router = useRouter();
   const auth = useAuth();
+  const quickAccess = QUICK_ACCESS.filter((item) => !item.permission || auth.hasPermission(item.permission));
   const { colors } = useTheme();
   const { selectedLocation } = useSelectedLocation();
   const { isMobile } = useResponsive();
@@ -428,7 +438,7 @@ export default function HomeScreen() {
               style={styles.quickScroll}
               contentContainerStyle={styles.quickScrollContent}
             >
-              {QUICK_ACCESS.map((item) => (
+              {quickAccess.map((item) => (
                 <TouchableOpacity
                   key={item.key}
                   style={styles.quickCompactCard}
@@ -450,7 +460,7 @@ export default function HomeScreen() {
             </ScrollView>
           ) : (
             <View style={styles.quickGrid}>
-              {QUICK_ACCESS.map((item) => (
+              {quickAccess.map((item) => (
                 <QuickAccessCard
                   key={item.key}
                   icon={item.icon}

@@ -10,6 +10,7 @@
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
@@ -27,6 +28,7 @@ interface ModuleItem {
   description: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   route: string;
+  permission?: string;
 }
 
 interface ModuleSection {
@@ -90,6 +92,13 @@ const MODULE_SECTIONS: ModuleSection[] = [
   {
     label: "Ventas",
     items: [
+      {
+        label: "Punto de venta",
+        description: "Cobrar en caja por turno",
+        icon: "point-of-sale",
+        route: "/(stacks)/pos",
+        permission: "sales_pos",
+      },
       {
         label: "Ventas",
         description: "Ventas a clientes",
@@ -164,11 +173,21 @@ const MODULE_SECTIONS: ModuleSection[] = [
 export default function AllModulesScreen() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const { hasPermission } = useAuth();
+
+  const sections = useMemo(
+    () =>
+      MODULE_SECTIONS.map((section) => ({
+        ...section,
+        items: section.items.filter((item) => !item.permission || hasPermission(item.permission)),
+      })),
+    [hasPermission]
+  );
 
   const filteredSections = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return MODULE_SECTIONS;
-    return MODULE_SECTIONS.map((section) => ({
+    if (!q) return sections;
+    return sections.map((section) => ({
       ...section,
       items: section.items.filter(
         (item) =>
@@ -176,9 +195,9 @@ export default function AllModulesScreen() {
           item.description.toLowerCase().includes(q)
       ),
     })).filter((section) => section.items.length > 0);
-  }, [query]);
+  }, [query, sections]);
 
-  const totalModules = MODULE_SECTIONS.reduce(
+  const totalModules = sections.reduce(
     (acc, s) => acc + s.items.length,
     0
   );

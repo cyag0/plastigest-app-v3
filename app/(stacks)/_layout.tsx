@@ -18,6 +18,13 @@ export default function _layout() {
       }}
     >
       <Stack.Screen
+        name="pos/index"
+        options={{
+          title: "Punto de venta",
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
         name="selectCompany"
         options={{
           title: "Seleccionar Empresa",
