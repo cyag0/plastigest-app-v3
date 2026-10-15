@@ -2,6 +2,7 @@ import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import { generateCrudMenu } from "@/utils/routes";
 import Services from "@/utils/services";
@@ -13,6 +14,17 @@ import { Avatar } from "react-native-paper";
 export default function LocationsIndexScreen() {
   const navigation = useRouter();
   const { company } = useSelectedCompany();
+  const { hasPermission } = useAuth();
+  // Sin el permiso el backend responde 403: la acción no se ofrece. Quien no
+  // tiene acceso a todas las sucursales (locations_all) solo ve las suyas.
+  const crudMenu = generateCrudMenu("/(tabs)/administration/locations" as any, {
+    showEdit: hasPermission("locations_update"),
+    showDelete: hasPermission("locations_delete"),
+  });
+  const menu = {
+    ...crudMenu,
+    onCreate: hasPermission("locations_create") ? crudMenu.onCreate : undefined,
+  };
 
   const columns: AppListColumn<any>[] = [
     {
@@ -74,7 +86,7 @@ export default function LocationsIndexScreen() {
           ...(item.email ? [{ label: "Email", value: item.email }] : []),
         ],
       })}
-      menu={generateCrudMenu("/(tabs)/administration/locations" as any)}
+      menu={menu}
       searchPlaceholder="Buscar sucursales..."
       emptyMessage="No hay sucursales para mostrar"
     />
