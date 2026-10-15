@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Eliminar mi cuenta · GCStock</title>
+    <meta name="description" content="Cómo pedir la baja de tu cuenta de GCStock y qué pasa con tus datos." />
+    <meta name="theme-color" content="#4F7A3A" />
+    <!--
+      PENDIENTE ANTES DE PUBLICAR EN LAS TIENDAS: reemplazar el correo marcado
+      con <mark class="pendiente"> y quitar el recuadro "Borrador". Esta página
+      se enlaza desde el inicio de sesión de la app (app/login.tsx) y sirve como
+      URL de "eliminación de cuenta" en Google Play
+      (https://app.cocos-francisco.com/eliminar-cuenta).
+    -->
+    <style>
+      :root { color-scheme: light; }
+      body {
+        margin: 0;
+        background: #f5f7f3;
+        color: #1f2a1c;
+        font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 32px 16px 48px;
+      }
+      header { border-bottom: 3px solid #4f7a3a; margin-bottom: 24px; }
+      .marca { color: #4f7a3a; font-weight: 800; letter-spacing: 0.02em; margin: 0; }
+      h1 { font-size: 1.75rem; line-height: 1.25; margin: 4px 0 16px; }
+      h2 { font-size: 1.15rem; margin: 28px 0 8px; color: #33502a; }
+      ol, ul { padding-left: 1.25rem; }
+      li { margin: 6px 0; }
+      a { color: #33502a; }
+      .borrador {
+        background: #fff4ce;
+        border: 1px solid #e0c35c;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 24px;
+        font-size: 0.95rem;
+      }
+      mark.pendiente { background: #fff4ce; padding: 0 4px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="marca">GCStock</p>
+        <h1>Eliminar mi cuenta</h1>
+      </header>
+
+      <p class="borrador">
+        <strong>Borrador:</strong> el correo <mark class="pendiente">resaltado</mark> debe
+        reemplazarse con el correo real de contacto antes de publicar esta página.
+      </p>
+
+      <p>
+        Las cuentas de GCStock las crea el administrador de cada negocio para su personal. Puedes
+        pedir que se elimine la tuya, y con ella tus datos personales, de cualquiera de estas dos
+        formas:
+      </p>
+
+      <h2>Opción 1: con el administrador de tu negocio</h2>
+      <p>
+        Pide al dueño o encargado de tu negocio que elimine tu usuario desde la sección de
+        usuarios de la app. Desde ese momento ya no podrás iniciar sesión.
+      </p>
+
+      <h2>Opción 2: por correo</h2>
+      <ol>
+        <li>
+          Escribe a
+          <mark class="pendiente"><a href="mailto:privacidad@REEMPLAZAR.com?subject=Baja%20de%20cuenta%20GCStock">[CORREO DE CONTACTO]</a></mark>
+          desde el correo con el que inicias sesión en GCStock.
+        </li>
+        <li>Pon como asunto "Baja de cuenta GCStock" e incluye tu nombre y el negocio o sucursal donde trabajas.</li>
+        <li>
+          Confirmaremos que la petición es tuya y te avisaremos por correo cuando la cuenta esté
+          eliminada, en un plazo máximo de 20 días hábiles.
+        </li>
+      </ol>
+
+      <h2>Qué se elimina y qué se conserva</h2>
+      <ul>
+        <li>
+          <strong>Se elimina:</strong> tu acceso a la app y tus datos de usuario (correo,
+          contraseña, rol y sucursales asignadas), así como los identificadores de tus
+          dispositivos para notificaciones.
+        </li>
+        <li>
+          <strong>Se conserva:</strong> las operaciones que registraste (ventas, cobros, cortes de
+          caja, compras y movimientos de inventario), porque son registros contables del negocio
+          que deben guardarse el tiempo que exigen las leyes fiscales. En ellas puede seguir
+          apareciendo tu nombre como la persona que hizo la operación.
+        </li>
+      </ul>
+
+      <p>
+        Para saber más sobre cómo se tratan tus datos, consulta el
+        <a href="/privacidad.html">Aviso de privacidad</a>.
+      </p>
+    </main>
+  </body>
+</html>

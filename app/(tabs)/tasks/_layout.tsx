@@ -2,6 +2,10 @@ import AppBar from "@/components/App/AppBar";
 import { Stack } from "expo-router";
 import React from "react";
 
+// Si una pantalla de esta sección truena, sólo se reemplaza la sección
+// (el menú y el resto de la app siguen) y el error se reporta.
+export { RouteErrorBoundary as ErrorBoundary } from "@/components/ErrorBoundary";
+
 export default function TasksLayout() {
   return (
     <Stack

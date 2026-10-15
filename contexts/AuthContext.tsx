@@ -2,10 +2,20 @@ import { clearSelectDataCache } from "@/components/Form/AppProSelect/cacheBus";
 import {
   authAPI,
   clearSessionStorage,
+  clearTabSelection,
+  describeError,
   getAuthToken,
+  getSelectedCompany,
+  getSelectedLocation,
+  isNetworkError,
+  removeSelectedCompany,
+  removeSelectedLocation,
   setAuthToken,
+  setSelectedCompany as storeSelectedCompany,
+  setSelectedLocation as storeSelectedLocation,
   onCompanyForbidden,
   onLocationForbidden,
+  onSessionChangedInOtherTab,
   onUnauthorized,
 } from "@/utils/axios";
 import Services from "@/utils/services";
@@ -107,9 +117,11 @@ interface AuthContextType {
   clearCompanySelection: () => Promise<void>;
   selectLocation: (location: any | null) => Promise<void>;
   location: App.Entities.Location | null;
-  // Estado del permiso de notificaciones push (web principalmente).
-  // "default" = nunca se ha pedido, "granted" = aceptado, "denied" = bloqueado,
-  // "unsupported" = el navegador no soporta.
+  // Estado de las notificaciones push (web principalmente).
+  // "default" = nunca se ha pedido (o el registro falló y hay que reintentar),
+  // "granted" = aceptado y con el token registrado (o registrándose),
+  // "denied" = bloqueado, "unsupported" = el navegador o este build no lo
+  // permite (p. ej. faltan las claves de Firebase). Ver usePushNotifications.
   notificationPermission: "default" | "granted" | "denied" | "unsupported";
   // Dispara el dialogo nativo del navegador. Debe llamarse desde un onPress
   // (user gesture) para que los navegadores modernos muestren el prompt.
@@ -239,8 +251,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Variables de entorno
   const USER_DATA_KEY = process.env.EXPO_PUBLIC_USER_DATA_KEY || "user_data";
-  const COMPANY_DATA_KEY = "selected_company";
-  const LOCATION_DATA_KEY = "selected_location";
   const COMPANIES_DATA_KEY =
     process.env.EXPO_PUBLIC_COMPANIES_DATA_KEY || "companies_list";
   const PERMISSIONS_KEY_PREFIX = "user_permissions";
@@ -322,7 +332,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setPermissions(perms);
       await AsyncStorage.setItem(permissionsKey, JSON.stringify(perms));
     } catch (error) {
-      console.error("Error loading permissions:", error);
+      console.error("Error loading permissions:", describeError(error));
       // Intentar restaurar desde caché
       try {
         const cached = await AsyncStorage.getItem(permissionsKey);
@@ -364,7 +374,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       return [];
     } catch (error) {
-      console.error("Error loading companies:", error);
+      console.error("Error loading companies:", describeError(error));
       // Intentar cargar desde caché local
       try {
         const cachedCompanies = await AsyncStorage.getItem(COMPANIES_DATA_KEY);
@@ -391,7 +401,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       clearSelectDataCache();
       setSelectedCompany(company);
-      await AsyncStorage.setItem(COMPANY_DATA_KEY, JSON.stringify(company));
+      await storeSelectedCompany(company);
       // Las notificaciones son por empresa: el contador de la campana se
       // recarga con la empresa nueva (ya guardada para el header X-Company-ID).
       void loadUnreadNotificationsCount();
@@ -409,13 +419,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setIsSwitchingLocation(true);
       clearSelectDataCache();
 
+      // Sólo en esta pestaña (y como inicial para las nuevas): las demás
+      // pestañas conservan su sucursal.
       if (location) {
-        await AsyncStorage.setItem(
-          LOCATION_DATA_KEY,
-          JSON.stringify(location)
-        );
+        await storeSelectedLocation(location);
       } else {
-        await AsyncStorage.removeItem(LOCATION_DATA_KEY);
+        await removeSelectedLocation();
       }
 
       setLocation(location);
@@ -443,8 +452,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setLocation(null);
       setPermissions([]);
       setUnreadNotificationsCount(0);
-      await AsyncStorage.removeItem(COMPANY_DATA_KEY);
-      await AsyncStorage.removeItem(LOCATION_DATA_KEY);
+      await removeSelectedCompany();
+      await removeSelectedLocation();
       await clearPermissionsCache();
     } catch (error) {
       console.error("Error clearing company selection:", error);
@@ -457,10 +466,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    */
   const restoreSavedSelection = async () => {
     try {
-      const cachedCompany = await AsyncStorage.getItem(COMPANY_DATA_KEY);
-      const cachedLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
-      const parsedCompany = cachedCompany ? JSON.parse(cachedCompany) : null;
-      const parsedLocation = cachedLocation ? JSON.parse(cachedLocation) : null;
+      // Selección de esta pestaña (en una nueva, la última que se eligió).
+      const parsedCompany = await getSelectedCompany();
+      const parsedLocation = await getSelectedLocation();
       const permissionsKey = getPermissionsStorageKey(
         parsedCompany?.id,
         parsedLocation?.id,
@@ -487,7 +495,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // loadPermissions pudo descubrir que la sucursal guardada ya no es
       // válida (location_forbidden): el interceptor la borra del storage.
       // Se relee para no restaurar una sucursal a la que ya no tiene acceso.
-      const stillStoredLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
+      const stillStoredLocation = await getSelectedLocation();
       if (parsedCompany && parsedLocation && stillStoredLocation) {
         setLocation(parsedLocation);
       } else {
@@ -537,7 +545,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         // Sin red, timeout o error del servidor: no es motivo para cerrar la
         // sesión. Se continúa con el usuario guardado y se vuelve a verificar
         // en cuanto haya conexión (ver efecto de re-verificación).
-        console.warn("No se pudo verificar la sesión:", error?.message ?? error);
+        console.warn("No se pudo verificar la sesión:", describeError(error));
         const cachedUser = await readCachedUser();
         if (!cachedUser) {
           setUser(null);
@@ -563,7 +571,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (error: any) {
       // Errores locales inesperados (storage). No se borra el token: el
       // usuario puede reintentar.
-      console.error("Error checking auth status:", error);
+      console.error("Error checking auth status:", describeError(error));
       setAuthError(
         "No se pudo restaurar la sesión. Inténtalo de nuevo.",
       );
@@ -675,9 +683,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       return { success: true };
     } catch (error: any) {
-      console.error("Login error:", error?.message ?? error);
+      console.error("Login error:", describeError(error));
 
-      let errorMessage = "Error de conexión. Inténtalo de nuevo.";
+      // Sin respuesta del servidor: el interceptor ya dejó el motivo en
+      // español (sin red o tiempo agotado).
+      let errorMessage = isNetworkError(error)
+        ? error.message
+        : "Error de conexión. Inténtalo de nuevo.";
 
       // Extraer info de rate limit de los headers de la respuesta.
       // Laravel siempre envía X-RateLimit-Limit y X-RateLimit-Remaining en
@@ -740,7 +752,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         await deactivateToken();
       } catch (error) {
-        console.warn("No se pudo desactivar el token FCM:", error);
+        console.warn("No se pudo desactivar el token FCM:", describeError(error));
       }
 
       // Intentar hacer logout en el servidor
@@ -750,7 +762,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         // Si falla el logout en el servidor, continuar con el logout local
         console.warn(
           "Server logout failed, continuing with local logout:",
-          error
+          describeError(error)
         );
       }
 
@@ -774,6 +786,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     checkAuthStatus();
     // Solo al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Web: el token es de todas las pestañas (la empresa y la sucursal no, ver
+  // utils/axios). Si en otra pestaña se cierra la sesión, aquí también; si
+  // allá se inicia sesión, esta pestaña (en login) la toma; y si allá se entra
+  // con OTRA cuenta, esta se recarga para no seguir operando como el usuario
+  // anterior con el token del nuevo.
+  const userRef = useRef<User | null>(null);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+  useEffect(() => {
+    return onSessionChangedInOtherTab((change) => {
+      const currentUser = userRef.current;
+      if (change.kind === "token") {
+        if (change.token === null) {
+          if (!currentUser) return;
+          clearTabSelection();
+          resetSessionState();
+          setSessionEndMessage("La sesión se cerró en otra pestaña. Inicia sesión de nuevo.");
+        } else if (!currentUser) {
+          void checkAuthStatus();
+        }
+        return;
+      }
+      if (
+        currentUser &&
+        change.userId !== null &&
+        change.userId !== currentUser.id &&
+        typeof window !== "undefined"
+      ) {
+        clearTabSelection();
+        window.alert(
+          "Se inició sesión con otra cuenta en otra pestaña. Esta pestaña se va a recargar.",
+        );
+        window.location.reload();
+      }
+    });
+    // resetSessionState y checkAuthStatus solo usan setters y el storage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

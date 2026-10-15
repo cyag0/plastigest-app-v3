@@ -11,8 +11,10 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.alejandrotrejo.plastigest",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
-        "NSUserNotificationsUsageDescription": "Esta aplicación necesita permisos para enviarte notificaciones importantes sobre tu inventario.",
         "UIBackgroundModes": [
           "remote-notification"
         ]
@@ -26,6 +28,7 @@
         "backgroundColor": "#4F7A3A"
       },
       "package": "com.alejandrotrejo.plastigest",
+      "allowBackup": false,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.POST_NOTIFICATIONS",
@@ -74,7 +77,7 @@
         "expo-camera",
         {
           "cameraPermission": "Permite a $(PRODUCT_NAME) acceder a tu cámara para escanear códigos de barras.",
-          "microphonePermission": "Permite a $(PRODUCT_NAME) acceder a tu micrófono.",
+          "microphonePermission": false,
           "recordAudioAndroid": false
         }
       ],
@@ -83,7 +86,7 @@
         {
           "photosPermission": "Permite a $(PRODUCT_NAME) acceder a tus fotos para adjuntar imágenes.",
           "cameraPermission": "Permite a $(PRODUCT_NAME) usar la cámara para tomar fotos de productos y comprobantes.",
-          "microphonePermission": "Permite a $(PRODUCT_NAME) acceder a tu micrófono."
+          "microphonePermission": false
         }
       ]
     ],

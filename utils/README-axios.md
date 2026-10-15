@@ -50,10 +50,10 @@ import axiosClient, { authAPI, setAuthToken } from "./utils/axios";
 const handleLogin = async (email: string, password: string) => {
   try {
     const response = await authAPI.login({ email, password });
-    const { token, user } = response.data;
+    const { access_token, user } = response.data;
 
     // Guardar token
-    await setAuthToken(token);
+    await setAuthToken(access_token);
 
     console.log("Login exitoso:", user);
   } catch (error) {
@@ -64,7 +64,7 @@ const handleLogin = async (email: string, password: string) => {
 // Hacer request autenticado
 const fetchUserData = async () => {
   try {
-    const response = await axiosClient.get("/user");
+    const response = await axiosClient.get("/auth/me");
     console.log("Usuario:", response.data);
   } catch (error) {
     console.error("Error obteniendo usuario:", error);
@@ -93,11 +93,11 @@ En `config/cors.php`:
 
 El cliente está configurado para trabajar con las respuestas estándar de Laravel Sanctum:
 
-### Login/Register exitoso:
+### Login exitoso:
 
 ```json
 {
-  "token": "1|abc123...",
+  "access_token": "1|abc123...",
   "user": {
     "id": 1,
     "name": "Usuario",

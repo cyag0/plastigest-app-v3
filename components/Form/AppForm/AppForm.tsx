@@ -2,7 +2,9 @@ import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { describeError } from "@/utils/axios";
 import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
 import { goBack } from "@/utils/navigation";
 import { CrudService } from "@/utils/services/crudService";
@@ -113,6 +115,8 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   const alerts = useAlerts();
   const { colors } = useTheme();
   const { hasPermission } = useAuth();
+  // Candado contra envíos dobles (guardar y eliminar), ver handleSubmit.
+  const { submitting, run } = useSubmitGuard();
   // Web usa botones compactos alineados a la derecha; mobile mantiene
   // los botones grandes apilados y a todo lo ancho.
   const isWeb = Platform.OS === "web";
@@ -154,7 +158,13 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     },
   }));
 
+  // Va antes de useFormik a propósito: este efecto corre antes que el
+  // validateOnMount de Formik (después, la validación del formulario vacío
+  // llegaba tarde y dejaba errores sobre los datos ya cargados).
+  // loadInitialValues es una función declarada más abajo; en ejecución no
+  // hay problema, la regla del React Compiler (apagado) no lo distingue.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/immutability
     loadInitialValues();
   }, [props.id, props.initialValues]);
 
@@ -269,7 +279,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         return;
       }
     } catch (error) {
-      console.error("Error loading initial values:", error);
+      console.error("Error loading initial values:", describeError(error));
       alerts.error("Error al cargar los datos del formulario");
       props.onError?.(error, {} as T);
       formInstance.setValues({} as T);
@@ -278,7 +288,15 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     }
   }
 
-  async function handleSubmit(_values: T) {
+  // Un doble toque, un Enter repetido o un botón del header que llama a
+  // submitForm dos veces llegan antes de que isSubmitting/loading
+  // deshabiliten el botón: se mandaban dos altas iguales. Mientras un envío
+  // sigue en curso (confirmación incluida), los demás se ignoran.
+  function handleSubmit(_values: T) {
+    return run(() => submitValues(_values));
+  }
+
+  async function submitValues(_values: T) {
     try {
       setLoading(true);
 
@@ -321,7 +339,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         props.onSuccess?.(response.data, _values);
       }
     } catch (error: any) {
-      console.error("Error submitting form:", error);
+      console.error("Error submitting form:", describeError(error));
       // En un 422 el backend manda "Error de validación" en message y el
       // detalle por campo en errors; sin él el usuario no sabe qué corregir.
       const data = error?.response?.data;
@@ -392,7 +410,11 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     Boolean(props.id && props.api) &&
     (!props.deletePermission || hasPermission(props.deletePermission));
 
-  async function handleDelete() {
+  function handleDelete() {
+    return run(deleteRecord);
+  }
+
+  async function deleteRecord() {
     if (!props.id || !props.api) return;
 
     const confirmed = await alerts.confirm(
@@ -415,7 +437,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         goBack();
       }
     } catch (error: any) {
-      console.error("Error deleting record:", error);
+      console.error("Error deleting record:", describeError(error));
       const status = error?.response?.status;
       const message =
         error?.response?.data?.message ||
@@ -457,7 +479,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
                     mode="outlined"
                     compact={isWeb}
                     onPress={handleDelete}
-                    disabled={formInstance.isSubmitting || loading}
+                    disabled={formInstance.isSubmitting || loading || submitting}
                     textColor={colors.error}
                     loading={loading}
                   >
@@ -490,7 +512,8 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
                       disabled={
                         !formInstance.isValid ||
                         formInstance.isSubmitting ||
-                        loading
+                        loading ||
+                        submitting
                       }
                       loading={loading}
                     >
