@@ -44,6 +44,13 @@ interface SelectedProduct {
 type SelectedProducts = Record<number | string, SelectedProduct>;
 
 /**
+ * Renglón de la lista. El del producto base de uno con for_sale = false se
+ * guarda (de él salen la existencia y la unidad de sus paquetes) pero no se
+ * ofrece: esa pieza no se vende suelta, solo sus paquetes.
+ */
+type SaleListItem = ProductListItem & { for_sale?: boolean };
+
+/**
  * Resultado de confirmar la venta:
  * - charged: quedó registrada (`sale` es la respuesta del servidor; con
  *   `recovered` se encontró por su llave después de perder la respuesta).
@@ -114,7 +121,7 @@ interface SaleProviderProps {
 }
 
 export function SaleProvider({ children }: SaleProviderProps) {
-  const [products, setProducts] = useState<ProductListItem[]>([]);
+  const [products, setProducts] = useState<SaleListItem[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [groupedUnits, setGroupedUnits] = useState<GroupedUnits>(
@@ -194,7 +201,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
         // Procesar productos
         if (productsData) {
           const products = productsData as App.Entities.Product[];
-          const expandedProducts: ProductListItem[] = [];
+          const expandedProducts: SaleListItem[] = [];
 
           products.forEach((product: App.Entities.Product) => {
             // Obtener unidades disponibles para este producto
@@ -218,6 +225,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
               main_image: product.main_image,
               available_units: availableUnits,
               is_package: false,
+              for_sale: product.for_sale !== false,
             });
 
             // Agregar cada paquete como un producto separado
@@ -289,8 +297,12 @@ export function SaleProvider({ children }: SaleProviderProps) {
     return totalUsed;
   };
 
-  const handleAddProduct = (product: ProductListItem, unitId: number) => {
+  const handleAddProduct = (product: SaleListItem, unitId: number) => {
     if (cartLocked()) return;
+    if (!product.is_package && product.for_sale === false) {
+      alerts.error(`${product.name} solo se vende por paquete.`);
+      return;
+    }
     const productId = product.id;
     const defaultUnit = product.available_units?.[0];
     const basePrice = parseFloat(product.price.toString());
@@ -688,8 +700,15 @@ export function SaleProvider({ children }: SaleProviderProps) {
     });
   }, [selectedProducts, products]);
 
+  // Lo que se ofrece en la lista y el escáner: sin la pieza suelta de los
+  // productos que solo se venden por paquete.
+  const offeredProducts = useMemo(
+    () => products.filter((product) => product.is_package || product.for_sale !== false),
+    [products],
+  );
+
   const value = {
-    products,
+    products: offeredProducts,
     units,
     categories,
     groupedUnits,

@@ -94,6 +94,8 @@ type Product = {
   unit_id: number;
   unit?: Unit;
   active_packages?: Package[];
+  /** false: la pieza suelta no se vende, solo sus paquetes. */
+  for_sale?: boolean;
   current_stock?: number;
   reserved_stock?: number;
   available_stock?: number;
@@ -164,6 +166,9 @@ const ProductCard = memo(function ProductCard({
   const image = resolveImage(product.main_image);
   const available = Number(product.available_stock ?? 0);
   const lowStock = available <= 0;
+  // for_sale = false: solo se ofrecen sus paquetes (el servidor rechaza la
+  // pieza suelta).
+  const soldLoose = product.for_sale !== false;
 
   return (
     <Surface style={styles.productCard} elevation={1}>
@@ -195,20 +200,28 @@ const ProductCard = memo(function ProductCard({
       <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
         {available.toFixed(2)} {product.unit?.abbreviation ?? ""}
       </Text>
-      <Text variant="titleMedium" style={{ color: palette.primary, fontWeight: "700" }}>
-        {fmt(Number(product.sale_price ?? product.price ?? 0))}
-      </Text>
-
-      <Pressable
-        style={[styles.addButton, lowStock && { opacity: 0.5 }]}
-        disabled={lowStock}
-        onPress={() => onAdd(product, null)}
-      >
-        <MaterialCommunityIcons name="plus" size={16} color="white" />
-        <Text style={{ color: "white", fontWeight: "700", fontSize: 12 }}>
-          Unidad
+      {soldLoose ? (
+        <Text variant="titleMedium" style={{ color: palette.primary, fontWeight: "700" }}>
+          {fmt(Number(product.sale_price ?? product.price ?? 0))}
         </Text>
-      </Pressable>
+      ) : (
+        <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
+          Solo por paquete
+        </Text>
+      )}
+
+      {soldLoose && (
+        <Pressable
+          style={[styles.addButton, lowStock && { opacity: 0.5 }]}
+          disabled={lowStock}
+          onPress={() => onAdd(product, null)}
+        >
+          <MaterialCommunityIcons name="plus" size={16} color="white" />
+          <Text style={{ color: "white", fontWeight: "700", fontSize: 12 }}>
+            Unidad
+          </Text>
+        </Pressable>
+      )}
 
       {(product.active_packages ?? []).length > 0 && (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
@@ -424,6 +437,11 @@ export default function KioskScreen() {
   const handleAddFromCard = useCallback(
     (product: Product, pkg: Package | null) => {
       if (cartLocked()) return;
+      // También al escanear el código del producto: no se vende suelto.
+      if (!pkg && product.for_sale === false) {
+        alerts.error(`${product.name} solo se vende por paquete.`);
+        return;
+      }
       const available = Number(product.available_stock ?? 0);
       const basePerUnit = pkg ? Number(pkg.quantity_per_package ?? 1) : 1;
       const basePrice = Number(product.sale_price ?? product.price ?? 0);
