@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/utils/dates";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -221,34 +222,21 @@ function MovementRow({ item, unit }: { item: Movement; unit: string }) {
         </Text>
 
         <Text variant="bodySmall" style={styles.muted}>
-          {formatDate(item.date)}
+          {formatDateTime(item.date)}
           {item.location ? ` · ${item.location.name}` : ""}
           {item.counterpart_location
             ? ` ${isIn ? "←" : "→"} ${item.counterpart_location.name}`
             : ""}
         </Text>
 
-        {(item.user || item.notes) && (
+        {(item.user || item.notes || item.reference?.label) && (
           <Text variant="bodySmall" style={styles.muted}>
-            {item.user?.name}
-            {item.user && item.notes ? " · " : ""}
-            {item.notes}
+            {[item.reference?.label, item.user?.name, item.notes].filter(Boolean).join(" · ")}
           </Text>
         )}
       </View>
     </View>
   );
-}
-
-function formatDate(value: string) {
-  const d = new Date(value);
-  return d.toLocaleString(undefined, {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 const useStyles = () =>

@@ -34,6 +34,8 @@ const segmentLabels: Record<string, string> = {
   home: "Inicio",
   inventory: "Inventario",
   kiosk: "Quiosco",
+  kardex: "Kárdex",
+  activity: "Actividad",
   locations: "Sucursales",
   movements: "Movimientos",
   packages: "Paquetes",

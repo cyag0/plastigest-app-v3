@@ -58,6 +58,12 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
+        name="kardex"
+        options={{
+          title: "Kárdex",
+        }}
+      />
+      <Stack.Screen
         name="weekly-inventory/index"
         options={{ title: "Inventario", headerShown: true }}
       />

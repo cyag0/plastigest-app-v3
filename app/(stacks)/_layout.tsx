@@ -85,6 +85,12 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
+        name="activity"
+        options={{
+          title: "Mi actividad",
+        }}
+      />
+      <Stack.Screen
         name="change-password"
         options={{
           title: "Cambiar Contraseña",

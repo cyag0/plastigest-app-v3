@@ -937,8 +937,19 @@ namespace App {
       /** La otra sucursal, en traspasos. */
       counterpart_location: { id: number; name: string } | null;
       user: { id: number; name: string } | null;
-      reference: { type: string; id: number } | null;
+      /** label: folio legible del documento ("Venta SAL-…"). */
+      reference: { type: string; id: number; label?: string | null } | null;
       notes: string | null;
+      /** Sólo en el kárdex general. */
+      product?: { id: number; name: string; code?: string | null; unit?: string | null } | null;
+    }
+
+    /** Opciones de filtro que devuelve el kárdex general. */
+    interface KardexFilters {
+      reasons: { value: string; label: string }[];
+      users: { value: number; label: string }[];
+      locations: { value: number; label: string }[];
+      can_choose_location: boolean;
     }
 
     type BusinessReportKey = "sales" | "inventory-valuation" | "adjustments" | "cash-differences";
@@ -956,6 +967,26 @@ namespace App {
       can_choose_location: boolean;
       current_location: { id: number; name: string } | null;
       locations: { id: number; name: string }[];
+    }
+
+    /** Un renglón de la bitácora ("Mi actividad"). */
+    interface ActivityEntry {
+      id: number;
+      date: string;
+      module: string;
+      module_label: string;
+      event: string;
+      description: string;
+      user: { id: number | null; name: string | null };
+      location: { id: number; name: string } | null;
+      subject: { type: string; id: number | null; label: string | null } | null;
+      changes: Record<string, any> | null;
+    }
+
+    interface ActivityResponse {
+      data: ActivityEntry[];
+      meta: { current_page: number; last_page: number; per_page: number; total: number };
+      filters: { modules: { value: string; label: string }[] };
     }
 
     interface StockMovementsResponse {

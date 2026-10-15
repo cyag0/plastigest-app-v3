@@ -90,6 +90,16 @@ export default function AdministrationScreen() {
       requiredPermission: "cash_registers_list",
     },
     {
+      id: "activity-log",
+      title: "Bitácora",
+      description: "Quién hizo qué: ventas, cortes, cambios de precio y permisos",
+      icon: "history",
+      route: "/(stacks)/activity?user_id=all",
+      color: palette.textSecondary,
+      category: "company",
+      requiredPermission: "users_read",
+    },
+    {
       id: "roles",
       title: "Roles y permisos",
       description: "Define roles y gestiona permisos de acceso",

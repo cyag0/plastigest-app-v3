@@ -37,6 +37,22 @@ const Services = {
       return response.data;
     },
   },
+  /** Kárdex general: todos los movimientos de inventario, con filtros. */
+  inventoryMovements: {
+    ...createCrudService<App.Entities.StockMovement>("/auth/admin/inventory-movements"),
+    /** Opciones de filtro (motivos, usuarios, sucursales). */
+    async filters(): Promise<App.Entities.KardexFilters> {
+      const response = await axiosClient.get("/auth/admin/inventory-movements", {
+        params: { per_page: 1 },
+      });
+      return response.data.filters;
+    },
+    /** URL firmada (10 min) del CSV con los mismos filtros. */
+    async exportUrl(params: Record<string, any>): Promise<string> {
+      const response = await axiosClient.get("/auth/admin/inventory-movements/export-url", { params });
+      return response.data.url;
+    },
+  },
   /** URL firmadas (30 min) de los documentos para imprimir. */
   print: {
     async saleTicketUrl(saleId: number, width: 58 | 80 = 80): Promise<string> {
@@ -76,6 +92,23 @@ const Services = {
     ): Promise<string> {
       const response = await axiosClient.get(`/auth/admin/business-reports/${report}/url`, { params });
       return response.data.url;
+    },
+  },
+  /** Bitácora: "me" (default), un id de usuario o "all" (toda la empresa). */
+  activity: {
+    async index(params: {
+      user_id?: number | "me" | "all";
+      /** "location": solo lo ocurrido en la sucursal actual. */
+      scope?: "location";
+      module?: string;
+      search?: string;
+      date_from?: string;
+      date_to?: string;
+      page?: number;
+      per_page?: number;
+    }): Promise<App.Entities.ActivityResponse> {
+      const response = await axiosClient.get("/auth/admin/activity", { params });
+      return response.data;
     },
   },
   transfers: {
