@@ -7,7 +7,7 @@ import { StyleSheet } from "react-native";
  *
  * RN 0.85 quitó `StyleSheet.absoluteFillObject`, pero react-native-paper 5
  * (Menu, Modal, FAB.Group, BottomNavigation, ActivityIndicator,
- * TouchableRipple) y react-native-skeleton-placeholder lo siguen usando.
+ * TouchableRipple) lo sigue usando.
  * Sin él, el fondo invisible que cierra un menú al tocar fuera quedaba de
  * tamaño cero en Android: el toque pasaba a la pantalla de abajo, el menú se
  * quedaba abierto y se podían abrir varios a la vez. En web,
