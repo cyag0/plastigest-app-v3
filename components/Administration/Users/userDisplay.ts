@@ -63,10 +63,15 @@ export function listFrom<T>(body: any): T[] {
   return [];
 }
 
-/** Mensaje del backend (422/403) o uno por defecto. */
+/**
+ * Mensaje del backend o uno por defecto: el primer error de campo (422), si no
+ * `message` (403, reglas de negocio) y si no `error`.
+ */
 export function apiMessage(error: any, fallback: string): string {
   const data = error?.response?.data;
   const fieldError = data?.errors ? (Object.values(data.errors).flat()[0] as string | undefined) : undefined;
-  const message = fieldError ?? data?.message;
-  return typeof message === "string" && message.trim() ? message : fallback;
+  const message = [fieldError, data?.message, data?.error].find(
+    (m): m is string => typeof m === "string" && m.trim() !== "",
+  );
+  return message ?? fallback;
 }

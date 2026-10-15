@@ -1,6 +1,7 @@
 import AdminSection, {
   AdminOption,
 } from "@/components/Administration/AdminSection";
+import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
 import EmptyState from "@/components/App/EmptyState";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
@@ -12,6 +13,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 export default function AdministrationScreen() {
   const { selectedCompany, user, location, hasPermission: authHasPermission } =
     useAuth();
+  const allLocations = useAllLocationsAccess();
 
   // Helper para verificar si el usuario tiene un permiso
   const hasPermission = (permission: string) => {
@@ -237,9 +239,9 @@ export default function AdministrationScreen() {
   const visibleOptions = adminOptions.filter((option) => {
     // Sin sucursal seleccionada no hay "esta sucursal".
     if (option.category === "location" && !location) return false;
-    // Quien no administra todas las sucursales solo ve a los usuarios de la
-    // suya: los tiene en "Esta sucursal".
-    if (option.id === "company-users" && !hasPermission("locations_list")) return false;
+    // Quien no entra a todas las sucursales (locations_all) solo ve a los
+    // usuarios de la suya: los tiene en "Esta sucursal".
+    if (option.id === "company-users" && !allLocations) return false;
     if (!option.requiredPermission) return true;
     return hasPermission(option.requiredPermission);
   });

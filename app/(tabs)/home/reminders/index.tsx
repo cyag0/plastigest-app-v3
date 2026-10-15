@@ -2,15 +2,21 @@ import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import { View } from "react-native";
 import { Text, Chip } from "react-native-paper";
 
 export default function RemindersIndex() {
   const navigation = router;
+  const alerts = useAlerts();
+  const { hasPermission } = useAuth();
+  // Cambia para recargar la lista (AppList no expone un refresh).
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const getTypeIcon = (type: string) => {
     const icons: Record<string, any> = {
@@ -35,14 +41,14 @@ export default function RemindersIndex() {
   const getStatusColor = (reminder: App.Entities.Reminder) => {
     if (reminder.status === "completed") return palette.success;
     if (reminder.is_overdue) return palette.error;
-    if (reminder.days_until_due !== null && reminder.days_until_due <= 3) return palette.warning;
+    if (reminder.days_until_due != null && reminder.days_until_due <= 3) return palette.warning;
     return palette.textSecondary;
   };
 
   const getStatusLabel = (reminder: App.Entities.Reminder) => {
     if (reminder.status === "completed") return "Completado";
     if (reminder.is_overdue) return "Vencido";
-    if (reminder.days_until_due !== null) {
+    if (reminder.days_until_due != null) {
       if (reminder.days_until_due === 0) return "Hoy";
       if (reminder.days_until_due === 1) return "Mañana";
       if (reminder.days_until_due <= 7) return `En ${reminder.days_until_due} días`;
@@ -55,6 +61,7 @@ export default function RemindersIndex() {
   return (
     <PermissionGate permission="reminders_list">
       <AppList
+      key={refreshKey}
       title="Recordatorios"
       service={Services.reminders}
       filters={[
@@ -81,15 +88,21 @@ export default function RemindersIndex() {
           ],
         },
         {
+          // "date" → date_from/date_to, lo que filtra el backend ("date_range"
+          // mandaba date_range_from/_to y no filtraba nada).
           type: "dateRange",
-          name: "date_range",
+          name: "date",
           label: "Rango de Fechas",
           placeholder: "Seleccionar fechas",
         },
       ]}
-      onPressCreate={() => {
-        navigation.push("/home/reminders/form");
-      }}
+      onPressCreate={
+        hasPermission("reminders_create")
+          ? () => {
+              navigation.push("/home/reminders/form");
+            }
+          : undefined
+      }
       onItemPress={(entity) => {
         navigation.push(`/home/reminders/form?id=${entity.id}`);
       }}
@@ -199,20 +212,25 @@ export default function RemindersIndex() {
       })}
       menu={{
         showView: false,
-        showEdit: true,
-        showDelete: true,
+        showEdit: hasPermission("reminders_update"),
+        showDelete: hasPermission("reminders_delete"),
         customActions: [
           {
             title: "Marcar como Completado",
             icon: "check-circle",
             color: palette.success,
-            show: (item: App.Entities.Reminder) => item.status === "pending",
+            // También los vencidos (status "overdue"); pide reminders_update.
+            show: (item: App.Entities.Reminder) =>
+              item.status !== "completed" && hasPermission("reminders_update"),
             onPress: async (item: App.Entities.Reminder) => {
               try {
                 await Services.reminders.markAsCompleted(item.id);
-                // La lista se recargará automáticamente
-              } catch (error) {
+                alerts.success("Recordatorio completado");
+                setRefreshKey((k) => k + 1);
+              } catch (error: any) {
                 console.error("Error al completar recordatorio:", error);
+                const data = error?.response?.data;
+                alerts.error(data?.message || data?.error || "No se pudo completar el recordatorio");
               }
             },
           },

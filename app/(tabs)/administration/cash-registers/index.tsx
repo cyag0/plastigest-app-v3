@@ -44,7 +44,10 @@ export default function CashRegistersIndexScreen() {
   const { scope } = useLocalSearchParams<{ scope?: string }>();
   const branchScope = scope === "location";
   const suffix = branchScope ? "?scope=location" : "";
-  const { location } = useAuth();
+  const { location, hasPermission } = useAuth();
+  // Sin el permiso el backend responde 403: la acción no se ofrece.
+  const canCreate = hasPermission("cash_registers_create");
+  const canEdit = hasPermission("cash_registers_update");
 
   const columns: AppListColumn<App.Entities.CashRegister>[] = [
     { title: "Código", dataIndex: "code", key: "code", width: 110 },
@@ -77,9 +80,11 @@ export default function CashRegistersIndexScreen() {
           : [],
       })}
       menu={{
-        onCreate: () => router.push(`${BASE}/form${suffix}` as any),
+        onCreate: canCreate ? () => router.push(`${BASE}/form${suffix}` as any) : undefined,
         onShow: (item) => router.push(`${BASE}/${item.id}${suffix}` as any),
         onEdit: (item) => router.push(`${BASE}/${item.id}/edit${suffix}` as any),
+        showEdit: canEdit,
+        showDelete: hasPermission("cash_registers_delete"),
       }}
       searchPlaceholder="Buscar por nombre o código..."
       emptyMessage={

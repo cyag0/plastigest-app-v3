@@ -1,19 +1,12 @@
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
-import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
-import { listFrom } from "./userDisplay";
+import { useCompanyRoles } from "./useCompanyRoles";
 
-export interface RoleOption {
-  id: number;
-  name: string;
-  description?: string | null;
-  permissions_count?: number;
-  is_active?: boolean;
-}
+export type { RoleOption } from "./useCompanyRoles";
 
 interface Props {
   value?: number | null;
@@ -28,29 +21,25 @@ interface Props {
 export default function RolePicker({ value, onChange, disabled }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const [roles, setRoles] = useState<RoleOption[] | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const { roles: allRoles, error } = useCompanyRoles();
+  // El rol que tenía al abrir (el primero que llega: en el formulario los
+  // valores cargan después de montar): si está desactivado se sigue mostrando.
+  const [initialValue, setInitialValue] = useState(value);
+  if (initialValue == null && value != null) setInitialValue(value);
+  // Los roles desactivados no se ofrecen, salvo el que ya tiene.
+  const roles = useMemo(
+    () => allRoles?.filter((role) => role.is_active !== false || role.id === initialValue) ?? null,
+    [allRoles, initialValue],
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    Services.admin.roles
-      .index({ all: true } as any)
-      .then((response: any) => {
-        if (cancelled) return;
-        const list = listFrom<RoleOption>(response?.data);
-        // Los roles desactivados no se ofrecen, salvo el que ya tiene.
-        setRoles(list.filter((role) => role.is_active !== false || role.id === value));
-      })
-      .catch(() => !cancelled && setLoadError(true));
-    return () => {
-      cancelled = true;
-    };
-    // Solo al montar: la lista de roles no cambia mientras se edita.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (loadError) {
-    return <Text style={styles.hint}>No se pudieron cargar los roles.</Text>;
+  if (error) {
+    return (
+      <Text style={styles.hint}>
+        {error?.response?.status === 403
+          ? "Para elegir el rol necesitas el permiso «Roles › Listar». Pídeselo al administrador."
+          : "No se pudieron cargar los roles."}
+      </Text>
+    );
   }
 
   if (roles === null) {

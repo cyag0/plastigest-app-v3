@@ -1,5 +1,6 @@
 import { goBack } from "@/utils/navigation";
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -17,8 +18,12 @@ import {
 export default function LocationDetailScreen() {
   const router = useRouter();
   const alerts = useAlerts();
+  const { hasPermission } = useAuth();
   const params = useLocalSearchParams();
   const locationId = params.id as string;
+  // Sin el permiso el backend responde 403: los botones no se ofrecen.
+  const canEdit = hasPermission("locations_update");
+  const canDelete = hasPermission("locations_delete");
 
   // El detalle trae la compañía anidada (el tipo base no la declara).
   const [location, setLocation] = useState<
@@ -40,9 +45,12 @@ export default function LocationDetailScreen() {
       const response = await Services.admin.locations.show(locationId);
       setLocation(response.data.data);
       loadedRef.current = true;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading location:", error);
-      alerts.error("No se pudo cargar la información de la sucursal");
+      // 403/404: sucursal de otra empresa o a la que no se tiene acceso.
+      alerts.error(
+        error?.response?.data?.message || "No se pudo cargar la información de la sucursal",
+      );
       if (firstLoad) goBack();
     } finally {
       setLoading(false);
@@ -262,30 +270,36 @@ export default function LocationDetailScreen() {
         </Card>
       </ScrollView>
       {/* Action buttons */}
-      <View style={[styles.actions, { padding: 16 }]}>
-        <Button
-          mode="contained"
-          onPress={handleEdit}
-          style={styles.editButton}
-          buttonColor={palette.primary}
-          textColor="#fff"
-          icon="pencil"
-        >
-          Editar Sucursal
-        </Button>
+      {(canEdit || canDelete) && (
+        <View style={[styles.actions, { padding: 16 }]}>
+          {canEdit && (
+            <Button
+              mode="contained"
+              onPress={handleEdit}
+              style={styles.editButton}
+              buttonColor={palette.primary}
+              textColor="#fff"
+              icon="pencil"
+            >
+              Editar Sucursal
+            </Button>
+          )}
 
-        <Button
-          mode="outlined"
-          onPress={handleDelete}
-          style={styles.deleteButton}
-          textColor={palette.error}
-          loading={deleting}
-          disabled={deleting}
-          icon="delete"
-        >
-          Eliminar
-        </Button>
-      </View>
+          {canDelete && (
+            <Button
+              mode="outlined"
+              onPress={handleDelete}
+              style={styles.deleteButton}
+              textColor={palette.error}
+              loading={deleting}
+              disabled={deleting}
+              icon="delete"
+            >
+              Eliminar
+            </Button>
+          )}
+        </View>
+      )}
     </View>
   );
 }

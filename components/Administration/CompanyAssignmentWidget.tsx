@@ -38,25 +38,45 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
   const [locations, setLocations] = useState<SelectOption[]>([]);
   const [roles, setRoles] = useState<SelectOption[]>([]);
   const [loading, setLoading] = useState(false);
+  // Antes un error (p. ej. 403 sin «Roles › Listar») dejaba los selects
+  // vacíos sin decir por qué.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     const params: any = { all: true };
     if (companyId) params.company_id = companyId;
 
-    Promise.all([
+    Promise.allSettled([
       Services.admin.locations.index(params),
       Services.admin.roles.index(params),
     ])
-      .then(([locRes, roleRes]) => {
-        const locs: any[] = Array.isArray(locRes.data) ? locRes.data : locRes.data?.data || [];
-        const rls: any[] = Array.isArray(roleRes.data) ? roleRes.data : roleRes.data?.data || [];
-        setLocations(
-          locs.map((l) => ({ value: String(l.id), label: shortLocationName(l.name, selectedCompany?.name) })),
-        );
-        setRoles(rls.map((r) => ({ value: String(r.id), label: r.name })));
+      .then(([locResult, roleResult]) => {
+        const problems: string[] = [];
+        if (locResult.status === "fulfilled") {
+          const locRes = locResult.value;
+          const locs: any[] = Array.isArray(locRes.data) ? locRes.data : (locRes.data as any)?.data || [];
+          setLocations(
+            locs.map((l) => ({ value: String(l.id), label: shortLocationName(l.name, selectedCompany?.name) })),
+          );
+        } else {
+          console.error(locResult.reason);
+          problems.push("No se pudieron cargar las sucursales.");
+        }
+        if (roleResult.status === "fulfilled") {
+          const roleRes = roleResult.value;
+          const rls: any[] = Array.isArray(roleRes.data) ? roleRes.data : (roleRes.data as any)?.data || [];
+          setRoles(rls.map((r) => ({ value: String(r.id), label: r.name })));
+        } else {
+          console.error(roleResult.reason);
+          problems.push(
+            (roleResult.reason as any)?.response?.status === 403
+              ? "Para elegir roles necesitas el permiso «Roles › Listar»."
+              : "No se pudieron cargar los roles.",
+          );
+        }
+        setLoadError(problems.length ? problems.join(" ") : null);
       })
-      .catch(console.error)
       .finally(() => setLoading(false));
   }, [companyId, selectedCompany?.name]);
 
@@ -80,6 +100,12 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
 
   return (
     <View style={styles.container}>
+      {!!loadError && (
+        <Text variant="bodySmall" style={styles.errorText}>
+          {loadError}
+        </Text>
+      )}
+
       {value.length === 0 && (
         <Card style={styles.emptyCard}>
           <Card.Content style={styles.emptyContent}>
@@ -232,6 +258,9 @@ const styles = StyleSheet.create({
     color: palette.textSecondary,
     fontStyle: "italic",
     paddingVertical: 12,
+  },
+  errorText: {
+    color: palette.error,
   },
   addButton: {
     borderRadius: 10,
