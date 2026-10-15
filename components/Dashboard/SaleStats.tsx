@@ -4,6 +4,7 @@ import KpiCard from "@/components/Dashboard/KpiCard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useResponsive } from "@/hooks/useResponsive";
+import { formatDate } from "@/utils/dates";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
@@ -112,6 +113,13 @@ export default function SaleStats() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
+      {/* Sin rango pedido, los totales son de los últimos 30 días (data.period). */}
+      {stats.period?.start_date && stats.period?.end_date ? (
+        <Text style={styles.periodText}>
+          {`Últimos 30 días · ${formatDate(stats.period.start_date)} al ${formatDate(stats.period.end_date)}`}
+        </Text>
+      ) : null}
+
       {/* KPI Cards */}
       <View style={styles.kpiGrid}>
         <KpiCard
@@ -337,6 +345,12 @@ const styles = StyleSheet.create({
   loadingText: {
     ...tokens.typography.body,
     color: palette.textSecondary,
+  },
+
+  periodText: {
+    ...tokens.typography.caption,
+    color: palette.textSecondary,
+    marginBottom: tokens.spacing[2],
   },
 
   // --- KPI grid ---

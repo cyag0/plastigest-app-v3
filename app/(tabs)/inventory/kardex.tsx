@@ -30,6 +30,9 @@ export default function KardexScreen() {
   const [exporting, setExporting] = useState(false);
   // Últimos filtros aplicados en la lista (para exportar lo mismo que se ve).
   const [lastParams, setLastParams] = useState<Record<string, any>>({});
+  // Sin filtro de fecha el servidor devuelve (y exporta) los últimos 30 días:
+  // range.default = true.
+  const [defaultRange, setDefaultRange] = useState(false);
 
   useEffect(() => {
     Services.inventoryMovements
@@ -42,9 +45,11 @@ export default function KardexScreen() {
   const service = useMemo(
     () => ({
       ...Services.inventoryMovements,
-      index: (params?: any) => {
+      index: async (params?: any) => {
         setLastParams(params ?? {});
-        return Services.inventoryMovements.index(params);
+        const response = await Services.inventoryMovements.index(params);
+        setDefaultRange((response?.data as any)?.range?.default === true);
+        return response;
       },
     }),
     [],
@@ -188,6 +193,11 @@ export default function KardexScreen() {
           paddingTop: tokens.spacing[3],
         }}
       >
+        {defaultRange && (
+          <Text variant="bodySmall" style={{ flex: 1, color: colors.textSecondary }}>
+            Últimos 30 días. Usa el filtro de fecha para ver otro periodo.
+          </Text>
+        )}
         <Button mode="outlined" icon="file-delimited-outline" compact onPress={exportCsv} loading={exporting} disabled={exporting}>
           Exportar
         </Button>
