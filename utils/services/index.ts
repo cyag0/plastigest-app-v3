@@ -792,7 +792,6 @@ const Services = {
   },
   home: {
     clientes: createCrudService<any>("/auth/admin/customers"),
-    proveedores: createCrudService<any>("/api/proveedores"),
     unidades: {
       ...createCrudService<any>("/auth/admin/units"),
       async getGroupedByBase(params?: { company_id?: number; unit_id?: number }) {

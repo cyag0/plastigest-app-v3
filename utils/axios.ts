@@ -114,7 +114,6 @@ export const clearTabSelection = (): void => {
 // incorrectas, recuperación de contraseña) o donde ya se está cerrando sesión.
 const UNAUTHORIZED_IGNORED_PATHS = [
   "/auth/login",
-  "/auth/register",
   "/auth/forgot-password",
   "/auth/verify-reset-code",
   "/auth/reset-password",
@@ -486,15 +485,6 @@ export const getAuthToken = async (): Promise<string | null> => {
   }
 };
 
-export const removeAuthToken = async (): Promise<void> => {
-  try {
-    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
-    await AsyncStorage.removeItem(USER_DATA_KEY);
-  } catch (error) {
-    console.error("Error removing token:", error);
-  }
-};
-
 /**
  * Borra todo lo que pertenece a la sesión: token, usuario, empresa y
  * sucursal seleccionadas, lista de empresas y los cachés de permisos y
@@ -631,22 +621,10 @@ export const onSessionChangedInOtherTab = (
   return () => window.removeEventListener("storage", handler);
 };
 
-// Función para limpiar toda la información de sesión
-export const clearAllStorage = async (): Promise<void> => {
-  await clearSessionStorage();
-};
-
 // Funciones de API específicas para autenticación
 export const authAPI = {
   login: (credentials: { email: string; password: string }) =>
     axiosClient.post("/auth/login", credentials),
-
-  register: (userData: {
-    name: string;
-    email: string;
-    password: string;
-    password_confirmation: string;
-  }) => axiosClient.post("/auth/register", userData),
 
   logout: () => axiosClient.post("/auth/logout"),
 
@@ -678,8 +656,5 @@ export const authAPI = {
     password_confirmation: string;
   }) => axiosClient.post("/auth/reset-password", data),
 };
-
-// Función para obtener el usuario autenticado
-export const getCurrentUser = () => axiosClient.get("/user");
 
 export default axiosClient;
