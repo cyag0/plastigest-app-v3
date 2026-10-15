@@ -143,16 +143,14 @@ export function TransferProvider({ children }: TransferProviderProps) {
           products.forEach((product: App.Entities.Product) => {
             // Buscar stock en la ubicación específica
             const locationStock = product.locations?.find(
-              (loc: { id: number; pivot?: { current_stock: number } }) =>
-                loc.id === locationId,
+              (loc) => loc.id === locationId,
             );
+            const currentStock = Number(locationStock?.pivot?.current_stock ?? 0);
 
-            if (!locationStock || !locationStock.pivot?.current_stock) {
+            if (!currentStock) {
               // Si no hay stock en esta ubicación, no mostrar el producto
               return;
             }
-
-            const currentStock = locationStock.pivot.current_stock;
 
             // Obtener unidades disponibles para este producto
             const availableUnits = product.unit?.unit_type
@@ -565,12 +563,13 @@ export function TransferProvider({ children }: TransferProviderProps) {
       const transferData = {
         from_location_id: fromLocationId,
         to_location_id: toLocationId,
-        notes: data?.notes || null,
+        notes: data?.notes || undefined,
         details: details,
       };
 
-      // Crear la transferencia
-      await transferService.store(transferData);
+      // Crear la transferencia (los detalles nuevos aún no tienen id ni
+      // producto: no son TransferDetail).
+      await transferService.store(transferData as any);
 
       alerts.success("Solicitud de transferencia creada exitosamente");
 
@@ -580,9 +579,17 @@ export function TransferProvider({ children }: TransferProviderProps) {
       setToLocationId(null);
     } catch (error: any) {
       console.error("Error creating transfer:", error);
+      // El motivo del servidor (p. ej. "Stock insuficiente de Coco: hay 12")
+      // en message, en error o como error de validación; nunca el texto en
+      // inglés de axios.
+      const responseData = error?.response?.data;
+      const fieldError = responseData?.errors
+        ? (Object.values(responseData.errors).flat()[0] as string | undefined)
+        : undefined;
       const errorMessage =
-        error?.response?.data?.message ||
-        error?.message ||
+        (error?.response
+          ? fieldError || responseData?.message || responseData?.error
+          : "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.") ||
         "Error al crear la transferencia";
       alerts.error(errorMessage);
       throw error;

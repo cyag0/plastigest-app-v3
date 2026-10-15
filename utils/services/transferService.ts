@@ -278,6 +278,12 @@ export interface TransferReceiveStepPayload {
 // Para compatibilidad con el código anterior
 export interface Transfer extends InventoryTransfer {}
 
+/** Sucursal a la que se le puede pedir una transferencia. */
+export interface TransferOrigin {
+  id: number;
+  name: string;
+}
+
 // Crear el servicio base
 const baseService = createCrudService<InventoryTransfer>(
   "/auth/admin/inventory-transfers",
@@ -344,6 +350,18 @@ async function buildStepFormData(
 // Extender con métodos personalizados
 const transferService = {
   ...baseService,
+
+  /**
+   * Sucursales a las que se puede pedir: las activas de la empresa menos la
+   * actual. Pide transfers_create, no locations_list: los roles de sucursal no
+   * tienen ese permiso y su lista de "Pedir a" quedaba vacía.
+   */
+  async origins(): Promise<TransferOrigin[]> {
+    const response = await apiClient.get<{ data: TransferOrigin[] }>(
+      "/auth/admin/inventory-transfers/origins",
+    );
+    return response.data.data ?? [];
+  },
 
   // Obtener por ID (adaptado para devolver solo data)
   async getTransfer(id: number): Promise<InventoryTransfer> {
