@@ -138,6 +138,26 @@ export function SaleProvider({ children }: SaleProviderProps) {
   // de cobrarla dos veces.
   const requestIdRef = useRef<string | null>(null);
   const [pendingUnknown, setPendingUnknown] = useState(false);
+  // Mientras un cobro siga en duda (o en envío) el carrito no se cambia: el
+  // reintento con la misma llave debe llevar lo mismo, porque si el primero
+  // sí se registró el servidor devuelve esa venta y lo agregado después se
+  // iría sin cobrar. Ref: las tarjetas de producto pueden llamar a un
+  // handler de un render anterior.
+  const pendingUnknownRef = useRef(false);
+  useEffect(() => {
+    pendingUnknownRef.current = pendingUnknown;
+  }, [pendingUnknown]);
+
+  /** true (y avisa) si el carrito está bloqueado por un cobro sin confirmar. */
+  const cartLocked = () => {
+    if (!pendingUnknownRef.current) return false;
+    alerts.warning(
+      submitting
+        ? "Espera a que termine de registrarse la venta."
+        : "No se pudo confirmar si la última venta quedó registrada: vuelve a confirmarla antes de cambiar el carrito, o vacíalo para empezar otra.",
+    );
+    return true;
+  };
 
   const loadData = useCallback(async () => {
     try {
@@ -270,6 +290,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
   };
 
   const handleAddProduct = (product: ProductListItem, unitId: number) => {
+    if (cartLocked()) return;
     const productId = product.id;
     const defaultUnit = product.available_units?.[0];
     const basePrice = parseFloat(product.price.toString());
@@ -352,6 +373,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
   };
 
   const handleRemoveProduct = (productId: number | string) => {
+    if (cartLocked()) return;
     setSelectedProducts((prev) => {
       const updated = { ...prev };
       delete updated[productId];
@@ -366,6 +388,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
     action: "increment" | "decrement" | "unit" | "set",
     data?: any,
   ) => {
+    if (cartLocked()) return;
     setSelectedProducts((prev) => {
       const product = prev[productId];
       if (!product) {

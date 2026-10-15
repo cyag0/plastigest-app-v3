@@ -326,6 +326,13 @@ export default function KioskScreen() {
   const requestIdRef = useRef<string | null>(null);
   /** El último cobro se quedó sin respuesta: no se sabe si se registró. */
   const [pendingUnknown, setPendingUnknown] = useState(false);
+  // Mientras siga en duda el carrito no se cambia: el reintento con la misma
+  // llave debe llevar lo mismo, porque si el primero sí se registró el
+  // servidor devuelve ese pedido y lo agregado después se iría sin cobrar.
+  const pendingUnknownRef = useRef(false);
+  useEffect(() => {
+    pendingUnknownRef.current = pendingUnknown;
+  }, [pendingUnknown]);
 
   // Con el cobro en envío no se sale del kiosko: el resultado se perdería.
   usePreventRemove(submitting, () => {
@@ -403,8 +410,20 @@ export default function KioskScreen() {
     [consumedBaseByProduct],
   );
 
+  /** true (y avisa) si el carrito está bloqueado por un cobro sin confirmar. */
+  const cartLocked = useCallback(() => {
+    if (!pendingUnknownRef.current) return false;
+    alerts.warning(
+      submitting
+        ? "Espera a que termine de registrarse la venta."
+        : "No se pudo confirmar si la última venta quedó registrada: vuelve a presionar «Confirmar venta» antes de hacer cambios, o vacía el carrito para empezar otra.",
+    );
+    return true;
+  }, [alerts, submitting]);
+
   const handleAddFromCard = useCallback(
     (product: Product, pkg: Package | null) => {
+      if (cartLocked()) return;
       const available = Number(product.available_stock ?? 0);
       const basePerUnit = pkg ? Number(pkg.quantity_per_package ?? 1) : 1;
       const basePrice = Number(product.sale_price ?? product.price ?? 0);
@@ -446,11 +465,12 @@ export default function KioskScreen() {
         ];
       });
     },
-    [canTake, alerts],
+    [canTake, alerts, cartLocked],
   );
 
   const handleInc = useCallback(
     (key: string) => {
+      if (cartLocked()) return;
       setCart((prev) => {
         const item = prev.find((c) => c.key === key);
         if (!item) return prev;
@@ -463,20 +483,22 @@ export default function KioskScreen() {
         );
       });
     },
-    [canTake, alerts],
+    [canTake, alerts, cartLocked],
   );
 
   const handleDec = useCallback((key: string) => {
+    if (cartLocked()) return;
     setCart((prev) =>
       prev
         .map((c) => (c.key === key ? { ...c, quantity: c.quantity - 1 } : c))
         .filter((c) => c.quantity > 0),
     );
-  }, []);
+  }, [cartLocked]);
 
   const handleRemove = useCallback((key: string) => {
+    if (cartLocked()) return;
     setCart((prev) => prev.filter((c) => c.key !== key));
-  }, []);
+  }, [cartLocked]);
  
   // ---------- Scanner ----------
 
@@ -920,8 +942,10 @@ export default function KioskScreen() {
               <RadioButton.Group
                 value={paymentMethod}
                 onValueChange={(v) => {
+                  // El reintento de un cobro en duda va con el mismo método.
+                  if (cartLocked()) return;
                   setPaymentMethod(v as PaymentMethod);
-                  if (!pendingUnknown) setPayMessage(null);
+                  setPayMessage(null);
                 }}
               >
                 <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
@@ -935,7 +959,10 @@ export default function KioskScreen() {
 
               {/* ¿Está pagado? */}
               <Pressable
-                onPress={() => setIsPaid((v) => !v)}
+                onPress={() => {
+                  if (cartLocked()) return;
+                  setIsPaid((v) => !v);
+                }}
                 style={styles.paidToggle}
               >
                 <View style={{ flex: 1 }}>
