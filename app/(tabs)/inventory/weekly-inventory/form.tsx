@@ -189,8 +189,9 @@ function InventoryForm(props: InventoryFormProps) {
       } as any);
       alerts.success("Conteo cancelado");
       goBack();
-    } catch {
-      alerts.error("No se pudo cancelar el conteo");
+    } catch (error) {
+      // P. ej. 422 count_closed: alguien más ya lo completó o canceló.
+      alerts.error(apiMessage(error, "No se pudo cancelar el conteo"));
     }
   }, [alerts, props.id, router]);
 
