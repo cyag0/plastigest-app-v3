@@ -166,10 +166,13 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
 
     try {
       setLoadingStats(true);
-      const stats = await services.sales.cashRegister({
+      // La respuesta es {success, data: {summary, payment_methods}}: antes se
+      // leía summary en el primer nivel y las sugerencias salían en $0.00.
+      const response = await services.sales.cashRegister({
         date: reportDate,
         location_id: location.id,
       });
+      const stats = response?.data ?? response;
 
       // Parse payment methods
       let cashTotal = 0;
