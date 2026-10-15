@@ -5,7 +5,13 @@ import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useDebounce } from "@/hooks/useDebounce";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Dimensions,
   FlatList,
@@ -442,6 +448,34 @@ export default function ListProducts({
   const [numColumns, setNumColumns] = useState(initialNumColumns);
   const isCompactMode = viewMode === "compact";
 
+  // Las tarjetas están memoizadas y sólo se vuelven a pintar cuando cambia su
+  // producto o su cantidad, así que se quedaban con los handlers del render en
+  // que se pintaron: un +/- calculaba sobre un carrito viejo (en compras
+  // borraba del carrito otros productos que el servidor sí tenía). Reciben
+  // funciones estables que siempre llaman a los handlers actuales.
+  const handlersRef = useRef({ onAddProduct, onRemoveProduct, onItemChange });
+  useLayoutEffect(() => {
+    handlersRef.current = { onAddProduct, onRemoveProduct, onItemChange };
+  });
+  const handleAddProduct = useCallback(
+    (product: ProductListItem, unitId: number) =>
+      handlersRef.current.onAddProduct(product, unitId),
+    [],
+  );
+  const handleRemoveProduct = useCallback(
+    (productId: number | string) =>
+      handlersRef.current.onRemoveProduct(productId),
+    [],
+  );
+  const handleItemChange = useCallback(
+    (
+      productId: number | string,
+      action: "increment" | "decrement" | "unit",
+      data?: any,
+    ) => handlersRef.current.onItemChange(productId, action, data),
+    [],
+  );
+
   // Debounce para la búsqueda
   const { run: runSearchDebounce } = useDebounce(
     (value: string) => setDebouncedSearchQuery(value),
@@ -559,9 +593,9 @@ export default function ListProducts({
           item={item}
           selectedProduct={selectedProducts[item.id]}
           compact={isCompactMode}
-          onAddProduct={onAddProduct}
-          onRemoveProduct={onRemoveProduct}
-          onItemChange={onItemChange}
+          onAddProduct={handleAddProduct}
+          onRemoveProduct={handleRemoveProduct}
+          onItemChange={handleItemChange}
         />
       </View>
     );
