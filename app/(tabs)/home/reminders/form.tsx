@@ -1,4 +1,5 @@
 import { toLocalDateString } from "@/utils/dates";
+import { parseMoney } from "@/utils/format";
 import { goBack } from "@/utils/navigation";
 import AppSelect from "@/components/Form/AppSelect";
 import palette from "@/constants/palette";
@@ -30,7 +31,7 @@ export default function ReminderForm(props: ReminderFormProps) {
     props.id || (params.id ? parseInt(params.id as string) : undefined);
   const alerts = useAlerts();
 
-  const { location } = useAuth();
+  const { location, user: me } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -46,7 +47,11 @@ export default function ReminderForm(props: ReminderFormProps) {
   const [recurrenceInterval, setRecurrenceInterval] = useState("1");
   const [notifyEnabled, setNotifyEnabled] = useState(true);
   const [notifyDaysBefore, setNotifyDaysBefore] = useState("1");
-  const [assignedUserId, setAssignedUserId] = useState<string>("");
+  // Un recordatorio siempre es de alguien (solo lo ve esa persona): por
+  // defecto, de quien lo crea.
+  const [assignedUserId, setAssignedUserId] = useState<string>(me?.id ? String(me.id) : "");
+  // Quien lo tenía asignado al abrirlo, por si ya no viene en la lista.
+  const [assignedUserName, setAssignedUserName] = useState<string | null>(null);
 
   const [types, setTypes] = useState<Array<{ label: string; value: string }>>(
     [],
@@ -91,26 +96,29 @@ export default function ReminderForm(props: ReminderFormProps) {
     }
   };
 
+  // A quién se le puede asignar: GET reminders/users (pide reminders_read,
+  // no users_list como la lista de usuarios de Administración).
   const loadUsers = async () => {
     try {
-      const response = await Services.users.index();
-
-      // La respuesta puede venir en response.data.data o response.data
-      const usersData = Array.isArray(response.data)
-        ? response.data
-        : response.data?.data || [];
-
-      console.log("Users data:", usersData);
+      const body: any = await Services.reminders.getUsers();
+      const usersData: any[] = Array.isArray(body)
+        ? body
+        : Array.isArray(body?.data)
+          ? body.data
+          : body?.data?.data ?? [];
 
       setUsers(
         usersData.map((user: any) => ({
-          label: user.name,
+          label: user.id === me?.id ? `${user.name} (yo)` : user.name,
           value: user.id.toString(),
         })),
       );
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading users:", error);
-      alerts.error("Error al cargar usuarios");
+      alerts.error(
+        error?.response?.data?.message ??
+          "No se pudo cargar a quién asignarlo; el recordatorio queda para ti.",
+      );
     }
   };
 
@@ -135,6 +143,7 @@ export default function ReminderForm(props: ReminderFormProps) {
       setNotifyEnabled(Boolean(reminder.notify_enabled));
       setNotifyDaysBefore(reminder.notify_days_before?.toString() || "1");
       setAssignedUserId(reminder.user_id?.toString() || "");
+      setAssignedUserName(reminder.user?.name ?? null);
     } catch (error) {
       console.error("Error loading reminder:", error);
       alerts.error("Error al cargar el recordatorio");
@@ -154,9 +163,19 @@ export default function ReminderForm(props: ReminderFormProps) {
       return;
     }
 
+    // Monto en formato mexicano ("1,500.50"); antes parseFloat leía 1.
+    const withAmount = type === "payment" || type === "renewal";
+    const parsedAmount = withAmount && amount.trim() ? parseMoney(amount) : null;
+    if (withAmount && amount.trim() && (parsedAmount === null || parsedAmount < 0)) {
+      alerts.error("El monto no es válido");
+      return;
+    }
+
     try {
       setSaving(true);
 
+      // Los opcionales vacíos viajan como "" (el backend los guarda como
+      // null): si no se mandaban, al editar no había forma de borrarlos.
       const data: any = {
         title,
         type,
@@ -164,27 +183,16 @@ export default function ReminderForm(props: ReminderFormProps) {
         is_recurring: isRecurring === true ? 1 : 0,
         notify_enabled: notifyEnabled === true ? 1 : 0,
         notify_days_before: parseInt(notifyDaysBefore) || 1,
+        description: description.trim(),
+        amount: parsedAmount ?? "",
+        recurrence_type: isRecurring && recurrenceType ? recurrenceType : "",
+        recurrence_interval: isRecurring ? parseInt(recurrenceInterval) || 1 : "",
       };
 
-      // Solo agregar campos opcionales si tienen valor
+      // Sin elegir a nadie el backend lo asigna a quien lo guarda.
       if (assignedUserId && assignedUserId.trim()) {
         data.user_id = parseInt(assignedUserId);
       }
-
-      if (description && description.trim()) {
-        data.description = description;
-      }
-
-      if (amount && parseFloat(amount) > 0) {
-        data.amount = parseFloat(amount);
-      }
-
-      if (isRecurring && recurrenceType) {
-        data.recurrence_type = recurrenceType;
-        data.recurrence_interval = parseInt(recurrenceInterval) || 1;
-      }
-
-      console.log("Datos a enviar:", data);
 
       if (reminderId) {
         await Services.reminders.update(reminderId, data);
@@ -200,19 +208,18 @@ export default function ReminderForm(props: ReminderFormProps) {
       console.error("Error response:", error.response?.data);
       console.error("Validation errors:", error.response?.data?.errors);
 
-      // Mostrar errores de validación específicos
-      if (error.response?.data?.errors) {
-        const errors = error.response.data.errors;
-        const errorMessages = Object.entries(errors)
-          .map(([field, messages]: [string, any]) => {
-            return `${field}: ${Array.isArray(messages) ? messages.join(", ") : messages}`;
-          })
+      // Errores de validación: los mensajes (ya en español), sin el nombre
+      // técnico del campo; si no, el mensaje o el error del backend.
+      const responseData = error.response?.data;
+      if (responseData?.errors) {
+        const errorMessages = (Object.values(responseData.errors) as any[])
+          .flat()
           .join("\n");
-        alerts.error(`Errores de validación:\n${errorMessages}`);
+        alerts.error(errorMessages || "Revisa los datos del recordatorio");
       } else {
-        const errorMessage =
-          error.response?.data?.message || "Error al guardar el recordatorio";
-        alerts.error(errorMessage);
+        alerts.error(
+          responseData?.message || responseData?.error || "Error al guardar el recordatorio",
+        );
       }
     } finally {
       setSaving(false);
@@ -250,8 +257,16 @@ export default function ReminderForm(props: ReminderFormProps) {
               <AppSelect
                 value={assignedUserId}
                 onChange={(value) => setAssignedUserId(String(value ?? ""))}
-                data={users}
-                placeholder="Selecciona un usuario"
+                data={
+                  // Quien lo tenía asignado aunque ya no venga en la lista
+                  // (desactivado o fuera de la empresa): que se vea su nombre.
+                  assignedUserId &&
+                  assignedUserName &&
+                  !users.some((u) => u.value === assignedUserId)
+                    ? [...users, { label: assignedUserName, value: assignedUserId }]
+                    : users
+                }
+                placeholder="Yo (si no eliges a nadie)"
               />
               <Text
                 variant="bodySmall"
