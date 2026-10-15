@@ -212,6 +212,11 @@ export default function SalesOrderDetail() {
           return;
         }
 
+        if (apiErrorCode(e) === SALE_ERROR_CODES.clientRequestConflict) {
+          // La llave ya se usó en otra operación: el siguiente cobro lleva
+          // otra (con la misma se rechazaría otra vez).
+          checkoutKeyRef.current = null;
+        }
         if (apiErrorCode(e) === SALE_ERROR_CODES.noOpenSession) {
           const canOpen = hasPermission("sales_pos");
           setCheckoutMessage({

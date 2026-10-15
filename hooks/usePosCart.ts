@@ -419,6 +419,15 @@ export function usePosCart(storageKey?: string | null) {
     if (draftRef.current.requestId) setRequest(draftRef.current.requestId, false);
   }, [setRequest]);
 
+  /**
+   * El servidor rechazó la llave porque ya se usó en otra operación
+   * (client_request_conflict): no se registró nada y el siguiente intento
+   * lleva una llave nueva (con la misma se rechazaría otra vez).
+   */
+  const renewRequestId = useCallback(() => {
+    setRequest(null, false);
+  }, [setRequest]);
+
   /** Llave actual, leída al momento (no la del último render). */
   const getRequestId = useCallback(() => draftRef.current.requestId, []);
 
@@ -499,6 +508,7 @@ export function usePosCart(storageKey?: string | null) {
     getRequestId,
     beginAttempt,
     markNotCharged,
+    renewRequestId,
     syncWithCatalog,
     restored,
     restoredLines,

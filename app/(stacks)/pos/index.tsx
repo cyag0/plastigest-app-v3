@@ -337,8 +337,13 @@ function PosRegister({ session, userId, compact, canEditPrice, cashierName, onEx
    * cambió; si el turno ya no está abierto aquí, se vuelve a consultar.
    */
   const handleRejected = async (error: unknown): Promise<string | null> => {
-    cart.markNotCharged();
     const code = apiErrorCode(error);
+    if (code === SALE_ERROR_CODES.clientRequestConflict) {
+      // La llave ya se usó en otra operación: el siguiente cobro lleva otra.
+      cart.renewRequestId();
+      return null;
+    }
+    cart.markNotCharged();
     if (code === SALE_ERROR_CODES.noOpenSession || code === SALE_ERROR_CODES.sessionOtherLocation) {
       setCheckoutOpen(false);
       onSessionLost(apiErrorMessage(error, "Tu turno de caja ya no está abierto."));

@@ -1,6 +1,10 @@
 import { formatQuantity, parseQuantity } from "@/utils/format";
 import { AppFormRef } from "@/components/Form/AppForm/AppForm";
-import { isOutcomeUnknown } from "@/components/Pos/saleErrors";
+import {
+  apiErrorCode,
+  isOutcomeUnknown,
+  SALE_ERROR_CODES,
+} from "@/components/Pos/saleErrors";
 import {
   ProductCategory,
   ProductListItem,
@@ -636,6 +640,11 @@ export function SaleProvider({ children }: SaleProviderProps) {
       } catch (error) {
         if (!isOutcomeUnknown(error)) {
           setPendingUnknown(false);
+          // La llave ya se usó en otra operación: el siguiente intento lleva
+          // una nueva (con la misma se rechazaría otra vez).
+          if (apiErrorCode(error) === SALE_ERROR_CODES.clientRequestConflict) {
+            requestIdRef.current = null;
+          }
           return { status: "rejected", error };
         }
 

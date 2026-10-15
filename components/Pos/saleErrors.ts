@@ -14,6 +14,12 @@ export const SALE_ERROR_CODES = {
   sessionOtherLocation: "session_other_location",
   /** El movimiento de caja pertenece a un turno ya cerrado. */
   closedSession: "closed_session",
+  /**
+   * La llave de cobro (client_request_id) ya se usó en otra operación (otra
+   * sucursal u otro pedido). No se registró nada: el siguiente intento debe
+   * llevar una llave NUEVA, o el servidor lo vuelve a rechazar.
+   */
+  clientRequestConflict: "client_request_conflict",
 } as const;
 
 /** `code` de la respuesta de error, si el backend lo mandó. */

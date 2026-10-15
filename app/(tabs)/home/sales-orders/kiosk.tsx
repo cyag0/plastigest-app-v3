@@ -664,6 +664,11 @@ export default function KioskScreen() {
         // Rechazada: no se registró nada.
         setPendingUnknown(false);
         const code = apiErrorCode(e);
+        if (code === SALE_ERROR_CODES.clientRequestConflict) {
+          // La llave ya se usó en otra operación: el siguiente cobro lleva
+          // otra (con la misma se rechazaría otra vez).
+          requestIdRef.current = null;
+        }
         if (code === SALE_ERROR_CODES.noOpenSession) {
           const canOpen = hasPermission("sales_pos");
           setPayMessage({
