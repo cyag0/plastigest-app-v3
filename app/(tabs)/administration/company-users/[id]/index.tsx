@@ -1,18 +1,8 @@
-import UserFormShared from "@/components/screens/UserFormShared";
-import { useAuth } from "@/contexts/AuthContext";
+import UserDetailScreen from "@/components/Administration/Users/UserDetailScreen";
 import { useLocalSearchParams } from "expo-router";
 
 export default function CompanyUserDetailScreen() {
-  const params = useLocalSearchParams();
-  const userId = params.id ? parseInt(params.id as string) : undefined;
-  const { selectedCompany } = useAuth();
+  const { id } = useLocalSearchParams<{ id: string }>();
 
-  return (
-    <UserFormShared
-      id={userId}
-      mode="company"
-      companyId={selectedCompany?.id}
-      readonly
-    />
-  );
+  return <UserDetailScreen id={Number(id)} scope="company" />;
 }

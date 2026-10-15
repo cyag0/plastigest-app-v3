@@ -1,9 +1,8 @@
+import UserDetailScreen from "@/components/Administration/Users/UserDetailScreen";
 import { useLocalSearchParams } from "expo-router";
-import UsersForm from "../form";
 
-export default function UserDetailScreen() {
-  const params = useLocalSearchParams();
-  const id = params.id ? parseInt(params.id as string) : undefined;
+export default function UserDetailRoute() {
+  const { id } = useLocalSearchParams<{ id: string }>();
 
-  return <UsersForm id={id} readonly />;
+  return <UserDetailScreen id={Number(id)} scope="global" />;
 }

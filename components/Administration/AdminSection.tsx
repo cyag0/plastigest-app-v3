@@ -23,19 +23,20 @@ export interface AdminOption {
 
 export interface AdminSectionProps {
   title: string;
+  /** Una línea debajo del título (p. ej. el nombre de la sucursal). */
+  subtitle?: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   options: AdminOption[];
 }
 
 /**
- * Seccion colapsable de opciones de administracion. Cada
- * seccion tiene un header con icono de categoria y una card
- * blanca con las opciones en formato de lista compacta
- * (estilo Linear/Vercel). Tonos suaves en vez de colores
- * saturados.
+ * Grupo de opciones de administración: título y una lista con separadores.
+ * Sin cuadritos de color ni subtítulos: el título de cada opción tiene que
+ * bastar (la `description` se conserva en los datos, no se pinta).
  */
 export default function AdminSection({
   title,
+  subtitle,
   icon,
   options,
 }: AdminSectionProps) {
@@ -47,15 +48,12 @@ export default function AdminSection({
     <View style={styles.section}>
       {/* Section Header */}
       <View style={styles.sectionHeader}>
-        <MaterialCommunityIcons
-          name={icon}
-          size={16}
-          color={palette.textMuted}
-        />
-        <Text style={styles.sectionTitle}>{title.toUpperCase()}</Text>
-        <View style={styles.countBadge}>
-          <Text style={styles.countText}>{options.length}</Text>
-        </View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {!!subtitle && (
+          <Text style={styles.sectionSubtitle} numberOfLines={1}>
+            · {subtitle}
+          </Text>
+        )}
       </View>
 
       {/* Options List */}
@@ -67,18 +65,11 @@ export default function AdminSection({
               onPress={() => router.push(option.route as any)}
               style={styles.optionItem}
             >
-              <View
-                style={[
-                  styles.iconBox,
-                  { backgroundColor: hexWithAlpha(option.color, 0.12) },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name={option.icon}
-                  size={20}
-                  color={option.color}
-                />
-              </View>
+              <MaterialCommunityIcons
+                name={option.icon}
+                size={20}
+                color={palette.textSecondary}
+              />
 
               <View style={styles.optionBody}>
                 <View style={styles.optionHeaderRow}>
@@ -94,12 +85,6 @@ export default function AdminSection({
                     </AppChip>
                   )}
                 </View>
-                <Text
-                  style={styles.optionDescription}
-                  numberOfLines={2}
-                >
-                  {option.description}
-                </Text>
               </View>
 
               <MaterialCommunityIcons
@@ -146,9 +131,15 @@ const styles = StyleSheet.create({
     gap: tokens.spacing[2],
   },
   sectionTitle: {
-    ...tokens.typography.micro,
+    fontSize: 14,
+    fontWeight: "600",
+    color: palette.textSecondary,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
     color: palette.textMuted,
     flex: 1,
+    minWidth: 0,
   },
   countBadge: {
     minWidth: 20,
@@ -167,8 +158,9 @@ const styles = StyleSheet.create({
   optionsCard: {
     marginHorizontal: tokens.spacing[5],
     backgroundColor: palette.surface,
-    borderRadius: tokens.radius.lg,
-    ...tokens.shadow.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: palette.border,
     overflow: "hidden",
   },
   optionItem: {
@@ -213,6 +205,6 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     backgroundColor: palette.border,
-    marginLeft: tokens.spacing[4] + 40 + tokens.spacing[3],
+    marginLeft: tokens.spacing[4] + 20 + tokens.spacing[3],
   },
 });

@@ -93,6 +93,20 @@ namespace App {
       password?: string;
       created_at: string;
       updated_at: string;
+      avatar?: { uri: string; name?: string; type?: string }[];
+      companies?: { id: number; name: string }[];
+      /** Sus sucursales y el rol en cada una. */
+      location_roles?: UserLocationRole[];
+      /** Su acceso a la sucursal actual (null si no tiene). */
+      location_role?: UserLocationRole | null;
+    }
+
+    interface UserLocationRole {
+      location_id: number;
+      location_name: string;
+      role_id: number | null;
+      role_name: string | null;
+      company_id: number;
     }
 
     interface Company {

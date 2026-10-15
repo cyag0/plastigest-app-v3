@@ -27,7 +27,7 @@ export default function AdministrationScreen() {
     // === CONFIGURACION DEL SISTEMA (Solo Super Admins) ===
     {
       id: "system-companies",
-      title: "Gestion de companias",
+      title: "Empresas",
       description: "Administra todas las empresas del sistema",
       icon: "office-building-cog",
       route: "/(tabs)/administration/companies",
@@ -37,20 +37,22 @@ export default function AdministrationScreen() {
     },
     {
       id: "system-users",
-      title: "Usuarios del sistema",
+      title: "Usuarios de todas las empresas",
       description: "Gestiona usuarios y accesos globales",
       icon: "account-cog",
       route: "/(tabs)/administration/users",
       color: palette.textSecondary,
       category: "system",
-      requiredPermission: "users_manage",
+      // Ver a los de todas las empresas es del administrador del sistema
+      // (con users_manage un encargado veía esta opción y solo a los suyos).
+      requiredPermission: "system_admin",
     },
 
     // === CONFIGURACION DE LA EMPRESA ===
     {
       id: "company-settings",
-      title: "Mi compania",
-      description: "Edita datos fiscales y configuracion de tu empresa",
+      title: "Datos de la empresa",
+      description: "Edita datos fiscales y configuración de tu empresa",
       icon: "office-building",
       route: selectedCompany
         ? `/(tabs)/administration/companies/${selectedCompany.id}/edit`
@@ -61,7 +63,7 @@ export default function AdministrationScreen() {
     },
     {
       id: "company-users",
-      title: "Usuarios de la empresa",
+      title: "Usuarios",
       description: "Gestiona usuarios con acceso a esta empresa",
       icon: "account-group",
       route: "/(tabs)/administration/company-users",
@@ -111,8 +113,8 @@ export default function AdministrationScreen() {
     },
     {
       id: "notification-preferences",
-      title: "Preferencias de notificaciones",
-      description: "Configura que eventos generan notificaciones y a quien",
+      title: "Notificaciones",
+      description: "Configura qué eventos generan notificaciones y a quién",
       icon: "bell-cog-outline",
       route: "/(stacks)/notification-preferences",
       color: palette.warning,
@@ -120,11 +122,13 @@ export default function AdministrationScreen() {
       requiredPermission: "companies_update",
     },
 
-    // === MI SUCURSAL ===
+    // === ESTA SUCURSAL ===
+    // Lo mismo que la empresa, pero solo de la sucursal actual: lo que se crea
+    // aquí queda en ella.
     {
       id: "current-location",
-      title: "Mi sucursal",
-      description: "Edita configuracion de tu sucursal actual",
+      title: "Datos de la sucursal",
+      description: "Nombre, dirección y contacto de la sucursal actual",
       icon: "store-edit",
       route: `/(tabs)/administration/locations/${location?.id}/edit`,
       color: palette.success,
@@ -132,21 +136,51 @@ export default function AdministrationScreen() {
       requiredPermission: "locations_update",
     },
     {
-      id: "recurring-tasks",
-      title: "Tareas recurrentes",
-      description: "Programa tareas automaticas (conteos, reportes)",
-      icon: "calendar-clock",
-      route: "/(tabs)/administration/recurring-tasks",
+      id: "location-users",
+      title: "Usuarios",
+      description: "Quién tiene acceso a esta sucursal y con qué rol",
+      icon: "account-group",
+      route: "/(tabs)/administration/current-location/users",
+      color: palette.textSecondary,
+      category: "location",
+      requiredPermission: "users_list",
+    },
+    {
+      id: "location-cash-registers",
+      title: "Cajas",
+      description: "Puntos de cobro de esta sucursal",
+      icon: "cash-register",
+      route: "/(tabs)/administration/cash-registers?scope=location",
       color: palette.success,
       category: "location",
-      requiredPermission: "tasks_manage",
+      requiredPermission: "cash_registers_list",
+    },
+    {
+      id: "location-notifications",
+      title: "Notificaciones",
+      description: "Avisos de esta sucursal y a quién le llegan",
+      icon: "bell-cog-outline",
+      route: "/(stacks)/notification-preferences?scope=location",
+      color: palette.warning,
+      category: "location",
+      requiredPermission: "notifications_list",
+    },
+    {
+      id: "location-activity",
+      title: "Bitácora",
+      description: "Qué se hizo en esta sucursal y quién lo hizo",
+      icon: "history",
+      route: "/(stacks)/activity?user_id=all&scope=location",
+      color: palette.textSecondary,
+      category: "location",
+      requiredPermission: "users_read",
     },
 
     // === CATALOGOS ===
     {
       id: "categories",
-      title: "Categorias",
-      description: "Organiza productos en grupos logicos",
+      title: "Categorías",
+      description: "Organiza productos en grupos lógicos",
       icon: "shape",
       route: "/(tabs)/administration/categories",
       color: palette.primary,
@@ -165,13 +199,15 @@ export default function AdministrationScreen() {
     },
     {
       id: "packages",
-      title: "Paquetes de producto",
+      title: "Paquetes",
       description: "Define paquetes y presentaciones de productos",
       icon: "package-variant",
       route: "/(tabs)/administration/packages",
       color: palette.warning,
       category: "catalog",
-      requiredPermission: "packages_list",
+      // Los paquetes son parte del catálogo de productos (no existe un
+      // permiso packages_list: la opción no se le mostraba a nadie).
+      requiredPermission: "products_list",
     },
     {
       id: "suppliers",
@@ -186,7 +222,7 @@ export default function AdministrationScreen() {
     {
       id: "clients",
       title: "Clientes",
-      description: "Gestiona informacion e historial de clientes",
+      description: "Gestiona información e historial de clientes",
       icon: "account-multiple",
       route: "/(tabs)/administration/clientes",
       color: palette.success,
@@ -199,15 +235,20 @@ export default function AdministrationScreen() {
   // - Si la opcion no requiere permiso, se muestra.
   // - Si requiere, debe estar en user.permissions (cargado por AuthContext).
   const visibleOptions = adminOptions.filter((option) => {
+    // Sin sucursal seleccionada no hay "esta sucursal".
+    if (option.category === "location" && !location) return false;
+    // Quien no administra todas las sucursales solo ve a los usuarios de la
+    // suya: los tiene en "Esta sucursal".
+    if (option.id === "company-users" && !hasPermission("locations_list")) return false;
     if (!option.requiredPermission) return true;
     return hasPermission(option.requiredPermission);
   });
 
   const categories = [
-    { key: "system", title: "Configuracion del sistema", icon: "server-security" },
-    { key: "company", title: "Mi empresa", icon: "office-building-cog" },
-    { key: "location", title: "Mi sucursal", icon: "store-cog" },
-    { key: "catalog", title: "Catalogos", icon: "database-cog" },
+    { key: "system", title: "Sistema", icon: "server-security" },
+    { key: "company", title: selectedCompany?.name ?? "Empresa", icon: "office-building-cog" },
+    { key: "location", title: "Esta sucursal", subtitle: location?.name, icon: "store-cog" },
+    { key: "catalog", title: "Catálogos", icon: "database-cog" },
   ] as const;
 
   return (
@@ -216,27 +257,8 @@ export default function AdministrationScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ============== INFO HEADER ============== */}
-        {visibleOptions.length > 0 && (
-          <View style={styles.headerCard}>
-            <View style={styles.headerIconBox}>
-              <MaterialCommunityIcons
-                name="information-outline"
-                size={20}
-                color={palette.info}
-              />
-            </View>
-            <View style={styles.headerBody}>
-              <Text style={styles.headerTitle}>
-                {selectedCompany
-                  ? `Configurando: ${selectedCompany.name}`
-                  : "Selecciona una empresa para comenzar"}
-              </Text>
-              <Text style={styles.headerSubtitle}>
-                Solo veras las opciones para las que tienes permisos
-              </Text>
-            </View>
-          </View>
+        {!selectedCompany && (
+          <Text style={styles.headerSubtitle}>Selecciona una empresa para empezar.</Text>
         )}
 
         {/* ============== CATEGORIES ============== */}
@@ -249,6 +271,7 @@ export default function AdministrationScreen() {
             <AdminSection
               key={category.key}
               title={category.title}
+              subtitle={"subtitle" in category ? category.subtitle : undefined}
               icon={category.icon as keyof typeof MaterialCommunityIcons.glyphMap}
               options={categoryOptions}
             />
@@ -261,18 +284,11 @@ export default function AdministrationScreen() {
             <EmptyState
               icon="shield-off-outline"
               title="Sin acceso"
-              description="No tienes permisos para acceder a opciones de administracion. Contacta a tu administrador."
+              description="No tienes permisos para acceder a opciones de administración. Contacta a tu administrador."
             />
           </View>
         )}
 
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            {visibleOptions.length} opcion
-            {visibleOptions.length === 1 ? "" : "es"} disponible
-            {visibleOptions.length === 1 ? "" : "s"}
-          </Text>
-        </View>
       </ScrollView>
     </View>
   );
@@ -286,6 +302,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingTop: tokens.spacing[4],
     paddingBottom: tokens.spacing[10],
+    width: "100%",
+    maxWidth: 760,
+    alignSelf: "center",
   },
 
   // --- Header card ---
@@ -322,9 +341,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   headerSubtitle: {
-    ...tokens.typography.caption,
+    ...tokens.typography.body,
     color: palette.textSecondary,
-    lineHeight: 16,
+    marginHorizontal: tokens.spacing[5],
+    marginBottom: tokens.spacing[4],
   },
 
   // --- Empty state ---

@@ -22,8 +22,8 @@ const segmentLabels: Record<string, string> = {
   closing: "Cierres anteriores",
   sessions: "Turnos de caja",
   companies: "Compañías",
-  "company-users": "Usuarios de compania",
-  "current-location": "Mi sucursal",
+  "company-users": "Usuarios",
+  "current-location": "Esta sucursal",
   edit: "Editar",
   expenses: "Gastos",
   form: "Nuevo",
@@ -73,7 +73,7 @@ const segmentLabels: Record<string, string> = {
 };
 
 const pathLabels: Record<string, string> = {
-  "/administration/current-location": "Mi sucursal",
+  "/administration/current-location": "Esta sucursal",
   "/home/purchases/formv2": "Nueva compra",
   "/home/sales/formv2": "Nueva venta",
   "/home/transfers/formv2": "Nueva solicitud",
@@ -85,6 +85,9 @@ const pathLabels: Record<string, string> = {
 // debe redirigir a la pantalla real (ej. el menu de transferencias).
 const hrefOverrides: Record<string, string> = {
   "/home/transfers": "/home/transfers-menu",
+  // Lo de la sucursal (usuarios…) se abre desde la sección "Esta sucursal"
+  // de Administración.
+  "/administration/current-location": "/administration",
 };
 
 const hiddenSegments = new Set(["", "(tabs)", "(stacks)", "index"]);

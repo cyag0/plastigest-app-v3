@@ -1,7 +1,9 @@
+import { shortLocationName } from "@/utils/locations";
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import Services from "@/utils/services";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { Button, Card, IconButton, Text } from "react-native-paper";
 import AppSelect from "../Form/AppSelect/AppSelect";
 
@@ -28,6 +30,11 @@ interface Props {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function LocationRoleList({ value, onChange, readonly, companyId }: Props) {
+  const { selectedCompany } = useAuth();
+  // En celular los dos selects lado a lado cortaban los nombres
+  // ("Cocos Francisco Suc…", "Encargado …"): se apilan.
+  const { width } = useWindowDimensions();
+  const stacked = width < 600;
   const [locations, setLocations] = useState<SelectOption[]>([]);
   const [roles, setRoles] = useState<SelectOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,12 +51,14 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
       .then(([locRes, roleRes]) => {
         const locs: any[] = Array.isArray(locRes.data) ? locRes.data : locRes.data?.data || [];
         const rls: any[] = Array.isArray(roleRes.data) ? roleRes.data : roleRes.data?.data || [];
-        setLocations(locs.map((l) => ({ value: String(l.id), label: l.name })));
+        setLocations(
+          locs.map((l) => ({ value: String(l.id), label: shortLocationName(l.name, selectedCompany?.name) })),
+        );
         setRoles(rls.map((r) => ({ value: String(r.id), label: r.name })));
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [companyId]);
+  }, [companyId, selectedCompany?.name]);
 
   const add = () => onChange([...value, { location_id: undefined, role_id: undefined }]);
 
@@ -107,9 +116,9 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
               )}
             </View>
 
-            <View style={styles.selects}>
+            <View style={[styles.selects, stacked && styles.selectsStacked]}>
               {/* Location */}
-              <View style={styles.selectLocation}>
+              <View style={[styles.selectLocation, stacked && styles.selectStacked]}>
                 <Text variant="labelSmall" style={styles.fieldLabel}>
                   Sucursal
                 </Text>
@@ -123,7 +132,7 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
               </View>
 
               {/* Role */}
-              <View style={styles.selectRole}>
+              <View style={[styles.selectRole, stacked && styles.selectStacked]}>
                 <Text variant="labelSmall" style={styles.fieldLabel}>
                   Rol
                 </Text>
@@ -197,6 +206,16 @@ const styles = StyleSheet.create({
   selects: {
     flexDirection: "row",
     gap: 10,
+  },
+  selectsStacked: {
+    flexDirection: "column",
+  },
+  // Apilados, cada select toma el alto de su contenido (flex: 3/2 es para
+  // repartir el ancho cuando van lado a lado).
+  selectStacked: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: "auto",
   },
   selectLocation: {
     flex: 3,

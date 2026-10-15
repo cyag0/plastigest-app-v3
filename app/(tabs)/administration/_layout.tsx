@@ -59,30 +59,16 @@ export default function _layout() {
           title: "Editar Compañía",
         }}
       />
-      <Stack.Screen
-        name="company-users/index"
-        options={{
-          title: "Usuarios de la Compañía",
-        }}
-      />
-      <Stack.Screen
-        name="company-users/form"
-        options={{
-          title: "Nuevo Usuario de la Compañía",
-        }}
-      />
-      <Stack.Screen
-        name="company-users/[id]/index"
-        options={{
-          title: "Ver Usuario de la Compañía",
-        }}
-      />
-      <Stack.Screen
-        name="company-users/[id]/edit"
-        options={{
-          title: "Editar Usuario de la Compañía",
-        }}
-      />
+      <Stack.Screen name="company-users/index" options={{ title: "Usuarios" }} />
+      <Stack.Screen name="company-users/form" options={{ title: "Nuevo usuario" }} />
+      <Stack.Screen name="company-users/[id]/index" options={{ title: "Usuario" }} />
+      <Stack.Screen name="company-users/[id]/edit" options={{ title: "Editar usuario" }} />
+
+      {/* Administración › Esta sucursal */}
+      <Stack.Screen name="current-location/users/index" options={{ title: "Usuarios de la sucursal" }} />
+      <Stack.Screen name="current-location/users/form" options={{ title: "Nuevo usuario" }} />
+      <Stack.Screen name="current-location/users/[id]/index" options={{ title: "Usuario" }} />
+      <Stack.Screen name="current-location/users/[id]/edit" options={{ title: "Editar usuario" }} />
 
       <Stack.Screen name="cash-registers/index" options={{ title: "Cajas" }} />
       <Stack.Screen name="cash-registers/form" options={{ title: "Nueva Caja" }} />
@@ -112,30 +98,10 @@ export default function _layout() {
           title: "Editar Sucursal",
         }}
       />
-      <Stack.Screen
-        name="users/index"
-        options={{
-          title: "Usuarios",
-        }}
-      />
-      <Stack.Screen
-        name="users/form"
-        options={{
-          title: "Nuevo Usuario",
-        }}
-      />
-      <Stack.Screen
-        name="users/[id]/index"
-        options={{
-          title: "Ver Usuario",
-        }}
-      />
-      <Stack.Screen
-        name="users/[id]/edit"
-        options={{
-          title: "Editar Usuario",
-        }}
-      />
+      <Stack.Screen name="users/index" options={{ title: "Todos los usuarios" }} />
+      <Stack.Screen name="users/form" options={{ title: "Nuevo usuario" }} />
+      <Stack.Screen name="users/[id]/index" options={{ title: "Usuario" }} />
+      <Stack.Screen name="users/[id]/edit" options={{ title: "Editar usuario" }} />
       <Stack.Screen
         name="current-location/index"
         options={{
