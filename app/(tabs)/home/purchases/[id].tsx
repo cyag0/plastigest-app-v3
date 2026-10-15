@@ -1,3 +1,4 @@
+import { formatDate } from "@/utils/dates";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
@@ -18,11 +19,11 @@ const toNum = (v: any): number => {
 
 // ── Status config ─────────────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
-  draft:      { color: "#f59e0b", icon: "file-document-edit-outline",  label: "Borrador" },
-  ordered:    { color: "#3b82f6", icon: "cart-check",                   label: "Pedido" },
-  in_transit: { color: "#8b5cf6", icon: "truck-delivery",              label: "En Tránsito" },
-  received:   { color: "#10b981", icon: "package-variant-closed-check", label: "Recibido" },
-  cancelled:  { color: "#ef4444", icon: "close-circle-outline",         label: "Cancelado" },
+  draft:      { color: "#C47F12", icon: "file-document-edit-outline",  label: "Borrador" },
+  ordered:    { color: "#2F6F7E", icon: "cart-check",                   label: "Pedido" },
+  in_transit: { color: "#7A6A8C", icon: "truck-delivery",              label: "En Tránsito" },
+  received:   { color: "#3F8A3A", icon: "package-variant-closed-check", label: "Recibido" },
+  cancelled:  { color: "#B9412C", icon: "close-circle-outline",         label: "Cancelado" },
 };
 
 const FLOW_STEPS = ["draft", "ordered", "in_transit", "received"] as const;
@@ -189,7 +190,7 @@ export default function PurchaseDetailScreen() {
 
   const status =
     STATUS_CONFIG[purchase.status] ?? {
-      color: "#6c757d",
+      color: "#6E6B5E",
       icon: "help-circle",
       label: purchase.status,
     };
@@ -220,7 +221,7 @@ export default function PurchaseDetailScreen() {
                 color="rgba(255,255,255,0.8)"
               />
               <Text variant="bodySmall" style={styles.headerMeta}>
-                {purchase.supplier_name || "Sin proveedor"}
+                {purchase.supplier_name || purchase.supplier?.name || "Sin proveedor"}
               </Text>
             </View>
             <View style={styles.row}>
@@ -230,9 +231,7 @@ export default function PurchaseDetailScreen() {
                 color="rgba(255,255,255,0.8)"
               />
               <Text variant="bodySmall" style={styles.headerMeta}>
-                {new Date(purchase.purchase_date).toLocaleDateString("es-MX", {
-                  dateStyle: "long",
-                })}
+                {formatDate(purchase.purchase_date, "long")}
               </Text>
             </View>
           </View>
@@ -291,7 +290,7 @@ export default function PurchaseDetailScreen() {
               const isCompleted = index < currentStepIndex;
               const isLast = index === FLOW_STEPS.length - 1;
               const dotColor =
-                isActive || isCompleted ? status.color : "#e4e7ec";
+                isActive || isCompleted ? status.color : "#E6E1D5";
 
               return (
                 <View key={key} style={styles.timelineItem}>
@@ -315,7 +314,7 @@ export default function PurchaseDetailScreen() {
                           {
                             backgroundColor: isCompleted
                               ? status.color
-                              : "#e4e7ec",
+                              : "#E6E1D5",
                           },
                         ]}
                       />
@@ -327,14 +326,14 @@ export default function PurchaseDetailScreen() {
                       style={{
                         fontWeight: isActive ? "700" : "400",
                         color:
-                          isActive || isCompleted ? palette.text : "#aaa",
+                          isActive || isCompleted ? palette.text : "#A39F92",
                       }}
                     >
                       {cfg.label}
                     </Text>
                     <Text
                       variant="bodySmall"
-                      style={{ color: "#aaa", fontSize: 11 }}
+                      style={{ color: "#A39F92", fontSize: 11 }}
                     >
                       {isActive
                         ? "Estado actual"
@@ -366,15 +365,15 @@ export default function PurchaseDetailScreen() {
           ]}
           elevation={1}
         >
-          <MaterialCommunityIcons name="close-circle" size={32} color="#ef4444" />
+          <MaterialCommunityIcons name="close-circle" size={32} color="#B9412C" />
           <View>
             <Text
               variant="titleMedium"
-              style={{ fontWeight: "700", color: "#ef4444" }}
+              style={{ fontWeight: "700", color: "#B9412C" }}
             >
               Compra Cancelada
             </Text>
-            <Text variant="bodySmall" style={{ color: "#aaa" }}>
+            <Text variant="bodySmall" style={{ color: "#A39F92" }}>
               Esta compra fue cancelada
             </Text>
           </View>
@@ -418,7 +417,7 @@ export default function PurchaseDetailScreen() {
                     <MaterialCommunityIcons
                       name="package-variant"
                       size={24}
-                      color="#aaa"
+                      color="#A39F92"
                     />
                   </View>
                 )}
@@ -431,7 +430,7 @@ export default function PurchaseDetailScreen() {
                   >
                     {detail.product_name}
                   </Text>
-                  <Text variant="bodySmall" style={{ color: "#999" }}>
+                  <Text variant="bodySmall" style={{ color: "#8F8B7D" }}>
                     {detail.product_code}
                   </Text>
                   {detail.package_name && (
@@ -439,14 +438,14 @@ export default function PurchaseDetailScreen() {
                       <MaterialCommunityIcons
                         name="package-variant-closed"
                         size={12}
-                        color="#aaa"
+                        color="#A39F92"
                       />
-                      <Text variant="bodySmall" style={{ color: "#999" }}>
+                      <Text variant="bodySmall" style={{ color: "#8F8B7D" }}>
                         {detail.package_name}
                       </Text>
                     </View>
                   )}
-                  <Text variant="bodySmall" style={{ color: "#aaa", marginTop: 2 }}>
+                  <Text variant="bodySmall" style={{ color: "#A39F92", marginTop: 2 }}>
                     {detail.unit_name} ({detail.unit_abbreviation})
                   </Text>
 
@@ -477,11 +476,11 @@ export default function PurchaseDetailScreen() {
                       <MaterialCommunityIcons
                         name="check-circle-outline"
                         size={13}
-                        color="#10b981"
+                        color="#3F8A3A"
                       />
                       <Text
                         variant="bodySmall"
-                        style={{ color: "#10b981", fontWeight: "600" }}
+                        style={{ color: "#3F8A3A", fontWeight: "600" }}
                       >
                         Recibido: {toNum(detail.quantity_received)}{" "}
                         {detail.unit_abbreviation}
@@ -521,7 +520,7 @@ export default function PurchaseDetailScreen() {
               Notas
             </Text>
           </View>
-          <Text variant="bodyMedium" style={{ color: "#555", lineHeight: 20 }}>
+          <Text variant="bodyMedium" style={{ color: "#57564B", lineHeight: 20 }}>
             {purchase.notes}
           </Text>
         </Surface>
@@ -536,7 +535,7 @@ export default function PurchaseDetailScreen() {
             loading={busy}
             disabled={busy}
             icon="cart-check"
-            buttonColor="#3b82f6"
+            buttonColor="#2F6F7E"
             style={styles.actionBtn}
           >
             Confirmar Pedido
@@ -550,7 +549,7 @@ export default function PurchaseDetailScreen() {
             loading={busy}
             disabled={busy}
             icon="truck-delivery"
-            buttonColor="#8b5cf6"
+            buttonColor="#7A6A8C"
             style={styles.actionBtn}
           >
             Marcar en Tránsito
@@ -564,7 +563,7 @@ export default function PurchaseDetailScreen() {
             loading={busy}
             disabled={busy}
             icon="package-variant-closed-check"
-            buttonColor="#10b981"
+            buttonColor="#3F8A3A"
             style={styles.actionBtn}
           >
             Confirmar Recepción
@@ -578,8 +577,8 @@ export default function PurchaseDetailScreen() {
             loading={busy}
             disabled={busy}
             icon="close-circle-outline"
-            textColor="#ef4444"
-            style={[styles.actionBtn, { borderColor: "#ef4444" }]}
+            textColor="#B9412C"
+            style={[styles.actionBtn, { borderColor: "#B9412C" }]}
           >
             Cancelar Compra
           </Button>
@@ -590,7 +589,7 @@ export default function PurchaseDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll:  { flex: 1, backgroundColor: "#f2f4f7" },
+  scroll:  { flex: 1, backgroundColor: "#F3F0E8" },
   content: { padding: 16, gap: 14 },
   center:  { flex: 1, justifyContent: "center", alignItems: "center" },
   card:    { backgroundColor: "white", borderRadius: 18, padding: 20 },
@@ -618,10 +617,10 @@ const styles = StyleSheet.create({
   timelineContent: { flex: 1, paddingTop: 4 },
 
   // Products
-  productItem:             { flexDirection: "row", gap: 12, alignItems: "flex-start", backgroundColor: "#f6f7fb", borderRadius: 12, padding: 12 },
+  productItem:             { flexDirection: "row", gap: 12, alignItems: "flex-start", backgroundColor: "#F6F4EE", borderRadius: 12, padding: 12 },
   productImage:            { width: 60, height: 60, borderRadius: 10 },
-  productImagePlaceholder: { backgroundColor: "#e4e7ec", justifyContent: "center", alignItems: "center" },
-  qtyBadge:                { backgroundColor: "#e8f0fe", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  productImagePlaceholder: { backgroundColor: "#E6E1D5", justifyContent: "center", alignItems: "center" },
+  qtyBadge:                { backgroundColor: "#DFEDF0", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
 
   // Actions
   actionBtn: { borderRadius: 10 },

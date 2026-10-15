@@ -1,3 +1,4 @@
+import { formatQuantity } from "@/utils/format";
 import palette from "@/constants/palette";
 import { resolveImageUri } from "@/utils/imageUtils";
 import type { InventoryTransfer } from "@/utils/services/transferService";
@@ -11,26 +12,26 @@ interface TransferStepFourSummaryProps {
 }
 
 function formatQty(value: number | string | undefined) {
-  return Number(value || 0).toFixed(3);
+  return formatQuantity(value);
 }
 
 function getReasonBadgeStyle(reason?: string) {
   if (reason === "loss") {
     return {
-      backgroundColor: "#B3261E",
+      backgroundColor: "#B9412C",
       text: "#FFFFFF",
     };
   }
 
   if (reason === "damage") {
     return {
-      backgroundColor: "#B45309",
+      backgroundColor: "#9A6210",
       text: "#FFFFFF",
     };
   }
 
   return {
-    backgroundColor: "#6B7280",
+    backgroundColor: "#6E6B5E",
     text: "#FFFFFF",
   };
 }
@@ -39,10 +40,10 @@ function getStepPresentation(result: string) {
   if (result === "failed") {
     return {
       icon: "close-circle-outline" as const,
-      iconColor: "#B3261E",
+      iconColor: "#B9412C",
       label: "Fallo",
-      chipBg: "#FDECEC",
-      chipText: "#8E1C15",
+      chipBg: "#F8E2DC",
+      chipText: "#8C3020",
       cardBorder: "#F4B4AE",
     };
   }
@@ -50,7 +51,7 @@ function getStepPresentation(result: string) {
   if (result === "completed") {
     return {
       icon: "check-circle-outline" as const,
-      iconColor: "#2E7D32",
+      iconColor: "#3F8A3A",
       label: "Completado",
       chipBg: "#EAF5E4",
       chipText: "#31502F",
@@ -71,7 +72,7 @@ function getStepPresentation(result: string) {
 
   return {
     icon: "clock-outline" as const,
-    iconColor: "#6B7280",
+    iconColor: "#6E6B5E",
     label: "Pendiente",
     chipBg: "#EFF1F4",
     chipText: "#465066",
@@ -300,7 +301,7 @@ export default function TransferStepFourSummary({
         <Divider style={styles.divider} />
 
         <Text style={styles.stepHelpText}>
-          Esta transferencia esta completada. Aqui puedes revisar el resultado
+          Esta transferencia está completada. Aquí puedes revisar el resultado
           final de todos los pasos.
         </Text>
 
@@ -324,7 +325,7 @@ export default function TransferStepFourSummary({
 
         {endedAtStep ? (
           <View style={styles.infoRowCompact}>
-            <Text style={styles.label}>Termino en:</Text>
+            <Text style={styles.label}>Terminó en:</Text>
             <Text style={[styles.value, endedAtStep < 4 && styles.valueFailed]}>
               Paso {endedAtStep}
             </Text>
@@ -346,7 +347,7 @@ export default function TransferStepFourSummary({
 
 
         <View style={styles.timelineBlock}>
-          <Text style={styles.timelineTitle}>Linea de tiempo</Text>
+          <Text style={styles.timelineTitle}>Línea de tiempo</Text>
 
           <View style={styles.timelineItem}>
             <MaterialCommunityIcons
@@ -355,7 +356,7 @@ export default function TransferStepFourSummary({
               color={palette.blue}
             />
             <Text style={styles.timelineText}>
-              Aprobacion: {formatDate(transfer.approved_at)}
+              Aprobación: {formatDate(transfer.approved_at)}
             </Text>
           </View>
 
@@ -375,7 +376,7 @@ export default function TransferStepFourSummary({
               color={palette.success}
             />
             <Text style={styles.timelineText}>
-              Recepcion: {formatDate(transfer.received_at)}
+              Recepción: {formatDate(transfer.received_at)}
             </Text>
           </View>
         </View>
@@ -404,7 +405,7 @@ export default function TransferStepFourSummary({
 
           {rowsWithDifferences.length === 0 ? (
             <Text style={styles.noDifferencesText}>
-              No se registraron diferencias en la recepcion.
+              No se registraron diferencias en la recepción.
             </Text>
           ) : (
             rowsWithDifferences.map((detail: any) => {
@@ -431,11 +432,11 @@ export default function TransferStepFourSummary({
         </View>
 
         <View style={styles.resumeBlock}>
-          <Text style={styles.resumeTitle}>Ajustes generados en recepcion</Text>
+          <Text style={styles.resumeTitle}>Ajustes generados en recepción</Text>
 
           {generatedAdjustments.length === 0 ? (
             <Text style={styles.noDifferencesText}>
-              No se generaron ajustes durante la recepcion.
+              No se generaron ajustes durante la recepción.
             </Text>
           ) : (
             generatedAdjustments.map((adjustment) => {
@@ -450,7 +451,7 @@ export default function TransferStepFourSummary({
                     <MaterialCommunityIcons
                       name="alert-circle-outline"
                       size={16}
-                      color="#8E1C15"
+                      color="#8C3020"
                     />
                     <Text style={styles.adjustmentCardTitle}>
                       Ajuste #{adjustment.id}
@@ -510,7 +511,7 @@ export default function TransferStepFourSummary({
 
           {renderStepCard({
             stepNumber: 1,
-            title: "Aprobacion",
+            title: "Aprobación",
             result: step1Result,
             completedAt: transfer.approved_at || transfer.requested_at,
             list: details,
@@ -527,7 +528,7 @@ export default function TransferStepFourSummary({
 
           {renderStepCard({
             stepNumber: 2,
-            title: "Envio",
+            title: "Envío",
             result: step2Result,
             completedAt: transfer.shipped_at,
             list: details,
@@ -545,7 +546,7 @@ export default function TransferStepFourSummary({
 
           {renderStepCard({
             stepNumber: 3,
-            title: "Recepcion",
+            title: "Recepción",
             result: step3Result,
             completedAt: transfer.received_at,
             list: details,
@@ -615,17 +616,17 @@ const styles = StyleSheet.create({
     height: 30,
   },
   statusChipFailed: {
-    backgroundColor: "#FDECEC",
+    backgroundColor: "#F8E2DC",
   },
   statusChipText: {
     color: "#31502F",
     fontWeight: "700",
   },
   statusChipTextFailed: {
-    color: "#8E1C15",
+    color: "#8C3020",
   },
   valueFailed: {
-    color: "#8E1C15",
+    color: "#8C3020",
     fontWeight: "700",
   },
   timelineBlock: {
@@ -707,7 +708,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1B5AF",
     borderRadius: 10,
-    backgroundColor: "#FDECEC",
+    backgroundColor: "#F8E2DC",
     padding: 10,
     marginBottom: 8,
     gap: 4,
@@ -719,7 +720,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   adjustmentCardTitle: {
-    color: "#8E1C15",
+    color: "#8C3020",
     fontWeight: "700",
     fontSize: 12,
   },
@@ -778,7 +779,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   failedText: {
-    color: "#8E1C15",
+    color: "#8C3020",
     fontWeight: "700",
     marginTop: 8,
   },

@@ -1,3 +1,5 @@
+import { formatMoney } from "@/utils/format";
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import type { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import type { VariantMatchMap } from "@/components/App/StatusBadge";
@@ -50,15 +52,7 @@ export default function HistoryTransfersScreen() {
     );
   }
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "";
-    const date = new Date(dateString);
-    return date.toLocaleDateString("es-MX", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
+  
 
   const getStatusInfo = (status: string) => {
     const statusMap: Record<
@@ -156,7 +150,7 @@ export default function HistoryTransfersScreen() {
       width: 140,
       align: "right",
       render: (_, item) =>
-        item.total_cost ? `$${(item.total_cost as number).toFixed(2)}` : "-",
+        item.total_cost ? formatMoney(item.total_cost) : "-",
     },
   ];
 

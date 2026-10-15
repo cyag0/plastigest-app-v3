@@ -1,3 +1,4 @@
+import { formatDate } from "@/utils/dates";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import services from "@/utils/services";
@@ -18,11 +19,11 @@ import {
 } from "react-native-paper";
 
 const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
-  pending:    { color: "#6B7280", icon: "clock-outline",         label: "Pendiente" },
-  preparing:  { color: "#D97706", icon: "progress-clock",        label: "Preparando" },
-  in_transit: { color: "#2563EB", icon: "truck-delivery",        label: "En tránsito" },
-  delivered:  { color: "#16A34A", icon: "check-circle-outline",  label: "Entregado" },
-  cancelled:  { color: "#DC2626", icon: "close-circle-outline",  label: "Cancelado" },
+  pending:    { color: "#6E6B5E", icon: "clock-outline",         label: "Pendiente" },
+  preparing:  { color: "#C47F12", icon: "progress-clock",        label: "Preparando" },
+  in_transit: { color: "#2F6F7E", icon: "truck-delivery",        label: "En tránsito" },
+  delivered:  { color: "#3F8A3A", icon: "check-circle-outline",  label: "Entregado" },
+  cancelled:  { color: "#B9412C", icon: "close-circle-outline",  label: "Cancelado" },
 };
 
 const FLOW_DELIVERY = ["pending", "preparing", "in_transit", "delivered"] as const;
@@ -206,7 +207,7 @@ export default function SalesOrderDetail() {
   const activeStepIndex = flowSteps.indexOf(status);
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f2f4f7" }}>
+    <View style={{ flex: 1, backgroundColor: "#F3F0E8" }}>
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: hasAnyAction ? 140 : 24 }}
         showsVerticalScrollIndicator={false}
@@ -237,7 +238,7 @@ export default function SalesOrderDetail() {
               </View>
               <View style={styles.row}>
                 <MaterialCommunityIcons name="calendar-outline" size={14} color="rgba(255,255,255,0.8)" />
-                <Text style={styles.headerMeta}>{order.order_date}</Text>
+                <Text style={styles.headerMeta}>{formatDate(order.order_date)}</Text>
               </View>
               {!!order.location && (
                 <View style={styles.row}>
@@ -284,11 +285,11 @@ export default function SalesOrderDetail() {
             <Text variant="titleMedium" style={styles.sectionTitle}>Progreso</Text>
             <View style={{ marginTop: 16 }}>
               {flowSteps.map((key, index) => {
-                const cfg = STATUS_CONFIG[key] ?? { color: "#ccc", icon: "help-circle", label: key };
+                const cfg = STATUS_CONFIG[key] ?? { color: "#D3CCBC", icon: "help-circle", label: key };
                 const isActive    = key === status;
                 const isCompleted = index < activeStepIndex;
                 const isLast      = index === flowSteps.length - 1;
-                const dotColor    = isActive || isCompleted ? statusColor : "#e4e7ec";
+                const dotColor    = isActive || isCompleted ? statusColor : "#E6E1D5";
                 return (
                   <View key={key} style={styles.timelineItem}>
                     <View style={styles.timelineLeft}>
@@ -300,17 +301,17 @@ export default function SalesOrderDetail() {
                         />
                       </View>
                       {!isLast && (
-                        <View style={[styles.timelineLine, { backgroundColor: isCompleted ? statusColor : "#e4e7ec" }]} />
+                        <View style={[styles.timelineLine, { backgroundColor: isCompleted ? statusColor : "#E6E1D5" }]} />
                       )}
                     </View>
                     <View style={styles.timelineContent}>
                       <Text
                         variant="bodyMedium"
-                        style={{ fontWeight: isActive ? "700" : "400", color: isActive || isCompleted ? "#1a1a1a" : "#aaa" }}
+                        style={{ fontWeight: isActive ? "700" : "400", color: isActive || isCompleted ? "#1a1a1a" : "#A39F92" }}
                       >
                         {cfg.label}
                       </Text>
-                      <Text variant="bodySmall" style={{ color: "#aaa", fontSize: 11 }}>
+                      <Text variant="bodySmall" style={{ color: "#A39F92", fontSize: 11 }}>
                         {isActive ? "Estado actual" : isCompleted ? "Completado" : "Pendiente"}
                       </Text>
                     </View>
@@ -327,10 +328,10 @@ export default function SalesOrderDetail() {
         {/* ── Cancelado banner ── */}
         {isCancelled && (
           <Surface style={[styles.card, { flexDirection: "row", alignItems: "center", gap: 12 }]} elevation={1}>
-            <MaterialCommunityIcons name="close-circle" size={32} color="#DC2626" />
+            <MaterialCommunityIcons name="close-circle" size={32} color="#B9412C" />
             <View>
-              <Text variant="titleMedium" style={{ fontWeight: "700", color: "#DC2626" }}>Pedido cancelado</Text>
-              <Text variant="bodySmall" style={{ color: "#aaa" }}>Este pedido fue cancelado</Text>
+              <Text variant="titleMedium" style={{ fontWeight: "700", color: "#B9412C" }}>Pedido cancelado</Text>
+              <Text variant="bodySmall" style={{ color: "#A39F92" }}>Este pedido fue cancelado</Text>
             </View>
           </Surface>
         )}
@@ -359,12 +360,12 @@ export default function SalesOrderDetail() {
                   </Text>
                   {!!d.package && (
                     <View style={[styles.row, { marginTop: 2 }]}>
-                      <MaterialCommunityIcons name="package-variant-closed" size={12} color="#aaa" />
-                      <Text variant="bodySmall" style={{ color: "#999" }}>{d.package.package_name}</Text>
+                      <MaterialCommunityIcons name="package-variant-closed" size={12} color="#A39F92" />
+                      <Text variant="bodySmall" style={{ color: "#8F8B7D" }}>{d.package.package_name}</Text>
                     </View>
                   )}
                   {!!d.unit && (
-                    <Text variant="bodySmall" style={{ color: "#aaa", marginTop: 2 }}>
+                    <Text variant="bodySmall" style={{ color: "#A39F92", marginTop: 2 }}>
                       {d.unit.name} ({d.unit.abbreviation})
                     </Text>
                   )}
@@ -382,16 +383,16 @@ export default function SalesOrderDetail() {
                     <View style={[styles.row, { marginTop: 6, gap: 14 }]}>
                       {toNum(d.prepared_quantity) > 0 && (
                         <View style={styles.row}>
-                          <MaterialCommunityIcons name="progress-check" size={13} color="#D97706" />
-                          <Text variant="bodySmall" style={{ color: "#D97706", fontWeight: "600" }}>
+                          <MaterialCommunityIcons name="progress-check" size={13} color="#C47F12" />
+                          <Text variant="bodySmall" style={{ color: "#C47F12", fontWeight: "600" }}>
                             Preparado: {toNum(d.prepared_quantity)}
                           </Text>
                         </View>
                       )}
                       {toNum(d.delivered_quantity) > 0 && (
                         <View style={styles.row}>
-                          <MaterialCommunityIcons name="check-circle-outline" size={13} color="#16A34A" />
-                          <Text variant="bodySmall" style={{ color: "#16A34A", fontWeight: "600" }}>
+                          <MaterialCommunityIcons name="check-circle-outline" size={13} color="#3F8A3A" />
+                          <Text variant="bodySmall" style={{ color: "#3F8A3A", fontWeight: "600" }}>
                             Entregado: {toNum(d.delivered_quantity)}
                           </Text>
                         </View>
@@ -405,13 +406,13 @@ export default function SalesOrderDetail() {
           <Divider style={{ marginVertical: 16 }} />
           <View style={{ gap: 6 }}>
             <View style={[styles.row, { justifyContent: "space-between" }]}>
-              <Text variant="bodyMedium" style={{ color: "#666" }}>Subtotal</Text>
+              <Text variant="bodyMedium" style={{ color: "#66635A" }}>Subtotal</Text>
               <Text variant="bodyMedium">{fmt(toNum(order.subtotal))}</Text>
             </View>
             {toNum(order.discount_amount) > 0 && (
               <View style={[styles.row, { justifyContent: "space-between" }]}>
-                <Text variant="bodyMedium" style={{ color: "#666" }}>Descuento</Text>
-                <Text variant="bodyMedium" style={{ color: "#16A34A" }}>-{fmt(toNum(order.discount_amount))}</Text>
+                <Text variant="bodyMedium" style={{ color: "#66635A" }}>Descuento</Text>
+                <Text variant="bodyMedium" style={{ color: "#3F8A3A" }}>-{fmt(toNum(order.discount_amount))}</Text>
               </View>
             )}
             <View style={[styles.row, { justifyContent: "space-between" }]}>
@@ -427,16 +428,16 @@ export default function SalesOrderDetail() {
         {!!order.sale && (
           <Surface style={styles.card} elevation={1}>
             <View style={[styles.row, { marginBottom: 8 }]}>
-              <MaterialCommunityIcons name="receipt" size={18} color="#16A34A" />
+              <MaterialCommunityIcons name="receipt" size={18} color="#3F8A3A" />
               <Text variant="titleMedium" style={styles.sectionTitle}>Venta vinculada</Text>
             </View>
             <View style={[styles.productItem, { backgroundColor: "#f0fdf4" }]}>
-              <MaterialCommunityIcons name="receipt" size={28} color="#16A34A" />
+              <MaterialCommunityIcons name="receipt" size={28} color="#3F8A3A" />
               <View style={{ flex: 1 }}>
-                <Text variant="bodyLarge" style={{ fontWeight: "700", color: "#16A34A" }}>
+                <Text variant="bodyLarge" style={{ fontWeight: "700", color: "#3F8A3A" }}>
                   {order.sale.sale_number ?? `Venta #${order.sale.id}`}
                 </Text>
-                <Text variant="bodySmall" style={{ color: "#16A34A", opacity: 0.8 }}>
+                <Text variant="bodySmall" style={{ color: "#3F8A3A", opacity: 0.8 }}>
                   {order.sale.status}
                 </Text>
               </View>
@@ -455,14 +456,14 @@ export default function SalesOrderDetail() {
               <Text variant="titleMedium" style={styles.sectionTitle}>Notas</Text>
             </View>
             {!!order.notes && (
-              <Text variant="bodyMedium" style={{ color: "#555", lineHeight: 20 }}>{order.notes}</Text>
+              <Text variant="bodyMedium" style={{ color: "#57564B", lineHeight: 20 }}>{order.notes}</Text>
             )}
             {!!order.internal_notes && (
               <>
                 <Text variant="labelSmall" style={{ color: palette.textSecondary, marginTop: 8 }}>
                   Notas internas
                 </Text>
-                <Text variant="bodyMedium" style={{ color: "#555", lineHeight: 20 }}>
+                <Text variant="bodyMedium" style={{ color: "#57564B", lineHeight: 20 }}>
                   {order.internal_notes}
                 </Text>
               </>
@@ -529,7 +530,7 @@ export default function SalesOrderDetail() {
                 loading={actionLoading}
                 disabled={actionLoading}
                 onPress={handlePrepare}
-                buttonColor="#D97706"
+                buttonColor="#C47F12"
                 style={{ borderRadius: 10 }}
               >
                 Marcar preparando
@@ -542,7 +543,7 @@ export default function SalesOrderDetail() {
                 loading={actionLoading}
                 disabled={actionLoading}
                 onPress={() => runAction("Enviar a ruta", () => services.salesOrders.ship(Number(id)))}
-                buttonColor="#2563EB"
+                buttonColor="#2F6F7E"
                 style={{ borderRadius: 10 }}
               >
                 Enviar a ruta
@@ -558,7 +559,7 @@ export default function SalesOrderDetail() {
                   setPaidAmount(String(toNum(order.total_amount)));
                   setCheckoutOpen(true);
                 }}
-                buttonColor="#16A34A"
+                buttonColor="#3F8A3A"
                 style={{ borderRadius: 10 }}
               >
                 Cobrar y cerrar venta
@@ -571,7 +572,7 @@ export default function SalesOrderDetail() {
                 loading={actionLoading}
                 disabled={actionLoading}
                 onPress={() => runAction("Marcar como entregado", () => services.salesOrders.deliver(Number(id)))}
-                buttonColor="#16A34A"
+                buttonColor="#3F8A3A"
                 style={{ borderRadius: 10 }}
               >
                 Marcar entregado
@@ -584,8 +585,8 @@ export default function SalesOrderDetail() {
                 loading={actionLoading}
                 disabled={actionLoading}
                 onPress={() => runAction("Cancelar pedido", () => services.salesOrders.cancel(Number(id)))}
-                textColor="#DC2626"
-                style={{ borderRadius: 10, borderColor: "#DC2626" }}
+                textColor="#B9412C"
+                style={{ borderRadius: 10, borderColor: "#B9412C" }}
               >
                 Cancelar pedido
               </Button>
@@ -620,9 +621,9 @@ const styles = StyleSheet.create({
   timelineLine:    { width: 2, flex: 1, marginTop: 4, minHeight: 24 },
   timelineContent: { flex: 1, paddingTop: 4 },
   // Products
-  productItem:  { flexDirection: "row", gap: 12, alignItems: "flex-start", backgroundColor: "#f6f7fb", borderRadius: 12, padding: 12 },
-  productThumb: { width: 52, height: 52, borderRadius: 10, backgroundColor: "#e4e7ec", justifyContent: "center", alignItems: "center" },
-  qtyBadge:     { backgroundColor: "#e8f0fe", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  productItem:  { flexDirection: "row", gap: 12, alignItems: "flex-start", backgroundColor: "#F6F4EE", borderRadius: 12, padding: 12 },
+  productThumb: { width: 52, height: 52, borderRadius: 10, backgroundColor: "#E6E1D5", justifyContent: "center", alignItems: "center" },
+  qtyBadge:     { backgroundColor: "#DFEDF0", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   // BottomBar
   bottomBar: {
     backgroundColor: "white",
@@ -634,7 +635,7 @@ const styles = StyleSheet.create({
   // Dialog input
   input: {
     borderWidth: 1,
-    borderColor: palette.border ?? "#ccc",
+    borderColor: palette.border ?? "#D3CCBC",
     borderRadius: 8,
     padding: 8,
     marginTop: 4,

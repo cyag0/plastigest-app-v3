@@ -1,3 +1,4 @@
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PermissionGate from "@/components/App/PermissionGate";
@@ -49,7 +50,7 @@ export default function SalesIndex() {
       case "cancelled":
         return palette.textMuted;
       default:
-        return "#6c757d";
+        return "#6E6B5E";
     }
   };
 
@@ -85,6 +86,8 @@ export default function SalesIndex() {
         return "bank-transfer";
       case "credit":
         return "account-clock";
+      case "mixed":
+        return "swap-horizontal";
       default:
         return "cash";
     }
@@ -100,6 +103,8 @@ export default function SalesIndex() {
         return "Transferencia";
       case "credit":
         return "Crédito";
+      case "mixed":
+        return "Mixto";
       default:
         return method || "-";
     }
@@ -108,13 +113,15 @@ export default function SalesIndex() {
   const getPaymentMethodColor = (method: string) => {
     switch (method) {
       case "cash":
-        return "#2E7D32";
+        return "#3F8A3A";
       case "card":
         return "#1565C0";
       case "transfer":
         return "#6D4C41";
       case "credit":
         return "#7B1FA2";
+      case "mixed":
+        return "#00838F";
       default:
         return "#607D8B";
     }
@@ -136,11 +143,11 @@ export default function SalesIndex() {
   const getPaymentStatusColor = (status?: string) => {
     switch (status) {
       case "paid":
-        return "#2E7D32";
+        return "#3F8A3A";
       case "partial":
-        return "#B45309";
+        return "#9A6210";
       case "pending":
-        return "#B3261E";
+        return "#B9412C";
       default:
         return "#607D8B";
     }
@@ -151,7 +158,7 @@ export default function SalesIndex() {
       {
         title: "Venta",
         key: "sale_number",
-        width: 130,
+        width: 180,
         render: (_, sale) => sale.sale_number || `#${sale.id}`,
       },
       {
@@ -159,11 +166,7 @@ export default function SalesIndex() {
         key: "sale_date",
         width: 130,
         render: (_, sale) =>
-          new Date(sale.sale_date).toLocaleDateString("es-MX", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          }),
+          formatDate(sale.sale_date),
       },
       {
         title: "Estado",
@@ -271,11 +274,7 @@ export default function SalesIndex() {
           bottom: [
             {
               label: "Fecha",
-              value: new Date(sale.sale_date).toLocaleDateString("es-MX", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-              }),
+              value: formatDate(sale.sale_date),
             },
             {
               label: "Método de pago",

@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -253,7 +254,7 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
         alerts.success("Reporte guardado exitosamente");
       }
 
-      router.back();
+      goBack();
     } catch (error: any) {
       console.error("Error saving report:", error);
       alerts.error(
@@ -301,7 +302,9 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
                     {location?.name || "Sin ubicación"}
                   </Text>
                   <Text variant="bodySmall" style={styles.date}>
-                    {dayjs(reportDate).format("dddd, D [de] MMMM [de] YYYY")}
+                    {capitalizeFirst(
+                      dayjs(reportDate).format("dddd, D [de] MMMM [de] YYYY"),
+                    )}
                   </Text>
                 </View>
               </View>
@@ -641,7 +644,7 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
 
       {!props.readonly && (
         <View style={styles.actions}>
-          <Button mode="outlined" onPress={() => router.back()}>
+          <Button mode="outlined" onPress={() => goBack()}>
             Cancelar
           </Button>
           <Button
@@ -662,7 +665,7 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#F3F0E8",
   },
   content: {
     padding: 16,
@@ -691,7 +694,6 @@ const styles = StyleSheet.create({
   date: {
     color: palette.textSecondary,
     marginTop: 2,
-    textTransform: "capitalize",
   },
   sectionHeader: {
     flexDirection: "row",
@@ -729,7 +731,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     padding: 12,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#F3F0E8",
     borderRadius: 8,
   },
   helpText: {
@@ -754,7 +756,7 @@ const styles = StyleSheet.create({
   readonlyItem: {
     flex: 1,
     padding: 12,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#F3F0E8",
     borderRadius: 8,
     alignItems: "center",
   },
@@ -764,3 +766,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 });
+
+// "martes, 13 de octubre de 2026" → "Martes, 13 de octubre de 2026"
+// (textTransform: capitalize ponía "13 De Octubre De").
+function capitalizeFirst(text: string) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}

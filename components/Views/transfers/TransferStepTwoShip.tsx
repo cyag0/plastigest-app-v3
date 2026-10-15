@@ -114,9 +114,9 @@ export default function TransferStepTwoShip({
     }
 
     const confirmed = await alerts.confirm(
-      "¿Deseas confirmar el envio y transferir estos productos?",
+      "¿Deseas confirmar el envío y transferir estos productos?",
       {
-        title: "Confirmar envio",
+        title: "Confirmar envío",
         okText: "Transferir",
         cancelText: "Cancelar",
       },
@@ -167,7 +167,7 @@ export default function TransferStepTwoShip({
         <Divider style={styles.divider} />
         <Text style={styles.stepHelpText}>
           {canContinueShipInStep2
-            ? "Verifica los productos aprobados y sube imagenes obligatorias como evidencia del transporte."
+            ? "Verifica los productos aprobados y sube imágenes obligatorias como evidencia del transporte."
             : isRequester
               ? "Tu solicitud fue aprobada. Ahora estas esperando que la otra sucursal confirme el transporte de los productos."
               : "Esta etapa la completa la sucursal que envia los productos."}
@@ -205,7 +205,7 @@ export default function TransferStepTwoShip({
           <>
             <Text style={styles.stepMutedText}>
               {isRequester
-                ? "Modo historial: puedes ver lo que ya se envio, pero no modificarlo."
+                ? "Modo historial: puedes ver lo que ya se envió, pero no modificarlo."
                 : "Modo historial: este paso ya fue procesado y solo esta disponible en lectura."}
             </Text>
 
@@ -240,7 +240,7 @@ export default function TransferStepTwoShip({
             ) : (
               <Text style={styles.stepMutedText}>
                 {isHistoricalStep2
-                  ? "No se registraron evidencias para este envio."
+                  ? "No se registraron evidencias para este envío."
                   : "Este paso todavia no se procesa y no hay evidencias."}
               </Text>
             )}
@@ -248,7 +248,7 @@ export default function TransferStepTwoShip({
         ) : (
           <>
             <AppUpload
-              label="Imagenes de transporte"
+              label="Imágenes de transporte"
               placeholder="Subir fotos del transporte (obligatorio)"
               value={evidence}
               onChange={(files: UploadedFile[]) => setEvidence(files)}

@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
 import palette from "@/constants/palette";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -128,7 +129,7 @@ export default function ProductosScreen() {
             <View style={{ padding: 16 }}>
               <Button
                 mode="contained"
-                onPress={() => router.back()}
+                onPress={() => goBack()}
                 style={{ marginTop: 8 }}
                 icon="arrow-left"
               >

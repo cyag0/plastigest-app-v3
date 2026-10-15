@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import { useSale } from "./SaleContext";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -90,7 +91,7 @@ export default function ScannerScreen() {
           </Button>
           <Button
             mode="text"
-            onPress={() => router.back()}
+            onPress={() => goBack()}
             style={{ marginTop: 8 }}
           >
             Volver
@@ -104,7 +105,9 @@ export default function ScannerScreen() {
     <View style={styles.container}>
       <View style={styles.scannerContainer}>
         <CameraView
-          style={StyleSheet.absoluteFillObject}
+          // RN 0.85 eliminó StyleSheet.absoluteFillObject: con él la cámara
+          // quedaba sin tamaño (en blanco) en Android/iOS.
+          style={StyleSheet.absoluteFill}
           facing="back"
           barcodeScannerSettings={{
             barcodeTypes: [
@@ -162,7 +165,7 @@ export default function ScannerScreen() {
 
         <Button
           mode="contained"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           style={{ marginTop: 16 }}
           buttonColor={palette.error}
         >
@@ -189,7 +192,12 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    // Equivalente a absoluteFill (eliminado en RN 0.85 como objeto).
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     justifyContent: "center",
   },
   unfocusedContainer: {

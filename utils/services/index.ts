@@ -119,19 +119,23 @@ const Services = {
   },
   productPackages: {
     ...createCrudService<any>("/auth/admin/product-packages"),
+    /**
+     * Paquete activo con ese código de barras exacto, o `{ data: null }`.
+     * El backend no tiene `POST product-packages/search-barcode` (respondía
+     * 405); se usa el listado con `search` (busca también por barcode) y se
+     * filtra la coincidencia exacta. Requiere products_list.
+     */
     async searchByBarcode(barcode: string) {
-      const response = await axiosClient.post(
-        "/auth/admin/product-packages/search-barcode",
-        { barcode },
-      );
-      return response.data;
-    },
-    async generateBarcode(productId: number) {
-      const response = await axiosClient.post(
-        "/auth/admin/product-packages/generate-barcode",
-        { product_id: productId },
-      );
-      return response.data;
+      const code = barcode.trim();
+      const response = await axiosClient.get("/auth/admin/product-packages", {
+        params: { search: code, active_only: 1 },
+      });
+      const body: any = response.data;
+      const list: any[] = Array.isArray(body) ? body : body?.data ?? [];
+      const match =
+        list.find((pkg) => pkg?.barcode != null && String(pkg.barcode).trim() === code) ??
+        null;
+      return { data: match };
     },
   },
   companies: {
@@ -274,7 +278,8 @@ const Services = {
     },
   },
   sales: {
-    ...createCrudService<App.Entities.Sale>("/auth/admin/sales"),
+    // App.Entities no declara Sale (las pantallas leen la venta como any).
+    ...createCrudService<any>("/auth/admin/sales"),
     async cancel(id: number) {
       const response = await axiosClient.post(`/auth/admin/sales/${id}/cancel`);
       return response.data;

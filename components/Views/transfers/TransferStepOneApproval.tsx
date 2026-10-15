@@ -48,7 +48,7 @@ export default function TransferStepOneApproval({
               color={palette.blue}
             />
             <Text variant="titleMedium" style={styles.sectionTitle}>
-              Paso 1: Aprobacion
+              Paso 1: Aprobación
             </Text>
           </View>
 
@@ -56,10 +56,10 @@ export default function TransferStepOneApproval({
 
           <Text style={styles.stepHelpText}>
             {canApproveInStep1
-              ? "Debes revisar los productos solicitados, ajustar cantidades si hace falta y confirmar la aprobacion o rechazo."
+              ? "Debes revisar los productos solicitados, ajustar cantidades si hace falta y confirmar la aprobación o rechazo."
               : isRequester
-                ? "Tu solicitud esta en revision. Espera a que la otra sucursal confirme si aprueba o rechaza esta transferencia."
-                : "Esta etapa esta en revision por el responsable de la sucursal origen."}
+                ? "Tu solicitud está en revisión. Espera a que la otra sucursal confirme si aprueba o rechaza esta transferencia."
+                : "Esta etapa está en revisión por el responsable de la sucursal origen."}
           </Text>
 
           <View style={styles.infoRowCompact}>
@@ -170,7 +170,7 @@ export default function TransferStepOneApproval({
                     {detail.product?.name || "Producto"}
                   </Text>
                   <Text style={styles.productCode}>
-                    Codigo: {detail.product?.code || "N/A"}
+                    Código: {detail.product?.code || "N/A"}
                   </Text>
 
                   {canEditQuantitiesInStep1 ? (
@@ -210,7 +210,7 @@ export default function TransferStepOneApproval({
           {!canApproveInStep1 && (
             <Text style={styles.stepMutedText}>
               {isRequester
-                ? "Cuando la otra sucursal confirme esta etapa, podras dar seguimiento al avance del envio."
+                ? "Cuando la otra sucursal confirme esta etapa, podrás dar seguimiento al avance del envío."
                 : "Esta pantalla es informativa para tu perfil. Solo quien aprueba en la sucursal origen puede editar cantidades y decidir."}
             </Text>
           )}
@@ -293,13 +293,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   badgeSender: {
-    backgroundColor: "#E3F2FD",
+    backgroundColor: "#DFEDF0",
   },
   badgeReceiver: {
     backgroundColor: "#F3E5F5",
   },
   badgeText: {
-    color: "#333",
+    color: "#3E3C33",
     fontWeight: "600", 
     fontSize: 12,
   },

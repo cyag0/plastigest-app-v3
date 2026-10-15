@@ -57,10 +57,14 @@ interface PurchaseContextType {
   setSupplier: (supplierId: number | null) => void;
   confirmPurchase: (data?: {
     expected_delivery_date?: string;
+    supplier_id?: string;
+    purchase_date?: string;
     document_number?: string;
     payment_method?: string;
     paid_from_cash?: boolean;
   }) => Promise<void>;
+  /** Ref del formulario de la compra: el contexto lo llena con el borrador. */
+  formRef: React.RefObject<AppFormRef<{}> | null>;
 }
 
 const PurchaseContext = createContext<PurchaseContextType | undefined>(
@@ -248,6 +252,8 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
               toLocalDateString(),
             notes: response.data.notes || "",
             document_number: response.data.document_number || "",
+            payment_method: response.data.payment_method || "other",
+            paid_from_cash: response.data.paid_from_cash ?? true,
           });
         }
       }
@@ -411,9 +417,13 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
         break;
 
       case "set": {
+        // El carrito ya decide si la unidad admite decimales (kg, L): aquí
+        // sólo se descarta lo que no es una cantidad positiva.
         const qty =
-          typeof data === "number" ? data : parseInt(String(data), 10);
-        if (isNaN(qty) || qty < 1) return;
+          typeof data === "number"
+            ? data
+            : parseFloat(String(data).replace(",", "."));
+        if (isNaN(qty) || qty <= 0) return;
         newQuantity = qty;
         newSelectedProducts[productId] = {
           ...current,
@@ -473,6 +483,8 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
 
   const confirmPurchase = async (data?: {
     expected_delivery_date?: string;
+    supplier_id?: string;
+    purchase_date?: string;
     document_number?: string;
     payment_method?: string;
     paid_from_cash?: boolean;

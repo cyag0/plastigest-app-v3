@@ -1,3 +1,4 @@
+import { formatQuantity } from "@/utils/format";
 import {
   ProductListItem as BaseProductListItem,
   ProductCategory,
@@ -291,7 +292,7 @@ export function TransferProvider({ children }: TransferProviderProps) {
       );
       const remaining = availableStock - usedStock;
       alerts.error(
-        `Stock insuficiente en ubicación de origen. Disponible: ${availableStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, En carrito: ${usedStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, Restante: ${remaining.toFixed(3)} ${productBaseUnit?.abbreviation || ""}`,
+        `Stock insuficiente en ubicación de origen. Disponible: ${formatQuantity(availableStock)} ${productBaseUnit?.abbreviation || ""}, En carrito: ${formatQuantity(usedStock)} ${productBaseUnit?.abbreviation || ""}, Restante: ${formatQuantity(remaining)} ${productBaseUnit?.abbreviation || ""}`,
       );
       return;
     }
@@ -366,7 +367,7 @@ export function TransferProvider({ children }: TransferProviderProps) {
           );
           const remaining = availableStock - usedStock;
           alerts.error(
-            `Stock insuficiente. Disponible: ${availableStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, Restante: ${remaining.toFixed(3)} ${productBaseUnit?.abbreviation || ""}`,
+            `Stock insuficiente. Disponible: ${formatQuantity(availableStock)} ${productBaseUnit?.abbreviation || ""}, Restante: ${formatQuantity(remaining)} ${productBaseUnit?.abbreviation || ""}`,
           );
           return prev;
         }
@@ -389,8 +390,12 @@ export function TransferProvider({ children }: TransferProviderProps) {
         // Cantidad escrita a mano en el carrito. Antes esta acción no se
         // manejaba y lo que el usuario tecleaba se ignoraba: solo +/-
         // cambiaban la cantidad.
-        const qty = typeof data === "number" ? data : parseInt(String(data), 10);
-        if (isNaN(qty) || qty < 1) {
+        // El carrito ya decide si la unidad admite decimales (kg, L).
+        const qty =
+          typeof data === "number"
+            ? data
+            : parseFloat(String(data).replace(",", "."));
+        if (isNaN(qty) || qty <= 0) {
           return prev;
         }
 
@@ -492,7 +497,7 @@ export function TransferProvider({ children }: TransferProviderProps) {
             const remaining = availableStock - usedStockExcludingCurrent;
 
             alerts.error(
-              `No se puede cambiar unidad. Stock disponible: ${availableStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, ya usado: ${usedStockExcludingCurrent.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, restante: ${remaining.toFixed(3)} ${productBaseUnit?.abbreviation || ""}`,
+              `No se puede cambiar unidad. Stock disponible: ${formatQuantity(availableStock)} ${productBaseUnit?.abbreviation || ""}, ya usado: ${formatQuantity(usedStockExcludingCurrent)} ${productBaseUnit?.abbreviation || ""}, restante: ${formatQuantity(remaining)} ${productBaseUnit?.abbreviation || ""}`,
             );
             return prev;
           }

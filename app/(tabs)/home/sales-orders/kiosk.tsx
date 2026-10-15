@@ -407,7 +407,30 @@ export default function KioskScreen() {
   // ---------- Scanner ----------
 
   const handleScanned = useCallback(
-    async (code: string) => {
+    async (rawCode: string) => {
+      const code = rawCode.trim();
+      if (!code) return;
+
+      // 1) Primero en lo que ya está cargado: código de barras de un paquete
+      //    o código del producto. No depende de la red.
+      for (const product of products) {
+        const localPackage = product.active_packages?.find(
+          (p) => p.barcode != null && String(p.barcode).trim() === code,
+        );
+        if (localPackage) {
+          handleAddFromCard(product, localPackage);
+          return;
+        }
+      }
+      const productByCode = products.find(
+        (p) => p.code != null && String(p.code).trim() === code,
+      );
+      if (productByCode) {
+        handleAddFromCard(productByCode, null);
+        return;
+      }
+
+      // 2) Si no, buscar el paquete en el servidor.
       try {
         const res = await Services.productPackages.searchByBarcode(code);
         const pkg = res?.data?.data ?? res?.data ?? res;
@@ -855,7 +878,7 @@ const styles = StyleSheet.create({
     width: "100%",
     aspectRatio: 1,
     borderRadius: 8,
-    backgroundColor: palette.surface ?? "#f0f0f0",
+    backgroundColor: palette.surface ?? "#F0EDE4",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 4,
@@ -916,7 +939,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     borderWidth: 1,
-    borderColor: palette.border ?? "#ccc",
+    borderColor: palette.border ?? "#D3CCBC",
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 10,
@@ -929,6 +952,6 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: palette.border ?? "#eee",
+    borderColor: palette.border ?? "#EEEAE0",
   },
 });

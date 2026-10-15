@@ -1,3 +1,6 @@
+import { SafeAreaView } from "react-native-safe-area-context";
+import { formatMoney } from "@/utils/format";
+import EmptyState from "@/components/App/EmptyState";
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
@@ -22,7 +25,12 @@ type ListSelectedProduct = {
 
 function CartHeaderButton({ count, onPress }: { count: number; onPress: () => void }) {
   return (
-    <TouchableOpacity onPress={onPress} style={cartBtnStyles.btn} activeOpacity={0.7}>
+    <TouchableOpacity
+      onPress={onPress}
+      style={cartBtnStyles.btn}
+      activeOpacity={0.7}
+      accessibilityLabel="Ver carrito"
+    >
       <MaterialCommunityIcons name="cart-outline" size={24} color={palette.text} />
       {count > 0 && (
         <View style={cartBtnStyles.badge}>
@@ -168,6 +176,9 @@ function TransferFormContent() {
         return;
       }
 
+      // El diálogo vive en el Portal de la app: con el modal del carrito abierto
+      // (mobile) quedaba detrás y el botón parecía no hacer nada.
+      setCartVisible(false);
       const confirmed = await alerts.confirm(
         "¿Deseas crear esta solicitud de transferencia?",
         {
@@ -177,7 +188,10 @@ function TransferFormContent() {
         },
       );
 
-      if (!confirmed) return;
+      if (!confirmed) {
+        if (isMobile) setCartVisible(true);
+        return;
+      }
 
       await transferContext.confirmTransfer({
         notes: notes || undefined,
@@ -211,47 +225,6 @@ function TransferFormContent() {
           <Text style={styles.sectionTitle}>
             Configuración de Transferencia
           </Text>
-
-          {/* Ubicación de Origen */}
-          <View style={{ marginBottom: 16 }}>
-            <Text style={styles.label}>Ubicación de Origen</Text>
-            <Text style={styles.sublabel}>
-              De dónde se tomarán los productos
-            </Text>
-            {loadingLocations ? (
-              <Text style={styles.loadingText}>Cargando ubicaciones...</Text>
-            ) : (
-              <Menu
-                visible={fromMenuVisible}
-                onDismiss={() => setFromMenuVisible(false)}
-                contentStyle={styles.menuContent}
-                anchor={
-                  <Button
-                    mode="outlined"
-                    onPress={() => setFromMenuVisible(true)}
-                    style={styles.selectButton}
-                    contentStyle={styles.selectButtonContent}
-                    icon="map-marker"
-                  >
-                    {locations.find(
-                      (l) => l.id === transferContext.fromLocationId,
-                    )?.name || "Seleccionar origen..."}
-                  </Button>
-                }
-              >
-                {availableFromLocations.map((location) => (
-                  <Menu.Item
-                    key={location.id}
-                    onPress={() => {
-                      transferContext.setFromLocation(location.id);
-                      setFromMenuVisible(false);
-                    }}
-                    title={location.name}
-                  />
-                ))}
-              </Menu>
-            )}
-          </View>
 
           {/* Ubicación de Destino */}
           {/* <View style={{ marginBottom: 16 }}>
@@ -301,7 +274,7 @@ function TransferFormContent() {
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Costo estimado:</Text>
-                <Text style={styles.summaryValue}>${totalCost.toFixed(2)}</Text>
+                <Text style={styles.summaryValue}>{formatMoney(totalCost)}</Text>
               </View>
             </Card.Content>
           </Card>
@@ -325,19 +298,75 @@ function TransferFormContent() {
         </Cart>
   );
 
+  const fromLocationName = locations.find(
+    (l) => l.id === transferContext.fromLocationId,
+  )?.name;
+
+  // Primer paso de la solicitud: de qué sucursal se piden los productos. Va
+  // arriba del catálogo (antes estaba al fondo del carrito y en celular ni se
+  // veía: el catálogo decía "Agrega productos para empezar a vender").
+  const originBar = (
+    <View style={styles.originBar}>
+      <MaterialCommunityIcons name="store-marker-outline" size={20} color={palette.primary} />
+      <Text style={styles.originLabel}>Pedir a</Text>
+      {loadingLocations ? (
+        <Text style={styles.loadingText}>Cargando sucursales...</Text>
+      ) : (
+        <Menu
+          visible={fromMenuVisible}
+          onDismiss={() => setFromMenuVisible(false)}
+          contentStyle={styles.menuContent}
+          anchor={
+            <Button
+              mode={fromLocationName ? "outlined" : "contained"}
+              onPress={() => setFromMenuVisible(true)}
+              icon="chevron-down"
+              contentStyle={{ flexDirection: "row-reverse" }}
+              compact
+            >
+              {fromLocationName || "Elegir sucursal"}
+            </Button>
+          }
+        >
+          {availableFromLocations.map((location) => (
+            <Menu.Item
+              key={location.id}
+              onPress={() => {
+                transferContext.setFromLocation(location.id);
+                setFromMenuVisible(false);
+              }}
+              title={location.name}
+            />
+          ))}
+        </Menu>
+      )}
+    </View>
+  );
+
   return (
     <View style={styles.container}>
       {/* Lista de productos */}
       <View style={styles.productsSection}>
-        <ListProducts
-          loading={transferContext.loading || loadingLocations}
-          categories={transferContext.categories}
-          products={transferContext.products}
-          selectedProducts={selectedProductsForList}
-          onAddProduct={transferContext.handleAddProduct}
-          onRemoveProduct={transferContext.handleRemoveProduct}
-          onItemChange={transferContext.handleItemChange}
-        />
+        {originBar}
+        {!transferContext.fromLocationId && !loadingLocations ? (
+          <EmptyState
+            icon="store-search-outline"
+            title="Elige de qué sucursal pides"
+            description="Verás el catálogo y las existencias de esa sucursal para armar tu solicitud."
+            actionLabel="Elegir sucursal"
+            onAction={() => setFromMenuVisible(true)}
+          />
+        ) : (
+          <ListProducts
+            loading={transferContext.loading || loadingLocations}
+            categories={transferContext.categories}
+            products={transferContext.products}
+            selectedProducts={selectedProductsForList}
+            onAddProduct={transferContext.handleAddProduct}
+            onRemoveProduct={transferContext.handleRemoveProduct}
+            onItemChange={transferContext.handleItemChange}
+          />
+        )}
       </View>
 
       {/* Carrito lateral — solo desktop */}
@@ -352,7 +381,7 @@ function TransferFormContent() {
           animationType="slide"
           onRequestClose={() => setCartVisible(false)}
         >
-          <View style={styles.cartModal}>
+          <SafeAreaView style={styles.cartModal} edges={["top", "bottom"]}>
             <View style={styles.cartModalHeader}>
               <Text style={styles.cartModalTitle}>Carrito</Text>
               <TouchableOpacity
@@ -364,7 +393,7 @@ function TransferFormContent() {
               </TouchableOpacity>
             </View>
             {cartContent}
-          </View>
+          </SafeAreaView>
         </Modal>
       )}
     </View>
@@ -384,6 +413,22 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     backgroundColor: "transparent" as any,
+  },
+  originBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: palette.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
+  },
+  originLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: palette.text,
   },
   productsSection: {
     flex: 1,

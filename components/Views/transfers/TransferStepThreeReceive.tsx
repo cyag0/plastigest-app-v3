@@ -1,3 +1,4 @@
+import { formatQuantity } from "@/utils/format";
 import AppUpload, { UploadedFile } from "@/components/Form/AppUpload";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -36,32 +37,32 @@ interface TransferStepThreeReceiveProps {
 }
 
 function formatQty(value: number | string | undefined) {
-  return Number(value || 0).toFixed(3);
+  return formatQuantity(value);
 }
 
 function getReasonLabel(reason?: string) {
-  if (reason === "loss") return "Extravio";
-  if (reason === "damage") return "Dano";
+  if (reason === "loss") return "Extravío";
+  if (reason === "damage") return "Daño";
   return "-";
 }
 
 function getReasonBadgeStyle(reason?: string) {
   if (reason === "loss") {
     return {
-      backgroundColor: "#B3261E",
+      backgroundColor: "#B9412C",
       text: "#FFFFFF",
     };
   }
 
   if (reason === "damage") {
     return {
-      backgroundColor: "#B45309",
+      backgroundColor: "#9A6210",
       text: "#FFFFFF",
     };
   }
 
   return {
-    backgroundColor: "#6B7280",
+    backgroundColor: "#6E6B5E",
     text: "#FFFFFF",
   };
 }
@@ -230,7 +231,7 @@ export default function TransferStepThreeReceive({
       }
       if (row.quantity_received < row.expected && !row.adjustment_reason) {
         alerts.error(
-          `Debes indicar si el faltante de ${row.product_name} fue por extravio o dano`,
+          `Debes indicar si el faltante de ${row.product_name} fue por extravío o daño`,
         );
         return;
       }
@@ -247,9 +248,9 @@ export default function TransferStepThreeReceive({
     }
 
     const confirmed = await alerts.confirm(
-      "¿Deseas confirmar la recepcion de esta transferencia?",
+      "¿Deseas confirmar la recepción de esta transferencia?",
       {
-        title: "Confirmar recepcion",
+        title: "Confirmar recepción",
         okText: "Confirmar",
         cancelText: "Cancelar",
       },
@@ -290,13 +291,13 @@ export default function TransferStepThreeReceive({
         evidence,
       });
 
-      alerts.success("Recepcion confirmada correctamente");
+      alerts.success("Recepción confirmada correctamente");
       await onCompleted();
     } catch (error: any) {
       alerts.error(
         error?.response?.data?.message ||
           error?.message ||
-          "No se pudo confirmar la recepcion",
+          "No se pudo confirmar la recepción",
       );
     } finally {
       setSaving(false);
@@ -313,7 +314,7 @@ export default function TransferStepThreeReceive({
             color={palette.success}
           />
           <Text variant="titleMedium" style={styles.sectionTitle}>
-            Paso 3: Recepcion
+            Paso 3: Recepción
           </Text>
         </View>
 
@@ -321,16 +322,16 @@ export default function TransferStepThreeReceive({
 
         <Text style={styles.stepHelpText}>
           {canContinueReceiveInStep3
-            ? "Debes confirmar la recepcion y registrar diferencias si existe faltante o dano."
+            ? "Debes confirmar la recepción y registrar diferencias si existe faltante o daño."
             : isRequester
-              ? "El pedido ya va en camino. Estas esperando que la sucursal destino confirme la recepcion."
+              ? "El pedido ya va en camino. Estás esperando que la sucursal destino confirme la recepción."
               : "Esta etapa la completa la sucursal que recibe la transferencia."}
         </Text>
 
         {!canContinueReceiveInStep3 && (
           <Text style={styles.stepMutedText}>
             {isRequester
-              ? "Modo historial: puedes ver el resultado de la recepcion, sin modificar datos."
+              ? "Modo historial: puedes ver el resultado de la recepción, sin modificar datos."
               : "Modo historial: este paso ya fue procesado y solo esta disponible en lectura."}
           </Text>
         )}
@@ -434,7 +435,7 @@ export default function TransferStepThreeReceive({
                     />
                   ) : (
                     <Text style={styles.okHintText}>
-                      Se registrara recepcion completa:{" "}
+                      Se registrará recepción completa:{" "}
                       {row.expected.toFixed(3)} {row.unit}
                     </Text>
                   )}
@@ -458,7 +459,7 @@ export default function TransferStepThreeReceive({
                           }
                           style={styles.reasonButton}
                         >
-                          Extravio
+                          Extravío
                         </Button>
                         <Button
                           mode={
@@ -473,7 +474,7 @@ export default function TransferStepThreeReceive({
                           }
                           style={styles.reasonButton}
                         >
-                          Dano
+                          Daño
                         </Button>
                       </View>
 
@@ -499,7 +500,7 @@ export default function TransferStepThreeReceive({
 
                       <AppUpload
                         label="Evidencia del incidente"
-                        placeholder="Subir imagenes del faltante o dano"
+                        placeholder="Subir imágenes del faltante o daño"
                         value={row.adjustment_evidence}
                         onChange={(files: UploadedFile[]) =>
                           updateRow(row.detail_id, { adjustment_evidence: files })
@@ -515,7 +516,7 @@ export default function TransferStepThreeReceive({
                           <MaterialCommunityIcons
                             name="alert-circle-outline"
                             size={16}
-                            color="#8E1C15"
+                            color="#8C3020"
                           />
                           <Text style={styles.adjustmentCardTitle}>Ajuste a generar</Text>
                         </View>
@@ -575,7 +576,7 @@ export default function TransferStepThreeReceive({
                   )}
                   {!!row.adjustment_reason && (
                     <Text style={styles.readOnlyInfoText}>
-                      Motivo: {row.adjustment_reason === "loss" ? "Extravio" : "Dano"}
+                      Motivo: {row.adjustment_reason === "loss" ? "Extravío" : "Daño"}
                     </Text>
                   )}
                   {!!row.adjustment_comment && (
@@ -595,7 +596,7 @@ export default function TransferStepThreeReceive({
                         <MaterialCommunityIcons
                           name="alert-circle-outline"
                           size={16}
-                          color="#8E1C15"
+                          color="#8C3020"
                         />
                         <Text style={styles.adjustmentCardTitle}>
                           Ajuste generado #{generatedAdjustment.id}
@@ -665,7 +666,7 @@ export default function TransferStepThreeReceive({
                     variant="labelMedium"
                     style={styles.existingEvidenceTitle}
                   >
-                    Evidencias de recepcion ({existingEvidenceFiles.length})
+                    Evidencias de recepción ({existingEvidenceFiles.length})
                   </Text>
                 </View>
 
@@ -684,7 +685,7 @@ export default function TransferStepThreeReceive({
             ) : (
               <Text style={styles.stepMutedText}>
                 {isHistoricalStep3
-                  ? "No se registraron evidencias de recepcion."
+                  ? "No se registraron evidencias de recepción."
                   : "Este paso todavia no se procesa y no hay evidencias."}
               </Text>
             )}
@@ -694,7 +695,7 @@ export default function TransferStepThreeReceive({
         {canContinueReceiveInStep3 && (
           <>
             <TextInput
-              label="Notas generales de recepcion"
+              label="Notas generales de recepción"
               mode="outlined"
               value={receivingNotes}
               onChangeText={setReceivingNotes}
@@ -704,8 +705,8 @@ export default function TransferStepThreeReceive({
             />
 
             <AppUpload
-              label="Evidencia de recepcion"
-              placeholder="Subir imagenes de recepcion"
+              label="Evidencia de recepción"
+              placeholder="Subir imágenes de recepción"
               value={evidence}
               onChange={(files: UploadedFile[]) => setEvidence(files)}
               multiple
@@ -727,7 +728,7 @@ export default function TransferStepThreeReceive({
               style={[styles.actionButton, styles.receiveButton]}
               textColor="#ffffff"
             >
-              Confirmar recepcion
+              Confirmar recepción
             </Button>
           </>
         )}
@@ -874,7 +875,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F1B5AF",
     borderRadius: 10,
-    backgroundColor: "#FDECEC",
+    backgroundColor: "#F8E2DC",
     padding: 10,
     gap: 4,
   },
@@ -885,7 +886,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   adjustmentCardTitle: {
-    color: "#8E1C15",
+    color: "#8C3020",
     fontWeight: "700",
     fontSize: 12,
   },

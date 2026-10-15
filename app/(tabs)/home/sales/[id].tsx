@@ -1,9 +1,12 @@
+import { formatDate, formatDateTime } from "@/utils/dates";
+import { goBack } from "@/utils/navigation";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
+import { printSaleTicket } from "@/utils/printDocument";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
+import { router, useLocalSearchParams, useNavigation } from "expo-router";
+import React, { useLayoutEffect, useState } from "react";
 import {
   Image,
   Modal,
@@ -30,8 +33,8 @@ const fmt = (value: number) =>
 const toNum = (v: any) => parseFloat(v ?? 0) || 0;
 
 const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
-  closed:    { color: "#198754", icon: "check-circle", label: "Cerrada" },
-  cancelled: { color: "#dc3545", icon: "close-circle", label: "Cancelada" },
+  closed:    { color: "#3F8A3A", icon: "check-circle", label: "Cerrada" },
+  cancelled: { color: "#B9412C", icon: "close-circle", label: "Cancelada" },
 };
 
 const PM_CONFIG: Record<string, { icon: string; label: string }> = {
@@ -42,13 +45,29 @@ const PM_CONFIG: Record<string, { icon: string; label: string }> = {
 };
 
 const PS_CONFIG: Record<string, { color: string; label: string }> = {
-  paid:    { color: "#198754", label: "Pagado" },
-  partial: { color: "#f59e0b", label: "Pago Parcial" },
-  pending: { color: "#dc3545", label: "Pendiente" },
+  paid:    { color: "#3F8A3A", label: "Pagado" },
+  partial: { color: "#C47F12", label: "Pago Parcial" },
+  pending: { color: "#B9412C", label: "Pendiente" },
 };
+
+function TotalRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  return (
+    <View style={styles.totalRowLine}>
+      <Text style={[styles.totalLabel, strong && styles.totalStrong]}>{label}</Text>
+      <Text style={[styles.totalValueText, strong && styles.totalStrong]}>{value}</Text>
+    </View>
+  );
+}
 
 export default function SaleDetail() {
   const params = useLocalSearchParams();
+  const navigation = useNavigation();
+
+  // El layout registra "sales/[id]/index", pero la pantalla es sales/[id]:
+  // sin esto el encabezado mostraba el nombre de la ruta ("sales/[id]").
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: "Venta" });
+  }, [navigation]);
   const id = params.id as string;
   const [sale, setSale] = React.useState<any>(null);
   const [loading, setLoading] = React.useState(true);
@@ -159,7 +178,7 @@ export default function SaleDetail() {
 
   const status =
     STATUS_CONFIG[sale.status] ?? {
-      color: "#6c757d",
+      color: "#6E6B5E",
       icon: "help-circle",
       label: sale.status_label || sale.status,
     };
@@ -170,9 +189,21 @@ export default function SaleDetail() {
     };
   const psConfig =
     PS_CONFIG[sale.payment_status] ?? {
-      color: "#6c757d",
+      color: "#6E6B5E",
       label: sale.payment_status,
     };
+
+  const discount = toNum(sale.discount);
+  const tax = toNum(sale.tax);
+  const cancelled = sale.status === "cancelled";
+  const payments: { method: string; amount: number; tendered: number | null; change: number | null }[] =
+    sale.payments ?? [];
+  const meta = [
+    sale.created_at ? formatDateTime(sale.created_at) : formatDate(sale.sale_date, "long"),
+    sale.location?.name ?? sale.location_name,
+    sale.cash_register_name,
+    sale.user_name ? `atendió ${sale.user_name}` : null,
+  ].filter(Boolean);
 
   return (
     <ScrollView
@@ -180,183 +211,34 @@ export default function SaleDetail() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {/* ── Header de color con estado ── */}
-      <Surface
-        style={[styles.card, { backgroundColor: status.color }]}
-        elevation={4}
-      >
-        <View style={styles.headerTop}>
-          <View style={{ flex: 1 }}>
-            <Text variant="labelMedium" style={styles.saleLabel}>
-              VENTA
-            </Text>
-            <Text variant="headlineMedium" style={styles.saleNumber}>
-              {sale.sale_number}
-            </Text>
-            <View style={styles.row}>
-              <MaterialCommunityIcons
-                name="calendar-outline"
-                size={14}
-                color="rgba(255,255,255,0.8)"
-              />
-              <Text variant="bodySmall" style={styles.headerMeta}>
-                {new Date(sale.sale_date).toLocaleDateString("es-MX", {
-                  dateStyle: "long",
-                })}
-              </Text>
-            </View>
-            <View style={styles.row}>
-              <MaterialCommunityIcons
-                name="map-marker-outline"
-                size={14}
-                color="rgba(255,255,255,0.8)"
-              />
-              <Text variant="bodySmall" style={styles.headerMeta}>
-                {sale.location?.name || "Sin ubicación"}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.statusBadge}>
-            <MaterialCommunityIcons
-              name={status.icon as any}
-              size={32}
-              color="rgba(255,255,255,0.95)"
-            />
-            <Text variant="labelMedium" style={styles.statusText}>
-              {status.label}
-            </Text>
+      {/* ── Encabezado: folio, estado y contexto (sin tarjeta de color) ── */}
+      <View style={styles.docHeader}>
+        <View style={styles.docTitleRow}>
+          <Text style={styles.docTitle} selectable>
+            {sale.sale_number}
+          </Text>
+          <View style={[styles.pill, { backgroundColor: status.color + "1F" }]}>
+            <Text style={[styles.pillText, { color: status.color }]}>{status.label}</Text>
           </View>
         </View>
+        <Text style={styles.docMeta}>{meta.join(" · ")}</Text>
+      </View>
 
-        <Divider
-          style={{
-            backgroundColor: "rgba(255,255,255,0.3)",
-            marginVertical: 16,
-          }}
-        />
-
-        <View style={styles.totalRow}>
-          <Text
-            variant="titleSmall"
-            style={{ color: "rgba(255,255,255,0.8)" }}
-          >
-            Total de venta
-          </Text>
-          <Text variant="headlineMedium" style={styles.totalValue}>
-            {fmt(total)}
-          </Text>
-        </View>
-      </Surface>
-
-      {/* ── Desglose financiero ── */}
-      <Surface style={styles.card} elevation={1}>
-        <Text variant="titleMedium" style={styles.sectionTitle}>
-          Desglose
+      {/* ── Total y pago ── */}
+      <View style={styles.totalBlock}>
+        <Text style={[styles.bigTotal, cancelled && styles.struck]}>{fmt(total)}</Text>
+        <Text style={styles.docMeta}>
+          {pmConfig.label}
+          {" · "}
+          <Text style={{ color: psConfig.color, fontWeight: "600" }}>{psConfig.label}</Text>
+          {pending > 0 && !cancelled ? ` · faltan ${fmt(pending)}` : ""}
         </Text>
-        <View style={styles.summaryGrid}>
-          {[
-            { label: "Subtotal",  value: fmt(toNum(sale.subtotal)),   color: undefined },
-            { label: "Impuestos", value: fmt(toNum(sale.tax)),         color: undefined },
-            { label: "Descuento", value: `-${fmt(toNum(sale.discount))}`, color: "#198754" },
-            { label: "Total",     value: fmt(total),                   color: palette.primary },
-          ].map((item) => (
-            <View key={item.label} style={styles.summaryItem}>
-              <Text variant="bodySmall" style={styles.metaLabel}>
-                {item.label}
-              </Text>
-              <Text
-                variant="titleSmall"
-                style={[
-                  styles.summaryValue,
-                  item.color ? { color: item.color } : undefined,
-                ]}
-              >
-                {item.value}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </Surface>
-
-      {/* ── Pago ── */}
-      <Surface style={styles.card} elevation={1}>
-        <View style={styles.sectionHeader}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Información de Pago
-          </Text>
-          <Chip
-            compact
-            style={{ backgroundColor: psConfig.color }}
-            textStyle={{ color: "white", fontSize: 11, fontWeight: "700" }}
-          >
-            {psConfig.label}
-          </Chip>
-        </View>
-
-        <View style={[styles.row, { marginBottom: 16 }]}>
-          <View
-            style={[
-              styles.iconCircle,
-              { backgroundColor: palette.primary + "18" },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name={pmConfig.icon as any}
-              size={20}
-              color={palette.primary}
-            />
+        {pending > 0 && !cancelled && (
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${paidPct}%` as any, backgroundColor: palette.primary }]} />
           </View>
-          <View>
-            <Text variant="bodySmall" style={styles.metaLabel}>
-              Método
-            </Text>
-            <Text variant="bodyLarge" style={{ fontWeight: "700" }}>
-              {pmConfig.label}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.progressTrack}>
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width: `${paidPct}%` as any,
-                backgroundColor: paidPct >= 100 ? "#198754" : palette.primary,
-              },
-            ]}
-          />
-        </View>
-
-        <View style={[styles.paymentRow, { marginTop: 10 }]}>
-          <View style={styles.paymentCell}>
-            <Text variant="bodySmall" style={styles.metaLabel}>
-              Pagado
-            </Text>
-            <Text
-              variant="titleMedium"
-              style={{ fontWeight: "700", color: "#198754" }}
-            >
-              {fmt(paid)}
-            </Text>
-          </View>
-          <View style={[styles.paymentCell, { alignItems: "flex-end" }]}>
-            <Text variant="bodySmall" style={styles.metaLabel}>
-              Pendiente
-            </Text>
-            <Text
-              variant="titleMedium"
-              style={{
-                fontWeight: "700",
-                color: pending > 0 ? "#dc3545" : "#198754",
-              }}
-            >
-              {fmt(pending)}
-            </Text>
-          </View>
-        </View>
-
-        {sale.payment_status !== "paid" && sale.status !== "cancelled" && (
+        )}
+        {sale.payment_status !== "paid" && !cancelled && (
           <Button
             mode="contained"
             onPress={() => {
@@ -365,229 +247,118 @@ export default function SaleDetail() {
             }}
             icon="cash-plus"
             buttonColor={palette.primary}
-            style={{ marginTop: 16, borderRadius: 10 }}
+            style={styles.inlineButton}
           >
-            Agregar Pago
+            Registrar pago
           </Button>
         )}
-      </Surface>
+      </View>
 
-      {/* ── Historial de pagos ── */}
-      {sale.payment_history && sale.payment_history.length > 0 && (
-        <Surface style={styles.card} elevation={1}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Historial de Pagos
-          </Text>
-          <View style={{ gap: 8, marginTop: 12 }}>
-            {sale.payment_history.map((payment: any, index: number) => {
-              const pc =
-                PM_CONFIG[payment.payment_method] ?? {
-                  icon: "cash",
-                  label: payment.payment_method,
-                };
-              return (
-                <View key={index} style={styles.historyItem}>
-                  <View
-                    style={[styles.iconCircle, { backgroundColor: "#19875420" }]}
-                  >
-                    <MaterialCommunityIcons
-                      name={pc.icon as any}
-                      size={18}
-                      color="#198754"
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text variant="bodyMedium" style={{ fontWeight: "600" }}>
-                      {pc.label}
+      {/* ── Productos y totales en una sola lista ── */}
+      <Text style={styles.groupTitle}>
+        {sale.details?.length || 0} {(sale.details?.length || 0) === 1 ? "producto" : "productos"}
+      </Text>
+      <View style={styles.group}>
+        {sale.details?.map((detail: any, i: number) => {
+          const unit = detail.package_name ?? detail.unit_abbreviation ?? "";
+          return (
+            <View key={detail.id} style={[styles.line, i > 0 && styles.lineDivider]}>
+              {detail.product_image ? <Image source={{ uri: detail.product_image }} style={styles.thumb} /> : null}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.lineTitle} numberOfLines={2}>
+                  {detail.product_name || "Producto"}
+                </Text>
+                <Text style={styles.lineMeta}>
+                  {parseFloat(detail.quantity)} {unit} × {fmt(toNum(detail.unit_price))}
+                  {detail.product_code ? ` · ${detail.product_code}` : ""}
+                  {toNum(detail.discount) > 0 ? ` · desc. ${fmt(toNum(detail.discount))}` : ""}
+                </Text>
+              </View>
+              <Text style={styles.lineAmount}>{fmt(toNum(detail.total))}</Text>
+            </View>
+          );
+        })}
+        <View style={[styles.totals, styles.lineDivider]}>
+          <TotalRow label="Subtotal" value={fmt(toNum(sale.subtotal))} />
+          {discount > 0 && <TotalRow label="Descuento" value={`−${fmt(discount)}`} />}
+          {tax > 0 && <TotalRow label="Impuestos" value={fmt(tax)} />}
+          <TotalRow label="Total" value={fmt(total)} strong />
+        </View>
+      </View>
+
+      {/* ── Pagos (cómo se cobró) ── */}
+      {(payments.length > 0 || (sale.payment_history?.length ?? 0) > 0) && (
+        <>
+          <Text style={styles.groupTitle}>Pagos</Text>
+          <View style={styles.group}>
+            {payments.map((p, i) => (
+              <View key={`p${i}`} style={[styles.line, i > 0 && styles.lineDivider]}>
+                <MaterialCommunityIcons name={(PM_CONFIG[p.method]?.icon ?? "cash") as any} size={18} color={palette.textSecondary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.lineTitle}>{PM_CONFIG[p.method]?.label ?? p.method}</Text>
+                  {p.method === "cash" && p.tendered != null && p.tendered > p.amount && (
+                    <Text style={styles.lineMeta}>
+                      Recibido {fmt(p.tendered)} · cambio {fmt(p.change ?? 0)}
                     </Text>
-                    <Text variant="bodySmall" style={styles.metaLabel}>
-                      {new Date(payment.date).toLocaleString("es-MX", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
-                    </Text>
-                    {payment.notes && (
-                      <Text variant="bodySmall" style={styles.metaLabel}>
-                        {payment.notes}
-                      </Text>
-                    )}
-                  </View>
-                  <Text
-                    variant="titleSmall"
-                    style={{ fontWeight: "bold", color: "#198754" }}
-                  >
-                    {fmt(toNum(payment.amount))}
+                  )}
+                </View>
+                <Text style={styles.lineAmount}>{fmt(p.amount)}</Text>
+              </View>
+            ))}
+            {(sale.payment_history ?? []).map((payment: any, i: number) => (
+              <View key={`h${i}`} style={[styles.line, (payments.length > 0 || i > 0) && styles.lineDivider]}>
+                <MaterialCommunityIcons name={(PM_CONFIG[payment.payment_method]?.icon ?? "cash") as any} size={18} color={palette.textSecondary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.lineTitle}>{PM_CONFIG[payment.payment_method]?.label ?? payment.payment_method}</Text>
+                  <Text style={styles.lineMeta}>
+                    {formatDateTime(payment.date)}
+                    {payment.notes ? ` · ${payment.notes}` : ""}
                   </Text>
                 </View>
-              );
-            })}
+                <Text style={styles.lineAmount}>{fmt(toNum(payment.amount))}</Text>
+              </View>
+            ))}
           </View>
-        </Surface>
+        </>
       )}
 
       {/* ── Cliente ── */}
-      {(sale.content?.customer_name ||
-        sale.content?.customer_phone ||
-        sale.content?.customer_email) && (
-        <Surface style={styles.card} elevation={1}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Cliente
+      {(sale.content?.customer_name || sale.content?.customer_phone || sale.content?.customer_email) && (
+        <>
+          <Text style={styles.groupTitle}>Cliente</Text>
+          <Text style={styles.plain}>
+            {[sale.content.customer_name, sale.content.customer_phone, sale.content.customer_email].filter(Boolean).join(" · ")}
           </Text>
-          <View style={{ gap: 10, marginTop: 12 }}>
-            {sale.content.customer_name && (
-              <View style={styles.row}>
-                <MaterialCommunityIcons
-                  name="account-outline"
-                  size={18}
-                  color={palette.primary}
-                />
-                <Text variant="bodyMedium">{sale.content.customer_name}</Text>
-              </View>
-            )}
-            {sale.content.customer_phone && (
-              <View style={styles.row}>
-                <MaterialCommunityIcons
-                  name="phone-outline"
-                  size={18}
-                  color={palette.primary}
-                />
-                <Text variant="bodyMedium">{sale.content.customer_phone}</Text>
-              </View>
-            )}
-            {sale.content.customer_email && (
-              <View style={styles.row}>
-                <MaterialCommunityIcons
-                  name="email-outline"
-                  size={18}
-                  color={palette.primary}
-                />
-                <Text variant="bodyMedium">{sale.content.customer_email}</Text>
-              </View>
-            )}
-          </View>
-        </Surface>
+        </>
       )}
-
-      {/* ── Productos ── */}
-      <Surface style={styles.card} elevation={1}>
-        <View style={styles.sectionHeader}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Productos
-          </Text>
-          <Chip
-            compact
-            style={{ backgroundColor: palette.primary + "18" }}
-            textStyle={{
-              color: palette.primary,
-              fontSize: 12,
-              fontWeight: "700",
-            }}
-          >
-            {sale.details?.length || 0}
-          </Chip>
-        </View>
-
-        <View style={{ gap: 10, marginTop: 4 }}>
-          {sale.details?.map((detail: any) => (
-            <View key={detail.id} style={styles.productItem}>
-              {detail.product_image ? (
-                <Image
-                  source={{ uri: detail.product_image }}
-                  style={styles.productImage}
-                />
-              ) : (
-                <View
-                  style={[styles.productImage, styles.productImagePlaceholder]}
-                >
-                  <MaterialCommunityIcons
-                    name="package-variant-closed"
-                    size={24}
-                    color="#aaa"
-                  />
-                </View>
-              )}
-              <View style={{ flex: 1 }}>
-                <Text
-                  variant="bodyLarge"
-                  style={{ fontWeight: "600" }}
-                  numberOfLines={1}
-                >
-                  {detail.product_name || "Producto sin nombre"}
-                </Text>
-                <Text variant="bodySmall" style={styles.metaLabel}>
-                  {detail.product_code}
-                </Text>
-                <View
-                  style={[
-                    styles.row,
-                    { justifyContent: "space-between", marginTop: 6 },
-                  ]}
-                >
-                  <View style={styles.qtyBadge}>
-                    <Text
-                      variant="bodySmall"
-                      style={{ color: palette.primary, fontWeight: "700" }}
-                    >
-                      ×{parseFloat(detail.quantity)} ·{" "}
-                      {fmt(toNum(detail.unit_price))}
-                    </Text>
-                  </View>
-                  <Text
-                    variant="titleSmall"
-                    style={{ fontWeight: "bold", color: palette.primary }}
-                  >
-                    {fmt(toNum(detail.total))}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          ))}
-        </View>
-      </Surface>
 
       {/* ── Notas ── */}
       {sale.content?.notes && (
-        <Surface style={styles.card} elevation={1}>
-          <View style={[styles.row, { marginBottom: 8 }]}>
-            <MaterialCommunityIcons
-              name="note-text-outline"
-              size={18}
-              color={palette.primary}
-            />
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Notas
-            </Text>
-          </View>
-          <Text
-            variant="bodyMedium"
-            style={{ color: "#555", lineHeight: 20 }}
-          >
-            {sale.content.notes}
-          </Text>
-        </Surface>
+        <>
+          <Text style={styles.groupTitle}>Notas</Text>
+          <Text style={styles.plain}>{sale.content.notes}</Text>
+        </>
       )}
 
       {/* ── Acciones ── */}
-      <View style={{ gap: 10, marginBottom: 32 }}>
+      <View style={styles.actions}>
+        <Button
+          mode="outlined"
+          onPress={() =>
+            printSaleTicket(sale.id, sale.sale_number).catch((e: any) =>
+              alerts.error(e?.response?.data?.message || "No se pudo imprimir el ticket"),
+            )
+          }
+          icon="printer"
+          style={styles.actionBtn}
+        >
+          Reimprimir ticket
+        </Button>
         {sale.can_cancel && (
-          <Button
-            mode="outlined"
-            onPress={handleCancel}
-            icon="close-circle"
-            style={[styles.actionBtn, { borderColor: "#dc3545" }]}
-            textColor="#dc3545"
-          >
-            Cancelar Venta
+          <Button mode="text" onPress={handleCancel} icon="close-circle-outline" textColor={palette.error}>
+            Cancelar venta
           </Button>
         )}
-        <Button
-          mode="text"
-          onPress={() => router.back()}
-          icon="arrow-left"
-          textColor="#888"
-        >
-          Volver
-        </Button>
       </View>
 
       {/* ── Modal pago ── */}
@@ -610,7 +381,7 @@ export default function SaleDetail() {
             >
               <Text variant="bodyMedium" style={{ marginBottom: 16 }}>
                 Saldo pendiente:{" "}
-                <Text style={{ fontWeight: "bold", color: "#dc3545" }}>
+                <Text style={{ fontWeight: "bold", color: "#B9412C" }}>
                   {fmt(toNum(sale?.total) - toNum(sale?.paid_amount))}
                 </Text>
               </Text>
@@ -691,8 +462,37 @@ export default function SaleDetail() {
 }
 
 const styles = StyleSheet.create({
-  scroll:   { flex: 1, backgroundColor: "#f2f4f7" },
-  content:  { padding: 16, gap: 14 },
+  scroll:   { flex: 1, backgroundColor: palette.background },
+  content:  { padding: 16, gap: 10, paddingBottom: 32, maxWidth: 760, width: "100%", alignSelf: "center" },
+
+  // Documento: encabezado y total sin tarjetas.
+  docHeader: { gap: 4, marginTop: 4 },
+  docTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  docTitle: { fontSize: 22, fontWeight: "700", color: palette.text, letterSpacing: -0.3 },
+  docMeta: { fontSize: 13, color: palette.textSecondary, lineHeight: 19 },
+  pill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  pillText: { fontSize: 12, fontWeight: "600" },
+  totalBlock: { gap: 4, marginTop: 10, marginBottom: 8 },
+  bigTotal: { fontSize: 36, lineHeight: 42, fontWeight: "700", color: palette.text, letterSpacing: -0.8, fontVariant: ["tabular-nums"] },
+  struck: { textDecorationLine: "line-through", color: palette.textMuted },
+  inlineButton: { alignSelf: "flex-start", marginTop: 8, borderRadius: 10 },
+
+  // Listas agrupadas con separadores.
+  groupTitle: { fontSize: 14, fontWeight: "600", color: palette.textSecondary, marginTop: 10 },
+  group: { backgroundColor: palette.surface, borderRadius: 12, borderWidth: 1, borderColor: palette.border, overflow: "hidden" },
+  line: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  lineDivider: { borderTopWidth: 1, borderTopColor: palette.border },
+  lineTitle: { fontSize: 15, fontWeight: "500", color: palette.text },
+  lineMeta: { fontSize: 13, color: palette.textSecondary, marginTop: 2 },
+  lineAmount: { fontSize: 15, fontWeight: "600", color: palette.text, fontVariant: ["tabular-nums"] },
+  thumb: { width: 40, height: 40, borderRadius: 8, backgroundColor: palette.surfaceMuted },
+  totals: { paddingHorizontal: 14, paddingVertical: 10, gap: 4, backgroundColor: palette.surfaceMuted },
+  totalRowLine: { flexDirection: "row", justifyContent: "space-between" },
+  totalLabel: { fontSize: 14, color: palette.textSecondary },
+  totalValueText: { fontSize: 14, color: palette.text, fontVariant: ["tabular-nums"] },
+  totalStrong: { fontSize: 16, fontWeight: "700", color: palette.text },
+  plain: { fontSize: 15, color: palette.text, lineHeight: 21 },
+  actions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 16 },
   center:   { flex: 1, justifyContent: "center", alignItems: "center" },
   card:     { backgroundColor: "white", borderRadius: 18, padding: 20 },
 
@@ -710,28 +510,28 @@ const styles = StyleSheet.create({
   row:          { flexDirection: "row", alignItems: "center", gap: 8 },
   sectionTitle: { fontWeight: "700" },
   sectionHeader:{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  metaLabel:    { color: "#999", fontSize: 12 },
+  metaLabel:    { color: "#8F8B7D", fontSize: 12 },
 
   // Summary grid
   summaryGrid:  { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 },
-  summaryItem:  { flex: 1, minWidth: "43%", backgroundColor: "#f6f7fb", borderRadius: 12, padding: 12, gap: 4 },
+  summaryItem:  { flex: 1, minWidth: "43%", backgroundColor: "#F6F4EE", borderRadius: 12, padding: 12, gap: 4 },
   summaryValue: { fontWeight: "700" },
 
   // Payment
-  progressTrack: { height: 7, backgroundColor: "#e4e7ec", borderRadius: 4, overflow: "hidden" },
+  progressTrack: { height: 7, backgroundColor: "#E6E1D5", borderRadius: 4, overflow: "hidden" },
   progressFill:  { height: "100%", borderRadius: 4 },
   paymentRow:    { flexDirection: "row", justifyContent: "space-between" },
   paymentCell:   { gap: 2 },
   iconCircle:    { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center" },
 
   // History
-  historyItem: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#f6f7fb", borderRadius: 12, padding: 12 },
+  historyItem: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#F6F4EE", borderRadius: 12, padding: 12 },
 
   // Products
-  productItem:             { flexDirection: "row", gap: 12, alignItems: "center", backgroundColor: "#f6f7fb", borderRadius: 12, padding: 12 },
+  productItem:             { flexDirection: "row", gap: 12, alignItems: "center", backgroundColor: "#F6F4EE", borderRadius: 12, padding: 12 },
   productImage:            { width: 56, height: 56, borderRadius: 10 },
-  productImagePlaceholder: { backgroundColor: "#e4e7ec", justifyContent: "center", alignItems: "center" },
-  qtyBadge:                { backgroundColor: "#e8f0fe", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  productImagePlaceholder: { backgroundColor: "#E6E1D5", justifyContent: "center", alignItems: "center" },
+  qtyBadge:                { backgroundColor: "#DFEDF0", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
 
   // Actions
   actionBtn: { borderRadius: 10 },
@@ -753,7 +553,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalTitle: { fontWeight: "700", marginBottom: 16 },
-  modalError: { color: "#dc3545", fontSize: 13, marginTop: 4, fontWeight: "600" },
+  modalError: { color: "#B9412C", fontSize: 13, marginTop: 4, fontWeight: "600" },
   modalScroll: { flexGrow: 0 },
   modalActions: {
     flexDirection: "row",
@@ -766,11 +566,11 @@ const styles = StyleSheet.create({
   inputLabel: { marginBottom: 6, fontWeight: "600", fontSize: 14 },
   input: {
     borderWidth: 1,
-    borderColor: "#dde1e9",
+    borderColor: "#DDD7C9",
     borderRadius: 10,
     padding: 12,
     marginBottom: 16,
     fontSize: 15,
-    backgroundColor: "#fafbfc",
+    backgroundColor: "#F8F6F1",
   },
 });

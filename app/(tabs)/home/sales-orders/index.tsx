@@ -1,3 +1,4 @@
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
@@ -114,11 +115,7 @@ export default function SalesOrdersIndex() {
                     variant="bodySmall"
                     style={{ color: palette.textSecondary }}
                   >
-                    {new Date(order.order_date).toLocaleDateString("es-MX", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })}
+                    {formatDate(order.order_date)}
                   </Text>
                 )}
               </View>
@@ -195,11 +192,7 @@ export default function SalesOrdersIndex() {
             width: 120,
             render: (value: string) =>
               value
-                ? new Date(value).toLocaleDateString("es-MX", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })
+                ? formatDate(value)
                 : "—",
           },
           {

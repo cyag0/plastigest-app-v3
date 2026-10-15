@@ -1,3 +1,4 @@
+import { formatQuantity } from "@/utils/format";
 import { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import {
   ProductCategory,
@@ -268,7 +269,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
       );
       const remaining = availableStock - usedStock;
       alerts.error(
-        `Stock insuficiente. Disponible: ${availableStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, En carrito: ${usedStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, Restante: ${remaining.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, Requiere: ${requiredStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}`,
+        `Stock insuficiente. Disponible: ${formatQuantity(availableStock)} ${productBaseUnit?.abbreviation || ""}, En carrito: ${formatQuantity(usedStock)} ${productBaseUnit?.abbreviation || ""}, Restante: ${formatQuantity(remaining)} ${productBaseUnit?.abbreviation || ""}, Requiere: ${formatQuantity(requiredStock)} ${productBaseUnit?.abbreviation || ""}`,
       );
       return;
     }
@@ -348,7 +349,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
           );
           const remaining = availableStock - usedStock;
           alerts.error(
-            `Stock insuficiente. Disponible: ${availableStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, En uso: ${usedStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, Restante: ${remaining.toFixed(3)} ${productBaseUnit?.abbreviation || ""}, Requiere: ${requiredStock.toFixed(3)} ${productBaseUnit?.abbreviation || ""}`,
+            `Stock insuficiente. Disponible: ${formatQuantity(availableStock)} ${productBaseUnit?.abbreviation || ""}, En uso: ${formatQuantity(usedStock)} ${productBaseUnit?.abbreviation || ""}, Restante: ${formatQuantity(remaining)} ${productBaseUnit?.abbreviation || ""}, Requiere: ${formatQuantity(requiredStock)} ${productBaseUnit?.abbreviation || ""}`,
           );
           return prev;
         }
@@ -371,8 +372,12 @@ export function SaleProvider({ children }: SaleProviderProps) {
         // Cantidad escrita a mano en el carrito. Antes esta acción no se
         // manejaba y lo que el usuario tecleaba se ignoraba: solo +/-
         // cambiaban la cantidad.
-        const qty = typeof data === "number" ? data : parseInt(String(data), 10);
-        if (isNaN(qty) || qty < 1) {
+        // El carrito ya decide si la unidad admite decimales (kg, L).
+        const qty =
+          typeof data === "number"
+            ? data
+            : parseFloat(String(data).replace(",", "."));
+        if (isNaN(qty) || qty <= 0) {
           return prev;
         }
 

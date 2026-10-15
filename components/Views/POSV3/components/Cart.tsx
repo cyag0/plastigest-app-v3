@@ -2,7 +2,7 @@ import EmptyState from "@/components/App/EmptyState";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useRef, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Divider, Menu } from "react-native-paper";
 
@@ -18,6 +18,9 @@ export interface CartItemData {
   unit_name?: string;
   unit_abbreviation?: string;
   unit?: string;
+  /** Tipo de la unidad ("quantity", "mass", "volume"…); decide si admite decimales. */
+  unit_type?: string;
+  is_package?: boolean;
   main_image?: {
     uri: string;
   };
@@ -25,7 +28,8 @@ export interface CartItemData {
     id: number;
     name: string;
     abbreviation: string;
-    price: number;
+    price?: number;
+    unit_type?: string;
   }[];
 }
 
@@ -62,18 +66,35 @@ interface CartItemComponentProps {
   ) => void;
 }
 
+/**
+ * Peso, volumen y longitud admiten decimales (2.5 kg); las piezas (unidad de
+ * tipo "quantity") y los paquetes se manejan enteros.
+ */
+const cartItemAllowsDecimal = (item: CartItemData): boolean => {
+  const unitType =
+    item.unit_type ??
+    item.available_units?.find((u) => u.id === item.unit_id)?.unit_type;
+  const isPackage =
+    item.is_package === true || String(item.id).startsWith("package_");
+  return !isPackage && !!unitType && unitType !== "quantity";
+};
+
+const formatQuantity = (n: number) => String(Math.round(n * 1000) / 1000);
+
 function CartItemComponent({
   item,
   onRemove,
   onItemChange,
 }: CartItemComponentProps) {
   const [unitMenuVisible, setUnitMenuVisible] = useState(false);
-  const [qtyText, setQtyText] = useState(String(item.quantity));
-
-  // Sincronizar el input cuando la cantidad cambia desde fuera (+/-)
-  useEffect(() => {
-    setQtyText(String(item.quantity));
-  }, [item.quantity]);
+  const allowDecimal = cartItemAllowsDecimal(item);
+  // Mientras el campo tiene el foco se muestra lo que se escribe; fuera de él,
+  // siempre la cantidad real del carrito (si el contexto rechaza el valor,
+  // el campo no se queda mostrando una cantidad que no se va a cobrar).
+  const [focused, setFocused] = useState(false);
+  const [qtyText, setQtyText] = useState(formatQuantity(item.quantity));
+  // onEndEditing y onBlur llegan juntos al salir del campo: aplicar una vez.
+  const committedRef = useRef<string | null>(null);
 
   const handleQuantityChange = (delta: number) => {
     if (delta > 0) {
@@ -84,14 +105,18 @@ function CartItemComponent({
   };
 
   const commitQuantity = () => {
-    const parsed = parseInt(qtyText, 10);
-    if (isNaN(parsed) || parsed < 1) {
-      // Valor inválido: restaurar la cantidad actual
-      setQtyText(String(item.quantity));
-      return;
-    }
-    if (parsed !== item.quantity) {
-      onItemChange(item.id, "set", parsed);
+    if (committedRef.current === qtyText) return;
+    committedRef.current = qtyText;
+
+    const raw = qtyText.trim().replace(",", ".");
+    const parsed = raw === "" ? NaN : Number(raw);
+    // Valor inválido: se descarta y vuelve a mostrarse la cantidad actual.
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    if (!allowDecimal && !Number.isInteger(parsed)) return;
+
+    const next = allowDecimal ? Math.round(parsed * 1000) / 1000 : parsed;
+    if (next !== item.quantity) {
+      onItemChange(item.id, "set", next);
     }
   };
 
@@ -208,13 +233,21 @@ function CartItemComponent({
           </TouchableOpacity>
           <TextInput
             style={styles.quantityInput}
-            value={qtyText}
+            value={focused ? qtyText : formatQuantity(item.quantity)}
             onChangeText={setQtyText}
+            onFocus={() => {
+              committedRef.current = null;
+              setQtyText(formatQuantity(item.quantity));
+              setFocused(true);
+            }}
             onEndEditing={commitQuantity}
-            onBlur={commitQuantity}
-            keyboardType="number-pad"
+            onBlur={() => {
+              commitQuantity();
+              setFocused(false);
+            }}
+            keyboardType={allowDecimal ? "decimal-pad" : "number-pad"}
             selectTextOnFocus
-            maxLength={6}
+            maxLength={allowDecimal ? 9 : 6}
             returnKeyType="done"
           />
           <TouchableOpacity

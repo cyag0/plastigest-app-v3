@@ -1,3 +1,4 @@
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PermissionGate from "@/components/App/PermissionGate";
@@ -98,15 +99,15 @@ export default function PurchasesIndex() {
     () => [
       {
         title: "Compra",
-        key: "document_number",
+        key: "purchase_number",
         width: 140,
-        render: (_, item) => `#${item.document_number || item.id}`,
+        render: (_, item) => purchaseLabel(item),
       },
       {
         title: "Proveedor",
         key: "supplier_name",
         width: 240,
-        render: (_, item) => item.supplier_name || "Sin proveedor",
+        render: (_, item) => item.supplier_name || item.supplier?.name || "Sin proveedor",
       },
       {
         title: "Estado",
@@ -144,18 +145,13 @@ export default function PurchasesIndex() {
         key: "products_count",
         width: 110,
         align: "right",
-        render: (_, item) => item.products_count || 0,
+        render: (_, item) => item.products_count ?? item.details?.length ?? 0,
       },
       {
         title: "Fecha",
-        key: "created_at",
+        key: "purchase_date",
         width: 130,
-        render: (_, item) =>
-          new Date(item.created_at).toLocaleDateString("es-PE", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          }),
+        render: (_, item) => formatDate(item.purchase_date ?? item.created_at),
       },
     ],
     [],
@@ -171,8 +167,8 @@ export default function PurchasesIndex() {
           const statusConfig = getStatusConfig(item.status);
 
           return {
-            title: `Compra #${item.document_number || item.id}`,
-            description: `Proveedor: ${item.supplier_name || "Sin proveedor"}`,
+            title: `Compra ${purchaseLabel(item)}`,
+            description: `Proveedor: ${item.supplier_name || item.supplier?.name || "Sin proveedor"}`,
             right: (
               <View style={styles.rightContent}>
                 <View
@@ -198,15 +194,11 @@ export default function PurchasesIndex() {
             bottom: [
               {
                 label: "Fecha",
-                value: new Date(item.created_at).toLocaleDateString("es-PE", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                }),
+                value: formatDate(item.purchase_date ?? item.created_at),
               },
               {
                 label: "Productos",
-                value: `${item.products_count || 0} items`,
+                value: `${item.products_count ?? item.details?.length ?? 0} items`,
               },
               {
                 label: "Método",
@@ -383,3 +375,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
 });
+
+// Mismo folio que muestra el detalle (PUR000051); el número de documento del
+// proveedor o el id sólo si la compra no tiene folio.
+function purchaseLabel(item: any): string {
+  return item.purchase_number || `#${item.document_number || item.id}`;
+}

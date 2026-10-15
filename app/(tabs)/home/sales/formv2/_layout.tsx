@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import AppBar from "@/components/App/AppBar";
 import palette from "@/constants/palette";
 import { Stack, usePathname, useRouter } from "expo-router";
@@ -16,7 +17,7 @@ function StackContent() {
     if (pathname.endsWith("/formv2")) {
       router.replace("/(tabs)/home/sales" as any);
     } else {
-      router.back();
+      goBack();
     }
   };
 

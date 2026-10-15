@@ -1,3 +1,4 @@
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
@@ -16,16 +17,7 @@ export default function SalesReportsIndexScreen() {
     onError: (error) => console.error("Error al descargar PDF:", error),
   });
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "";
-    // Agregar T00:00:00 para que JavaScript interprete la fecha como hora local
-    const date = new Date(dateString + "T00:00:00");
-    return date.toLocaleDateString("es-MX", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
+  
 
   const formatCurrency = (amount: number | string) => {
     const num = typeof amount === "string" ? parseFloat(amount) : amount;
@@ -36,7 +28,7 @@ export default function SalesReportsIndexScreen() {
   };
 
   return (
-    <PermissionGate permission="reports_view">
+    <PermissionGate permission="reports_list">
       <View style={{ flex: 1 }}>
       <AppList
         title="Reportes de Ventas"

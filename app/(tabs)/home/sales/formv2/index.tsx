@@ -1,3 +1,5 @@
+import { SafeAreaView } from "react-native-safe-area-context";
+import { formatMoney } from "@/utils/format";
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
@@ -227,7 +229,7 @@ export default function SaleFormScreen() {
             {/* Monto a pagar */}
             <View style={styles.field}>
               <Text style={styles.label}>
-                Monto Total: ${totalAmount.toFixed(2)}
+                Monto Total: {formatMoney(totalAmount)}
               </Text>
               <Text style={styles.sublabel}>
                 Monto a pagar ahora (cámbialo a 0 para dejarlo a crédito)
@@ -289,7 +291,7 @@ export default function SaleFormScreen() {
           animationType="slide"
           onRequestClose={() => setCartVisible(false)}
         >
-          <View style={styles.cartModal}>
+          <SafeAreaView style={styles.cartModal} edges={["top", "bottom"]}>
             <View style={styles.cartModalHeader}>
               <Text style={styles.cartModalTitle}>Carrito</Text>
               <TouchableOpacity
@@ -301,7 +303,7 @@ export default function SaleFormScreen() {
               </TouchableOpacity>
             </View>
             {cartContent}
-          </View>
+          </SafeAreaView>
         </Modal>
       )}
 
@@ -328,7 +330,7 @@ export default function SaleFormScreen() {
             <View style={styles.modalTotalBox}>
               <Text style={styles.modalTotalLabel}>Total</Text>
               <Text style={styles.modalTotalValue}>
-                ${lastSale?.total.toFixed(2)}
+                {formatMoney(lastSale?.total)}
               </Text>
             </View>
 
@@ -336,7 +338,7 @@ export default function SaleFormScreen() {
               <View style={styles.modalRow}>
                 <Text style={styles.modalRowLabel}>Cambio</Text>
                 <Text style={[styles.modalRowValue, { color: palette.success }]}>
-                  ${lastSale.change.toFixed(2)}
+                  {formatMoney(lastSale.change)}
                 </Text>
               </View>
             )}
@@ -345,7 +347,7 @@ export default function SaleFormScreen() {
               <View style={styles.modalRow}>
                 <Text style={styles.modalRowLabel}>Pendiente</Text>
                 <Text style={[styles.modalRowValue, { color: palette.warning }]}>
-                  ${lastSale.pending.toFixed(2)}
+                  {formatMoney(lastSale.pending)}
                 </Text>
               </View>
             )}

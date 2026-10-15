@@ -1,3 +1,4 @@
+import { formatMoney, formatQuantity } from "@/utils/format";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppDependency from "@/components/Form/AppDependency";
 import AppForm from "@/components/Form/AppForm/AppForm";
@@ -8,6 +9,7 @@ import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation, useLocalSearchParams, useRouter } from "expo-router";
 import { useFormikContext } from "formik";
@@ -60,10 +62,10 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
   const { isMobile } = useResponsive();
 
   const purchaseContext = usePurchase();
+  const { selectedLocation } = useSelectedLocation();
 
-  const id = useLocalSearchParams().id
-    ? parseInt(useLocalSearchParams().id as string)
-    : undefined;
+  const params = useLocalSearchParams();
+  const id = params.id ? parseInt(params.id as string) : undefined;
 
   const cartItemCount = purchaseContext.cartItems?.length ?? 0;
 
@@ -118,6 +120,8 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
       // transferencia u otro medio nunca toca el corte.
       const paymentMethod = values.get("payment_method")?.toString();
       await purchaseContext.confirmPurchase({
+        supplier_id: values.get("supplier_id")?.toString(),
+        purchase_date: values.get("purchase_date")?.toString(),
         document_number: values.get("document_number")?.toString(),
         payment_method: paymentMethod,
         paid_from_cash:
@@ -147,6 +151,10 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
 
   return (
     <AppForm
+      // El contexto llena el formulario con el borrador guardado (proveedor,
+      // fecha, forma de pago); sin la ref, al reabrir un borrador el carrito
+      // tenía productos pero el proveedor quedaba vacío.
+      ref={purchaseContext.formRef}
       api={Services.purchasesV2}
       id={id}
       submitButtonText="Confirmar Compra"
@@ -178,28 +186,18 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
             color={palette.primary}
           />
           <Text variant="headlineMedium" style={styles.title}>
-            Compra #{purchaseContext.currentPurchaseId || "Nueva"}
+            {purchaseContext.currentPurchaseId
+              ? `Compra #${purchaseContext.currentPurchaseId}`
+              : "Nueva compra"}
           </Text>
-          <Text variant="bodyMedium" style={styles.subtitle}>
-            Sistema de compras
-          </Text>
+          {/* La compra entra a la sucursal actual (antes había selects de
+              compañía y ubicación deshabilitados y vacíos). */}
+          {selectedLocation?.name ? (
+            <Text variant="bodyMedium" style={styles.subtitle}>
+              Se recibe en {selectedLocation.name}
+            </Text>
+          ) : null}
         </View>
-
-        <FormProSelect
-          name="company_id"
-          label="Compañía"
-          model="admin.companies"
-          placeholder="Seleccionar compañía"
-          disabled
-        />
-
-        <FormProSelect
-          name="location_id"
-          label="Ubicación"
-          model="admin.locations"
-          placeholder="Seleccionar ubicación"
-          disabled
-        />
 
         <FormDatePicker
           name="purchase_date"
@@ -299,7 +297,7 @@ function PurchasesContent(props: PurchasesContentProps) {
             variant="headlineSmall"
             style={[styles.statValue, { color: palette.primary }]}
           >
-            {cartTotal.toFixed(2)} MXN
+            {formatMoney(cartTotal)}
           </Text>
         </View>
       </View>
@@ -376,10 +374,10 @@ function PurchasesContent(props: PurchasesContentProps) {
 
                 <View style={styles.cartPreviewNumbers}>
                   <Text style={styles.cartPreviewQty}>
-                    {item.quantity} × ${item.price.toFixed(2)}
+                    {formatQuantity(item.quantity)} × {formatMoney(item.price)}
                   </Text>
                   <Text style={styles.cartPreviewTotal}>
-                    ${item.total.toFixed(2)}
+                    {formatMoney(item.total)}
                   </Text>
                 </View>
               </View>
