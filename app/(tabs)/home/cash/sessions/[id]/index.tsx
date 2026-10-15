@@ -1,8 +1,10 @@
+import { formatDateTime } from "@/utils/dates";
 import CloseShiftModal from "@/components/Pos/CloseShiftModal";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { formatMoney } from "@/hooks/usePosCart";
+import { printShiftTicket } from "@/utils/printDocument";
 import Services from "@/utils/services";
 import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
@@ -10,9 +12,6 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import { ActivityIndicator, Button, Surface, Text } from "react-native-paper";
 
 const METHOD_LABELS: Record<string, string> = { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia" };
-
-const formatDateTime = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" }) : "—";
 
 /** Detalle y corte de un turno. Un supervisor puede cerrar el que quedó abierto. */
 export default function CashSessionDetail() {
@@ -96,6 +95,15 @@ export default function CashSessionDetail() {
           {session.notes ? <Text style={styles.notes}>{session.notes}</Text> : null}
         </Surface>
       )}
+
+      <Button
+        mode="outlined"
+        icon="printer"
+        onPress={() => printShiftTicket(session.id).catch(() => alerts.error("No se pudo imprimir el corte"))}
+        style={{ borderRadius: 10 }}
+      >
+        {isOpen ? "Imprimir corte parcial" : "Imprimir corte"}
+      </Button>
 
       {canClose && (
         <Button mode="contained" icon="lock" onPress={() => setClosing(true)} style={{ borderRadius: 10 }}>

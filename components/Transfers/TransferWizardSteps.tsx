@@ -2,9 +2,10 @@ import type { VariantMatchMap } from "@/components/App/StatusBadge";
 import StatusBadge from "@/components/App/StatusBadge";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React from "react";
+import { printTransferRemission } from "@/utils/printDocument";
+import React, { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Card, Text } from "react-native-paper";
+import { Button, Card, Text } from "react-native-paper";
 
 interface TransferWizardStatusCardProps {
   transfer: InventoryTransfer;
@@ -85,6 +86,21 @@ export function TransferWizardStatusCard({
   onSelectStep,
 }: TransferWizardStatusCardProps) {
   const theme = getStepTheme(selectedStep);
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState(false);
+
+  // La remisión es la hoja que viaja con la mercancía y se firma al recibir.
+  const printRemission = async () => {
+    try {
+      setPrinting(true);
+      setPrintError(false);
+      await printTransferRemission(transfer.id, transfer.transfer_number);
+    } catch {
+      setPrintError(true);
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   return (
     <Card style={[styles.statusCard, { backgroundColor: theme.color }]}>
@@ -101,6 +117,22 @@ export function TransferWizardStatusCard({
             label={transfer.status_label || transfer.status}
             match={STATUS_MATCH}
           />
+        </View>
+
+        <View style={styles.printRow}>
+          <Button
+            mode="outlined"
+            compact
+            icon="printer"
+            textColor="#FFFFFF"
+            style={styles.printButton}
+            onPress={printRemission}
+            loading={printing}
+            disabled={printing}
+          >
+            Imprimir remisión
+          </Button>
+          {printError && <Text style={styles.statusSubtitle}>No se pudo generar la remisión</Text>}
         </View>
 
         <View style={styles.progressRow}>
@@ -211,6 +243,16 @@ const styles = StyleSheet.create({
   statusSubtitle: {
     marginTop: 4,
     color: "rgba(255, 255, 255, 0.92)",
+  },
+  printRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12,
+  },
+  printButton: {
+    borderColor: "rgba(255, 255, 255, 0.7)",
   },
   progressRow: {
     flexDirection: "row",

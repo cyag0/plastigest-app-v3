@@ -37,6 +37,26 @@ const Services = {
       return response.data;
     },
   },
+  /** URL firmadas (30 min) de los documentos para imprimir. */
+  print: {
+    async saleTicketUrl(saleId: number, width: 58 | 80 = 80): Promise<string> {
+      const response = await axiosClient.get(`/auth/admin/sales/${saleId}/ticket-url`, { params: { width } });
+      return response.data.url;
+    },
+    async shiftTicketUrl(sessionId: number, width: 58 | 80 = 80): Promise<string> {
+      const response = await axiosClient.get(`/auth/admin/cash-register-sessions/${sessionId}/ticket-url`, { params: { width } });
+      return response.data.url;
+    },
+    async transferPdfUrl(transferId: number): Promise<string> {
+      const response = await axiosClient.get(`/auth/admin/inventory-transfers/${transferId}/pdf-url`);
+      return response.data.url;
+    },
+    /** Hoja de producción para la planta (qué producir y qué sacar del almacén). */
+    async productionSheetUrl(orderId: number): Promise<string> {
+      const response = await axiosClient.get(`/auth/admin/production-orders/${orderId}/sheet-url`);
+      return response.data.url;
+    },
+  },
   transfers: {
     ...createCrudService<App.Entities.Company>("/auth/admin/inventory-transfers"),
   },

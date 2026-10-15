@@ -1,10 +1,12 @@
+import { goBack } from "@/utils/navigation";
 import ProductionStatusBadge from "@/components/Production/ProductionStatusBadge";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
+import { printPdf } from "@/utils/printDocument";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { Button, Card, DataTable, Divider, Text } from "react-native-paper";
 import { parseLocalDate } from "@/utils/dates";
@@ -17,42 +19,74 @@ export default function ProductionDetail() {
   const [variance, setVariance] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const loadedRef = useRef(false);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const r: any = await Services.productionOrders.show(parseInt(params.id, 10));
-        setOrder(r?.data?.data ?? r?.data);
-        if ((r?.data?.data ?? r?.data)?.formula_id) {
-          try {
-            const v: any = await Services.productionOrders.getVariance(parseInt(params.id, 10));
-            setVariance(v.data);
-          } catch (e) {
-            // ignore
-          }
+  const loadOrder = useCallback(async () => {
+    // Spinner solo en la primera carga; al volver de editar o empacar se
+    // refresca sin parpadeo.
+    const firstLoad = !loadedRef.current;
+    try {
+      if (firstLoad) setLoading(true);
+      const r: any = await Services.productionOrders.show(parseInt(params.id, 10));
+      const loaded = r?.data?.data ?? r?.data;
+      setOrder(loaded);
+      loadedRef.current = true;
+      if (loaded?.formula_id) {
+        try {
+          const v: any = await Services.productionOrders.getVariance(parseInt(params.id, 10));
+          setVariance(v.data);
+        } catch (e) {
+          // ignore
         }
-      } catch (e: any) {
-        alerts.error("No se pudo cargar: " + e.message);
-      } finally {
-        setLoading(false);
       }
-    })();
+    } catch (e: any) {
+      alerts.error("No se pudo cargar: " + e.message);
+    } finally {
+      setLoading(false);
+    }
   }, [params.id, alerts]);
 
+  // Se recarga cada vez que la pantalla recupera el foco: antes se cargaba una
+  // sola vez y al volver de "Editar" o del empaque mostraba datos viejos.
+  useFocusEffect(
+    useCallback(() => {
+      loadOrder();
+    }, [loadOrder]),
+  );
+
   const handleCancel = async () => {
-    if (!order) return;
+    if (!order || cancelling) return;
     const ok = await alerts.confirm(
       `¿Cancelar la producción ${order.folio}? Se revertirá el stock.`,
       { title: "Cancelar producción", okText: "Sí, cancelar", cancelText: "Volver" },
     );
     if (!ok) return;
     try {
+      setCancelling(true);
       await Services.productionOrders.cancel(order.id);
       alerts.success("Producción cancelada");
-      router.back();
+      goBack();
     } catch (e: any) {
-      alerts.error("No se pudo cancelar: " + e.message);
+      alerts.error("No se pudo cancelar: " + (e?.response?.data?.message ?? e.message));
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  // Hoja para la planta: en borrador, qué producir y qué sacar del almacén con
+  // espacios para anotar lo real; ya completada, lo producido contra lo esperado.
+  const handlePrintSheet = async () => {
+    if (!order || printing) return;
+    try {
+      setPrinting(true);
+      const url = await Services.print.productionSheetUrl(order.id);
+      await printPdf(url, `hoja-produccion-${order.folio}.pdf`);
+    } catch (e: any) {
+      alerts.error("No se pudo generar la hoja de producción. " + (e?.response?.data?.message ?? e?.message ?? ""));
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -70,6 +104,8 @@ export default function ProductionDetail() {
       const r: any = await Services.productionOrders.complete(order.id);
       setOrder(r?.data ?? order);
       alerts.success(r?.message ?? "Producción completada");
+      // Variación y estado de empaque cambian al completar.
+      loadOrder();
     } catch (e: any) {
       const data = e?.response?.data;
       const detail =
@@ -132,6 +168,19 @@ export default function ProductionDetail() {
             <MetaItem icon="account" label="Responsable" value={order.responsible_name ?? "—"} />
             <MetaItem icon="map-marker" label="Sucursal" value={order.location_name ?? "—"} />
           </View>
+
+          {order.status !== "cancelled" ? (
+            <Button
+              mode="outlined"
+              icon="printer"
+              onPress={handlePrintSheet}
+              loading={printing}
+              disabled={printing}
+              style={{ marginTop: 8, alignSelf: "flex-start" }}
+            >
+              {order.status === "draft" ? "Imprimir hoja para planta" : "Imprimir hoja de producción"}
+            </Button>
+          ) : null}
   
           {order.notes ? (
             <View style={styles.notesBlock}>
