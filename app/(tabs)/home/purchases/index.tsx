@@ -10,6 +10,11 @@ import palette from "@/constants/palette";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
+import {
+  CrudService,
+  IndexParams,
+  createCrudService,
+} from "@/utils/services/crudService";
 import { useRouter } from "expo-router";
 import React, { useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
@@ -21,6 +26,35 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   card:     "Tarjeta",
   transfer: "Transferencia",
   other:    "Otro",
+};
+
+/**
+ * Listado para AppList: la respuesta de axios con { data, meta } para que
+ * pagine (Services.purchasesV2.index devolvía solo el cuerpo y la lista se
+ * quedaba en las últimas 20 compras, sin paginador), con búsqueda y filtros.
+ * Los filtros en "Todos" (vacíos) no se mandan: el servidor los tomaría como
+ * un estado vacío y no traería nada.
+ */
+const purchasesCrud = createCrudService<any>("/auth/admin/purchases-v2");
+const purchasesListService: CrudService<any> = {
+  ...purchasesCrud,
+  index: (params?: IndexParams) =>
+    purchasesCrud.index(
+      Object.fromEntries(
+        Object.entries(params ?? {}).filter(
+          ([, value]) => value !== "" && value !== null && value !== undefined,
+        ),
+      ),
+    ),
+};
+
+/** Motivo que manda el backend; nunca el texto en inglés de axios. */
+const apiMessage = (error: any, fallback: string): string => {
+  if (error?.isAxiosError && !error.response) {
+    return "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.";
+  }
+  const data = error?.response?.data;
+  return data?.message || data?.error || fallback;
 };
 
 // Helper function to get status configuration
@@ -54,6 +88,13 @@ const getStatusConfig = (status: string) => {
         borderColor: palette.success,
         textColor: palette.textSecondary,
       };
+    case "cancelled":
+      return {
+        label: "CANCELADO",
+        backgroundColor: palette.error + "20",
+        borderColor: palette.error,
+        textColor: palette.textSecondary,
+      };
     default:
       return {
         label: "DESCONOCIDO",
@@ -75,6 +116,8 @@ export default function PurchasesIndex() {
   ]);
 
   const modalRef = useRef<CreatePurchaseModalRef>(null);
+  // Remonta la lista después de eliminar un borrador para que desaparezca.
+  const [listKey, setListKey] = useState(0);
 
   const { downloadPdfFromApi, isDownloading } = usePdfDownload({
     onError: (error) => alerts.error(error.message || "Error al descargar el PDF"),
@@ -157,11 +200,45 @@ export default function PurchasesIndex() {
     [],
   );
 
+  // Eliminar un borrador: antes se borraba sin confirmar y la lista no se
+  // actualizaba (el menú propio reemplaza la confirmación de AppList).
+  const handleDeleteDraft = async (item: any) => {
+    const ok = await alerts.confirm(
+      `¿Eliminar el borrador ${purchaseLabel(item)}? Esta acción no se puede deshacer.`,
+      { title: "Eliminar borrador", okText: "Eliminar", cancelText: "Cancelar" },
+    );
+    if (!ok) return;
+    try {
+      await Services.purchasesV2.delete(item.id);
+      alerts.success("Borrador eliminado");
+      setListKey((key) => key + 1);
+    } catch (error: any) {
+      alerts.error(apiMessage(error, "No se pudo eliminar el borrador"));
+    }
+  };
+
   const renderListRoute = useMemo(
     () => () => (
       <AppList
+        key={listKey}
         title="Compras"
-        service={Services.purchasesV2}
+        service={purchasesListService}
+        searchPlaceholder="Buscar compras..."
+        filters={[
+          {
+            type: "simple",
+            name: "status",
+            label: "Estado",
+            options: [
+              { label: "Todos", value: "" },
+              { label: "Borrador", value: "draft" },
+              { label: "Pedido", value: "ordered" },
+              { label: "En tránsito", value: "in_transit" },
+              { label: "Recibido", value: "received" },
+              { label: "Cancelado", value: "cancelled" },
+            ],
+          },
+        ]}
         showAppBar={false}
         renderCard={({ item }: { item: any }) => {
           const statusConfig = getStatusConfig(item.status);
@@ -223,9 +300,7 @@ export default function PurchasesIndex() {
           showDelete(item) {
             return item.status === "draft";
           },
-          async onDelete(item) {
-            await Services.purchasesV2.delete(item.id);
-          },
+          onDelete: handleDeleteDraft,
           customActions: [
             {
               title: isDownloading ? "Descargando..." : "Imprimir PDF",
@@ -243,7 +318,7 @@ export default function PurchasesIndex() {
         columns={columns}
       />
     ),
-    [router, columns],
+    [router, columns, listKey],
   );
 
   const renderStatsRoute = useMemo(() => () => <PurchaseStats />, []);
