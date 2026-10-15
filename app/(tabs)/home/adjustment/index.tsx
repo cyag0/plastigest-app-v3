@@ -33,7 +33,15 @@ interface InventoryAdjustmentItem {
   reason_code?: string;
   reason_code_label?: string;
   applied_at?: string;
+  /** reverted_at: merma de una producción cancelada; su stock ya se devolvió. */
+  content?: { reverted_at?: string | null } | null;
 }
+
+/** Motivo del ajuste, con "Revertida" si su stock ya se devolvió. */
+const reasonText = (item: InventoryAdjustmentItem, label?: string) => {
+  const reason = label || item.reason_code_label || item.reason_code || "Sin especificar";
+  return item.content?.reverted_at ? `${reason} · Revertida` : reason;
+};
 
 const tableColumns: AppListColumn<InventoryAdjustmentItem>[] = [
   {
@@ -120,7 +128,7 @@ const tableColumns: AppListColumn<InventoryAdjustmentItem>[] = [
             variant="labelSmall"
             style={{ color: "#fff", fontWeight: "700" }}
           >
-            {value || item.reason_code || "-"}
+            {reasonText(item, value || item.reason_code || "-")}
           </Text>
         </View>
       );
@@ -214,7 +222,7 @@ export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
             },
             {
               label: "Acción",
-              value: item.reason_code_label || item.reason_code || "Sin especificar",
+              value: reasonText(item),
             },
           ],
         };
