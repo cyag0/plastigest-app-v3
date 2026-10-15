@@ -158,7 +158,13 @@ export default function ExpenseForm(props: ExpenseFormProps) {
           category,
           amount: roundMoney(parsedAmount),
           payment_method: paymentMethod,
-          paid_from_cash: paymentMethod === "efectivo" ? paidFromCash : false,
+          // Bloqueado (turno cerrado) se manda tal como estaba guardado.
+          paid_from_cash:
+            moneyLocked && loadedRef.current
+              ? loadedRef.current.paidFromCash
+              : paymentMethod === "efectivo"
+                ? paidFromCash
+                : false,
           description,
           expense_date: toLocalDateString(expenseDate),
         };
