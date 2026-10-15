@@ -3,6 +3,7 @@ import PermissionGate from "@/components/App/PermissionGate";
 import TransferStats from "@/components/Dashboard/TransferStats";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useAuth } from "@/contexts/AuthContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
@@ -77,11 +78,22 @@ function hexWithAlpha(hex: string, alpha: number): string {
 export default function TransfersMenuScreen() {
   const router = useRouter();
   const layout = useWindowDimensions();
+  const { hasPermission } = useAuth();
+  // Las estadísticas salen de reports/transfer-stats, que pide reports_view:
+  // sin él la pestaña solo mostraba un error. Crear pide transfers_create.
+  const canViewStats = hasPermission("reports_view");
+  const canCreate = hasPermission("transfers_create");
   const [index, setIndex] = useState(0);
-  const [routes] = useState([
-    { key: "modules", title: "Módulos" },
-    { key: "stats", title: "Estadísticas" },
-  ]);
+  const routes = useMemo(
+    () =>
+      canViewStats
+        ? [
+            { key: "modules", title: "Módulos" },
+            { key: "stats", title: "Estadísticas" },
+          ]
+        : [{ key: "modules", title: "Módulos" }],
+    [canViewStats],
+  );
 
   const handleModulePress = (route: string) => {
     router.push(route as any);
@@ -116,30 +128,32 @@ export default function TransfersMenuScreen() {
         </View>
 
         {/* ============== PRIMARY ACTION ============== */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={handleCreateTransfer}
-          style={styles.primaryAction}
-        >
-          <View style={styles.primaryActionIconBox}>
+        {canCreate && (
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={handleCreateTransfer}
+            style={styles.primaryAction}
+          >
+            <View style={styles.primaryActionIconBox}>
+              <MaterialCommunityIcons
+                name="plus-circle"
+                size={22}
+                color={palette.primary}
+              />
+            </View>
+            <View style={styles.primaryActionBody}>
+              <Text style={styles.primaryActionTitle}>Nueva Transferencia</Text>
+              <Text style={styles.primaryActionSubtitle}>
+                Solicita productos de otra ubicación
+              </Text>
+            </View>
             <MaterialCommunityIcons
-              name="plus-circle"
-              size={22}
-              color={palette.primary}
+              name="arrow-right"
+              size={18}
+              color={palette.textMuted}
             />
-          </View>
-          <View style={styles.primaryActionBody}>
-            <Text style={styles.primaryActionTitle}>Nueva Transferencia</Text>
-            <Text style={styles.primaryActionSubtitle}>
-              Solicita productos de otra ubicación
-            </Text>
-          </View>
-          <MaterialCommunityIcons
-            name="arrow-right"
-            size={18}
-            color={palette.textMuted}
-          />
-        </TouchableOpacity>
+          </TouchableOpacity>
+        )}
 
         {/* ============== SECTION HEADER ============== */}
         <View style={styles.sectionHeader}>
@@ -225,7 +239,7 @@ export default function TransfersMenuScreen() {
         </View>
       </ScrollView>
     ),
-    [handleCreateTransfer],
+    [handleCreateTransfer, canCreate],
   );
 
   const renderStatsRoute = useMemo(() => () => <TransferStats />, []);
@@ -234,41 +248,43 @@ export default function TransfersMenuScreen() {
     () =>
       SceneMap({
         modules: renderModulesRoute,
-        stats: renderStatsRoute,
+        stats: canViewStats ? renderStatsRoute : () => null,
       }),
-    [renderModulesRoute, renderStatsRoute],
+    [renderModulesRoute, renderStatsRoute, canViewStats],
   );
 
   return (
     <PermissionGate permission="transfers_list">
       <View style={styles.container}>
-        {/* Tabs Header */}
-        <View style={styles.tabsContainer}>
-          <Pressable
-            style={[styles.tab, index === 0 && styles.tabActive]}
-            onPress={() => setIndex(0)}
-          >
-            <Text
-              style={[styles.tabText, index === 0 && styles.tabTextActive]}
+        {/* Tabs Header (sin pestañas si solo hay módulos) */}
+        {canViewStats && (
+          <View style={styles.tabsContainer}>
+            <Pressable
+              style={[styles.tab, index === 0 && styles.tabActive]}
+              onPress={() => setIndex(0)}
             >
-              Módulos
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tab, index === 1 && styles.tabActive]}
-            onPress={() => setIndex(1)}
-          >
-            <Text
-              style={[styles.tabText, index === 1 && styles.tabTextActive]}
+              <Text
+                style={[styles.tabText, index === 0 && styles.tabTextActive]}
+              >
+                Módulos
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tab, index === 1 && styles.tabActive]}
+              onPress={() => setIndex(1)}
             >
-              Estadísticas
-            </Text>
-          </Pressable>
-        </View>
+              <Text
+                style={[styles.tabText, index === 1 && styles.tabTextActive]}
+              >
+                Estadísticas
+              </Text>
+            </Pressable>
+          </View>
+        )}
 
         {/* Tab View */}
         <TabView
-          navigationState={{ index, routes }}
+          navigationState={{ index: canViewStats ? index : 0, routes }}
           renderScene={renderScene}
           onIndexChange={setIndex}
           initialLayout={{ width: layout.width }}

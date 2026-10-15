@@ -1,4 +1,5 @@
-import AppList, { AppListColumn } from "@/components/App/AppList/AppList";
+import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";

@@ -11,6 +11,18 @@ import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { Button, Card, DataTable, Divider, Text } from "react-native-paper";
 import { parseLocalDate } from "@/utils/dates";
 
+/** Motivo que manda el backend: `error` trae el detalle cuando `message` es genérico. */
+function apiMessage(error: any, fallback: string): string {
+  if (error?.isAxiosError && !error.response) {
+    return "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.";
+  }
+  const data = error?.response?.data;
+  const fieldError = data?.errors
+    ? (Object.values(data.errors).flat()[0] as string | undefined)
+    : undefined;
+  return fieldError || data?.error || data?.message || fallback;
+}
+
 export default function ProductionDetail() {
   const params = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -42,7 +54,7 @@ export default function ProductionDetail() {
         }
       }
     } catch (e: any) {
-      alerts.error("No se pudo cargar: " + e.message);
+      alerts.error(apiMessage(e, "No se pudo cargar la producción"));
     } finally {
       setLoading(false);
     }
@@ -69,7 +81,7 @@ export default function ProductionDetail() {
       alerts.success("Producción cancelada");
       goBack();
     } catch (e: any) {
-      alerts.error("No se pudo cancelar: " + (e?.response?.data?.message ?? e.message));
+      alerts.error("No se pudo cancelar: " + apiMessage(e, "Error"));
     } finally {
       setCancelling(false);
     }
@@ -84,7 +96,7 @@ export default function ProductionDetail() {
       const url = await Services.print.productionSheetUrl(order.id);
       await printPdf(url, `hoja-produccion-${order.folio}.pdf`);
     } catch (e: any) {
-      alerts.error("No se pudo generar la hoja de producción. " + (e?.response?.data?.message ?? e?.message ?? ""));
+      alerts.error("No se pudo generar la hoja de producción. " + apiMessage(e, ""));
     } finally {
       setPrinting(false);
     }
@@ -107,13 +119,9 @@ export default function ProductionDetail() {
       // Variación y estado de empaque cambian al completar.
       loadOrder();
     } catch (e: any) {
-      const data = e?.response?.data;
-      const detail =
-        (data?.errors ? Object.values(data.errors).flat()[0] : null) ||
-        data?.error ||
-        data?.message ||
-        e?.message;
-      alerts.error("No se pudo completar la producción. " + detail);
+      alerts.error(
+        "No se pudo completar la producción. " + apiMessage(e, "Error desconocido"),
+      );
     } finally {
       setCompleting(false);
     }

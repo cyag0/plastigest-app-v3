@@ -4,6 +4,7 @@ import EmptyState from "@/components/App/EmptyState";
 import KpiCard from "@/components/Dashboard/KpiCard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useAuth } from "@/contexts/AuthContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import axios from "@/utils/axios";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -48,6 +49,9 @@ const STATUS_META: Record<
 
 export default function TransferStats() {
   const { isMobile } = useResponsive();
+  // reports/transfer-stats pide reports_view: sin él no se pide (respondía 403).
+  const { hasPermission } = useAuth();
+  const canView = hasPermission("reports_view");
   const { width: screenWidth } = useWindowDimensions();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<TransferStatsData | null>(null);
@@ -56,8 +60,8 @@ export default function TransferStats() {
   const chartWidth = screenWidth - (tokens.spacing[5] + tokens.spacing[4]) * 2;
 
   useEffect(() => {
-    loadStats();
-  }, [period]);
+    if (canView) loadStats();
+  }, [period, canView]);
 
   const loadStats = async () => {
     try {
@@ -72,6 +76,16 @@ export default function TransferStats() {
       setLoading(false);
     }
   };
+
+  if (!canView) {
+    return (
+      <EmptyState
+        icon="lock-outline"
+        title="Sin acceso a estadísticas"
+        description="Para ver las estadísticas de transferencias se necesita el permiso de reportes."
+      />
+    );
+  }
 
   if (loading) {
     return (

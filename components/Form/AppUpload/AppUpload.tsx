@@ -3,7 +3,7 @@ import { useAlerts } from "@/hooks/useAlerts";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, Platform, StyleSheet, View } from "react-native";
 import {
   Button,
   Card,
@@ -18,6 +18,91 @@ export interface UploadedFile {
   name: string;
   type: string;
   size?: number;
+}
+
+// El API acepta imágenes de hasta 5 MB (jpg, png, webp) y una petición con
+// varias fotos no debe pasar de lo que permite el servidor: las fotos se
+// comprimen al elegirlas y las que siguen siendo muy pesadas se rechazan
+// aquí, no al guardar.
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// Compresión JPEG del selector (en nativo; en web no la aplica).
+const PICKER_QUALITY = 0.6;
+// En web la foto se reduce a este lado mayor antes de subirla.
+const WEB_MAX_SIDE = 1600;
+
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+const formatMegabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
+
+/**
+ * Web: reduce la foto (lado mayor WEB_MAX_SIDE) y la vuelve JPEG con un
+ * canvas; el selector de web no comprime. Devuelve null si no se pudo.
+ */
+async function resizeImageOnWeb(
+  uri: string,
+): Promise<{ uri: string; size: number } | null> {
+  if (typeof document === "undefined") return null;
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const element = document.createElement("img");
+      element.onload = () => resolve(element);
+      element.onerror = reject;
+      element.src = uri;
+    });
+    const longest = Math.max(image.naturalWidth, image.naturalHeight);
+    if (!longest) return null;
+    const scale = Math.min(1, WEB_MAX_SIDE / longest);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(image.naturalWidth * scale);
+    canvas.height = Math.round(image.naturalHeight * scale);
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    // Fondo blanco: lo transparente de un PNG saldría negro en JPEG.
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", 0.8),
+    );
+    if (!blob) return null;
+    return { uri: URL.createObjectURL(blob), size: blob.size };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Foto elegida o tomada → archivo para subir, con su tipo real (antes todas
+ * se marcaban como image/jpeg aunque fueran PNG). En web se reduce antes.
+ */
+async function toUploadedImage(
+  asset: ImagePicker.ImagePickerAsset,
+  prefix: "image" | "camera",
+  index = 0,
+): Promise<UploadedFile> {
+  let uri = asset.uri;
+  let type = asset.mimeType || "image/jpeg";
+  let size = asset.fileSize;
+
+  if (Platform.OS === "web") {
+    const resized = await resizeImageOnWeb(asset.uri);
+    // Un formato que el API no acepta (gif, heic...) se queda en JPEG aunque
+    // no pese menos.
+    const acceptedType = Boolean(IMAGE_EXTENSIONS[type.toLowerCase()]);
+    if (resized && (!size || resized.size < size || !acceptedType)) {
+      uri = resized.uri;
+      type = "image/jpeg";
+      size = resized.size;
+    }
+  }
+
+  const extension = IMAGE_EXTENSIONS[type.toLowerCase()] ?? "jpg";
+  return { uri, name: `${prefix}_${Date.now()}_${index}.${extension}`, type, size };
 }
 
 interface AppUploadProps {
@@ -72,6 +157,19 @@ export default function AppUpload(props: AppUploadProps) {
   // Normalizar el valor a un array siempre
   const value = Array.isArray(rawValue) ? rawValue : [];
 
+  /** Quita (y avisa) las fotos que siguen pasando del límite del servidor. */
+  const withinSizeLimit = (files: UploadedFile[]) => {
+    const tooBig = files.filter((file) => (file.size ?? 0) > MAX_IMAGE_BYTES);
+    if (tooBig.length > 0) {
+      alerts.warning(
+        tooBig.length === 1
+          ? `La foto pesa ${formatMegabytes(tooBig[0].size ?? 0)} MB y el máximo es 5 MB. Tómala con menos resolución o elige otra.`
+          : `${tooBig.length} fotos pasan de 5 MB y no se agregaron. Tómalas con menos resolución o elige otras.`,
+      );
+    }
+    return files.filter((file) => (file.size ?? 0) <= MAX_IMAGE_BYTES);
+  };
+
   const handleDocumentPick = async () => {
     try {
       setUploading(true);
@@ -123,16 +221,21 @@ export default function AppUpload(props: AppUploadProps) {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsMultipleSelection: multiple,
-        quality: 0.8,
+        quality: PICKER_QUALITY,
+        // iOS: entrega JPEG en vez de HEIC, que el API no acepta.
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       });
 
       if (!result.canceled && result.assets) {
-        const newFiles: UploadedFile[] = result.assets.map((asset, index) => ({
-          uri: asset.uri,
-          name: `image_${Date.now()}_${index}.jpg`,
-          type: "image/jpeg",
-          size: asset.fileSize,
-        }));
+        const newFiles = withinSizeLimit(
+          await Promise.all(
+            result.assets.map((asset, index) =>
+              toUploadedImage(asset, "image", index),
+            ),
+          ),
+        );
+        if (newFiles.length === 0) return;
 
         const updatedFiles = multiple ? [...value, ...newFiles] : newFiles;
 
@@ -165,19 +268,16 @@ export default function AppUpload(props: AppUploadProps) {
 
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ["images"],
-        quality: 0.8,
+        quality: PICKER_QUALITY,
         allowsEditing: true,
         aspect: [4, 3],
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const asset = result.assets[0];
-        const newFile: UploadedFile = {
-          uri: asset.uri,
-          name: `camera_${Date.now()}.jpg`,
-          type: "image/jpeg",
-          size: asset.fileSize,
-        };
+        const [newFile] = withinSizeLimit([
+          await toUploadedImage(result.assets[0], "camera"),
+        ]);
+        if (!newFile) return;
 
         const updatedFiles = multiple ? [...value, newFile] : [newFile];
 

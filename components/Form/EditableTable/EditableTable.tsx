@@ -210,7 +210,6 @@ export default function EditableTable({
           fetchParams={col.productFetchParams}
           placeholder="Seleccionar producto"
           required={col.required}
-          hideLabel
         />
       );
     }
@@ -257,7 +256,6 @@ export default function EditableTable({
             placeholder="0.00"
             keyboardType="numeric"
             required={col.required}
-            hideLabel
           />
           {helper ? (
             <Text
@@ -278,7 +276,6 @@ export default function EditableTable({
         name={fieldName}
         placeholder={col.label}
         required={col.required}
-        hideLabel
       />
     );
   }
@@ -360,7 +357,6 @@ function UnitCell({
       model="home.unidades"
       placeholder="Unidad"
       required={required}
-      hideLabel
       filterItem={filterItem}
     />
   );

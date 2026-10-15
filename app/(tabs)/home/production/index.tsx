@@ -1,10 +1,10 @@
-import AppList, {
-  AppListColumn,
-} from "@/components/App/AppList/AppList";
+import AppList from "@/components/App/AppList/AppList";
+import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PermissionGate from "@/components/App/PermissionGate";
 import ProductionKpiCards from "@/components/Production/ProductionKpiCards";
 import ProductionStatusBadge from "@/components/Production/ProductionStatusBadge";
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
@@ -81,6 +81,9 @@ export default function ProductionIndex() {
   const { company } = useSelectedCompany();
   const { selectedLocation } = useSelectedLocation();
   const { isMobile } = useResponsive();
+  const { hasPermission } = useAuth();
+  // Cancelar revierte el stock: el backend pide production_orders_update.
+  const canUpdate = hasPermission("production_orders_update");
   const layout = useWindowDimensions();
   const [tabIndex, setTabIndex] = useState(0);
   const [routes] = useState([
@@ -119,9 +122,14 @@ export default function ProductionIndex() {
         alerts.success("Producción cancelada y stock revertido");
         return true;
       } catch (e: any) {
+        // El motivo (p. ej. no hay stock para revertir) viene en `error`;
+        // `message` solo dice "Error al cancelar producción".
+        const data = e?.response?.data;
         alerts.error(
           "No se pudo cancelar: " +
-            (e?.response?.data?.message ?? e?.message ?? "Error"),
+            (data?.error ??
+              data?.message ??
+              (e?.response ? "Error" : "sin conexión con el servidor")),
         );
         return false;
       }
@@ -129,8 +137,19 @@ export default function ProductionIndex() {
     [alerts],
   );
 
-  // Remonta la lista después de cancelar para que el estado se actualice.
+  // Remonta la lista después de cancelar para que el estado se actualice, y
+  // al cambiar de sucursal (AppList no recarga si cambian sus filtros fijos).
   const [reloadToken, setReloadToken] = useState(0);
+  const companyId = company?.id;
+  const locationId = selectedLocation?.id;
+  const listKey = `${reloadToken}-${locationId ?? "all"}`;
+  const listFilters = useMemo(
+    () => ({
+      ...(companyId ? { company_id: companyId } : {}),
+      ...(locationId ? { location_id: locationId } : {}),
+    }),
+    [companyId, locationId],
+  );
 
   // "Duplicar" y "Cancelar" vivían en un onMenuAction que AppList no soporta:
   // nunca aparecían. AppList sí muestra customActions.
@@ -154,14 +173,14 @@ export default function ProductionIndex() {
           title: "Cancelar producción",
           icon: "cancel",
           color: palette.error,
-          show: (item: any) => item.status !== "cancelled",
+          show: (item: any) => canUpdate && item.status !== "cancelled",
           onPress: async (item: any) => {
             if (await handleCancel(item)) setReloadToken((t) => t + 1);
           },
         },
       ],
     }),
-    [handleItem, handleEdit, handleCancel, router],
+    [handleItem, handleEdit, handleCancel, router, canUpdate],
   );
 
   const formulasButton = (
@@ -214,17 +233,16 @@ export default function ProductionIndex() {
       <View style={{ flex: 1 }}>
         {formulasButton}
         <AppList
-          key={reloadToken}
+          key={listKey}
           title="Producción"
           service={Services.productionOrders}
           columns={PRODUCTION_COLUMNS}
           showAppBar={isMobile ? false : undefined}
           actionColumnTitle="Acciones"
           actionColumnWidth={200}
-          queryParams={{
-            ...(company?.id ? { company_id: company.id } : {}),
-            ...(selectedLocation?.id ? { location_id: selectedLocation.id } : {}),
-          }}
+          // AppList no conoce `queryParams`: la sucursal nunca se mandaba y
+          // quien ve todas las sucursales recibía las órdenes de todas.
+          defaultFilters={listFilters}
           renderCard={({ item }: { item: any }) => ({
             // Celular: folio como título y el estado debajo, sin columna de
             // ícono; antes ícono + badge + menú dejaban ~100px al texto y el
@@ -282,7 +300,7 @@ export default function ProductionIndex() {
         />
       </View>
     ),
-    [company, selectedLocation, handleItem, productionMenu, reloadToken, isMobile],
+    [listFilters, listKey, handleItem, productionMenu, isMobile],
   );
 
   const statsScene = useMemo(() => () => <ProductionKpiCards />, []);
@@ -332,16 +350,15 @@ export default function ProductionIndex() {
         <ProductionKpiCards />
         {formulasButton}
         <AppList
-          key={reloadToken}
+          key={listKey}
           title="Producción"
           service={Services.productionOrders}
           columns={PRODUCTION_COLUMNS}
           actionColumnTitle="Acciones"
           actionColumnWidth={200}
-          queryParams={{
-            ...(company?.id ? { company_id: company.id } : {}),
-            ...(selectedLocation?.id ? { location_id: selectedLocation.id } : {}),
-          }}
+          // AppList no conoce `queryParams`: la sucursal nunca se mandaba y
+          // quien ve todas las sucursales recibía las órdenes de todas.
+          defaultFilters={listFilters}
           renderCard={({ item }: { item: any }) => ({
             // Celular: folio como título y el estado debajo, sin columna de
             // ícono; antes ícono + badge + menú dejaban ~100px al texto y el

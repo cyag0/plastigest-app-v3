@@ -1,15 +1,19 @@
 import { SafeAreaView } from "react-native-safe-area-context";
 import { formatMoney } from "@/utils/format";
 import EmptyState from "@/components/App/EmptyState";
+import PermissionGate from "@/components/App/PermissionGate";
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import transferService, {
+  type TransferOrigin,
+} from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
-import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal, ScrollView, StyleSheet, Text as RNText, TextInput, TouchableOpacity, View } from "react-native";
@@ -66,8 +70,11 @@ function TransferFormContent() {
   const navigation = useNavigation();
   const { isMobile } = useResponsive();
 
-  const [locations, setLocations] = useState<App.Entities.Location[]>([]);
+  const [locations, setLocations] = useState<TransferOrigin[]>([]);
   const [notes, setNotes] = useState("");
+  // Candado de "Crear Solicitud": un doble toque abría otra confirmación y
+  // mandaba la solicitud dos veces.
+  const { submitting, run } = useSubmitGuard();
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [fromMenuVisible, setFromMenuVisible] = useState(false);
   const [cartVisible, setCartVisible] = useState(false);
@@ -89,21 +96,21 @@ function TransferFormContent() {
     }
   }, [currentLocation]);
 
+  // "Pedir a": las sucursales activas de la empresa menos la actual. Antes
+  // salían de /admin/locations, que a un rol de sucursal (sin locations_list)
+  // solo le devuelve su propia sucursal: la lista quedaba vacía.
   const loadLocations = async () => {
     try {
       setLoadingLocations(true);
-      const response = await Services.admin.locations.index({
-        company_id: company?.id,
-      });
-
-      const data = Array.isArray(response.data)
-        ? response.data
-        : response.data?.data || [];
-
-      setLocations(data as App.Entities.Location[]);
-    } catch (error) {
+      setLocations(await transferService.origins());
+    } catch (error: any) {
       console.error("Error loading locations:", error);
-      alerts.error("Error al cargar ubicaciones");
+      const data = error?.response?.data;
+      alerts.error(
+        data?.message ||
+          data?.error ||
+          "No se pudieron cargar las sucursales a las que puedes pedir",
+      );
     } finally {
       setLoadingLocations(false);
     }
@@ -164,48 +171,49 @@ function TransferFormContent() {
     ListSelectedProduct
   >;
 
-  const handleConfirmTransfer = async () => {
-    try {
-      if (!transferContext.fromLocationId || !transferContext.toLocationId) {
-        alerts.error("Debes seleccionar ubicación de origen y destino");
-        return;
+  const handleConfirmTransfer = () =>
+    run(async () => {
+      try {
+        if (!transferContext.fromLocationId || !transferContext.toLocationId) {
+          alerts.error("Debes seleccionar ubicación de origen y destino");
+          return;
+        }
+
+        if (cartItems.length === 0) {
+          alerts.error("Debes agregar al menos un producto");
+          return;
+        }
+
+        // El diálogo vive en el Portal de la app: con el modal del carrito abierto
+        // (mobile) quedaba detrás y el botón parecía no hacer nada.
+        setCartVisible(false);
+        const confirmed = await alerts.confirm(
+          "¿Deseas crear esta solicitud de transferencia?",
+          {
+            title: "Confirmar Transferencia",
+            okText: "Crear Solicitud",
+            cancelText: "Cancelar",
+          },
+        );
+
+        if (!confirmed) {
+          if (isMobile) setCartVisible(true);
+          return;
+        }
+
+        await transferContext.confirmTransfer({
+          notes: notes || undefined,
+        });
+
+        // Limpiar formulario
+        setNotes("");
+
+        router.replace("/(tabs)/home/transfers/pending" as any);
+      } catch (error: any) {
+        console.error("Error confirming transfer:", error);
+        // El error ya fue mostrado en el contexto
       }
-
-      if (cartItems.length === 0) {
-        alerts.error("Debes agregar al menos un producto");
-        return;
-      }
-
-      // El diálogo vive en el Portal de la app: con el modal del carrito abierto
-      // (mobile) quedaba detrás y el botón parecía no hacer nada.
-      setCartVisible(false);
-      const confirmed = await alerts.confirm(
-        "¿Deseas crear esta solicitud de transferencia?",
-        {
-          title: "Confirmar Transferencia",
-          okText: "Crear Solicitud",
-          cancelText: "Cancelar",
-        },
-      );
-
-      if (!confirmed) {
-        if (isMobile) setCartVisible(true);
-        return;
-      }
-
-      await transferContext.confirmTransfer({
-        notes: notes || undefined,
-      });
-
-      // Limpiar formulario
-      setNotes("");
-
-      router.replace("/(tabs)/home/transfers/pending" as any);
-    } catch (error: any) {
-      console.error("Error confirming transfer:", error);
-      // El error ya fue mostrado en el contexto
-    }
-  };
+    });
 
   // El origen no puede ser la misma sucursal actual (destino fijo)
   const availableFromLocations = locations.filter(
@@ -284,7 +292,9 @@ function TransferFormContent() {
           <Button
             mode="contained"
             onPress={handleConfirmTransfer}
+            loading={submitting}
             disabled={
+              submitting ||
               !transferContext.fromLocationId ||
               !transferContext.toLocationId ||
               cartItems.length === 0
@@ -311,6 +321,10 @@ function TransferFormContent() {
       <Text style={styles.originLabel}>Pedir a</Text>
       {loadingLocations ? (
         <Text style={styles.loadingText}>Cargando sucursales...</Text>
+      ) : availableFromLocations.length === 0 ? (
+        <Text style={styles.loadingText}>
+          No hay otras sucursales activas a las que pedir
+        </Text>
       ) : (
         <Menu
           visible={fromMenuVisible}
@@ -349,13 +363,21 @@ function TransferFormContent() {
       <View style={styles.productsSection}>
         {originBar}
         {!transferContext.fromLocationId && !loadingLocations ? (
-          <EmptyState
-            icon="store-search-outline"
-            title="Elige de qué sucursal pides"
-            description="Verás el catálogo y las existencias de esa sucursal para armar tu solicitud."
-            actionLabel="Elegir sucursal"
-            onAction={() => setFromMenuVisible(true)}
-          />
+          availableFromLocations.length === 0 ? (
+            <EmptyState
+              icon="store-off-outline"
+              title="No hay sucursales a las que pedir"
+              description="Solo puedes pedir productos a otras sucursales activas de la empresa."
+            />
+          ) : (
+            <EmptyState
+              icon="store-search-outline"
+              title="Elige de qué sucursal pides"
+              description="Verás el catálogo y las existencias de esa sucursal para armar tu solicitud."
+              actionLabel="Elegir sucursal"
+              onAction={() => setFromMenuVisible(true)}
+            />
+          )
         ) : (
           <ListProducts
             loading={transferContext.loading || loadingLocations}
@@ -402,9 +424,13 @@ function TransferFormContent() {
 
 export default function TransferFormScreen() {
   return (
-    <TransferProvider>
-      <TransferFormContent />
-    </TransferProvider>
+    // Crear la solicitud pide transfers_create (igual que el backend); antes
+    // bastaba transfers_list y el formulario fallaba al final.
+    <PermissionGate permission="transfers_create">
+      <TransferProvider>
+        <TransferFormContent />
+      </TransferProvider>
+    </PermissionGate>
   );
 }
 

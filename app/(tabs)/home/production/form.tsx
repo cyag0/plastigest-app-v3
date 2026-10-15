@@ -3,7 +3,7 @@ import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
-import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
+import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import EditableTable, {
   EditableTableColumn,
 } from "@/components/Form/EditableTable/EditableTable";
@@ -13,6 +13,7 @@ import FormulaPickerModal, {
 import InventorySummaryPanel from "@/components/Production/InventorySummaryPanel";
 import MermasTable from "@/components/Production/MermasTable";
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
@@ -88,6 +89,26 @@ const DEFAULT_OUTPUT = {
   quantity: 0,
   notes: "",
 };
+
+/** Listas de la orden; una vacía se marca con `<lista>_empty=1` al editar. */
+const ORDER_LISTS = ["consumptions", "outputs", "wastes"] as const;
+
+interface ResponsibleOption {
+  id: number;
+  name: string;
+}
+
+/** Motivo que manda el backend; nunca el texto en inglés de axios. */
+function apiMessage(error: any, fallback: string): string {
+  if (error?.isAxiosError && !error.response) {
+    return "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.";
+  }
+  const data = error?.response?.data;
+  const fieldError = data?.errors
+    ? (Object.values(data.errors).flat()[0] as string | undefined)
+    : undefined;
+  return data?.error || fieldError || data?.message || fallback;
+}
 
 /**
  * Salidas de una fórmula, tolerando el formato anterior.
@@ -184,18 +205,52 @@ export default function ProductionForm() {
   const params = useLocalSearchParams<{ id?: string; duplicateFrom?: string }>();
   const router = useRouter();
   const alerts = useAlerts();
+  const { user } = useAuth();
   const { company } = useSelectedCompany();
   const { selectedLocation } = useSelectedLocation();
   const formRef = useRef<AppFormRef<any>>(null);
   const [initialValues, setInitialValues] = React.useState<any | null>(null);
   const [editingId, setEditingId] = React.useState<number | undefined>(undefined);
+  const [responsibles, setResponsibles] = React.useState<ResponsibleOption[]>([]);
+  // Al editar, si la orden no cargó no se muestra el formulario: guardar sus
+  // valores vacíos sobre el borrador le borraría los renglones.
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = React.useState(0);
 
   // Cargar valores iniciales: edición o duplicado
   useEffect(() => {
     (async () => {
+      // Responsables: usuarios activos de la empresa con acceso a esta
+      // sucursal (production-orders/initial-data). Antes salían de la lista de
+      // usuarios del administrador, que pide users_list: los roles de planta
+      // (plantilla "Operativo") no podían registrar producción.
+      let options: ResponsibleOption[] = [];
+      try {
+        const r: any = await Services.productionOrders.getInitialData();
+        options = (r?.data?.responsibles ?? []).map((u: any) => ({
+          id: Number(u.id),
+          name: String(u.name ?? `Usuario #${u.id}`),
+        }));
+      } catch (e) {
+        console.warn("No se pudieron cargar los responsables", e);
+        // Sin la lista, al menos quien registra puede ser el responsable.
+        if (user?.id) options = [{ id: Number(user.id), name: user.name }];
+      }
+      // El responsable guardado se conserva aunque ya no esté en la lista.
+      const ensureOption = (id: any, name?: string | null) => {
+        const numericId = Number(id);
+        if (numericId && !options.some((o) => o.id === numericId)) {
+          options = [...options, { id: numericId, name: name || `Usuario #${numericId}` }];
+        }
+      };
+
       const baseValues = {
         production_date: toLocalDateString(),
-        responsible_user_id: 0,
+        // Por omisión, quien registra (si está entre los responsables).
+        responsible_user_id:
+          user?.id && options.some((o) => o.id === Number(user.id))
+            ? Number(user.id)
+            : 0,
         formula_id: null,
         notes: "",
         consumptions: [] as any[],
@@ -213,6 +268,8 @@ export default function ProductionForm() {
         try {
           const r: any = await Services.productionOrders.show(parseInt(sourceId as string, 10));
           const order = r?.data?.data ?? r?.data;
+          ensureOption(order.responsible_user_id, order.responsible_name);
+          setResponsibles(options);
           if (params.duplicateFrom) {
             setInitialValues({
               ...baseValues,
@@ -271,13 +328,41 @@ export default function ProductionForm() {
           }
           return;
         } catch (e: any) {
-          alerts.error("No se pudo cargar la producción: " + e.message);
+          if (params.id) {
+            setLoadError(apiMessage(e, "No se pudo cargar la producción"));
+            return;
+          }
+          alerts.error(
+            apiMessage(e, "No se pudo cargar la producción a duplicar"),
+          );
         }
       }
+      setResponsibles(options);
       setInitialValues(baseValues);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.id, params.duplicateFrom]);
+  }, [params.id, params.duplicateFrom, loadAttempt]);
+
+  if (loadError) {
+    return (
+      <View style={styles.loadError}>
+        <MaterialCommunityIcons name="alert-circle-outline" size={40} color={palette.error} />
+        <Text style={{ color: palette.text, textAlign: "center" }}>{loadError}</Text>
+        <Button
+          mode="contained"
+          onPress={() => {
+            setLoadError(null);
+            setLoadAttempt((n) => n + 1);
+          }}
+        >
+          Reintentar
+        </Button>
+        <Button mode="text" onPress={() => goBack("/(tabs)/home/production")}>
+          Volver
+        </Button>
+      </View>
+    );
+  }
 
   if (!initialValues) {
     return null;
@@ -297,6 +382,11 @@ export default function ProductionForm() {
         // Recuperamos los valores originales (objetos) desde la instancia de
         // Formik para poder calcular los totales reales y leer affect_stock.
         const originalValues = formRef.current?.getValues() ?? values;
+
+        if (!Number(originalValues.responsible_user_id)) {
+          alerts.error("Selecciona quién es el responsable de la producción.");
+          return;
+        }
 
         const totalC = (originalValues.consumptions ?? []).reduce(
           (a: number, b: any) => a + (Number(b.quantity) || 0),
@@ -319,6 +409,18 @@ export default function ProductionForm() {
         // "Cancelado por el usuario").
         if (!ok) return;
 
+        // Una lista vacía no viaja en un FormData: al quitar todas las mermas
+        // (o consumos o resultados) de un borrador, el servidor conservaba las
+        // anteriores y al completar las descontaba del stock. Se avisa con
+        // `<lista>_empty=1` que la lista quedó vacía a propósito.
+        if (editingId) {
+          ORDER_LISTS.forEach((list) => {
+            if ((originalValues[list] ?? []).length === 0) {
+              values.append(`${list}_empty`, "1");
+            }
+          });
+        }
+
         // AppForm NO llama a la API cuando se le pasa onSubmit, así que la
         // invocamos manualmente aquí con los valores convertidos a FormData.
         // Cuando affect_stock está activo, el backend crea Y descuenta el
@@ -330,14 +432,10 @@ export default function ProductionForm() {
             ? await Services.productionOrders.update(editingId, values)
             : await Services.productionOrders.store(values);
         } catch (e: any) {
-          const data = e?.response?.data;
-          const detail =
-            data?.error ||
-            (data?.errors ? Object.values(data.errors).flat()[0] : null) ||
-            data?.message ||
-            e?.message ||
-            "Error desconocido";
-          alerts.error("No se pudo registrar la producción. " + detail);
+          alerts.error(
+            "No se pudo registrar la producción. " +
+              apiMessage(e, "Error desconocido"),
+          );
           // Nos quedamos en el formulario (no navegamos) para que el usuario
           // ajuste las cantidades y reintente.
           return;
@@ -367,12 +465,18 @@ export default function ProductionForm() {
         goBack("/(tabs)/home/production");
       }}
     >
-      <ProductionFormBody editingId={editingId} />
+      <ProductionFormBody editingId={editingId} responsibles={responsibles} />
     </AppForm>
   );
 }
 
-function ProductionFormBody({ editingId }: { editingId?: number }) {
+function ProductionFormBody({
+  editingId,
+  responsibles,
+}: {
+  editingId?: number;
+  responsibles: ResponsibleOption[];
+}) {
   const { values, submitForm, isSubmitting, setFieldValue } = useFormikContext<any>();
   const router = useRouter();
   const formulaPickerRef = useRef<FormulaPickerModalRef>(null);
@@ -491,10 +595,13 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
             label="Fecha de Producción"
             required
           />
-          <FormProSelect
+          {/* Las opciones ya vienen cargadas antes de montar el formulario: el
+              campo (FastField) no se vuelve a pintar si solo cambian. */}
+          <FormSelectSimple
             name="responsible_user_id"
             label="Responsable"
-            model="users"
+            placeholder="Selecciona al responsable"
+            data={responsibles.map((r) => ({ value: String(r.id), label: r.name }))}
             required
           />
  
@@ -651,5 +758,12 @@ const styles = StyleSheet.create({
   actionBar: {
     flexDirection: "row",
     marginTop: 16,
+  },
+  loadError: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 24,
   },
 });

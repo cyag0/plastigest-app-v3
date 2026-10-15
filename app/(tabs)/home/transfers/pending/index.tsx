@@ -13,6 +13,11 @@ import React, { useState } from "react";
 import { View } from "react-native";
 import { Badge, IconButton, Text } from "react-native-paper";
 
+/**
+ * Quién pidió, visto desde la sucursal actual: "YO SOLICITE" si la mercancía
+ * llega aquí (la sucursal actual es el destino), "ME SOLICITARON" si sale de
+ * aquí.
+ */
 function DirectionBadge({ isSent }: { isSent: boolean }) {
   return (
     <View
@@ -119,8 +124,6 @@ export default function PendingTransfersScreen() {
     info: "in_transit",
   };
 
-  console.log("Current location:", location);
-
   const columns: AppListColumn<InventoryTransfer>[] = [
     {
       title: "Folio",
@@ -199,7 +202,6 @@ export default function PendingTransfersScreen() {
         service={transferService}
         defaultFilters={{
           company_id: company.id,
-          mode: "pending",
           status: "pending,approved,in_transit",
         }}
         filters={[
@@ -215,13 +217,15 @@ export default function PendingTransfersScreen() {
             ],
           },
           {
+            // Desde la sucursal actual: "received" = la mercancía llega aquí
+            // (lo que yo pedí), "sent" = sale de aquí (lo que me pidieron).
             type: "simple",
             name: "direction",
             label: "Dirección",
             options: [
               { label: "Todas", value: "" },
-              { label: "Enviadas", value: "sent" },
-              { label: "Recibidas", value: "received" },
+              { label: "Yo solicité (llegan aquí)", value: "received" },
+              { label: "Me solicitaron (salen de aquí)", value: "sent" },
             ],
           },
         ]}
@@ -230,8 +234,6 @@ export default function PendingTransfersScreen() {
         actionColumnWidth={200}
         renderCard={({ item }) => {
           const statusInfo = getStatusInfo(item.status);
-          const requesterId = item.requested_by_user_id ?? item.requested_by;
-          const isRequestedByMe = requesterId === auth.user?.id;
           const isSent = item.from_location_id === location.id;
           const isReceived = item.to_location_id === location.id;
 
@@ -278,7 +280,10 @@ export default function PendingTransfersScreen() {
             ),
             right: (
               <View style={styles.rightContent}>
-                <DirectionBadge isSent={isRequestedByMe} />
+                {/* Igual que la columna "Dirección": por sucursal, no por
+                    usuario (antes decía "ME SOLICITARON" si la pidió un
+                    compañero de la misma sucursal). */}
+                <DirectionBadge isSent={isReceived} />
                 <StatusBadge
                   value={item.status}
                   label={statusInfo.label}

@@ -278,6 +278,12 @@ export interface TransferReceiveStepPayload {
 // Para compatibilidad con el código anterior
 export interface Transfer extends InventoryTransfer {}
 
+/** Sucursal a la que se le puede pedir una transferencia. */
+export interface TransferOrigin {
+  id: number;
+  name: string;
+}
+
 // Crear el servicio base
 const baseService = createCrudService<InventoryTransfer>(
   "/auth/admin/inventory-transfers",
@@ -345,96 +351,16 @@ async function buildStepFormData(
 const transferService = {
   ...baseService,
 
-  // === ENDPOINTS DE LOS 4 MÓDULOS ===
-
   /**
-   * Obtener peticiones (transferencias solicitadas desde mi ubicación)
-   * Estados: ordered, in_transit
+   * Sucursales a las que se puede pedir: las activas de la empresa menos la
+   * actual. Pide transfers_create, no locations_list: los roles de sucursal no
+   * tienen ese permiso y su lista de "Pedir a" quedaba vacía.
    */
-  async getPetitions(params?: any): Promise<InventoryTransfer[]> {
-    const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
-      "/auth/admin/inventory-transfers/petitions",
-      { params },
+  async origins(): Promise<TransferOrigin[]> {
+    const response = await apiClient.get<{ data: TransferOrigin[] }>(
+      "/auth/admin/inventory-transfers/origins",
     );
-    return response.data.data;
-  },
-
-  /**
-   * Obtener envíos (transferencias solicitadas completadas o rechazadas)
-   * Estados: closed, rejected
-   */
-  async getShipments(params?: any): Promise<InventoryTransfer[]> {
-    const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
-      "/auth/admin/inventory-transfers/shipments",
-      { params },
-    );
-    return response.data.data;
-  },
-
-  /**
-   * Obtener recepciones (transferencias que recibiré)
-   * Estados: ordered, in_transit
-   */
-  async getReceipts(params?: any): Promise<InventoryTransfer[]> {
-    const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
-      "/auth/admin/inventory-transfers/receipts",
-      { params },
-    );
-    return response.data.data;
-  },
-
-  /**
-   * Obtener transferencias (historial de transferencias recibidas)
-   * Estados: closed, rejected
-   */
-  async getTransfers(params?: any): Promise<InventoryTransfer[]> {
-    const response = await apiClient.get<LaravelResponse<InventoryTransfer[]>>(
-      "/auth/admin/inventory-transfers/transfers",
-      { params },
-    );
-    return response.data.data;
-  },
-
-  // Sobrescribir el método index para manejar casos especiales
-  async index(params?: any) {
-    console.log("🔍 transferService.index called with params:", params);
-
-    // Si hay filtros específicos de recibos, usar getReceipts
-    if (params?.to_location_id || params?.mode === "receipts") {
-      console.log("📦 Using getReceipts method");
-      const receipts = await this.getReceipts(params);
-      console.log("📦 getReceipts returned:", receipts.length, "items");
-      return {
-        data: {
-          data: receipts,
-          meta: { total: receipts.length },
-        },
-        status: 200,
-        statusText: "OK",
-        headers: {},
-        config: {} as any,
-      };
-    }
-
-    // Si hay filtros específicos de envíos, usar getShipments
-    if (params?.from_location_id || params?.mode === "shipments") {
-      console.log("🚛 Using getShipments method");
-      const shipments = await this.getShipments(params);
-      return {
-        data: {
-          data: shipments,
-          meta: { total: shipments.length },
-        },
-        status: 200,
-        statusText: "OK",
-        headers: {},
-        config: {} as any,
-      };
-    }
-
-    // Usar el método base para otros casos
-    console.log("🔧 Using base service index method");
-    return await baseService.index(params);
+    return response.data.data ?? [];
   },
 
   // Obtener por ID (adaptado para devolver solo data)

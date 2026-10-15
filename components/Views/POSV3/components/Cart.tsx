@@ -1,6 +1,7 @@
 import EmptyState from "@/components/App/EmptyState";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { parseQuantity } from "@/utils/format";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useRef, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -108,10 +109,11 @@ function CartItemComponent({
     if (committedRef.current === qtyText) return;
     committedRef.current = qtyText;
 
-    const raw = qtyText.trim().replace(",", ".");
-    const parsed = raw === "" ? NaN : Number(raw);
+    // "1,500" ya no se lee como 1.5: parseQuantity lo rechaza por ambiguo
+    // (igual puede ser 1.5 kg que 1500 piezas) y "2,5" sigue siendo 2.5.
+    const parsed = parseQuantity(qtyText);
     // Valor inválido: se descarta y vuelve a mostrarse la cantidad actual.
-    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    if (parsed === null || parsed <= 0) return;
     if (!allowDecimal && !Number.isInteger(parsed)) return;
 
     const next = allowDecimal ? Math.round(parsed * 1000) / 1000 : parsed;

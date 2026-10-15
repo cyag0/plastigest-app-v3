@@ -13,12 +13,25 @@ import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useHelpSection } from "@/help";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import transferService from "@/utils/services/transferService";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
+
+/** Motivo que manda el backend; nunca el texto en inglés de axios. */
+function apiMessage(error: any, fallback: string): string {
+  if (error?.isAxiosError && !error.response) {
+    return "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.";
+  }
+  const data = error?.response?.data;
+  const fieldError = data?.errors
+    ? (Object.values(data.errors).flat()[0] as string | undefined)
+    : undefined;
+  return fieldError || data?.message || data?.error || fallback;
+}
 
 // Sección de la ayuda que abre el botón "?" según el paso que se está viendo.
 const HELP_SECTION_BY_STEP: Record<number, string> = {
@@ -36,7 +49,8 @@ export default function TransferDetailWizardScreen() {
   const [transfer, setTransfer] = useState<InventoryTransfer | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedStep, setSelectedStep] = useState(1);
-  const [submitting, setSubmitting] = useState(false);
+  // Candado de aprobar/rechazar: un doble toque no manda la acción dos veces.
+  const { submitting, run } = useSubmitGuard();
   const [editableQuantities, setEditableQuantities] = useState<
     Record<number, number>
   >({});
@@ -120,71 +134,59 @@ export default function TransferDetailWizardScreen() {
     }));
   };
 
-  const handleApprove = async () => {
-    const confirmed = await alerts.confirm(
-      "Deseas aprobar esta transferencia?",
-      {
-        title: "Aprobar transferencia",
-        okText: "Aprobar",
-        cancelText: "Cancelar",
-      },
-    );
-
-    if (!confirmed) return;
-
-    try {
-      setSubmitting(true);
-      await transferService.approve(transfer.id, {
-        items: (transfer.details || []).map((detail) => ({
-          detail_id: detail.id,
-          quantity_requested:
-            editableQuantities[detail.id] ??
-            Number(detail.quantity_requested || 0),
-        })),
-      });
-      alerts.success("Transferencia aprobada correctamente");
-      await loadTransfer();
-    } catch (error: any) {
-      alerts.error(
-        error?.response?.data?.message ||
-          error?.message ||
-          "No se pudo aprobar la transferencia",
+  const handleApprove = () =>
+    run(async () => {
+      const confirmed = await alerts.confirm(
+        "Deseas aprobar esta transferencia?",
+        {
+          title: "Aprobar transferencia",
+          okText: "Aprobar",
+          cancelText: "Cancelar",
+        },
       );
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
-  const handleReject = async () => {
-    const confirmed = await alerts.confirm(
-      "Deseas rechazar esta transferencia?",
-      {
-        title: "Rechazar transferencia",
-        okText: "Rechazar",
-        cancelText: "Cancelar",
-      },
-    );
+      if (!confirmed) return;
 
-    if (!confirmed) return;
+      try {
+        await transferService.approve(transfer.id, {
+          items: (transfer.details || []).map((detail) => ({
+            detail_id: detail.id,
+            quantity_requested:
+              editableQuantities[detail.id] ??
+              Number(detail.quantity_requested || 0),
+          })),
+        });
+        alerts.success("Transferencia aprobada correctamente");
+        await loadTransfer();
+      } catch (error: any) {
+        alerts.error(apiMessage(error, "No se pudo aprobar la transferencia"));
+      }
+    });
 
-    try {
-      setSubmitting(true);
-      await transferService.reject(
-        transfer.id,
-        "Rechazada desde wizard de transferencias",
+  const handleReject = () =>
+    run(async () => {
+      const confirmed = await alerts.confirm(
+        "Deseas rechazar esta transferencia?",
+        {
+          title: "Rechazar transferencia",
+          okText: "Rechazar",
+          cancelText: "Cancelar",
+        },
       );
-      alerts.success("Transferencia rechazada");
-      await loadTransfer();
-    } catch (error: any) {
-      alerts.error(
-        error?.response?.data?.message ||
-          error?.message ||
-          "No se pudo rechazar la transferencia",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  };
+
+      if (!confirmed) return;
+
+      try {
+        await transferService.reject(
+          transfer.id,
+          "Rechazada desde wizard de transferencias",
+        );
+        alerts.success("Transferencia rechazada");
+        await loadTransfer();
+      } catch (error: any) {
+        alerts.error(apiMessage(error, "No se pudo rechazar la transferencia"));
+      }
+    });
 
   return (
     <>
