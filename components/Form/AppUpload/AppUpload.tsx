@@ -1,6 +1,13 @@
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
 import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import {
+  ImageManipulator,
+  type ImageManipulatorContext,
+  type ImageRef,
+  SaveFormat,
+} from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import { Image, Platform, StyleSheet, View } from "react-native";
@@ -27,8 +34,11 @@ export interface UploadedFile {
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 // Compresión JPEG del selector (en nativo; en web no la aplica).
 const PICKER_QUALITY = 0.6;
-// En web la foto se reduce a este lado mayor antes de subirla.
-const WEB_MAX_SIDE = 1600;
+// La foto se reduce a este lado mayor antes de subirla: en web con un canvas,
+// en el teléfono con expo-image-manipulator.
+const MAX_IMAGE_SIDE = 1600;
+// Compresión JPEG de la foto reducida en el teléfono.
+const NATIVE_JPEG_QUALITY = 0.7;
 
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
@@ -40,7 +50,7 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
 const formatMegabytes = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1);
 
 /**
- * Web: reduce la foto (lado mayor WEB_MAX_SIDE) y la vuelve JPEG con un
+ * Web: reduce la foto (lado mayor MAX_IMAGE_SIDE) y la vuelve JPEG con un
  * canvas; el selector de web no comprime. Devuelve null si no se pudo.
  */
 async function resizeImageOnWeb(
@@ -56,7 +66,7 @@ async function resizeImageOnWeb(
     });
     const longest = Math.max(image.naturalWidth, image.naturalHeight);
     if (!longest) return null;
-    const scale = Math.min(1, WEB_MAX_SIDE / longest);
+    const scale = Math.min(1, MAX_IMAGE_SIDE / longest);
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(image.naturalWidth * scale);
     canvas.height = Math.round(image.naturalHeight * scale);
@@ -77,8 +87,52 @@ async function resizeImageOnWeb(
 }
 
 /**
+ * Teléfono: reduce la foto (lado mayor MAX_IMAGE_SIDE) y la guarda como JPEG
+ * con expo-image-manipulator; el selector solo comprime y una foto de 12 MP
+ * seguía pesando 1.5-3 MB. Si ya es chica y de un formato que el API acepta
+ * no se toca. Devuelve null si no hizo falta o no se pudo.
+ */
+async function resizeImageOnNative(
+  asset: ImagePicker.ImagePickerAsset,
+  acceptedType: boolean,
+): Promise<{ uri: string; size?: number } | null> {
+  // El selector ya entrega el ancho y alto con la rotación EXIF aplicada.
+  const longest = Math.max(asset.width || 0, asset.height || 0);
+  if (!longest || (longest <= MAX_IMAGE_SIDE && acceptedType)) return null;
+
+  let context: ImageManipulatorContext | null = null;
+  let image: ImageRef | null = null;
+  try {
+    context = ImageManipulator.manipulate(asset.uri);
+    if (longest > MAX_IMAGE_SIDE) {
+      // Con un solo lado se conserva la proporción.
+      context.resize(
+        asset.width >= asset.height
+          ? { width: MAX_IMAGE_SIDE }
+          : { height: MAX_IMAGE_SIDE },
+      );
+    }
+    image = await context.renderAsync();
+    const saved = await image.saveAsync({
+      compress: NATIVE_JPEG_QUALITY,
+      format: SaveFormat.JPEG,
+    });
+    const info = await FileSystem.getInfoAsync(saved.uri).catch(() => null);
+    return { uri: saved.uri, size: info?.exists ? info.size : undefined };
+  } catch (error) {
+    console.warn("No se pudo reducir la foto:", error);
+    return null;
+  } finally {
+    // Libera ya el bitmap decodificado (decenas de MB en una foto grande).
+    image?.release();
+    context?.release();
+  }
+}
+
+/**
  * Foto elegida o tomada → archivo para subir, con su tipo real (antes todas
- * se marcaban como image/jpeg aunque fueran PNG). En web se reduce antes.
+ * se marcaban como image/jpeg aunque fueran PNG). Antes de subirla se reduce
+ * (en web con un canvas, en el teléfono con expo-image-manipulator).
  */
 async function toUploadedImage(
   asset: ImagePicker.ImagePickerAsset,
@@ -89,16 +143,20 @@ async function toUploadedImage(
   let type = asset.mimeType || "image/jpeg";
   let size = asset.fileSize;
 
-  if (Platform.OS === "web") {
-    const resized = await resizeImageOnWeb(asset.uri);
-    // Un formato que el API no acepta (gif, heic...) se queda en JPEG aunque
-    // no pese menos.
-    const acceptedType = Boolean(IMAGE_EXTENSIONS[type.toLowerCase()]);
-    if (resized && (!size || resized.size < size || !acceptedType)) {
-      uri = resized.uri;
-      type = "image/jpeg";
-      size = resized.size;
-    }
+  // Un formato que el API no acepta (gif, heic...) se queda en JPEG aunque
+  // no pese menos.
+  const acceptedType = Boolean(IMAGE_EXTENSIONS[type.toLowerCase()]);
+  const resized =
+    Platform.OS === "web"
+      ? await resizeImageOnWeb(asset.uri)
+      : await resizeImageOnNative(asset, acceptedType);
+  if (
+    resized &&
+    (!size || resized.size === undefined || resized.size < size || !acceptedType)
+  ) {
+    uri = resized.uri;
+    type = "image/jpeg";
+    size = resized.size;
   }
 
   const extension = IMAGE_EXTENSIONS[type.toLowerCase()] ?? "jpg";
@@ -228,13 +286,13 @@ export default function AppUpload(props: AppUploadProps) {
       });
 
       if (!result.canceled && result.assets) {
-        const newFiles = withinSizeLimit(
-          await Promise.all(
-            result.assets.map((asset, index) =>
-              toUploadedImage(asset, "image", index),
-            ),
-          ),
-        );
+        // Una por una: reducir varias fotos grandes a la vez puede agotar la
+        // memoria del teléfono.
+        const converted: UploadedFile[] = [];
+        for (const [index, asset] of result.assets.entries()) {
+          converted.push(await toUploadedImage(asset, "image", index));
+        }
+        const newFiles = withinSizeLimit(converted);
         if (newFiles.length === 0) return;
 
         const updatedFiles = multiple ? [...value, ...newFiles] : newFiles;
