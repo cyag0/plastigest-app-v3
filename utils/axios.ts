@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios, { AxiosInstance, AxiosResponse } from "axios";
+import { Platform } from "react-native";
 import { API_BASE_URL, API_CONFIG_ERROR } from "./appConfig";
 
 // Configuración base para el cliente axios usando variables de entorno.
@@ -24,6 +25,90 @@ const COMPANIES_DATA_KEY =
 // Cachés que dependen del usuario/empresa: permisos por empresa+sucursal
 // (AuthContext) y sucursales por empresa (useSelectedLocation).
 const SESSION_CACHE_PREFIXES = ["user_permissions", "locations_list"];
+
+// --- Empresa y sucursal activas, por pestaña -------------------------------
+//
+// En web AsyncStorage es localStorage, que comparten todas las pestañas. Antes
+// cambiar de sucursal en una pestaña cambiaba los headers X-Company-ID /
+// X-Location-ID de todas: la otra pestaña seguía mostrando "Centro" pero sus
+// ventas, gastos, ajustes y compras se registraban en "Norte". Ahora cada
+// pestaña guarda su selección en sessionStorage (es de la pestaña y sobrevive
+// a recargarla) y localStorage queda como valor inicial para las pestañas
+// nuevas (la última selección hecha en cualquiera). En el teléfono sólo hay
+// AsyncStorage.
+const TAB_SCOPED_KEYS = [SELECTED_COMPANY_KEY, SELECTED_LOCATION_KEY];
+// "Esta pestaña no tiene selección": para no volver a heredar la de
+// localStorage después de quitarla o si no había ninguna al abrirla.
+const TAB_NO_SELECTION = "__none__";
+
+function getTabStorage(): Storage | null {
+  if (Platform.OS !== "web" || typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage ?? null;
+  } catch {
+    // El navegador bloquea el almacenamiento: queda la selección compartida.
+    return null;
+  }
+}
+
+/**
+ * Selección vigente en esta pestaña. La primera lectura copia la de
+ * localStorage (o la marca de "sin selección"); desde ahí la pestaña ya no ve
+ * los cambios de las demás.
+ */
+async function readSelection(key: string): Promise<string | null> {
+  const tab = getTabStorage();
+  if (tab) {
+    try {
+      const own = tab.getItem(key);
+      if (own !== null) return own === TAB_NO_SELECTION ? null : own;
+    } catch {
+      return AsyncStorage.getItem(key);
+    }
+  }
+  const shared = await AsyncStorage.getItem(key);
+  if (tab) {
+    try {
+      tab.setItem(key, shared ?? TAB_NO_SELECTION);
+    } catch {
+      // sin sessionStorage: se sigue leyendo la compartida
+    }
+  }
+  return shared;
+}
+
+/** Guarda la selección de esta pestaña y la deja como inicial para las nuevas. */
+async function writeSelection(key: string, value: string | null): Promise<void> {
+  const tab = getTabStorage();
+  if (tab) {
+    try {
+      tab.setItem(key, value ?? TAB_NO_SELECTION);
+    } catch {
+      // sin sessionStorage: sólo la compartida
+    }
+  }
+  if (value === null) {
+    await AsyncStorage.removeItem(key);
+  } else {
+    await AsyncStorage.setItem(key, value);
+  }
+}
+
+/**
+ * Olvida la selección propia de esta pestaña (al cerrar sesión): la siguiente
+ * lectura vuelve a tomar la de localStorage.
+ */
+export const clearTabSelection = (): void => {
+  const tab = getTabStorage();
+  if (!tab) return;
+  TAB_SCOPED_KEYS.forEach((key) => {
+    try {
+      tab.removeItem(key);
+    } catch {
+      // nada que limpiar
+    }
+  });
+};
 
 // Endpoints donde un 401 NO significa "sesión expirada" (credenciales
 // incorrectas, recuperación de contraseña) o donde ya se está cerrando sesión.
@@ -106,12 +191,9 @@ axiosClient.interceptors.request.use(
       // respuesta).
       config._authToken = token ?? null;
 
-      // Obtener company y location seleccionados
-      const selectedCompanyData =
-        await AsyncStorage.getItem(SELECTED_COMPANY_KEY);
-      const selectedLocationData = await AsyncStorage.getItem(
-        SELECTED_LOCATION_KEY,
-      );
+      // Empresa y sucursal de ESTA pestaña (ver readSelection).
+      const selectedCompanyData = await readSelection(SELECTED_COMPANY_KEY);
+      const selectedLocationData = await readSelection(SELECTED_LOCATION_KEY);
 
       if (selectedCompanyData && config.headers) {
         try {
@@ -265,10 +347,8 @@ axiosClient.interceptors.response.use(
       error.response?.data?.code === "company_forbidden"
     ) {
       try {
-        await AsyncStorage.multiRemove([
-          SELECTED_COMPANY_KEY,
-          SELECTED_LOCATION_KEY,
-        ]);
+        await writeSelection(SELECTED_COMPANY_KEY, null);
+        await writeSelection(SELECTED_LOCATION_KEY, null);
       } catch (storageError) {
         console.error("Error clearing company:", storageError);
       }
@@ -280,7 +360,7 @@ axiosClient.interceptors.response.use(
       error.response?.data?.code === "location_forbidden"
     ) {
       try {
-        await AsyncStorage.removeItem(SELECTED_LOCATION_KEY);
+        await writeSelection(SELECTED_LOCATION_KEY, null);
       } catch (storageError) {
         console.error("Error clearing location:", storageError);
       }
@@ -327,6 +407,7 @@ export const removeAuthToken = async (): Promise<void> => {
  * conservan.
  */
 export const clearSessionStorage = async (): Promise<void> => {
+  clearTabSelection();
   const fixedKeys = [
     AUTH_TOKEN_KEY,
     USER_DATA_KEY,
@@ -353,10 +434,11 @@ export const clearSessionStorage = async (): Promise<void> => {
   }
 };
 
-// Funciones helper para manejo de empresa seleccionada
+// Empresa y sucursal seleccionadas en esta pestaña (en el teléfono, en la
+// app). AuthContext es quien las cambia; el interceptor las manda en headers.
 export const setSelectedCompany = async (company: any): Promise<void> => {
   try {
-    await AsyncStorage.setItem(SELECTED_COMPANY_KEY, JSON.stringify(company));
+    await writeSelection(SELECTED_COMPANY_KEY, JSON.stringify(company));
   } catch (error) {
     console.error("Error saving selected company:", error);
   }
@@ -364,7 +446,7 @@ export const setSelectedCompany = async (company: any): Promise<void> => {
 
 export const getSelectedCompany = async (): Promise<any | null> => {
   try {
-    const companyData = await AsyncStorage.getItem(SELECTED_COMPANY_KEY);
+    const companyData = await readSelection(SELECTED_COMPANY_KEY);
     return companyData ? JSON.parse(companyData) : null;
   } catch (error) {
     console.error("Error getting selected company:", error);
@@ -374,16 +456,15 @@ export const getSelectedCompany = async (): Promise<any | null> => {
 
 export const removeSelectedCompany = async (): Promise<void> => {
   try {
-    await AsyncStorage.removeItem(SELECTED_COMPANY_KEY);
+    await writeSelection(SELECTED_COMPANY_KEY, null);
   } catch (error) {
     console.error("Error removing selected company:", error);
   }
 };
 
-// Funciones helper para manejo de ubicación seleccionada
 export const setSelectedLocation = async (location: any): Promise<void> => {
   try {
-    await AsyncStorage.setItem(SELECTED_LOCATION_KEY, JSON.stringify(location));
+    await writeSelection(SELECTED_LOCATION_KEY, JSON.stringify(location));
   } catch (error) {
     console.error("Error saving selected location:", error);
   }
@@ -391,7 +472,7 @@ export const setSelectedLocation = async (location: any): Promise<void> => {
 
 export const getSelectedLocation = async (): Promise<any | null> => {
   try {
-    const locationData = await AsyncStorage.getItem(SELECTED_LOCATION_KEY);
+    const locationData = await readSelection(SELECTED_LOCATION_KEY);
     return locationData ? JSON.parse(locationData) : null;
   } catch (error) {
     console.error("Error getting selected location:", error);
@@ -401,10 +482,56 @@ export const getSelectedLocation = async (): Promise<any | null> => {
 
 export const removeSelectedLocation = async (): Promise<void> => {
   try {
-    await AsyncStorage.removeItem(SELECTED_LOCATION_KEY);
+    await writeSelection(SELECTED_LOCATION_KEY, null);
   } catch (error) {
     console.error("Error removing selected location:", error);
   }
+};
+
+/** Cambio de la sesión hecho en otra pestaña (web). */
+export type OtherTabSessionChange =
+  /** Token nuevo, o null si allá se cerró la sesión (o expiró). */
+  | { kind: "token"; token: string | null }
+  /** Usuario que guardó la otra pestaña al iniciar sesión. */
+  | { kind: "user"; userId: number | null };
+
+/**
+ * Web: el token y el usuario sí son compartidos por todas las pestañas
+ * (localStorage). Avisa cuando otra pestaña cierra sesión o entra con otra
+ * cuenta, para que esta no siga con la sesión anterior ni actúe como otro
+ * usuario sin saberlo. En el teléfono no hace nada.
+ */
+export const onSessionChangedInOtherTab = (
+  listener: (change: OtherTabSessionChange) => void,
+): (() => void) => {
+  if (Platform.OS !== "web" || typeof window === "undefined") {
+    return () => {};
+  }
+  const handler = (event: StorageEvent) => {
+    try {
+      if (event.storageArea && event.storageArea !== window.localStorage) return;
+      // localStorage.clear() en otra pestaña.
+      if (event.key === null) {
+        listener({ kind: "token", token: null });
+        return;
+      }
+      if (event.key === AUTH_TOKEN_KEY && event.oldValue !== event.newValue) {
+        listener({ kind: "token", token: event.newValue });
+        return;
+      }
+      if (event.key === USER_DATA_KEY && event.newValue) {
+        const parsed = JSON.parse(event.newValue);
+        listener({
+          kind: "user",
+          userId: typeof parsed?.id === "number" ? parsed.id : null,
+        });
+      }
+    } catch {
+      // Datos ilegibles de otra pestaña: se ignoran.
+    }
+  };
+  window.addEventListener("storage", handler);
+  return () => window.removeEventListener("storage", handler);
 };
 
 // Función para limpiar toda la información de sesión

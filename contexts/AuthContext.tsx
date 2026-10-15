@@ -2,10 +2,18 @@ import { clearSelectDataCache } from "@/components/Form/AppProSelect/cacheBus";
 import {
   authAPI,
   clearSessionStorage,
+  clearTabSelection,
   getAuthToken,
+  getSelectedCompany,
+  getSelectedLocation,
+  removeSelectedCompany,
+  removeSelectedLocation,
   setAuthToken,
+  setSelectedCompany as storeSelectedCompany,
+  setSelectedLocation as storeSelectedLocation,
   onCompanyForbidden,
   onLocationForbidden,
+  onSessionChangedInOtherTab,
   onUnauthorized,
 } from "@/utils/axios";
 import Services from "@/utils/services";
@@ -239,8 +247,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Variables de entorno
   const USER_DATA_KEY = process.env.EXPO_PUBLIC_USER_DATA_KEY || "user_data";
-  const COMPANY_DATA_KEY = "selected_company";
-  const LOCATION_DATA_KEY = "selected_location";
   const COMPANIES_DATA_KEY =
     process.env.EXPO_PUBLIC_COMPANIES_DATA_KEY || "companies_list";
   const PERMISSIONS_KEY_PREFIX = "user_permissions";
@@ -391,7 +397,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     try {
       clearSelectDataCache();
       setSelectedCompany(company);
-      await AsyncStorage.setItem(COMPANY_DATA_KEY, JSON.stringify(company));
+      await storeSelectedCompany(company);
       // Las notificaciones son por empresa: el contador de la campana se
       // recarga con la empresa nueva (ya guardada para el header X-Company-ID).
       void loadUnreadNotificationsCount();
@@ -409,13 +415,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setIsSwitchingLocation(true);
       clearSelectDataCache();
 
+      // Sólo en esta pestaña (y como inicial para las nuevas): las demás
+      // pestañas conservan su sucursal.
       if (location) {
-        await AsyncStorage.setItem(
-          LOCATION_DATA_KEY,
-          JSON.stringify(location)
-        );
+        await storeSelectedLocation(location);
       } else {
-        await AsyncStorage.removeItem(LOCATION_DATA_KEY);
+        await removeSelectedLocation();
       }
 
       setLocation(location);
@@ -443,8 +448,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setLocation(null);
       setPermissions([]);
       setUnreadNotificationsCount(0);
-      await AsyncStorage.removeItem(COMPANY_DATA_KEY);
-      await AsyncStorage.removeItem(LOCATION_DATA_KEY);
+      await removeSelectedCompany();
+      await removeSelectedLocation();
       await clearPermissionsCache();
     } catch (error) {
       console.error("Error clearing company selection:", error);
@@ -457,10 +462,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
    */
   const restoreSavedSelection = async () => {
     try {
-      const cachedCompany = await AsyncStorage.getItem(COMPANY_DATA_KEY);
-      const cachedLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
-      const parsedCompany = cachedCompany ? JSON.parse(cachedCompany) : null;
-      const parsedLocation = cachedLocation ? JSON.parse(cachedLocation) : null;
+      // Selección de esta pestaña (en una nueva, la última que se eligió).
+      const parsedCompany = await getSelectedCompany();
+      const parsedLocation = await getSelectedLocation();
       const permissionsKey = getPermissionsStorageKey(
         parsedCompany?.id,
         parsedLocation?.id,
@@ -487,7 +491,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       // loadPermissions pudo descubrir que la sucursal guardada ya no es
       // válida (location_forbidden): el interceptor la borra del storage.
       // Se relee para no restaurar una sucursal a la que ya no tiene acceso.
-      const stillStoredLocation = await AsyncStorage.getItem(LOCATION_DATA_KEY);
+      const stillStoredLocation = await getSelectedLocation();
       if (parsedCompany && parsedLocation && stillStoredLocation) {
         setLocation(parsedLocation);
       } else {
@@ -774,6 +778,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     checkAuthStatus();
     // Solo al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Web: el token es de todas las pestañas (la empresa y la sucursal no, ver
+  // utils/axios). Si en otra pestaña se cierra la sesión, aquí también; si
+  // allá se inicia sesión, esta pestaña (en login) la toma; y si allá se entra
+  // con OTRA cuenta, esta se recarga para no seguir operando como el usuario
+  // anterior con el token del nuevo.
+  const userRef = useRef<User | null>(null);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+  useEffect(() => {
+    return onSessionChangedInOtherTab((change) => {
+      const currentUser = userRef.current;
+      if (change.kind === "token") {
+        if (change.token === null) {
+          if (!currentUser) return;
+          clearTabSelection();
+          resetSessionState();
+          setSessionEndMessage("La sesión se cerró en otra pestaña. Inicia sesión de nuevo.");
+        } else if (!currentUser) {
+          void checkAuthStatus();
+        }
+        return;
+      }
+      if (
+        currentUser &&
+        change.userId !== null &&
+        change.userId !== currentUser.id &&
+        typeof window !== "undefined"
+      ) {
+        clearTabSelection();
+        window.alert(
+          "Se inició sesión con otra cuenta en otra pestaña. Esta pestaña se va a recargar.",
+        );
+        window.location.reload();
+      }
+    });
+    // resetSessionState y checkAuthStatus solo usan setters y el storage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
