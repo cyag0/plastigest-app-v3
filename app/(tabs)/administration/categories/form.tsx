@@ -2,9 +2,10 @@ import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
+import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import { ScrollView, View } from "react-native";
 import { Text } from "react-native-paper";
 
@@ -28,12 +29,22 @@ export default function CategoriesForm(props: CategoriesFormProps) {
   const formRef = useRef<AppFormRef<CategoryFormData>>(null);
 
   const router = useRouter();
+  const { company } = useSelectedCompany();
+  // La empresa viene ya elegida (la del contexto); antes el campo salía vacío
+  // y, si no se tocaba, el guardado fallaba. Referencia estable: AppForm
+  // reinicia el formulario cada vez que cambia initialValues.
+  const initialValues = useMemo(
+    () => ({ name: "", description: "", company_id: company?.id, is_active: true }) as any,
+    [company?.id],
+  );
 
   return (
     <AppForm
+      deletePermission="categories_delete"
       ref={formRef}
       api={Services.categories}
       id={categoryId}
+      initialValues={initialValues}
       readonly={props.readonly}
       onSuccess={() => {
         router.replace("/administration/categories");

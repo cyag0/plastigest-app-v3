@@ -1,8 +1,10 @@
+import { goBack } from "@/utils/navigation";
 import palette from "@/constants/palette";
+import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { Alert, ScrollView, StyleSheet, View } from "react-native";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useRef, useState } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Avatar,
@@ -14,56 +16,76 @@ import {
 
 export default function LocationDetailScreen() {
   const router = useRouter();
+  const alerts = useAlerts();
   const params = useLocalSearchParams();
   const locationId = params.id as string;
 
-  const [location, setLocation] = useState<App.Entities.Location | null>(null);
+  // El detalle trae la compañía anidada (el tipo base no la declara).
+  const [location, setLocation] = useState<
+    | (App.Entities.Location & {
+        company?: { name?: string; business_name?: string } | null;
+      })
+    | null
+  >(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    loadLocationData();
-  }, [locationId]);
+  const loadedRef = useRef(false);
 
   const loadLocationData = async () => {
+    // La primera carga muestra el spinner; al volver (p. ej. de editar) se
+    // refresca sin parpadeo.
+    const firstLoad = !loadedRef.current;
     try {
-      setLoading(true);
+      if (firstLoad) setLoading(true);
       const response = await Services.admin.locations.show(locationId);
       setLocation(response.data.data);
+      loadedRef.current = true;
     } catch (error) {
       console.error("Error loading location:", error);
-      Alert.alert("Error", "No se pudo cargar la información de la sucursal");
-      router.back();
+      alerts.error("No se pudo cargar la información de la sucursal");
+      if (firstLoad) goBack();
     } finally {
       setLoading(false);
     }
   };
 
+  // Se recarga al volver a la pantalla: después de editar se veían los datos
+  // viejos.
+  useFocusEffect(
+    useCallback(() => {
+      loadLocationData();
+      // loadLocationData solo depende de locationId.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [locationId]),
+  );
+
   const handleEdit = () => {
     router.push(`/(tabs)/administration/locations/form?id=${locationId}`);
   };
 
-  const handleDelete = () => {
-    Alert.alert(
-      "Confirmar eliminación",
-      `¿Estás seguro que deseas eliminar la sucursal "${location?.name}"?`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Eliminar", style: "destructive", onPress: confirmDelete },
-      ]
+  // Antes era Alert.alert con botones: en web no hace nada y la sucursal no
+  // se podía eliminar desde aquí.
+  const handleDelete = async () => {
+    const confirmed = await alerts.confirm(
+      `¿Estás seguro de que deseas eliminar la sucursal "${location?.name ?? ""}"?`,
+      {
+        title: "Confirmar eliminación",
+        okText: "Eliminar",
+        cancelText: "Cancelar",
+      },
     );
-  };
+    if (!confirmed) return;
 
-  const confirmDelete = async () => {
     try {
       setDeleting(true);
       await Services.admin.locations.destroy(locationId);
-      Alert.alert("Éxito", "Sucursal eliminada correctamente", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
-    } catch (error) {
+      alerts.success("Sucursal eliminada correctamente");
+      goBack();
+    } catch (error: any) {
       console.error("Error deleting location:", error);
-      Alert.alert("Error", "No se pudo eliminar la sucursal");
+      alerts.error(
+        error?.response?.data?.message || "No se pudo eliminar la sucursal",
+      );
     } finally {
       setDeleting(false);
     }

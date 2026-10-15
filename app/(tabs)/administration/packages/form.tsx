@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
@@ -91,15 +92,17 @@ export default function PackagesForm(props: PackagesFormProps) {
 
   return (
     <AppForm
+      deletePermission="products_delete"
       ref={formRef}
       api={Services.productPackages}
       id={packageId}
       readonly={props?.readonly || false}
       validationSchema={validationSchema}
       onSuccess={() => {
-        router.back();
+        goBack();
       }}
       initialValues={initialValues}
+      card
     >
       {/* Información básica del paquete */}
       <Text

@@ -1,3 +1,4 @@
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
@@ -49,7 +50,7 @@ export default function UnidadesScreen() {
           bottom: [
             {
               label: "Creado el",
-              value: new Date(item.created_at).toLocaleDateString(),
+              value: formatDate(item.created_at),
             },
           ],
         })}

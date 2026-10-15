@@ -187,7 +187,7 @@ export default function PackagesIndex() {
             {
               title: "Imprimir Etiquetas",
               icon: "barcode",
-              onPress: (item) => {
+              onPress: (item: any) => {
                 setSelectedPackage(item);
                 setPrintModalVisible(true);
               },

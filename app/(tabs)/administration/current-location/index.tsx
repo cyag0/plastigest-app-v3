@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
@@ -62,7 +63,7 @@ export default function CurrentLocationScreen() {
       ref={formRef}
       api={Services.admin.locations}
       id={location.id}
-      onSuccess={() => router.back()}
+      onSuccess={() => goBack()}
       initialValues={{
         name: "",
         address: "",

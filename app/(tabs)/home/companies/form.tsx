@@ -1,8 +1,10 @@
+import { goBack } from "@/utils/navigation";
 import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
+import { useRouter } from "expo-router";
 import React, { useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import * as yup from "yup";
@@ -55,10 +57,12 @@ interface CompaniesProps {
 
 export default function CompaniesForm(props: CompaniesProps) {
   const formRef = useRef<AppFormRef<Company>>(null);
+  const router = useRouter();
 
   return (
     <View style={styles.container}>
       <AppForm
+        deletePermission="companies_delete"
         ref={formRef}
         api={Services.admin.companies}
         initialValues={{
@@ -73,8 +77,9 @@ export default function CompaniesForm(props: CompaniesProps) {
         validationSchema={validationSchema}
         id={props.id}
         readonly={props.readonly}
-        onSuccess={(response) => {
-          console.log("Compañía guardada exitosamente:", response);
+        card
+        onSuccess={() => {
+          goBack();
         }}
         onError={(error) => {
           console.error("Error al guardar compañía:", error);

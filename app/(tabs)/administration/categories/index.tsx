@@ -1,3 +1,4 @@
+import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import palette from "@/constants/palette";
@@ -17,11 +18,7 @@ export default function CategoriesIndex() {
       width: 100,
       align: "center",
       render: (_, item) => (
-        <AppList.Description
-          style={{ fontWeight: "bold", color: item.is_active ? palette.success : palette.textMuted }}
-        >
-          {item.is_active ? "Activo" : "Inactivo"}
-        </AppList.Description>
+<ActiveBadge active={!!item.is_active} feminine />
       ),
     },
   ];
@@ -40,14 +37,7 @@ export default function CategoriesIndex() {
             </AppList.Description>
           ),
           right: (
-            <AppList.Description
-              style={{
-                fontWeight: "bold",
-                color: item.is_active ? palette.success : palette.textMuted,
-              }}
-            >
-              {item.is_active ? "Activo" : "Inactiva"}
-            </AppList.Description>
+<ActiveBadge active={!!item.is_active} feminine />
           ),
           bottom: [
             {

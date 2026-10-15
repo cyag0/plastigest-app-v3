@@ -90,6 +90,7 @@ export default function SuppliersForm(props: SuppliersFormProps) {
 
   return (
     <AppForm
+      deletePermission="suppliers_delete"
       ref={formRef}
       api={Services.suppliers}
       id={supplierId}

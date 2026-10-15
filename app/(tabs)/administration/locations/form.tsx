@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
@@ -55,11 +56,12 @@ const router = useRouter();
 
   return (
     <AppForm
+      deletePermission="locations_delete"
       id={locationId}
       submitButtonText={isEditing ? "Actualizar Sucursal" : "Crear Sucursal"}
       api={Services.admin.locations}
       onSuccess={() => {
-        router.back();
+        goBack();
       }}
       initialValues={{
         name: "",

@@ -73,7 +73,7 @@ export default function SuppliersIndex() {
                   textStyle={[
                     styles.statusText,
                     {
-                      color: item.is_active ? "#2e7d32" : palette.textMuted,
+                      color: item.is_active ? "#3F8A3A" : palette.textMuted,
                     },
                   ]}
                   compact
@@ -118,7 +118,9 @@ export default function SuppliersIndex() {
           };
         }}
         onItemPress={(entity: any) => {
-          router.push(`/(tabs)/home/suppliers/${entity.id}` as any);
+          // El detalle vive en administration/suppliers/[id] (la ruta
+          // home/suppliers/:id no existe y abría "no encontrado").
+          router.push(`/(tabs)/administration/suppliers/${entity.id}` as any);
         }}
         onPressCreate={() => {
           router.push("/(tabs)/administration/suppliers/form" as any);
@@ -143,16 +145,16 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
+    borderTopColor: "#F0EDE4",
   },
   contactText: {
     fontSize: 12,
-    color: "#666",
+    color: "#66635A",
     flex: 1,
   },
   companyText: {
     fontSize: 12,
-    color: "#666",
+    color: "#66635A",
     flex: 1,
     textAlign: "right",
   },

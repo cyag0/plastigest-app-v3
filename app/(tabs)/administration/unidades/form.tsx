@@ -1,9 +1,11 @@
+import { goBack } from "@/utils/navigation";
 import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppDependency from "@/components/Form/AppDependency";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormNumeric } from "@/components/Form/AppNumeric";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
+import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import { useAlerts } from "@/hooks/useAlerts";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
@@ -21,7 +23,17 @@ interface UnidadFormData {
   conversion: boolean;
   base_unit_id?: number | null;
   factor_to_base?: number | null;
+  unit_type?: string | null;
 }
+
+// Una unidad que no es conversión necesita su tipo: el backend lo exige y
+// antes el formulario no lo pedía, así que crearla siempre fallaba.
+const UNIT_TYPES = [
+  { label: "Cantidad (piezas)", value: "quantity" },
+  { label: "Peso (kg, g)", value: "mass" },
+  { label: "Volumen (L, ml)", value: "volume" },
+  { label: "Longitud (m, cm)", value: "length" },
+];
 
 const validationSchema = Yup.object().shape({
   name: Yup.string().required("El nombre es requerido"),
@@ -33,6 +45,12 @@ const validationSchema = Yup.object().shape({
     then: (schema) => schema.required("Debe seleccionar la unidad base"),
     otherwise: (schema) => schema.nullable(),
   }),
+  unit_type: Yup.string()
+    .nullable()
+    .when("conversion", {
+      is: false,
+      then: (schema) => schema.required("Selecciona el tipo de unidad"),
+    }),
   factor_to_base: Yup.number().when("conversion", {
     is: true,
     then: (schema) =>
@@ -66,6 +84,7 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
 
   return (
     <AppForm
+      deletePermission="units_delete"
       ref={formRef}
       api={Services.home.unidades}
       validationSchema={validationSchema}
@@ -76,11 +95,12 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
         conversion: false,
         base_unit_id: null,
         factor_to_base: 1,
+        unit_type: "quantity",
       }}
       id={id}
       readonly={readonly}
       onSuccess={() => {
-        router.back();
+        goBack();
       }}
     >
 
@@ -103,6 +123,15 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
 
       <AppDependency name="conversion">
         {(value = false) => {
+          if (!value) {
+            return (
+              <FormSelectSimple
+                name="unit_type"
+                label="Tipo de unidad *"
+                data={UNIT_TYPES}
+              />
+            );
+          }
           return (
             value && (
               <>

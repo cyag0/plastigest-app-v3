@@ -1,3 +1,4 @@
+import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import palette from "@/constants/palette";
@@ -7,7 +8,7 @@ import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import * as React from "react";
 import { StyleSheet } from "react-native";
-import { Avatar, Chip } from "react-native-paper";
+import { Avatar } from "react-native-paper";
 
 export default function LocationsIndexScreen() {
   const navigation = useRouter();
@@ -44,15 +45,7 @@ export default function LocationsIndexScreen() {
       width: 100,
       align: "center",
       render: (_, item) => (
-        <Chip
-          style={{
-            backgroundColor: item.is_active ? palette.success : palette.error,
-          }}
-          textStyle={{ color: "white" }}
-          compact
-        >
-          {item.is_active ? "Activa" : "Inactiva"}
-        </Chip>
+        <ActiveBadge active={!!item.is_active} feminine />
       ),
     },
   ];
@@ -74,15 +67,7 @@ export default function LocationsIndexScreen() {
           />
         ),
         right: (
-          <Chip
-            style={{
-              backgroundColor: item.is_active ? palette.success : palette.error,
-            }}
-            textStyle={{ color: "white" }}
-            compact
-          >
-            {item.is_active ? "Activa" : "Inactiva"}
-          </Chip>
+          <ActiveBadge active={!!item.is_active} feminine />
         ),
         bottom: [
           ...(item.phone ? [{ label: "Tel", value: item.phone }] : []),
