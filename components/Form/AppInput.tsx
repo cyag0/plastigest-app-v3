@@ -36,11 +36,15 @@ const paperTheme = {
 };
 
 export default function AppInput(props: AppInputProps) {
-  const { value = "", onChange, onBlur, hasError, ...restProps } = props;
+  // `error` (el texto de validación) no se reenvía al TextInput: pisaría a
+  // hasError y marcaría en rojo campos que el usuario aún no ha tocado.
+  const { value = "", onChange, onBlur, hasError, error: _error, ...restProps } = props;
 
   const readonly = props.readonly || false;
 
-  const formattedValue = String(value);
+  // null llega desde el backend (p. ej. un precio sin capturar): String(null)
+  // mostraba "null" en pantalla.
+  const formattedValue = value == null ? "" : String(value);
 
   return (
     <View style={styles.container}>

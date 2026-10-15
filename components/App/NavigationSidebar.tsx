@@ -179,8 +179,8 @@ export default function NavigationSidebar({
   }, []);
 
   // Color del icono de texto (chevron, map-marker): del theme
-  const iconMuted = mode === "dark" ? "#64748B" : "#94A3B8";
-  const iconSecondary = mode === "dark" ? "#CBD5E1" : "#475569";
+  const iconMuted = mode === "dark" ? "#6E6B5E" : "#8F8B7D";
+  const iconSecondary = mode === "dark" ? "#D3CCBC" : "#57564B";
 
   const styles = useThemedStyles((colors) => ({
     container: {

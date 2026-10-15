@@ -123,7 +123,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginBottom: 16,
-    color: palette.textPrimary,
+    // `textPrimary` no existe en la paleta (el color quedaba indefinido).
+    color: palette.text,
   },
   input: {
     marginBottom: 8,

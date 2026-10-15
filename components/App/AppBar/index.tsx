@@ -2,6 +2,7 @@ import NotificationBell from "@/components/Notifications/NotificationBell";
 import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
 import UserMenu from "@/components/App/UserMenu";
 import { tokens } from "@/constants/tokens";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -62,6 +63,10 @@ export default function AppBar({
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const useBreadcrumbTitle = showBreadcrumb && isWeb;
+  // En web angosta el menú es un botón flotante arriba a la izquierda
+  // (ver WebTabLayout): se le deja su espacio y las migas se compactan.
+  const { isMobile } = useResponsive();
+  const isNarrowWeb = isWeb && isMobile;
   const [userMenuVisible, setUserMenuVisible] = useState(false);
   // Modal de cambio de empresa/sucursal. Antes el AppBar empujaba
   // a `/(stacks)/selectLocation` y el usuario perdia su tab.
@@ -77,6 +82,7 @@ export default function AppBar({
       backgroundColor: backgroundColor ?? colors.surface,
     },
     header: { height: 'auto', padding: 4, backgroundColor: "transparent", justifyContent: "space-between" },
+    headerWithMenu: { paddingLeft: 52 },
     titleSlot: { flexShrink: 1 },
     searchSlot: {
       flex: 1,
@@ -121,14 +127,14 @@ export default function AppBar({
     <TouchableOpacity
       onPress={() => setUserMenuVisible(true)}
       style={styles.userTrigger}
-      accessibilityLabel="Menu de usuario"
+      accessibilityLabel="Menú de usuario"
     >
       <View style={styles.avatar}>
         <View style={styles.avatarInner}>
           <Appbar.Action
             icon="account-circle"
             size={20}
-            color={styles.avatar.backgroundColor === "#4F7A3A" ? "#FFFFFF" : "#0F172A"}
+            color={styles.avatar.backgroundColor === "#4F7A3A" ? "#FFFFFF" : "#1F241B"}
             style={styles.avatarIcon}
           />
         </View>
@@ -149,7 +155,7 @@ export default function AppBar({
       
 
       <Appbar.Header
-        style={styles.header}
+        style={[styles.header, isNarrowWeb && styles.headerWithMenu]}
         statusBarHeight={0} // Ya manejamos el safe area con un View separado, evitamos padding extra.
       >
         {/* Botón de retroceso */}
@@ -167,7 +173,7 @@ export default function AppBar({
         {/* Título / breadcrumb */}
         {useBreadcrumbTitle ? (
           <View style={styles.titleSlot}>
-            <WebBreadcrumb embedded showSingleItem />
+            <WebBreadcrumb embedded showSingleItem compact={isNarrowWeb} />
           </View>
         ) : (
           <Appbar.Content

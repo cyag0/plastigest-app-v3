@@ -75,7 +75,7 @@ export default function LocationSelector({
   const handleSelectLocation = async (locationId: number) => {
     const locationToSelect = locations.find((l) => l.id === locationId);
     if (!locationToSelect) {
-      alerts.error("Ubicacion no encontrada");
+      alerts.error("Ubicación no encontrada");
       return;
     }
     if (currentLocation?.id === locationId) {
@@ -108,7 +108,7 @@ export default function LocationSelector({
       );
       onLocationSelected?.();
     } catch {
-      alerts.error("No se pudo cambiar de ubicacion. Intenta nuevamente.");
+      alerts.error("No se pudo cambiar de ubicación. Intenta nuevamente.");
     } finally {
       setLoading(false);
     }
@@ -275,7 +275,7 @@ export default function LocationSelector({
       <View style={styles.container}>
         <EmptyState
           icon="office-building-outline"
-          title="Selecciona una compania primero"
+          title="Selecciona una compañía primero"
           description="Debes elegir una empresa antes de poder ver sus sucursales"
         />
       </View>

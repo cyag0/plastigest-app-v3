@@ -9,7 +9,7 @@ export default function InventoryLayout() {
         header: ({ options, route }) => (
           <AppBar
             title={options.title || route.name}
-            onSearchPress={() => console.log("Search pressed")}
+            showSearchButton={false}
             onNotificationPress={() => console.log("Notifications pressed")}
             onProfilePress={() => console.log("Profile pressed")}
           />

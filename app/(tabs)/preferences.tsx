@@ -28,7 +28,7 @@ const THEME_OPTIONS: {
   {
     value: "light",
     label: "Claro",
-    description: "Fondo blanco, ideal para el dia",
+    description: "Fondo blanco, ideal para el día",
     icon: "white-balance-sunny",
   },
   {
@@ -55,7 +55,7 @@ const DENSITY_OPTIONS: {
   {
     value: "compact",
     label: "Compacto",
-    description: "Mas informacion",
+    description: "Más información",
     lineCount: 4,
     lineHeight: 6,
   },
@@ -69,7 +69,7 @@ const DENSITY_OPTIONS: {
   {
     value: "comfortable",
     label: "Espacioso",
-    description: "Mas aire y tipografia grande",
+    description: "Más aire y tipografía grande",
     lineCount: 2,
     lineHeight: 10,
   },
@@ -91,7 +91,7 @@ export default function PreferencesScreen() {
     await setPreference(value);
     alerts.success(
       value === "system"
-        ? "Tema automatico activado"
+        ? "Tema automático activado"
         : value === "dark"
           ? "Modo oscuro activado"
           : "Modo claro activado",
@@ -257,7 +257,7 @@ export default function PreferencesScreen() {
           <View style={[styles.card, { backgroundColor: colors.surface }]}>
             <SettingRow
               icon="vibrate"
-              label="Vibracion"
+              label="Vibración"
               description="Respuesta haptica al tocar botones"
               value={hapticsEnabled}
               onValueChange={setHapticsEnabled}
@@ -282,7 +282,7 @@ export default function PreferencesScreen() {
             <SettingRow
               icon="dock-left"
               label="Sidebar compacto"
-              description="Reduce el tamano de los items del menu lateral"
+              description="Reduce el tamaño de los items del menú lateral"
               value={compactSidebar}
               onValueChange={setCompactSidebar}
             />
@@ -321,7 +321,7 @@ export default function PreferencesScreen() {
                   { color: colors.textSecondary },
                 ]}
               >
-                Configura que eventos generan alertas y a quien
+                Configura qué eventos generan alertas y a quién
               </Text>
             </View>
             <MaterialCommunityIcons
@@ -345,7 +345,7 @@ export default function PreferencesScreen() {
             <AboutRow
               icon="translate"
               label="Idioma"
-              value="Espanol (es-MX)"
+              value="Español (es-MX)"
             />
             <DividerLine />
             <AboutRow
@@ -366,7 +366,7 @@ export default function PreferencesScreen() {
 
         <View style={styles.footer}>
           <Text style={[styles.footerText, { color: colors.textMuted }]}>
-            Hecho con pasion para la gestion de tu negocio
+            Hecho con pasión para la gestión de tu negocio
           </Text>
         </View>
       </ScrollView>

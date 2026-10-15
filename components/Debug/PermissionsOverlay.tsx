@@ -6,6 +6,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import React, { useState } from "react";
 import {
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -96,7 +97,7 @@ const styles = StyleSheet.create({
     color: "#a8ff78",
     fontSize: 11,
     lineHeight: 20,
-    fontFamily: "SpaceMono",
+    fontFamily: Platform.OS === "web" ? "monospace" : Platform.OS === "ios" ? "Menlo" : "monospace",
   },
   empty: {
     color: "#ff6b6b",

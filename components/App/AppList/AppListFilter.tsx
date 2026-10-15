@@ -13,7 +13,7 @@ import {
   Text,
 } from "react-native-paper";
 import { DatePickerModal } from "react-native-paper-dates";
-import { toLocalDateString } from "@/utils/dates";
+import { toLocalDateString, formatDate, parseLocalDate } from "@/utils/dates";
 
 export type FilterType = "simple" | "multiple" | "date" | "dateRange";
 
@@ -149,15 +149,7 @@ function FilterPopover({
     setShowDatePicker(false);
   };
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return "";
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("es-ES", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
-  };
+  
 
   return (
     <Portal>
@@ -306,7 +298,7 @@ function FilterPopover({
           mode="single"
           visible={showDatePicker}
           onDismiss={() => setShowDatePicker(false)}
-          date={tempValue ? new Date(tempValue) : new Date()}
+          date={tempValue ? parseLocalDate(tempValue) : new Date()}
           onConfirm={handleSingleDateConfirm}
         />
       )}
@@ -320,9 +312,9 @@ function FilterPopover({
           onDismiss={() => setShowDatePicker(false)}
           date={
             datePickerField === "from" && tempValue?.from
-              ? new Date(tempValue.from)
+              ? parseLocalDate(tempValue.from)
               : datePickerField === "to" && tempValue?.to
-              ? new Date(tempValue.to)
+              ? parseLocalDate(tempValue.to)
               : new Date()
           }
           onConfirm={handleRangeDateConfirm}
@@ -375,27 +367,13 @@ export default function AppListFilterBar({
 
     if (filter.type === "date") {
       if (!value) return "Todos";
-      const date = new Date(value);
-      return date.toLocaleDateString("es-ES", {
-        month: "short",
-        day: "numeric",
-      });
+      return dayLabel(value);
     }
 
     if (filter.type === "dateRange") {
       if (!value?.from && !value?.to) return "Todos";
-      const from = value?.from
-        ? new Date(value.from).toLocaleDateString("es-ES", {
-            month: "short",
-            day: "numeric",
-          })
-        : "";
-      const to = value?.to
-        ? new Date(value.to).toLocaleDateString("es-ES", {
-            month: "short",
-            day: "numeric",
-          })
-        : "";
+      const from = value?.from ? dayLabel(value.from) : "";
+      const to = value?.to ? dayLabel(value.to) : "";
       if (from && to) return `${from} - ${to}`;
       if (from) return `Desde ${from}`;
       if (to) return `Hasta ${to}`;
@@ -532,3 +510,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
 });
+
+/** "17 sep": el valor del filtro es YYYY-MM-DD, se lee como fecha local. */
+function dayLabel(value: string) {
+  return parseLocalDate(value).toLocaleDateString("es-MX", {
+    month: "short",
+    day: "numeric",
+  });
+}

@@ -1,3 +1,4 @@
+import { parseLocalDate } from "@/utils/dates";
 import AppChip from "@/components/App/Chip";
 import EmptyState from "@/components/App/EmptyState";
 import KpiCard from "@/components/Dashboard/KpiCard";
@@ -186,7 +187,7 @@ export default function TransferStats() {
               data={{
                 labels: stats.transfers_by_period.map((item) =>
                   item.date
-                    ? new Date(item.date).toLocaleDateString("es-MX", {
+                    ? parseLocalDate(item.date).toLocaleDateString("es-MX", {
                         day: "2-digit",
                         month: "short",
                       })

@@ -371,8 +371,14 @@ function AppList<T extends { id: number | string }>({
     }, []),
   );
 
+  // Solo se aplica la respuesta de la petición más reciente: con búsquedas o
+  // cambios de página rápidos una respuesta vieja podía llegar después y
+  // pisar los resultados.
+  const requestIdRef = React.useRef(0);
+
   // Cargar datos
   const loadData = async (isRefresh = false) => {
+    const requestId = ++requestIdRef.current;
     try {
       if (isRefresh) {
         setRefreshing(true);
@@ -394,6 +400,7 @@ function AppList<T extends { id: number | string }>({
       }
 
       const response = await service.index(params);
+      if (requestId !== requestIdRef.current) return;
 
       // Manejar respuesta paginada o array simple
       if (Array.isArray(response.data)) {
@@ -405,14 +412,25 @@ function AppList<T extends { id: number | string }>({
         setPagination(paginatedData.meta);
       }
     } catch (error) {
+      if (requestId !== requestIdRef.current) return;
       const apiError = handleApiError(error);
       console.error("Error loading data:", apiError);
       alerts.error("Error al cargar los datos: " + apiError.message);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
+
+  // La versión más reciente de loadData (con la búsqueda, filtros y página
+  // actuales). El refresco al volver a la pantalla usaba la del primer render
+  // y recargaba la página 1 sin filtros aunque la UI siguiera mostrándolos.
+  const loadDataRef = React.useRef(loadData);
+  useEffect(() => {
+    loadDataRef.current = loadData;
+  });
 
   // Efectos
   useEffect(() => {
@@ -423,10 +441,17 @@ function AppList<T extends { id: number | string }>({
     loadData();
   }, [searchQuery, activeFilters, currentPage]);
 
+  // El primer foco coincide con la carga inicial (efecto de arriba): no se
+  // repite la petición.
+  const hasFocusedRef = React.useRef(false);
   useFocusEffect(
     useCallback(() => {
+      if (!hasFocusedRef.current) {
+        hasFocusedRef.current = true;
+        return;
+      }
       if (refreshOnFocus) {
-        loadData(true);
+        loadDataRef.current(true);
       }
     }, [refreshOnFocus]),
   );
@@ -534,7 +559,7 @@ function AppList<T extends { id: number | string }>({
   if (loading) {
     return (
       <View style={styles.container}>
-        <SearchBarComponent onChangeText={setSearchQuery} value={searchQuery} />
+        <SearchBarComponent onChangeText={setSearchQuery} value={searchQuery} placeholder={searchPlaceholder} />
 
         {/* Barra de filtros */}
         <AppListFilterBar
@@ -550,7 +575,7 @@ function AppList<T extends { id: number | string }>({
 
   return (
     <View style={styles.container}>
-      <SearchBarComponent onChangeText={setSearchQuery} value={searchQuery} />
+      <SearchBarComponent onChangeText={setSearchQuery} value={searchQuery} placeholder={searchPlaceholder} />
 
       {/* Barra de filtros */}
       <AppListFilterBar
@@ -713,8 +738,10 @@ function AppList<T extends { id: number | string }>({
                 })}
               </View>
             ) : (
-              // List layout — card-based modern design
-              (data || []).map((item, index) => {
+              // Una sola lista con separadores (antes, una tarjeta con sombra
+              // por renglón: mucho ruido para leer muchos registros).
+              <View style={styles.listGroup}>
+              {(data || []).map((item, index) => {
                 const cardProps = renderCard({ item, index });
                 const showView = getMenuFlag(menu?.showView, item, true);
                 const showEdit = getMenuFlag(menu?.showEdit, item, true);
@@ -725,7 +752,7 @@ function AppList<T extends { id: number | string }>({
                   <TouchableRipple
                     key={item.id}
                     onPress={() => handleItemPress(item)}
-                    style={styles.listCard}
+                    style={[styles.listCard, index > 0 && styles.listCardDivider]}
                   >
                     <View style={styles.listCardInner}>
                       <View style={styles.cardMain}>
@@ -758,19 +785,21 @@ function AppList<T extends { id: number | string }>({
                       </View>
 
                       {hasBottom && (
-                        <View style={styles.bottomRow}>
+                        <Text style={styles.bottomLine}>
                           {cardProps.bottom!.map((b, idx) => (
-                            <View key={idx} style={styles.bottomMeta}>
-                              <Text style={styles.bottomLabel}>{b.label}:</Text>
+                            <Text key={idx}>
+                              {idx > 0 ? "  ·  " : ""}
+                              {!!b.label && <Text style={styles.bottomLabel}>{b.label} </Text>}
                               <Text style={styles.bottomValue}>{b.value.toString()}</Text>
-                            </View>
+                            </Text>
                           ))}
-                        </View>
+                        </Text>
                       )}
                     </View>
                   </TouchableRipple>
                 );
-              })
+              })}
+              </View>
             )}
           </ScrollView>
 
@@ -849,6 +878,7 @@ function AppList<T extends { id: number | string }>({
 interface SearchBarComponentProps {
   onChangeText: (text: string) => void;
   value: string;
+  placeholder?: string;
 }
 
 function SearchBarComponent(props: SearchBarComponentProps) {
@@ -875,7 +905,7 @@ function SearchBarComponent(props: SearchBarComponentProps) {
 
   return (
     <Searchbar
-      placeholder="Buscar..."
+      placeholder={props.placeholder || "Buscar..."}
       onChangeText={handleChangeText}
       value={searchQuery}
       style={styles.searchbar}
@@ -929,7 +959,10 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
       margin: 16,
       marginBottom: 0,
       backgroundColor: c.surface,
-      elevation: 2,
+      elevation: 0,
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 12,
     },
     card: {
       backgroundColor: c.surface,
@@ -937,14 +970,23 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
     cardContent: {
       padding: 0,
     },
-    listCard: {
+    listGroup: {
       backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      ...tokens.shadow.sm,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.border,
       overflow: "hidden" as const,
     },
+    listCard: {
+      backgroundColor: c.surface,
+    },
+    listCardDivider: {
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
     listCardInner: {
-      padding: tokens.spacing[4],
+      paddingHorizontal: 14,
+      paddingVertical: 12,
     },
     cardMain: {
       flexDirection: "row" as const,
@@ -963,28 +1005,18 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
       justifyContent: "center" as const,
       flexShrink: 0,
     },
-    bottomRow: {
-      flexDirection: "row" as const,
-      flexWrap: "wrap" as const,
-      gap: tokens.spacing[3],
-      marginTop: tokens.spacing[3],
-      paddingTop: tokens.spacing[3],
-      borderTopWidth: 1,
-      borderTopColor: c.border,
-    },
-    bottomMeta: {
-      flexDirection: "row" as const,
-      alignItems: "center" as const,
-      gap: 4,
+    // Datos extra en una sola línea discreta ("Fecha 14 oct · Sucursal …").
+    bottomLine: {
+      ...tokens.typography.caption,
+      color: c.textSecondary,
+      marginTop: 6,
+      lineHeight: 18,
     },
     bottomLabel: {
-      ...tokens.typography.caption,
       color: c.textMuted,
     },
     bottomValue: {
-      ...tokens.typography.caption,
       color: c.textSecondary,
-      fontWeight: "600" as const,
     },
     titleContainer: {
       marginBottom: 2,
@@ -1043,7 +1075,9 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
       fontWeight: "600" as const,
     },
     paginationPageTextActive: {
-      color: c.onPrimary || "#fff",
+      // `onPrimary` no existe en la paleta (siempre caía en #fff, ilegible
+      // sobre el verde claro del modo oscuro).
+      color: c.primaryForeground,
     },
     paginationEllipsis: {
       color: c.textSecondary,

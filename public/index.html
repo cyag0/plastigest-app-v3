@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <!-- Expo reemplaza el marcador del título con el "name" de app.json (solo la primera aparición). -->
+    <title>%WEB_TITLE%</title>
+    <meta name="description" content="GCStock: punto de venta, inventario, compras y caja para las sucursales." />
+    <meta name="theme-color" content="#4F7A3A" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Tipografía: Inter (en el teléfono va dentro de la app; ver utils/globalFont.ts). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style id="app-font">
+      /* Texto de react-native-web sin fuente propia → Inter. Sin !important:
+         los íconos (y Paper) ponen su fuente en línea y esa gana. */
+      html [class*="css-text-"]:not([class*="r-fontFamily-"]),
+      html [class*="css-textinput-"]:not([class*="r-fontFamily-"]) {
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+    </style>
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>Necesitas habilitar JavaScript para usar GCStock.</noscript>
+    <!-- Expo inserta aquí los scripts del bundle (output "single"). -->
+    <div id="root"></div>
+  </body>
+</html>

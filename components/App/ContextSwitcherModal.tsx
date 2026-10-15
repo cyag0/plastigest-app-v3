@@ -93,7 +93,7 @@ export default function ContextSwitcherModal({
       alerts.success(`Has cambiado a ${companyToSelect.name}`);
       onDismiss();
     } catch {
-      alerts.error("No se pudo cambiar de compania. Intenta nuevamente.");
+      alerts.error("No se pudo cambiar de compañía. Intenta nuevamente.");
     } finally {
       setLoadingCompanyId(null);
       setConfirming(false);
@@ -120,7 +120,7 @@ export default function ContextSwitcherModal({
       alerts.success(`Has cambiado a ${loc.name}`);
       onDismiss();
     } catch {
-      alerts.error("No se pudo cambiar de ubicacion. Intenta nuevamente.");
+      alerts.error("No se pudo cambiar de ubicación. Intenta nuevamente.");
     } finally {
       setLoadingLocationId(null);
       setConfirming(false);
@@ -531,7 +531,7 @@ function LocationSection({
           />
           <Text style={styles.emptyTitle}>Sin sucursales</Text>
           <Text style={styles.emptySubtitle}>
-            Esta empresa aun no tiene sucursales registradas
+            Esta empresa aún no tiene sucursales registradas
           </Text>
         </View>
       ) : (

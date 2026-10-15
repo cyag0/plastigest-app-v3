@@ -28,3 +28,58 @@ export function parseLocalDate(value: string | Date): Date {
   }
   return new Date(value);
 }
+
+// ---------------------------------------------------------------------------
+// Formato para mostrar. Todas las pantallas usan estas funciones para que una
+// misma fecha se vea igual en toda la app (antes convivían "17 set. 2026",
+// "17/09/2026", "2026 09 16" y "Sep 26, 2026, 01:38 AM").
+// ---------------------------------------------------------------------------
+
+const LOCALE = "es-MX";
+const EMPTY = "—";
+
+type DateInput = string | Date | null | undefined;
+
+function toValidDate(value: DateInput): Date | null {
+  if (value === null || value === undefined || value === "") return null;
+  const date = parseLocalDate(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+const DATE_STYLES = {
+  /** 17/09/2026 */
+  short: { day: "2-digit", month: "2-digit", year: "numeric" },
+  /** 17 sep 2026 */
+  medium: { day: "numeric", month: "short", year: "numeric" },
+  /** 17 de septiembre de 2026 */
+  long: { day: "numeric", month: "long", year: "numeric" },
+} as const;
+
+/** Fecha de calendario: "17 sep 2026" (o "17/09/2026", "17 de septiembre de 2026"). */
+export function formatDate(
+  value: DateInput,
+  style: keyof typeof DATE_STYLES = "medium",
+): string {
+  const date = toValidDate(value);
+  return date ? date.toLocaleDateString(LOCALE, DATE_STYLES[style]) : EMPTY;
+}
+
+/** Fecha y hora: "17 sep 2026, 1:38 p.m." */
+export function formatDateTime(value: DateInput): string {
+  const date = toValidDate(value);
+  return date
+    ? date.toLocaleString(LOCALE, {
+        ...DATE_STYLES.medium,
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : EMPTY;
+}
+
+/** Hora: "1:38 p.m." */
+export function formatTime(value: DateInput): string {
+  const date = toValidDate(value);
+  return date
+    ? date.toLocaleTimeString(LOCALE, { hour: "numeric", minute: "2-digit" })
+    : EMPTY;
+}

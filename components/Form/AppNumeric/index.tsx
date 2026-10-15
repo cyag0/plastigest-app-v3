@@ -17,7 +17,8 @@ interface AppInputProps
 }
 
 export default function AppNumeric(props: AppInputProps) {
-  const { value, onChange, onBlur, hasError, ...restProps } = props;
+  // Igual que en AppInput: el texto `error` no debe pisar a hasError.
+  const { value, onChange, onBlur, hasError, error: _error, ...restProps } = props;
 
   const readonly = props.readonly || false;
 

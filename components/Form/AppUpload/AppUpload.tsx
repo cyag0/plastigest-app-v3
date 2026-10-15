@@ -30,7 +30,9 @@ interface AppUploadProps {
   label?: string;
   placeholder?: string;
   disabled?: boolean;
-  error?: boolean;
+  error?: boolean | string;
+  /** Lo inyecta FormUpload: error de validación ya tocado por el usuario. */
+  hasError?: boolean;
   helperText?: string;
   itemStyle?: (file: UploadedFile, index: number) => any;
   onItemPress?: (file: UploadedFile, index: number) => void;
@@ -61,14 +63,14 @@ export default function AppUpload(props: AppUploadProps) {
     label = "Subir archivos",
     placeholder = "Selecciona archivos para subir",
     disabled = false,
-    error = false,
     helperText,
   } = props;
+  // Dentro de un formulario manda hasError (validación ya tocada); `error`
+  // trae el texto del error aunque el usuario no haya tocado el campo.
+  const error = props.hasError ?? Boolean(props.error);
 
   // Normalizar el valor a un array siempre
   const value = Array.isArray(rawValue) ? rawValue : [];
-
-  console.log("AppUpload value:", props);
 
   const handleDocumentPick = async () => {
     try {
@@ -115,16 +117,11 @@ export default function AppUpload(props: AppUploadProps) {
     try {
       setUploading(true);
 
-      const permissionResult =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (permissionResult.granted === false) {
-        alerts.warning("Se necesita permiso para acceder a la galería");
-        return;
-      }
-
+      // Sin pedir permiso de galería: el selector del sistema (Photo Picker
+      // en Android, PHPicker en iOS) no lo necesita. Pedirlo obligaría a
+      // declarar READ_MEDIA_IMAGES, que Google Play restringe.
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsMultipleSelection: multiple,
         quality: 0.8,
       });
@@ -167,7 +164,7 @@ export default function AppUpload(props: AppUploadProps) {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         quality: 0.8,
         allowsEditing: true,
         aspect: [4, 3],

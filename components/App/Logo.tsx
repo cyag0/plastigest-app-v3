@@ -52,8 +52,8 @@ function Mark() {
 export default function Logo({
   variant = "full",
   size = 160,
-  wordmarkColor = "#0F172A",
-  taglineColor = "#64748B",
+  wordmarkColor = "#1F241B",
+  taglineColor = "#6E6B5E",
   showTagline = true,
   style,
 }: LogoProps) {

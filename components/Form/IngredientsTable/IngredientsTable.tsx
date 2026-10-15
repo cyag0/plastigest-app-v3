@@ -91,7 +91,7 @@ export default function IngredientsTable({
           showsHorizontalScrollIndicator={false}
           style={{
             borderWidth: 1,
-            borderColor: "#E5E7EB",
+            borderColor: "#E6E1D5",
             borderRadius: 8,
           }}
         >
@@ -100,18 +100,18 @@ export default function IngredientsTable({
             <View
               style={{
                 flexDirection: "row",
-                backgroundColor: "#F9FAFB",
+                backgroundColor: "#F8F6F1",
                 paddingVertical: 12,
                 paddingHorizontal: 8,
                 borderBottomWidth: 1,
-                borderBottomColor: "#E5E7EB",
+                borderBottomColor: "#E6E1D5",
               }}
             >
               <Text
                 style={{
                   flex: 3,
                   fontWeight: "600",
-                  color: "#374151",
+                  color: "#3E3C33",
                   fontSize: 14,
                 }}
               >
@@ -121,7 +121,7 @@ export default function IngredientsTable({
                 style={{
                   flex: 1,
                   fontWeight: "600",
-                  color: "#374151",
+                  color: "#3E3C33",
                   fontSize: 14,
                   textAlign: "center",
                 }}
@@ -132,7 +132,7 @@ export default function IngredientsTable({
                 style={{
                   flex: 2,
                   fontWeight: "600",
-                  color: "#374151",
+                  color: "#3E3C33",
                   fontSize: 14,
                 }}
               >
@@ -150,7 +150,7 @@ export default function IngredientsTable({
                   paddingVertical: 8,
                   paddingHorizontal: 8,
                   borderBottomWidth: index < ingredients.length - 1 ? 1 : 0,
-                  borderBottomColor: "#F3F4F6",
+                  borderBottomColor: "#F0EDE4",
                   alignItems: "center",
                 }}
               >
@@ -189,7 +189,7 @@ export default function IngredientsTable({
                     <TouchableOpacity
                       onPress={() => removeIngredient(ingredient.id)}
                       style={{
-                        backgroundColor: "#FEE2E2",
+                        backgroundColor: "#F8E2DC",
                         padding: 8,
                         borderRadius: 4,
                       }}
@@ -206,7 +206,7 @@ export default function IngredientsTable({
         <View
           style={{
             borderWidth: 1,
-            borderColor: "#E5E7EB",
+            borderColor: "#E6E1D5",
             borderRadius: 8,
             padding: 24,
             alignItems: "center",
@@ -215,12 +215,12 @@ export default function IngredientsTable({
           <Ionicons
             name="cube-outline"
             size={48}
-            color="#9CA3AF"
+            color="#8F8B7D"
             style={{ marginBottom: 8 }}
           />
           <Text
             style={{
-              color: "#6B7280",
+              color: "#6E6B5E",
               fontSize: 14,
               textAlign: "center",
               marginBottom: 8,
@@ -230,7 +230,7 @@ export default function IngredientsTable({
           </Text>
           <Text
             style={{
-              color: "#9CA3AF",
+              color: "#8F8B7D",
               fontSize: 12,
               textAlign: "center",
             }}

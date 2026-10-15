@@ -1,8 +1,10 @@
 import { tokens } from "@/constants/tokens";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
+import { goBack } from "@/utils/navigation";
 import { CrudService } from "@/utils/services/crudService";
 import { FormikProps, FormikProvider, useFormik } from "formik";
 import React, {
@@ -86,6 +88,18 @@ interface FormProps<T> {
   containerStyle?: StyleProp<ViewStyle>;
   disableScroll?: boolean;
   loading?: boolean;
+  /** Envuelve los campos en una tarjeta (fondo, borde y sombra). */
+  card?: boolean;
+  /**
+   * Permiso necesario para el botón "Eliminar" del modo solo lectura (p. ej.
+   * "categories_delete"). Si el usuario no lo tiene, el botón no se muestra.
+   * Sin este prop el botón se muestra y el backend decide (con confirmación).
+   */
+  deletePermission?: string;
+  /** Oculta el botón "Eliminar" del modo solo lectura. */
+  showDeleteButton?: boolean;
+  /** Qué hacer tras eliminar en modo solo lectura (por defecto, regresar). */
+  onDeleted?: () => void;
 }
 
 const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
@@ -98,6 +112,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
 
   const alerts = useAlerts();
   const { colors } = useTheme();
+  const { hasPermission } = useAuth();
   // Web usa botones compactos alineados a la derecha; mobile mantiene
   // los botones grandes apilados y a todo lo ancho.
   const isWeb = Platform.OS === "web";
@@ -167,17 +182,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       },
       setFieldValue: (field: string, value: any) => {
         console.log("Setting field value:", field, value);
-        console.log(
-          "Before set, current value:",
-          formInstance.getFieldProps(field).value,
-        );
         formInstance.setFieldValue(field, value);
-
-        console.log(
-          "After set, new value:",
-          formInstance,
-          formInstance.getFieldProps(field).value,
-        );
       },
       setFieldTouched: (field: string, touched?: boolean) =>
         formInstance.setFieldTouched(field, touched),
@@ -380,6 +385,49 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   const showButtons =
     props.showButtons === undefined ? true : props.showButtons;
 
+  // "Eliminar" del modo solo lectura: solo con registro y API, y si se indicó
+  // el permiso, solo cuando el usuario lo tiene.
+  const canDelete =
+    props.showDeleteButton !== false &&
+    Boolean(props.id && props.api) &&
+    (!props.deletePermission || hasPermission(props.deletePermission));
+
+  async function handleDelete() {
+    if (!props.id || !props.api) return;
+
+    const confirmed = await alerts.confirm(
+      "¿Seguro que deseas eliminar este registro? Esta acción no se puede deshacer.",
+      {
+        title: "Eliminar registro",
+        okText: "Eliminar",
+        cancelText: "Cancelar",
+      },
+    );
+    if (!confirmed) return;
+
+    try {
+      setLoading(true);
+      await props.api.destroy(props.id);
+      alerts.success("Registro eliminado");
+      if (props.onDeleted) {
+        props.onDeleted();
+      } else {
+        goBack();
+      }
+    } catch (error: any) {
+      console.error("Error deleting record:", error);
+      const status = error?.response?.status;
+      const message =
+        error?.response?.data?.message ||
+        (status === 403
+          ? "No tienes permiso para eliminar este registro."
+          : "No se pudo eliminar el registro.");
+      alerts.error(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // Bloque de botones (Submit/Reset o Editar/Eliminar en readonly).
   // Se renderiza dentro del ScrollView en web (debajo de children) y
   // fuera en mobile (siempre visible sobre el teclado).
@@ -403,34 +451,20 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
                 </Button>
               </View>
 
-              <View style={styles.buttonWrap}>
-                <Button
-                  mode="outlined"
-                  compact={isWeb}
-                  onPress={async () => {
-                    if (props.id && props.api) {
-                      try {
-                        setLoading(true);
-                        await props.api.destroy(props.id);
-                        formInstance.resetForm();
-                      } catch (error) {
-                        console.error("Error deleting record:", error);
-                      } finally {
-                        setLoading(false);
-                      }
-                    }
-                  }}
-                  disabled={
-                    !formInstance.isValid ||
-                    formInstance.isSubmitting ||
-                    loading
-                  }
-                  textColor={colors.error}
-                  loading={loading}
-                >
-                  Eliminar
-                </Button>
-              </View>
+              {canDelete && (
+                <View style={styles.buttonWrap}>
+                  <Button
+                    mode="outlined"
+                    compact={isWeb}
+                    onPress={handleDelete}
+                    disabled={formInstance.isSubmitting || loading}
+                    textColor={colors.error}
+                    loading={loading}
+                  >
+                    Eliminar
+                  </Button>
+                </View>
+              )}
             </>
           ) : (
             (props.showSubmitButton !== false ||
@@ -510,6 +544,12 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
          }, props.containerStyle]}>
           <ScrollView
             scrollEnabled={!props.disableScroll}
+            // Con el teclado abierto, el primer toque en un botón o select
+            // ejecuta la acción en vez de solo cerrar el teclado.
+            keyboardShouldPersistTaps="handled"
+            // iOS: desplaza el campo enfocado por encima del teclado en
+            // formularios largos (Android ajusta la ventana; web lo ignora).
+            automaticallyAdjustKeyboardInsets
             style={[{ padding: 16,
               backgroundColor: styles.backgroundStyle.backgroundColor,
             }, props.style]}
@@ -518,7 +558,11 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
               styles.cardWrap,
             ]}
           >
-           {props.children}
+            {props.card ? (
+              <View style={styles.formCard}>{props.children}</View>
+            ) : (
+              props.children
+            )}
             <View style={{ height: props.disableScroll ? 0 : 16 }} />
 
             {isWeb && renderButtons()}

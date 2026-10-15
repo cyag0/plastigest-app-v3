@@ -1,3 +1,4 @@
+import { SafeAreaView } from "react-native-safe-area-context";
 import palette from "@/constants/palette";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
@@ -53,7 +54,7 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
           animationType="slide"
           onRequestClose={handleClose}
         >
-          <View style={styles.container}>
+          <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
             <View style={styles.header}>
               <Text variant="headlineSmall" style={styles.title}>
                 Escáner de Código de Barras
@@ -63,7 +64,7 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
             <View style={styles.messageContainer}>
               <Text>Solicitando permiso para usar la cámara...</Text>
             </View>
-          </View>
+          </SafeAreaView>
         </Modal>
       );
     }
@@ -76,7 +77,7 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
           animationType="slide"
           onRequestClose={handleClose}
         >
-          <View style={styles.container}>
+          <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
             <View style={styles.header}>
               <Text variant="headlineSmall" style={styles.title}>
                 Escáner de Código de Barras
@@ -115,7 +116,7 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
                 Cancelar
               </Button>
             </View>
-          </View>
+          </SafeAreaView>
         </Modal>
       );
     }
@@ -126,7 +127,7 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
         animationType="slide"
         onRequestClose={handleClose}
       >
-        <View style={styles.container}>
+        <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
           <View style={styles.header}>
             <Text variant="headlineSmall" style={styles.title}>
               Escanear Código de Barras
@@ -136,7 +137,9 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
 
           <View style={styles.scannerContainer}>
             <CameraView
-              style={StyleSheet.absoluteFillObject}
+              // RN 0.85 eliminó StyleSheet.absoluteFillObject: con él la
+              // cámara quedaba sin tamaño (en blanco) en Android/iOS.
+              style={StyleSheet.absoluteFill}
               facing="back"
               barcodeScannerSettings={{
                 barcodeTypes: [
@@ -203,7 +206,7 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
               </Button>
             )}
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
     );
   }
@@ -240,7 +243,12 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    // Equivalente a absoluteFill (eliminado en RN 0.85 como objeto).
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     justifyContent: "center",
   },
   unfocusedContainer: {

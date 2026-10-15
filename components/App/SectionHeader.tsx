@@ -27,16 +27,22 @@ export default function SectionHeader({
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+      gap: 12,
       marginBottom: 12,
     },
+    // El título cede espacio a la acción de la derecha en pantallas
+    // angostas (antes se encimaban: "Permisos del dispositivoReverificar").
     left: {
       flexDirection: "row",
       alignItems: "center",
       gap: 8,
+      flexShrink: 1,
+      minWidth: 0,
     },
     title: {
       ...tokens.typography.h2,
       color: colors.text,
+      flexShrink: 1,
     },
     badge: {
       minWidth: 20,

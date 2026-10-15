@@ -59,13 +59,6 @@ function MakeForm<TProps extends Record<string, any>>(
           meta: { error?: string; touched?: boolean };
           form: any;
         }) => {
-          if (name === "product_images") {
-            console.log(
-              "Rendering FormWrappedComponent for 'product_images' with props:",
-              field
-            );
-          }
-
           const onChange = (value: any) => {
             // Primero actualizar Formik
             form.setFieldValue(name, value);

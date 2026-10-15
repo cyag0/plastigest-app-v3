@@ -1,142 +1,150 @@
 /**
- * Paleta de colores PlastiGest v2 — SaaS 2025.
+ * Paleta GCStock — "coco y matcha".
  *
  * Principios:
- * - 1 color principal (matcha profundo) para acciones/foco/activo
- * - Estados semanticos unicos (emerald, amber, red, blue)
- * - Escala de grises neutros (slate) para todo lo demas
- * - Fondos claros (slate-50) + cards blancos para que las sombras se vean
+ * - Un solo verde de marca (el oliva del logo) para acciones, foco y activo.
+ *   "Éxito" es de la misma familia: antes convivían el oliva y un esmeralda
+ *   de Tailwind que no combinaban.
+ * - Neutros cálidos (arena, crema, café) en lugar de los grises azulados de
+ *   Tailwind (slate): van con el producto (coco) y con el oliva.
+ * - Estados en tonos de tierra: ocre (aviso), ladrillo (error), petróleo
+ *   (información). Sin el azul/lila de plantilla.
+ * - Acento tostado (cáscara de coco) para detalles, con moderación.
  *
- * Modo oscuro: la funcion `paletteFor(mode)` retorna el set de tokens
- * correspondiente. Los componentes que necesitan reactividad al tema
- * deben usar el hook `useTheme()` en lugar de importar `palette` directo.
+ * Modo oscuro: `paletteFor(mode)` devuelve el set del modo. Los componentes
+ * que reaccionan al tema usan `useTheme()` en vez de importar `palette`.
  *
- * Migracion desde v1: las claves deprecadas (secondary, accent,
- * skeleton, red, blue) se mantienen con sus valores antiguos
- * para no romper componentes legacy. Marcan con comentario
- * @deprecated. Eliminar cuando se migren todos los componentes.
+ * Las claves @deprecated (secondary, skeleton, red, blue…) se conservan
+ * apuntando a los colores nuevos para no romper componentes viejos.
  */
 
 export type ThemeMode = "light" | "dark";
 
 const lightPalette = {
   // --- Marca ---
-  primary: "#4F7A3A", // Matcha profundo
-  primaryHover: "#3F6230",
-  primarySoft: "#E8F0E0", // Fondo para chips/badges/active state
+  primary: "#4F7A3A", // Oliva/matcha del logo
+  primaryHover: "#3E6230",
+  primarySoft: "#E9F0E1", // Fondo de chips, badges y estado activo
   primaryForeground: "#FFFFFF",
 
-  // --- Superficies (slate cool) ---
-  background: "#F8FAFC", // Slate-50
+  // --- Acento (cáscara de coco) ---
+  accent: "#8A6A43",
+  accentSoft: "#F3EBDD",
+
+  // --- Superficies (arena cálida) ---
+  background: "#F6F4EE",
   surface: "#FFFFFF",
-  surfaceMuted: "#F1F5F9", // Slate-100
+  surfaceMuted: "#F0EDE4",
   surfaceElevated: "#FFFFFF",
-  overlay: "rgba(15, 23, 42, 0.48)",
+  overlay: "rgba(31, 36, 27, 0.48)",
 
   // --- Bordes ---
-  border: "#E2E8F0", // Slate-200
-  borderStrong: "#CBD5E1", // Slate-300
-  ring: "rgba(79, 122, 58, 0.20)",
+  border: "#E6E1D5",
+  borderStrong: "#D3CCBC",
+  ring: "rgba(79, 122, 58, 0.22)",
 
-  // --- Texto ---
-  text: "#0F172A", // Slate-900
-  textSecondary: "#475569", // Slate-600
-  textMuted: "#94A3B8", // Slate-400
+  // --- Texto (negro oliva y grises cálidos) ---
+  text: "#1F241B",
+  textSecondary: "#57564B",
+  textMuted: "#8F8B7D",
   textInverse: "#FFFFFF",
 
-  // --- Estados semanticos ---
-  success: "#10B981",
-  successSoft: "#D1FAE5",
-  warning: "#F59E0B",
-  warningSoft: "#FEF3C7",
-  error: "#EF4444",
-  errorSoft: "#FEE2E2",
-  info: "#3B82F6",
-  infoSoft: "#DBEAFE",
+  // --- Estados ---
+  success: "#3F8A3A",
+  successSoft: "#E4F0DA",
+  warning: "#C47F12",
+  warningSoft: "#FAEED6",
+  error: "#B9412C",
+  errorSoft: "#F8E2DC",
+  info: "#2F6F7E",
+  infoSoft: "#DFEDF0",
 
-  // --- Acentos para charts ---
+  // --- Gráficas (de la misma familia) ---
   chart1: "#4F7A3A",
-  chart2: "#3B82F6",
-  chart3: "#F59E0B",
-  chart4: "#8B5CF6",
-  chart5: "#EC4899",
-  chart6: "#10B981",
+  chart2: "#8A6A43",
+  chart3: "#C47F12",
+  chart4: "#2F6F7E",
+  chart5: "#A4B86A",
+  chart6: "#B9412C",
 
   // --- @deprecated ---
-  secondary: "#B3B792",
-  accent: "#D2AB80",
-  skeleton: "#E2E8F0",
-  red: "#EF4444",
-  blue: "#3B82F6",
-  textLegacy: "#333",
+  secondary: "#A9AE86",
+  skeleton: "#E6E1D5",
+  red: "#B9412C",
+  blue: "#2F6F7E",
+  textLegacy: "#1F241B",
   card: "#FFFFFF",
-  purple: "#8B5CF6",
-  skeletonCard: "#E2E8F0",
-  skeletonTextBlock: "#F1F5F9",
-  skeletonLine: "#E2E8F0",
+  purple: "#7A6A8C",
+  skeletonCard: "#E6E1D5",
+  skeletonTextBlock: "#F0EDE4",
+  skeletonLine: "#E6E1D5",
   cardContent: "#FFFFFF",
 };
 
 /**
- * Paleta dark: superficies slate oscuras, texto claro, estados
- * semanticos con versiones mas brillantes para contraste.
+ * Paleta oscura: superficies café-oliva muy oscuras, texto crema y estados
+ * más claros para que tengan contraste.
  */
 const darkPalette = {
   // --- Marca ---
-  primary: "#86C66B", // Matcha mas claro para contraste
-  primaryHover: "#A0D585",
-  primarySoft: "rgba(134, 198, 107, 0.16)", // primary con alpha
-  primaryForeground: "#0F172A",
+  primary: "#9CC47F",
+  primaryHover: "#B2D399",
+  primarySoft: "rgba(156, 196, 127, 0.16)",
+  primaryForeground: "#14170F",
 
-  // --- Superficies (slate-900/800/700) ---
-  background: "#0B1220", // Slate-950-ish
-  surface: "#111827", // Slate-900
-  surfaceMuted: "#1E293B", // Slate-800
-  surfaceElevated: "#1E293B",
+  // --- Acento ---
+  accent: "#C9A577",
+  accentSoft: "rgba(201, 165, 119, 0.16)",
+
+  // --- Superficies ---
+  background: "#12140F",
+  surface: "#1B1D16",
+  surfaceMuted: "#25281F",
+  surfaceElevated: "#25281F",
   overlay: "rgba(0, 0, 0, 0.65)",
 
   // --- Bordes ---
-  border: "#1E293B", // Slate-800
-  borderStrong: "#334155", // Slate-700
-  ring: "rgba(134, 198, 107, 0.30)",
+  border: "#2C2F25",
+  borderStrong: "#3D4033",
+
+  ring: "rgba(156, 196, 127, 0.30)",
 
   // --- Texto ---
-  text: "#F1F5F9", // Slate-100
-  textSecondary: "#CBD5E1", // Slate-300
-  textMuted: "#64748B", // Slate-500
-  textInverse: "#0F172A",
+  text: "#F1EEE4",
+  textSecondary: "#CFCABA",
+  textMuted: "#8E8A7B",
+  textInverse: "#14170F",
 
-  // --- Estados semanticos ---
-  success: "#34D399", // Emerald-400
-  successSoft: "rgba(52, 211, 153, 0.16)",
-  warning: "#FBBF24", // Amber-400
-  warningSoft: "rgba(251, 191, 36, 0.16)",
-  error: "#F87171", // Red-400
-  errorSoft: "rgba(248, 113, 113, 0.16)",
-  info: "#60A5FA", // Blue-400
-  infoSoft: "rgba(96, 165, 250, 0.16)",
+  // --- Estados ---
+  success: "#8FC56E",
+  successSoft: "rgba(143, 197, 110, 0.16)",
+  warning: "#E3A646",
+  warningSoft: "rgba(227, 166, 70, 0.16)",
+  error: "#E07A62",
+  errorSoft: "rgba(224, 122, 98, 0.16)",
+  info: "#7FB4C2",
+  infoSoft: "rgba(127, 180, 194, 0.16)",
 
-  // --- Acentos para charts ---
-  chart1: "#86C66B",
-  chart2: "#60A5FA",
-  chart3: "#FBBF24",
-  chart4: "#A78BFA",
-  chart5: "#F472B6",
-  chart6: "#34D399",
+  // --- Gráficas ---
+  chart1: "#9CC47F",
+  chart2: "#C9A577",
+  chart3: "#E3A646",
+  chart4: "#7FB4C2",
+  chart5: "#C8D79A",
+  chart6: "#E07A62",
 
-  // --- @deprecated (aliases en dark) ---
-  secondary: "#5C6B57",
-  accent: "#7A6650",
-  skeleton: "#1E293B",
-  red: "#F87171",
-  blue: "#60A5FA",
-  textLegacy: "#F1F5F9",
-  card: "#111827",
-  purple: "#A78BFA",
-  skeletonCard: "#1E293B",
-  skeletonTextBlock: "#1E293B",
-  skeletonLine: "#1E293B",
-  cardContent: "#111827",
+  // --- @deprecated (alias en oscuro) ---
+  secondary: "#6B7058",
+  skeleton: "#2C2F25",
+  red: "#E07A62",
+  blue: "#7FB4C2",
+  textLegacy: "#F1EEE4",
+  card: "#1B1D16",
+  purple: "#A99BBB",
+  skeletonCard: "#2C2F25",
+  skeletonTextBlock: "#25281F",
+  skeletonLine: "#2C2F25",
+  cardContent: "#1B1D16",
 };
 
 export type Palette = typeof lightPalette;

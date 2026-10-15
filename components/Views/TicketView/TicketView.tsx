@@ -265,7 +265,7 @@ const styles = StyleSheet.create({
   },
   emptyMessage: {
     textAlign: "center",
-    color: "#666",
+    color: "#66635A",
     fontSize: 16,
     marginBottom: 24,
   },
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
   },
   itemCode: {
     fontSize: 12,
-    color: "#666",
+    color: "#66635A",
   },
   itemDetails: {
     flexDirection: "row",
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   },
   itemQuantity: {
     fontSize: 14,
-    color: "#666",
+    color: "#66635A",
   },
   itemTotal: {
     fontSize: 16,
@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
   },
   stockText: {
     fontSize: 12,
-    color: "#666",
+    color: "#66635A",
     marginBottom: 2,
   },
   itemDivider: {
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 14,
-    color: "#666",
+    color: "#66635A",
   },
   summaryValue: {
     fontSize: 14,

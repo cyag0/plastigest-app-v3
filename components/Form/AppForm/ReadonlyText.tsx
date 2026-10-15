@@ -10,11 +10,11 @@ export default function ReadonlyText(props: ReadonlyTextProps) {
   return (
     <Text
       style={{
-        color: "#555",
+        color: "#57564B",
         ...props.textStyle,
       }}
     >
-      {props.text || "-"}
+      {props.text && props.text !== "null" ? props.text : "—"}
     </Text>
   );
 }

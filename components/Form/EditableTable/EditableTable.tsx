@@ -496,7 +496,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: "#EEEAE0",
     paddingVertical: 8,
   },
   headerRowTable: {
@@ -519,6 +519,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 15,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: "#F8E2DC",
   },
 });

@@ -82,7 +82,7 @@ export default function UserBlock({ collapsed = false, onPress }: UserBlockProps
         onPress={onPress}
         activeOpacity={0.7}
         style={styles.collapsedWrapper}
-        accessibilityLabel="Menu de usuario"
+        accessibilityLabel="Menú de usuario"
       >
         <View style={styles.collapsedAvatar}>
           <Text style={styles.collapsedInitial}>{initial}</Text>
@@ -96,7 +96,7 @@ export default function UserBlock({ collapsed = false, onPress }: UserBlockProps
       onPress={onPress}
       activeOpacity={0.7}
       style={styles.container}
-      accessibilityLabel="Menu de usuario"
+      accessibilityLabel="Menú de usuario"
     >
       <View style={styles.avatar}>
         <Text style={styles.initial}>{initial}</Text>

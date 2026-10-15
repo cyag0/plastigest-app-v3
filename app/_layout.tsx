@@ -1,3 +1,5 @@
+import "@/utils/silenceLogs";
+import { applyGlobalFont, WEB_FONT_STACK } from "@/utils/globalFont";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import "react-native-reanimated";
@@ -9,6 +11,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { AlertsDialogs, AlertsProvider } from "@/hooks/useAlerts";
 import {
+  configureFonts,
   MD3DarkTheme,
   MD3LightTheme,
   PaperProvider,
@@ -16,13 +19,35 @@ import {
 import { es, registerTranslation } from "react-native-paper-dates";
 import PermissionsOverlay from "@/components/Debug/PermissionsOverlay";
 import React from "react";
-import { StatusBar, View } from "react-native";
+import { Platform, StatusBar, View } from "react-native";
+
+// Antes de cualquier render: Text/TextInput con Inter (ver utils/globalFont).
+applyGlobalFont();
+
+// Inter para Paper. En web la familia CSS con todos sus grosores; en el
+// teléfono la regular (el envoltorio de Text cambia la familia según el grosor).
+const PAPER_FONTS = configureFonts({
+  config: { fontFamily: Platform.OS === "web" ? WEB_FONT_STACK : "Inter_400Regular" },
+});
+
+// En el teléfono Inter va dentro de la app (funciona sin internet). En web
+// se carga de Google Fonts en public/index.html (woff2, mucho más ligero).
+const INTER_NATIVE: Record<string, number> =
+  Platform.OS === "web"
+    ? {}
+    : {
+        Inter_400Regular: require("@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf"),
+        Inter_500Medium: require("@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf"),
+        Inter_600SemiBold: require("@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf"),
+        Inter_700Bold: require("@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf"),
+        Inter_800ExtraBold: require("@expo-google-fonts/inter/800ExtraBold/Inter_800ExtraBold.ttf"),
+      };
 
 registerTranslation("es", es);
 
 export default function RootLayout() {
-  const [loaded] = useFonts({
-    SpaceMono: require("../assets/fonts/SpaceMono-Regular.ttf"),
+  const [loaded, fontError] = useFonts({
+    ...INTER_NATIVE,
     // Fuentes de iconos cargadas desde assets/fonts (copia local) en vez de
     // node_modules/@expo/...: Cloudflare Pages no sirve rutas con "@", por lo
     // que los .ttf de los iconos no cargaban en web. Estos nombres de familia
@@ -31,8 +56,14 @@ export default function RootLayout() {
     ionicons: require("../assets/fonts/Ionicons.ttf"),
   });
 
-  if (!loaded) {
-    // Async font loading only occurs in development.
+  if (fontError) {
+    // Si una fuente no carga (404 en el hosting web, red lenta) la app sigue:
+    // solo faltarían esos íconos/tipografía. Antes se quedaba en blanco.
+    console.warn("No se pudieron cargar las fuentes:", fontError);
+  }
+
+  if (!loaded && !fontError) {
+    // En web (y en desarrollo) las fuentes se cargan de forma asíncrona.
     return null;
   }
 
@@ -73,6 +104,7 @@ function ThemedApp() {
   const base = mode === "dark" ? MD3DarkTheme : MD3LightTheme;
   const theme = {
     ...base,
+    fonts: PAPER_FONTS,
     roundness: 2,
     colors: {
       ...base.colors,
@@ -83,15 +115,31 @@ function ThemedApp() {
       onBackground: colors.text,
       onSurface: colors.textSecondary,
       surfaceVariant: colors.surfaceMuted,
+      onSurfaceVariant: colors.textSecondary,
       error: colors.error,
+      errorContainer: colors.errorSoft,
       outline: colors.border,
-      // Look plano global: se anulan los elevation levels para que
-      // Card, Button, FAB, Surface elevado, etc. no proyecten sombra.
+      outlineVariant: colors.border,
+      // Sin esto Paper usa sus tonos por defecto (lila en chips
+      // seleccionados, menús y switches): se ven de plantilla.
+      primaryContainer: colors.primarySoft,
+      onPrimaryContainer: colors.primaryHover,
+      secondaryContainer: colors.primarySoft,
+      onSecondaryContainer: colors.primaryHover,
+      tertiary: colors.accent,
+      tertiaryContainer: colors.accentSoft,
+      onTertiaryContainer: colors.accent,
+      backdrop: colors.overlay,
+      // Fondos por nivel de elevación (la sombra la pone el prop
+      // `elevation`, no estos colores). Cards y botones quedan planos
+      // (transparentes), pero los menús (nivel 2) y los diálogos y
+      // buscadores (nivel 3) necesitan fondo: con "transparent" el menú del
+      // punto de venta y los Dialog de Paper se veían encimados al contenido.
       elevation: {
         level0: "transparent",
         level1: "transparent",
-        level2: "transparent",
-        level3: "transparent",
+        level2: colors.surface,
+        level3: colors.surface,
         level4: "transparent",
         level5: "transparent",
       },

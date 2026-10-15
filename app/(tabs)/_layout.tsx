@@ -4,7 +4,6 @@ import React, { useEffect, useState } from "react";
 import {
   Platform,
   Pressable,
-  StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -42,7 +41,7 @@ function WebTabs() {
             <AppBar
               title={options.title || route.name}
               showBackButton={false}
-              onSearchPress={() => console.log("Search pressed")}
+              showSearchButton={false}
               onNotificationPress={() => console.log("Notifications pressed")}
               onProfilePress={() => console.log("Profile pressed")}
             />
@@ -104,13 +103,15 @@ function WebTabLayout() {
       borderRadius: 8,
       backgroundColor: "transparent" as any,
     },
+    // Queda dentro del hueco que el AppBar reserva a la izquierda en web
+    // angosta (paddingLeft 52), a la altura del header.
     hamburger: {
       position: "absolute" as const,
-      top: 12,
-      left: 12,
+      top: 4,
+      left: 6,
       zIndex: 50,
-      width: 44,
-      height: 44,
+      width: 40,
+      height: 40,
       borderRadius: 9999,
       backgroundColor: colors.surface,
       borderWidth: 1,
@@ -119,8 +120,13 @@ function WebTabLayout() {
       justifyContent: "center" as const,
       ...tokens.shadow.md,
     },
+    // absoluteFillObject ya no existe en RN 0.85 (en web sí, pero tipaba mal).
     overlayRoot: {
-      ...StyleSheet.absoluteFillObject,
+      position: "absolute" as const,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
       flexDirection: "row" as const,
       zIndex: 100,
     },
@@ -233,6 +239,8 @@ function NativeTabLayout() {
         name="administration"
         options={{
           title: "Administración",
+          // En la barra inferior no cabe completo (5 pestañas en un teléfono).
+          tabBarLabel: "Admin",
           tabBarIcon: ({ color, focused }) => (
             <Appbar.Action icon="cog" iconColor={color} size={24} />
           ),
@@ -240,7 +248,7 @@ function NativeTabLayout() {
           header: ({ options, route }) => (
             <AppBar
               title={options.title || route.name}
-              onSearchPress={() => console.log("Search pressed")}
+              showSearchButton={false}
               onProfilePress={() => console.log("Profile pressed")}
             />
           ),

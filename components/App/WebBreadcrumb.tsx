@@ -11,36 +11,49 @@ type BreadcrumbItem = {
 };
 
 const segmentLabels: Record<string, string> = {
-  administration: "Administracion",
+  administration: "Administración",
   adjustment: "Ajustes",
+  "all-modules": "Todos los módulos",
+  carrito: "Carrito",
   cash: "Caja",
-  categories: "Categorias",
+  categories: "Categorías",
+  "change-password": "Cambiar contraseña",
+  clientes: "Clientes",
   closing: "Cierres anteriores",
   sessions: "Turnos de caja",
-  companies: "Companias",
+  companies: "Compañías",
   "company-users": "Usuarios de compania",
   "current-location": "Mi sucursal",
   edit: "Editar",
+  expenses: "Gastos",
   form: "Nuevo",
   formv2: "Nuevo",
+  formulas: "Fórmulas",
   history: "Historial",
   home: "Inicio",
   inventory: "Inventario",
   kiosk: "Quiosco",
   locations: "Sucursales",
+  movements: "Movimientos",
+  packages: "Paquetes",
+  packaging: "Empaque",
   "cash-registers": "Cajas",
   "cash-register-sessions": "Turnos",
   pos: "Punto de venta",
   notifications: "Notificaciones",
   "notification-preferences": "Preferencias",
   pending: "Pendientes",
+  preferences: "Preferencias",
   products: "Productos",
-  production: "Produccion",
+  production: "Producción",
   profile: "Perfil",
+  productos: "Productos",
   purchases: "Compras",
+  reminders: "Recordatorios",
   reports: "Dashboard",
   roles: "Roles",
   sales: "Ventas",
+  scanner: "Escáner",
   "sales-orders": "Pedidos",
   "sales-reports": "Reportes de ventas",
   selectCompany: "Seleccionar empresa",
@@ -49,6 +62,7 @@ const segmentLabels: Record<string, string> = {
   tasks: "Tareas",
   "task-notification-guide": "Tareas y notificaciones",
   transfers: "Transferencias",
+  unidades: "Unidades",
   "transfers-menu": "Transferencias",
   users: "Usuarios",
   "weekly-inventory": "Inventario semanal",
@@ -61,6 +75,7 @@ const pathLabels: Record<string, string> = {
   "/home/transfers/formv2": "Nueva solicitud",
   "/home/transfers/log-guide": "Guia del log",
   "/inventory/weekly-inventory/form": "Crear inventario",
+  "/inventory/products/type/all": "Todos",
 };
 
 // Algunos segmentos no tienen ruta index propia, por lo que su href intermedio
@@ -70,6 +85,13 @@ const hrefOverrides: Record<string, string> = {
 };
 
 const hiddenSegments = new Set(["", "(tabs)", "(stacks)", "index"]);
+
+const GENERIC_LABELS = new Set(["Nuevo", "Detalle", "Editar"]);
+
+// Segmentos que forman parte de la URL pero no son una pantalla navegable
+// (ej. /inventory/products/type/[slug]): se conservan en el href de los
+// siguientes items pero no se muestran como miga.
+const skippedSegments = new Set(["type"]);
 
 function isDynamicSegment(segment: string) {
   return /^\d+$/.test(segment) || /^[0-9a-f-]{12,}$/i.test(segment);
@@ -108,7 +130,7 @@ function buildBreadcrumbs(pathname: string): BreadcrumbItem[] {
     const nextSegment = rawSegments[index + 1];
     const label = getSegmentLabel(segment, href, nextSegment);
 
-    if (!label) {
+    if (!label || skippedSegments.has(segment)) {
       return;
     }
 
@@ -131,9 +153,12 @@ function buildBreadcrumbs(pathname: string): BreadcrumbItem[] {
 export default function WebBreadcrumb({
   embedded = false,
   showSingleItem = false,
+  compact = false,
 }: {
   embedded?: boolean;
   showSingleItem?: boolean;
+  /** Pantallas angostas: sólo "‹ Página actual"; la flecha lleva al nivel anterior. */
+  compact?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -145,6 +170,35 @@ export default function WebBreadcrumb({
 
   if (items.length === 0 || (items.length <= 1 && !showSingleItem)) {
     return null;
+  }
+
+  if (compact) {
+    const current = items[items.length - 1];
+    const parent = items.length > 1 ? items[items.length - 2] : null;
+    // "Nuevo" o "Detalle" solos no dicen dónde estás: se agrega la sección.
+    const title =
+      parent && GENERIC_LABELS.has(current.label)
+        ? `${current.label} · ${parent.label}`
+        : current.label;
+
+    return (
+      <View style={[styles.wrapper, embedded && styles.embeddedWrapper, styles.compactContent]}>
+        {parent && (
+          <Pressable
+            onPress={() => router.push(parent.href as any)}
+            style={({ pressed }) => [styles.compactBack, pressed && styles.pressedItem]}
+            accessibilityRole="link"
+            accessibilityLabel={`Volver a ${parent.label}`}
+            hitSlop={8}
+          >
+            <MaterialCommunityIcons name="chevron-left" size={24} color={palette.text} />
+          </Pressable>
+        )}
+        <Text numberOfLines={1} style={styles.compactLabel}>
+          {title}
+        </Text>
+      </View>
+    );
   }
 
   return (
@@ -229,5 +283,24 @@ const styles = StyleSheet.create({
   },
   currentLabel: {
     color: palette.primary,
+  },
+  compactContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 40,
+    gap: 2,
+  },
+  compactBack: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  compactLabel: {
+    flexShrink: 1,
+    color: palette.text,
+    fontSize: 16,
+    fontWeight: "700",
   },
 });
