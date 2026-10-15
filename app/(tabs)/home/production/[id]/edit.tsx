@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -20,13 +21,15 @@ export default function EditProduction() {
         const order = r?.data?.data ?? r?.data;
         if (order.status !== "draft") {
           alerts.warning("Solo se pueden editar producciones en estado Borrador");
-          router.replace(`/(tabs)/home/production/${params.id}` as any);
+          // Volver al detalle (de donde se llegó). Con replace quedaban dos
+          // detalles apilados.
+          goBack(`/(tabs)/home/production/${params.id}`);
           return;
         }
         setAllowed(true);
       } catch (e: any) {
         alerts.error("No se pudo cargar: " + e.message);
-        router.back();
+        goBack();
       }
     })();
   }, [params.id, alerts, router]);

@@ -1,3 +1,6 @@
+import { useAuth } from "@/contexts/AuthContext";
+import { formatQuantity } from "@/utils/format";
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PermissionGate from "@/components/App/PermissionGate";
@@ -84,7 +87,7 @@ const tableColumns: AppListColumn<InventoryAdjustmentItem>[] = [
     width: 170,
     align: "right",
     render: (_, item) =>
-      `${Number(item.quantity || 0).toFixed(2)} ${item.unit?.code || item.unit?.name || ""}`.trim(),
+      formatQuantity(item.quantity, item.unit?.code || item.unit?.name),
   },
   {
     title: "Razón",
@@ -136,13 +139,17 @@ export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
   const { selectedLocation, isLoadingLocations } = useSelectedLocation();
 
   const route: Href = props.route || "/(tabs)/home/adjustment";
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission("inventory_manage");
 
   if (isLoadingLocations) {
     return <Text>Cargando...</Text>;
   }
 
   return (
-    <PermissionGate permission="inventory_manage">
+    // Ver la lista pide inventory_list (igual que el backend); registrar un
+    // ajuste, inventory_manage.
+    <PermissionGate permission="inventory_list">
       <AppList<InventoryAdjustmentItem>
       title="Ajustes de Inventario"
       service={Services.inventoryAdjustments}
@@ -176,7 +183,9 @@ export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
           ],
         },
       ]}
-      onPressCreate={() => router.push(`${route}/form` as any)}
+      onPressCreate={
+        canManage ? () => router.push(`${route}/form` as any) : undefined
+      }
       renderCard={({ item }: { item: InventoryAdjustmentItem }) => {
         const isIncrease = item.direction === "in";
 
@@ -224,16 +233,6 @@ export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
   );
 }
 
-function formatDate(dateString: string) {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return dateString;
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy} ${mm} ${dd}`;
-}
-
 function getReasonIcon(reasonCode: string) {
   switch (reasonCode) {
     case "count_diff":
@@ -256,18 +255,18 @@ function getReasonIcon(reasonCode: string) {
 function getReasonBadgeStyle(reasonCode: string) {
   switch (reasonCode) {
     case "count_diff":
-      return { backgroundColor: "#6B7280" };
+      return { backgroundColor: "#6E6B5E" };
     case "damage":
-      return { backgroundColor: "#B45309" };
+      return { backgroundColor: "#9A6210" };
     case "loss":
-      return { backgroundColor: "#B3261E" };
+      return { backgroundColor: "#B9412C" };
     case "expiry":
       return { backgroundColor: "#9A3412" };
     case "theft":
       return { backgroundColor: "#7F1D1D" };
     case "found":
-      return { backgroundColor: "#2E7D32" };
+      return { backgroundColor: "#3F8A3A" };
     default:
-      return { backgroundColor: "#475569" };
+      return { backgroundColor: "#57564B" };
   }
 }

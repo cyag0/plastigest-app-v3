@@ -1,3 +1,4 @@
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PrintLabelsModal from "@/components/Products/PrintLabelsModal";
@@ -76,7 +77,7 @@ export default function ProductsByTypeIndex() {
     {
       title: "Imagen",
       key: "image",
-      width: 96,
+      width: 88,
       render: (_, item) => {
         if (item.main_image?.uri) {
           return (
@@ -87,8 +88,8 @@ export default function ProductsByTypeIndex() {
                 height: 36,
                 borderRadius: 8,
                 borderWidth: 1,
-                borderColor: "#E5E7EB",
-                backgroundColor: "#F3F4F6",
+                borderColor: "#E6E1D5",
+                backgroundColor: "#F0EDE4",
               }}
             />
           );
@@ -101,8 +102,8 @@ export default function ProductsByTypeIndex() {
               height: 36,
               borderRadius: 8,
               borderWidth: 1,
-              borderColor: "#E5E7EB",
-              backgroundColor: "#F9FAFB",
+              borderColor: "#E6E1D5",
+              backgroundColor: "#F8F6F1",
               alignItems: "center",
               justifyContent: "center",
             }}
@@ -110,7 +111,7 @@ export default function ProductsByTypeIndex() {
             <MaterialCommunityIcons
               name="image-off-outline"
               size={16}
-              color="#6B7280"
+              color="#6E6B5E"
             />
           </View>
         );
@@ -125,7 +126,7 @@ export default function ProductsByTypeIndex() {
     {
       title: "Tipo",
       key: "inventory_type",
-      width: 170,
+      width: 150,
       render: (_, item) => {
         const type = item.inventory_type;
         if (!type) return "-";
@@ -153,12 +154,12 @@ export default function ProductsByTypeIndex() {
     {
       title: "Estado",
       key: "is_active",
-      width: 130,
+      width: 110,
       render: (_, item) => (
         <View
           style={{
             alignSelf: "flex-start",
-            backgroundColor: item.is_active ? "#2E7D32" : "#B3261E",
+            backgroundColor: item.is_active ? "#3F8A3A" : "#B9412C",
             borderRadius: 999,
             paddingHorizontal: 10,
             paddingVertical: 4,
@@ -173,7 +174,7 @@ export default function ProductsByTypeIndex() {
     {
       title: "Stock",
       key: "stock",
-      width: 170,
+      width: 130,
       render: (_, item) => {
         const stock =
           item.current_stock !== null && item.current_stock !== undefined
@@ -181,7 +182,7 @@ export default function ProductsByTypeIndex() {
             : 0;
         const minStock = Number(item.minimum_stock || 0);
         const isHealthy = minStock > 0 ? stock > minStock : stock > 0;
-        const stockColor = isHealthy ? "#2E7D32" : "#B3261E";
+        const stockColor = isHealthy ? "#3F8A3A" : "#B9412C";
 
         return (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -198,7 +199,7 @@ export default function ProductsByTypeIndex() {
     {
       title: "Precio",
       key: "sale_price",
-      width: 120,
+      width: 110,
       align: "right",
       render: (_, item) =>
         item.sale_price
@@ -208,7 +209,7 @@ export default function ProductsByTypeIndex() {
     {
       title: "Creado",
       key: "created_at",
-      width: 120,
+      width: 110,
       render: (_, item) => formatDate(item.created_at),
     },
   ];
@@ -220,6 +221,10 @@ export default function ProductsByTypeIndex() {
     // Si viene el parámetro filter=low_stock, agregar el filtro
     if (params.filter === "low_stock") {
       filters.low_stock = "1";
+    }
+    // Desde el aviso de Inicio "N productos agotados".
+    if (params.filter === "out_of_stock") {
+      filters.in_stock = "0";
     }
 
     // El tipo de inventario viene en la ruta, como slug
@@ -252,6 +257,7 @@ export default function ProductsByTypeIndex() {
   return (
     <>
       <AppList
+        actionColumnWidth={180}
         title={title}
         service={Services.products}
         defaultFilters={getDefaultFilters()}
@@ -335,10 +341,10 @@ export default function ProductsByTypeIndex() {
                   style={{
                     width: 50,
                     height: 50,
-                    backgroundColor: "#ccc",
+                    backgroundColor: "#D3CCBC",
                     borderRadius: 8,
                     borderWidth: 1,
-                    borderColor: "#eee",
+                    borderColor: "#EEEAE0",
                   }}
                 />
               )}
@@ -467,7 +473,3 @@ export default function ProductsByTypeIndex() {
   );
 }
 
-function formatDate(dateString: string) {
-  const date = new Date(dateString);
-  return date.toLocaleDateString();
-}

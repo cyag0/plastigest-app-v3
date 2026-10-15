@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
@@ -314,7 +315,9 @@ export default function ProductionForm() {
           }`,
           { title: "Confirmar producción", okText: "Registrar" },
         );
-        if (!ok) throw new Error("Cancelado por el usuario");
+        // Cancelar la confirmación no es un error (antes salía un aviso rojo
+        // "Cancelado por el usuario").
+        if (!ok) return;
 
         // AppForm NO llama a la API cuando se le pasa onSubmit, así que la
         // invocamos manualmente aquí con los valores convertidos a FormData.
@@ -358,7 +361,10 @@ export default function ProductionForm() {
         } else {
           alerts.success("Producción actualizada");
         }
-        router.push("/(tabs)/home/production" as any);
+        // Regresar a donde se abrió el formulario (lista o detalle; ambos se
+        // recargan al recuperar el foco). Antes se hacía push de la lista y la
+        // pila crecía: "atrás" volvía a abrir el formulario ya guardado.
+        goBack("/(tabs)/home/production");
       }}
     >
       <ProductionFormBody editingId={editingId} />
@@ -561,7 +567,7 @@ function ProductionFormBody({ editingId }: { editingId?: number }) {
       <View style={styles.actionBar}>
         <Button
           mode="outlined"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           style={{ flex: 1, marginRight: 8 }}
         >
           Cancelar

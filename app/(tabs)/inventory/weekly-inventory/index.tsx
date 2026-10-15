@@ -16,7 +16,7 @@ import { View } from "react-native";
 import { ProgressChart } from "react-native-chart-kit";
 import { Text } from "react-native-paper";
 import * as Yup from "yup";
-import { toLocalDateString } from "@/utils/dates";
+import { toLocalDateString, formatDate } from "@/utils/dates";
 
 const statusLabels: Record<string, string> = {
   planning: "Planificación",
@@ -319,17 +319,6 @@ export default function InventoryIndex() {
       </AppModal>
     </>
   );
-}
-
-function formatDate(dateString: string) {
-  if (!dateString) return "";
-
-  const date = new Date(dateString);
-  return date.toLocaleDateString("es-MX", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 }
 
 interface ProgressPieChartProps {

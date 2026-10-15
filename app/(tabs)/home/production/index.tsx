@@ -16,7 +16,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, TouchableOpacity, View, useWindowDimensions } from "react-native";
 import { Text } from "react-native-paper";
 import { SceneMap, TabView } from "react-native-tab-view";
-import { parseLocalDate } from "@/utils/dates";
+import { parseLocalDate, formatDate } from "@/utils/dates";
 
 const PRODUCTION_COLUMNS: AppListColumn<any>[] = [
   {
@@ -33,11 +33,7 @@ const PRODUCTION_COLUMNS: AppListColumn<any>[] = [
     render: (value: any) => {
       if (!value) return "-";
       try {
-        return new Date(value).toLocaleDateString("es-MX", {
-          day: "2-digit",
-          month: "2-digit",
-          year: "numeric",
-        });
+        return formatDate(value);
       } catch {
         return String(value);
       }
@@ -112,20 +108,60 @@ export default function ProductionIndex() {
 
   const handleCancel = useCallback(
     async (item: any) => {
-      if (item.status === "cancelled") return;
+      if (item.status === "cancelled") return false;
       const ok = await alerts.confirm(
         `¿Cancelar la producción ${item.folio}? Se revertirá el impacto en stock.`,
         { title: "Cancelar producción", okText: "Sí, cancelar" },
       );
-      if (!ok) return;
+      if (!ok) return false;
       try {
         await Services.productionOrders.cancel(item.id);
         alerts.success("Producción cancelada y stock revertido");
+        return true;
       } catch (e: any) {
-        alerts.error("No se pudo cancelar: " + (e?.message ?? "Error"));
+        alerts.error(
+          "No se pudo cancelar: " +
+            (e?.response?.data?.message ?? e?.message ?? "Error"),
+        );
+        return false;
       }
     },
     [alerts],
+  );
+
+  // Remonta la lista después de cancelar para que el estado se actualice.
+  const [reloadToken, setReloadToken] = useState(0);
+
+  // "Duplicar" y "Cancelar" vivían en un onMenuAction que AppList no soporta:
+  // nunca aparecían. AppList sí muestra customActions.
+  const productionMenu = useMemo(
+    () => ({
+      onShow: handleItem,
+      onEdit: handleEdit,
+      showEdit: (item: any) => item.status === "draft",
+      showDelete: () => false,
+      customActions: [
+        {
+          title: "Duplicar",
+          icon: "content-copy",
+          onPress: (item: any) =>
+            router.push({
+              pathname: "/(tabs)/home/production/form",
+              params: { duplicateFrom: item.id },
+            } as any),
+        },
+        {
+          title: "Cancelar producción",
+          icon: "cancel",
+          color: palette.error,
+          show: (item: any) => item.status !== "cancelled",
+          onPress: async (item: any) => {
+            if (await handleCancel(item)) setReloadToken((t) => t + 1);
+          },
+        },
+      ],
+    }),
+    [handleItem, handleEdit, handleCancel, router],
   );
 
   const formulasButton = (
@@ -178,6 +214,7 @@ export default function ProductionIndex() {
       <View style={{ flex: 1 }}>
         {formulasButton}
         <AppList
+          key={reloadToken}
           title="Producción"
           service={Services.productionOrders}
           columns={PRODUCTION_COLUMNS}
@@ -189,10 +226,16 @@ export default function ProductionIndex() {
             ...(selectedLocation?.id ? { location_id: selectedLocation.id } : {}),
           }}
           renderCard={({ item }: { item: any }) => ({
-            title: `Producción ${item.folio}`,
+            // Celular: folio como título y el estado debajo, sin columna de
+            // ícono; antes ícono + badge + menú dejaban ~100px al texto y el
+            // título se partía letra por letra.
+            title: item.folio,
             description: (
-              <View>
-                <Text style={{ color: palette.textSecondary, fontSize: 12 }}>
+              <View style={{ gap: 2 }}>
+                <View style={{ alignSelf: "flex-start", marginVertical: 2 }}>
+                  <ProductionStatusBadge status={item.status} />
+                </View>
+                <Text style={{ color: palette.textSecondary, fontSize: 12 }} numberOfLines={1}>
                   {item.responsible_name ?? "—"} · {item.location_name ?? "—"}
                 </Text>
                 {item.outputs && item.outputs.length > 0 ? (
@@ -223,63 +266,23 @@ export default function ProductionIndex() {
                 ) : null}
               </View>
             ),
-            left: (
-              <View
-                style={{
-                  justifyContent: "center",
-                  alignItems: "center",
-                  width: 50,
-                  height: 50,
-                  borderRadius: 12,
-                  backgroundColor: palette.primary + "22",
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="factory"
-                  size={26}
-                  color={palette.primary}
-                />
-              </View>
-            ),
-            right: (
-              <View style={{ alignItems: "flex-end" }}>
-                <ProductionStatusBadge status={item.status} />
-              </View>
-            ),
             bottom: [
               {
                 label: "Fecha",
                 value: item.production_date
-                  ? parseLocalDate(item.production_date).toLocaleDateString("es-MX")
+                  ? formatDate(item.production_date)
                   : "—",
               },
-              { label: "Folio", value: item.folio },
             ],
           })}
           onItemPress={handleItem}
-          menu={{
-            onView: (item: any) => router.push(`/(tabs)/home/production/${item.id}` as any),
-            onEdit: handleEdit,
-            onDelete: undefined,
-            showEdit: (item: any) => item.status === "draft",
-            showDelete: (item: any) => item.status === "draft",
-          }}
-          onMenuAction={async (action: string, item: any) => {
-            if (action === "cancel") {
-              await handleCancel(item);
-            } else if (action === "duplicate") {
-              router.push({
-                pathname: "/(tabs)/home/production/form",
-                params: { duplicateFrom: item.id },
-              } as any);
-            }
-          }}
+          menu={productionMenu}
           onPressCreate={() => router.push("/(tabs)/home/production/form" as any)}
           fabLabel="Nueva Producción"
         />
       </View>
     ),
-    [company, selectedLocation, handleItem, handleEdit, handleCancel, isMobile],
+    [company, selectedLocation, handleItem, productionMenu, reloadToken, isMobile],
   );
 
   const statsScene = useMemo(() => () => <ProductionKpiCards />, []);
@@ -329,6 +332,7 @@ export default function ProductionIndex() {
         <ProductionKpiCards />
         {formulasButton}
         <AppList
+          key={reloadToken}
           title="Producción"
           service={Services.productionOrders}
           columns={PRODUCTION_COLUMNS}
@@ -339,10 +343,16 @@ export default function ProductionIndex() {
             ...(selectedLocation?.id ? { location_id: selectedLocation.id } : {}),
           }}
           renderCard={({ item }: { item: any }) => ({
-            title: `Producción ${item.folio}`,
+            // Celular: folio como título y el estado debajo, sin columna de
+            // ícono; antes ícono + badge + menú dejaban ~100px al texto y el
+            // título se partía letra por letra.
+            title: item.folio,
             description: (
-              <View>
-                <Text style={{ color: palette.textSecondary, fontSize: 12 }}>
+              <View style={{ gap: 2 }}>
+                <View style={{ alignSelf: "flex-start", marginVertical: 2 }}>
+                  <ProductionStatusBadge status={item.status} />
+                </View>
+                <Text style={{ color: palette.textSecondary, fontSize: 12 }} numberOfLines={1}>
                   {item.responsible_name ?? "—"} · {item.location_name ?? "—"}
                 </Text>
                 {item.outputs && item.outputs.length > 0 ? (
@@ -373,57 +383,17 @@ export default function ProductionIndex() {
                 ) : null}
               </View>
             ),
-            left: (
-              <View
-                style={{
-                  justifyContent: "center",
-                  alignItems: "center",
-                  width: 50,
-                  height: 50,
-                  borderRadius: 12,
-                  backgroundColor: palette.primary + "22",
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="factory"
-                  size={26}
-                  color={palette.primary}
-                />
-              </View>
-            ),
-            right: (
-              <View style={{ alignItems: "flex-end" }}>
-                <ProductionStatusBadge status={item.status} />
-              </View>
-            ),
             bottom: [
               {
                 label: "Fecha",
                 value: item.production_date
-                  ? parseLocalDate(item.production_date).toLocaleDateString("es-MX")
+                  ? formatDate(item.production_date)
                   : "—",
               },
-              { label: "Folio", value: item.folio },
             ],
           })}
           onItemPress={handleItem}
-          menu={{
-            onView: (item: any) => router.push(`/(tabs)/home/production/${item.id}` as any),
-            onEdit: handleEdit,
-            onDelete: undefined,
-            showEdit: (item: any) => item.status === "draft",
-            showDelete: (item: any) => item.status === "draft",
-          }}
-          onMenuAction={async (action: string, item: any) => {
-            if (action === "cancel") {
-              await handleCancel(item);
-            } else if (action === "duplicate") {
-              router.push({
-                pathname: "/(tabs)/home/production/form",
-                params: { duplicateFrom: item.id },
-              } as any);
-            }
-          }}
+          menu={productionMenu}
           onPressCreate={() => router.push("/(tabs)/home/production/form" as any)}
           fabLabel="Nueva Producción"
         />

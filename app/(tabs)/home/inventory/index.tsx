@@ -16,7 +16,7 @@ import { View } from "react-native";
 import { ProgressChart } from "react-native-chart-kit";
 import { Text } from "react-native-paper";
 import * as Yup from "yup";
-import { toLocalDateString } from "@/utils/dates";
+import { toLocalDateString, formatDate } from "@/utils/dates";
 
 const inventoryValidationSchema = Yup.object().shape({
   name: Yup.string().required("El nombre del inventario es requerido"),
@@ -272,17 +272,6 @@ export default function InventoryIndex() {
       </AppModal>
     </PermissionGate>
   );
-}
-
-function formatDate(dateString: string) {
-  if (!dateString) return "";
-
-  const date = new Date(dateString);
-  return date.toLocaleDateString("es-MX", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
 }
 
 interface ProgressPieChartProps {

@@ -73,7 +73,7 @@ export default function MermasTable({ name = "wastes" }: Props) {
       addLabel="Agregar merma"
       emptyMessage="Sin mermas registradas. Agrega una si hubo pérdidas durante la producción."
       borderLeft
-      highlightColor="#EF4444"
+      highlightColor="#B9412C"
     />
   );
 }

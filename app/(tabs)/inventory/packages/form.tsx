@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { InputLabel } from "@/components/Form/AppForm/hoc";
@@ -117,15 +118,17 @@ export default function PackagesForm(props: PackagesFormProps) {
 
   return (
     <AppForm
+      deletePermission="products_delete"
       ref={formRef}
       api={Services.productPackages}
       id={packageId}
       readonly={props?.readonly || false}
       validationSchema={validationSchema}
       onSuccess={() => {
-        router.back();
+        goBack();
       }}
       initialValues={initialValues}
+      card
     >
       {/* Syncs product_id → productUnitType state (must be inside FormikProvider) */}
       <UnitTypeWatcher

@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import AppDependency from "@/components/Form/AppDependency";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
@@ -138,12 +139,13 @@ export default function ProductsForm(props: ProductsFormProps) {
 
   return (
     <AppForm
+      deletePermission="products_delete"
       ref={formRef}
       api={Services.products}
       id={productId}
       readonly={props.readonly}
       onSuccess={() => {
-        router.back();
+        goBack();
       }}
       initialValues={initialValues}
     >
@@ -163,33 +165,42 @@ export default function ProductsForm(props: ProductsFormProps) {
 
         <View style={styles.codeInputContainer}>
           <View style={styles.codeInput}>
+            {/* Editable: se escribe a mano, con lector USB (teclea en el campo)
+                o con los botones de escanear / generar. */}
             <FormInput
               name="code"
               label="Código del Producto"
               placeholder="Ej: BP-2030"
               required
-              //@ts-ignore
-              readonly
+              autoCapitalize="characters"
+              autoCorrect={false}
             />
           </View>
-          <IconButton
-            icon="barcode-scan"
-            mode="contained"
-            containerColor={colors.primary}
-            iconColor={colors.primaryForeground}
-            size={22}
-            onPress={() => scannerRef.current?.open()}
-            style={styles.scanButton}
-          />
-          <IconButton
-            icon="auto-fix"
-            mode="contained"
-            containerColor={colors.surfaceMuted}
-            iconColor={colors.textSecondary}
-            size={22}
-            onPress={generateRandomBarcode}
-            style={styles.scanButton}
-          />
+          {/* En el detalle (solo lectura) no hay nada que escanear ni generar. */}
+          {!props.readonly && (
+            <>
+              <IconButton
+                icon="barcode-scan"
+                mode="contained"
+                containerColor={colors.primary}
+                iconColor={colors.primaryForeground}
+                size={22}
+                onPress={() => scannerRef.current?.open()}
+                style={styles.scanButton}
+                accessibilityLabel="Escanear código"
+              />
+              <IconButton
+                icon="auto-fix"
+                mode="contained"
+                containerColor={colors.surfaceMuted}
+                iconColor={colors.textSecondary}
+                size={22}
+                onPress={generateRandomBarcode}
+                style={styles.scanButton}
+                accessibilityLabel="Generar código"
+              />
+            </>
+          )}
         </View>
 
         <FormInput

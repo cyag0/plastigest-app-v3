@@ -1,23 +1,29 @@
+import Skeleton from "@/components/SkeletonLoader";
 import palette from "@/constants/palette";
 import useInventoryTypes, {
   ALL_INVENTORY_TYPES,
 } from "@/hooks/useInventoryTypes";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
-  ActivityIndicator,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Text,
   View,
 } from "react-native";
-import { Divider, IconButton, Text, TouchableRipple } from "react-native-paper";
 
 type InventoryType = App.Entities.InventoryType;
 
 /**
- * Paso previo al listado de productos: se elige primero el tipo de inventario.
+ * Paso previo al listado de productos: se elige el tipo de inventario.
  * El tipo elegido queda en la ruta como slug (/inventory/products/type/materia-prima).
+ *
+ * Lista sobria: ícono neutro, nombre y cuántos productos tiene. Antes cada
+ * tipo llevaba su color, un ícono grande en recuadro, una descripción de dos
+ * renglones y un contador de color: mucho ruido para elegir una opción.
  */
 export default function ProductsIndex() {
   const router = useRouter();
@@ -41,129 +47,91 @@ export default function ProductsIndex() {
     0,
   );
 
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={palette.primary} />
-      </View>
-    );
-  }
-
   return (
-    <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        <View style={styles.header}>
-          <Text variant="titleMedium" style={styles.headerTitle}>
-            Tipos de inventario
-          </Text>
-          <Text variant="bodySmall" style={styles.headerSubtitle}>
-            Elige un tipo para ver sólo esos productos
-          </Text>
-        </View>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
+      {!!error && <Text style={styles.error}>{error}</Text>}
 
-        {error && (
-          <Text variant="bodySmall" style={styles.error}>
-            {error}
-          </Text>
-        )}
+      {loading ? (
+        <TypesSkeleton />
+      ) : (
+        <>
+          <View style={styles.group}>
+            <Row
+              icon="format-list-bulleted"
+              title="Todos los productos"
+              count={totalProducts}
+              onPress={() => openType(ALL_INVENTORY_TYPES)}
+            />
+          </View>
 
-        <View style={styles.list}>
-          <Option
-            icon="format-list-bulleted"
-            color={palette.primary}
-            title="Todos los productos"
-            description="El catálogo completo, sin filtrar"
-            badge={totalProducts}
-            onPress={() => openType(ALL_INVENTORY_TYPES)}
-          />
-
-          <Divider style={styles.divider} />
-
-          {types.map((type: InventoryType, index: number) => (
-            <React.Fragment key={type.id}>
-              <Option
-                icon={type.icon || "shape-outline"}
-                color={type.color || palette.primary}
+          <Text style={styles.groupTitle}>Por tipo</Text>
+          <View style={styles.group}>
+            {types.map((type: InventoryType, index: number) => (
+              <Row
+                key={type.id}
+                icon={(type.icon || "shape-outline") as any}
                 title={type.name}
-                description={type.description || ""}
-                badge={type.products_count}
+                count={type.products_count ?? 0}
+                divider={index > 0}
                 onPress={() => openType(type.slug)}
               />
-
-              {index < types.length - 1 && <Divider style={styles.divider} />}
-            </React.Fragment>
-          ))}
-        </View>
-      </ScrollView>
-    </View>
+            ))}
+          </View>
+        </>
+      )}
+    </ScrollView>
   );
 }
 
-interface OptionProps {
-  icon: string;
-  color: string;
+function Row({
+  icon,
+  title,
+  count,
+  divider,
+  onPress,
+}: {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
   title: string;
-  description: string;
-  badge?: number;
+  count: number;
+  divider?: boolean;
   onPress: () => void;
+}) {
+  const empty = count === 0;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.row,
+        divider && styles.rowDivider,
+        pressed && { backgroundColor: palette.surfaceMuted },
+      ]}
+    >
+      <MaterialCommunityIcons name={icon} size={20} color={empty ? palette.textMuted : palette.textSecondary} />
+      <Text style={[styles.rowTitle, empty && styles.muted]} numberOfLines={1}>
+        {title}
+      </Text>
+      <Text style={styles.count}>{count}</Text>
+      <MaterialCommunityIcons name="chevron-right" size={18} color={palette.textMuted} />
+    </Pressable>
+  );
 }
 
-function Option({
-  icon,
-  color,
-  title,
-  description,
-  badge,
-  onPress,
-}: OptionProps) {
+function TypesSkeleton() {
   return (
-    <TouchableRipple onPress={onPress} style={styles.optionItem}>
-      <View style={styles.optionContent}>
-        <View style={[styles.optionIcon, { backgroundColor: color + "20" }]}>
-          <IconButton
-            icon={icon}
-            size={28}
-            iconColor={color}
-            style={{ margin: 0 }}
-          />
-        </View>
-
-        <View style={styles.optionText}>
-          <Text variant="titleMedium" style={styles.optionTitle}>
-            {title}
-          </Text>
-          {!!description && (
-            <Text
-              variant="bodySmall"
-              style={styles.optionDescription}
-              numberOfLines={2}
-            >
-              {description}
-            </Text>
-          )}
-        </View>
-
-        {badge !== undefined && (
-          <View style={[styles.badge, { backgroundColor: color }]}>
-            <Text variant="labelSmall" style={styles.badgeText}>
-              {badge}
-            </Text>
-          </View>
-        )}
-
-        <IconButton
-          icon="chevron-right"
-          size={24}
-          iconColor={palette.textSecondary}
-          style={{ margin: 0 }}
-        />
+    <View style={{ gap: 18 }}>
+      <View style={[styles.group, styles.skeletonGroup]}>
+        <Skeleton width="55%" height={14} borderRadius={6} />
       </View>
-    </TouchableRipple>
+      <View style={[styles.group, styles.skeletonGroup, { gap: 22 }]}>
+        {Array.from({ length: 6 }, (_, i) => (
+          <Skeleton key={i} width={`${45 + ((i * 13) % 30)}%`} height={14} borderRadius={6} />
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -172,74 +140,57 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: palette.background,
   },
-  centered: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  scrollContent: {
+  content: {
+    padding: 16,
     paddingBottom: 32,
-    maxWidth: 800,
+    gap: 8,
+    maxWidth: 720,
     width: "100%",
     alignSelf: "center",
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  headerTitle: {
-    fontWeight: "700",
-    color: palette.text,
-  },
-  headerSubtitle: {
-    color: palette.textSecondary,
-  },
   error: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
     color: palette.error,
+    fontSize: 13,
   },
-  list: {
+  groupTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: palette.textSecondary,
+    marginTop: 14,
+  },
+  group: {
     backgroundColor: palette.surface,
     borderRadius: 12,
-    marginHorizontal: 8,
+    borderWidth: 1,
+    borderColor: palette.border,
     overflow: "hidden",
   },
-  divider: {
-    marginLeft: 80,
+  skeletonGroup: {
+    padding: 16,
   },
-  optionItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  optionContent: {
+  row: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
-  optionIcon: {
-    borderRadius: 12,
-    marginRight: 12,
+  rowDivider: {
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
   },
-  optionText: {
+  rowTitle: {
     flex: 1,
-  },
-  optionTitle: {
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "500",
     color: palette.text,
   },
-  optionDescription: {
-    color: palette.textSecondary,
+  muted: {
+    color: palette.textMuted,
   },
-  badge: {
-    minWidth: 28,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  badgeText: {
-    color: "#fff",
-    fontWeight: "700",
+  count: {
+    fontSize: 14,
+    color: palette.textMuted,
+    fontVariant: ["tabular-nums"],
   },
 });

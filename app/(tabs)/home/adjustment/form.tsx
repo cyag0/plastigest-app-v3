@@ -1,3 +1,5 @@
+import { formatQuantity } from "@/utils/format";
+import { goBack } from "@/utils/navigation";
 import AppForm, {
   AppFormRef,
   useAppForm,
@@ -104,7 +106,7 @@ export default function AdjustmentForm(props: AdjustmentFormProps) {
           .min(1, "Debe agregar al menos un producto al ajuste"),
       })}
       onSuccess={() => {
-        router.back();
+        goBack();
       }}
     >
       <FormDatePicker name="applied_at" label="Fecha del ajuste" required />
@@ -468,7 +470,7 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
           <View style={{ marginTop: 8 }}>
             <AppUpload
               label="Evidencias del producto"
-              placeholder="Subir imagenes para este producto"
+              placeholder="Subir imágenes para este producto"
               value={detail?.evidence || []}
               onChange={(files: UploadedFile[]) => form.setFieldValue(`details.${index}.evidence`, files)}
               multiple
@@ -534,7 +536,7 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
                     fontSize: 16,
                   }}
                 >
-                  {resultingStock.toFixed(2)} {baseUnit?.abbreviation || "unidades"}
+                  {formatQuantity(resultingStock, baseUnit?.abbreviation || "unidades")}
                 </Text>
               </View>
             </View>
@@ -629,6 +631,6 @@ const styles = StyleSheet.create({
   },
   emptyCard: {
     padding: 24,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#F3F0E8",
   },
 });

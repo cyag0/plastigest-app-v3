@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import { FormSwitch } from "@/components/Form/AppSwitch";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
@@ -282,7 +283,7 @@ function FormulaFormBody({ editing }: { editing: boolean }) {
       <View style={styles.actionBar}>
         <Button
           mode="outlined"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           style={{ flex: 1 }}
           disabled={isSubmitting}
         >

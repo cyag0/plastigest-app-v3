@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
     elevation: 0,
     shadowColor: "transparent",
     borderWidth: 1,
-    borderColor: "#E2E8F0",
+    borderColor: "#E6E1D5",
   },
   headerRow: {
     flexDirection: "row",
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   empty: {
-    color: "#9CA3AF",
+    color: "#8F8B7D",
     fontSize: 12,
     fontStyle: "italic",
   },

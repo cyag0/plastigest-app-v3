@@ -4,6 +4,7 @@ import KpiCard from "@/components/Dashboard/KpiCard";
 import QuickAccessCard from "@/components/Dashboard/QuickAccessCard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useAuth } from "@/contexts/AuthContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import Services from "@/utils/services";
 import { Href, useRouter } from "expo-router";
@@ -35,6 +36,13 @@ interface InventoryStats {
 
 const INVENTORY_ACTIONS = [
   {
+    key: "kardex",
+    label: "Kárdex",
+    description: "Todas las entradas y salidas",
+    icon: "swap-vertical-bold" as const,
+    route: "/(tabs)/inventory/kardex",
+  },
+  {
     key: "products",
     label: "Ver inventario",
     description: "Stock de todos los productos",
@@ -51,7 +59,7 @@ const INVENTORY_ACTIONS = [
   {
     key: "weekly",
     label: "Inv. semanal",
-    description: "Verificacion fisica",
+    description: "Verificación física",
     icon: "clipboard-check-outline" as const,
     route: "/(tabs)/inventory/weekly-inventory",
   },
@@ -77,8 +85,17 @@ export default function InventoryScreen() {
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [stats, setStats] = React.useState<InventoryStats | null>(null);
+  // El resumen sale de reportes: sin ese permiso la API responde 403 y las
+  // tarjetas mostraban 0 productos y $0 como si el almacén estuviera vacío.
+  const { hasPermission } = useAuth();
+  const canSeeSummary = hasPermission("reports_view");
 
   const loadData = async () => {
+    if (!canSeeSummary) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     try {
       const response = await Services.reports.inventoryStats({
         scope: "location",
@@ -161,6 +178,7 @@ export default function InventoryScreen() {
       }
     >
       {/* ============== RESUMEN ============== */}
+      {canSeeSummary && (
       <View style={styles.section}>
         <SectionHeader title="Resumen" />
         <View style={styles.kpiRow}>
@@ -181,66 +199,40 @@ export default function InventoryScreen() {
             label="Valor inventario"
             value={formatCurrency(inventoryValue)}
           />
+          {/* Incluye los agotados; el porcentaje es la proporción del
+              catálogo, no una tendencia (antes salía como "+37.2%" en rojo). */}
           <KpiCard
             icon="alert-circle-outline"
-            label="Stock bajo"
+            label="Bajo o agotado"
             value={formatStock(lowStockCount + outOfStock)}
-            inverseDelta={lowStockCount + outOfStock > 0}
-            delta={
+            caption={
               totalProducts > 0
-                ? {
-                    value: ((lowStockCount + outOfStock) / totalProducts) * 100,
-                    period: "del total",
-                  }
+                ? `${Math.round(((lowStockCount + outOfStock) / totalProducts) * 100)}% de los productos`
                 : undefined
             }
           />
         </View>
       </View>
+      )}
 
       {/* ============== ACCIONES RAPIDAS ============== */}
       <View style={styles.section}>
-        <SectionHeader title="Acciones rapidas" />
-        {isMobile ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.actionsScroll}
-            contentContainerStyle={styles.actionsScrollContent}
-          >
-            {INVENTORY_ACTIONS.map((item) => (
-              <TouchableOpacity
-                key={item.key}
-                style={styles.actionCompactCard}
-                onPress={() => router.push(item.route as any)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.actionCompactIconBox}>
-                  <MaterialCommunityIcons
-                    name={item.icon}
-                    size={24}
-                    color={palette.text}
-                  />
-                </View>
-                <Text style={styles.actionCompactLabel} numberOfLines={2}>
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        ) : (
-          <View style={styles.actionsGrid}>
-            {INVENTORY_ACTIONS.map((item) => (
-              <QuickAccessCard
-                key={item.key}
-                icon={item.icon}
-                label={item.label}
-                description={item.description}
-                onPress={() => router.push(item.route as any)}
-              />
-            ))}
-          </View>
-        )}
+        <SectionHeader title="Ir a" />
+        {/* Accesos compactos (como en Inicio): sin tarjeta, cuadro de ícono
+            ni descripción por cada uno. */}
+        <View style={styles.pills}>
+          {INVENTORY_ACTIONS.map((item) => (
+            <TouchableOpacity
+              key={item.key}
+              style={styles.pill}
+              onPress={() => router.push(item.route as any)}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name={item.icon} size={18} color={palette.primary} />
+              <Text style={styles.pillText}>{item.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
 
       {/* ============== SALUD DEL STOCK ============== */}
@@ -256,7 +248,7 @@ export default function InventoryScreen() {
           />
           <View style={styles.card}>
             <HealthRow
-              label="Optimo"
+              label="Óptimo"
               value={stockHealth.optimal}
               total={totalForHealth}
               color={palette.success}
@@ -272,7 +264,7 @@ export default function InventoryScreen() {
             />
             <Divider />
             <HealthRow
-              label="Critico"
+              label="Crítico"
               value={stockHealth.critical}
               total={totalForHealth}
               color={palette.error}
@@ -298,7 +290,7 @@ export default function InventoryScreen() {
       {categoryEntries.length > 0 && (
         <View style={styles.section}>
           <SectionHeader
-            title="Productos por categoria"
+            title="Productos por categoría"
             badge={`${categoryEntries.length}`}
           />
           <View style={styles.card}>
@@ -366,7 +358,7 @@ export default function InventoryScreen() {
               </View>
               <Text style={styles.alertText} numberOfLines={2}>
                 Hay {lowStockCount} producto{lowStockCount === 1 ? "" : "s"} que
-                {lowStockCount === 1 ? " necesita" : " necesitan"} reposicion
+                {lowStockCount === 1 ? " necesita" : " necesitan"} reposición
                 urgente. Revisa el inventario para evitar desabastecimiento.
               </Text>
             </View>
@@ -617,6 +609,27 @@ const styles = StyleSheet.create({
   },
 
   // --- Actions grid / scroll ---
+  pills: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  pillText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: palette.text,
+  },
   actionsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

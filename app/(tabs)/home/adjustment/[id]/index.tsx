@@ -1,3 +1,5 @@
+import { formatQuantity } from "@/utils/format";
+import { formatDate } from "@/utils/dates";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -123,7 +125,7 @@ export default function AdjustmentDetailScreen() {
           <Row label="Tipo" value={isIncrease ? "Entrada" : "Salida"} />
           <Row
             label="Cantidad"
-            value={`${Number(detail.quantity || 0).toFixed(2)} ${detail.unit?.code || detail.unit?.name || ""}`.trim()}
+            value={formatQuantity(detail.quantity, detail.unit?.code || detail.unit?.name)}
           />
           <Row label="Razón" value={detail.reason_code_label || detail.reason_code || "-"} />
           <Row label="Ubicación" value={detail.location?.name || "-"} />
@@ -184,17 +186,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatDate(dateString: string) {
-  if (!dateString) return "";
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return dateString;
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy} ${mm} ${dd}`;
-}
-
 function toFixedValue(value?: number) {
   if (value === undefined || value === null) return "-";
-  return Number(value).toFixed(2);
+  return formatQuantity(value);
 }

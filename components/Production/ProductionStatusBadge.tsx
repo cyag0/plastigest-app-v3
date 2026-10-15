@@ -10,11 +10,11 @@ type Status = "draft" | "completed" | "packaging" | "packed" | "cancelled";
  * borrador → producción terminada → en empaque → empacada.
  */
 const COLORS: Record<Status, { bg: string; fg: string; label: string }> = {
-  draft: { bg: "#F3F4F6", fg: "#6B7280", label: "Borrador" },
-  completed: { bg: "#D1FAE5", fg: "#065F46", label: "Producción terminada" },
-  packaging: { bg: "#DBEAFE", fg: "#1E40AF", label: "En empaque" },
+  draft: { bg: "#F0EDE4", fg: "#6E6B5E", label: "Borrador" },
+  completed: { bg: "#E4F0DA", fg: "#065F46", label: "Producción terminada" },
+  packaging: { bg: "#DFEDF0", fg: "#1E40AF", label: "En empaque" },
   packed: { bg: "#EDE9FE", fg: "#5B21B6", label: "Empacada" },
-  cancelled: { bg: "#FEE2E2", fg: "#991B1B", label: "Cancelada" },
+  cancelled: { bg: "#F8E2DC", fg: "#991B1B", label: "Cancelada" },
 };
 
 interface Props {

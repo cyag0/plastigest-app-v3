@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, {
   AppFormRef,
@@ -179,7 +180,7 @@ export default function InventoryForm(props: InventoryFormProps) {
       onSuccess={() => {
         alerts.success("Conteo completado exitosamente");
 
-        router.back();
+        goBack();
       }}
     >
       <Card
@@ -794,6 +795,6 @@ const styles = StyleSheet.create({
   },
   emptyCard: {
     padding: 24,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#F3F0E8",
   },
 });

@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import AppInput from "@/components/Form/AppInput";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -120,7 +121,7 @@ export default function ProductionPackaging() {
       setSaving(true);
       await Services.productionOrders.finishPackaging(orderId);
       alerts.success("Empaque cerrado");
-      router.back();
+      goBack();
     } catch (e: any) {
       const data = e?.response?.data;
       alerts.error(
@@ -279,7 +280,7 @@ export default function ProductionPackaging() {
           </Button>
         </View>
       ) : (
-        <Button mode="outlined" onPress={() => router.back()} style={{ marginTop: tokens.spacing[2] }}>
+        <Button mode="outlined" onPress={() => goBack()} style={{ marginTop: tokens.spacing[2] }}>
           Volver
         </Button>
       )}

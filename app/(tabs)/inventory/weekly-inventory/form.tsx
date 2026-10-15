@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, {
   AppFormRef,
@@ -12,7 +13,7 @@ import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useFormikContext } from "formik";
 import React, {
   useCallback,
@@ -74,7 +75,17 @@ async function runChunked<T>(
 // ===========================================================================
 // Pantalla principal: carga productos + detalles existentes y monta el form.
 // ===========================================================================
-export default function InventoryForm(props: InventoryFormProps) {
+// Esta pantalla sólo edita un conteo existente (se crea desde el modal del
+// listado). Si se abre /weekly-inventory/form sin id, se regresa al listado
+// en lugar de pedir /inventory-counts/undefined.
+export default function InventoryFormRoute(props: InventoryFormProps) {
+  if (!props.id) {
+    return <Redirect href="/inventory/weekly-inventory" />;
+  }
+  return <InventoryForm {...props} />;
+}
+
+function InventoryForm(props: InventoryFormProps) {
   const { selectedLocation } = useSelectedLocation();
   const formRef = useRef<AppFormRef<InventoryFormData>>(null);
   const router = useRouter();
@@ -155,7 +166,7 @@ export default function InventoryForm(props: InventoryFormProps) {
         status: "cancelled",
       } as any);
       alerts.success("Conteo cancelado");
-      router.back();
+      goBack();
     } catch {
       alerts.error("No se pudo cancelar el conteo");
     }
@@ -163,6 +174,7 @@ export default function InventoryForm(props: InventoryFormProps) {
 
   return (
     <AppForm
+      deletePermission="inventory_delete"
       readonly={props.readonly}
       id={props.id}
       ref={formRef}
