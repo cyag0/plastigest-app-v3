@@ -1,7 +1,8 @@
 import palette from "@/constants/palette";
 import { formatMoney } from "@/hooks/usePosCart";
+import { printSaleTicket } from "@/utils/printDocument";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Modal, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { Button, Text } from "react-native-paper";
 
@@ -25,6 +26,15 @@ const METHODS: { key: CheckoutMethod; label: string; icon: string }[] = [
 ];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Monto capturado: acepta coma o punto decimal y separadores de miles. */
+const parseAmount = (text: string) => {
+  const raw = text.trim().replace(/\s/g, "");
+  // "1,234.50" → miles con coma; "12,5" → decimal con coma.
+  const normalized = /,\d{1,2}$/.test(raw) && !raw.includes(".")
+    ? raw.replace(",", ".")
+    : raw.replace(/,/g, "");
+  return Number(normalized);
+};
 
 /**
  * Cobro: efectivo (recibido → cambio), tarjeta o mixto (parte en efectivo,
@@ -37,6 +47,8 @@ export default function CheckoutModal({ visible, total, initialMethod, onClose, 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<App.Entities.PosSaleResult | null>(null);
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -45,12 +57,26 @@ export default function CheckoutModal({ visible, total, initialMethod, onClose, 
       setMixedCash("");
       setError(null);
       setResult(null);
+      setPrintError(null);
     }
   }, [visible, initialMethod]);
 
-  const tendered = received === "" ? total : Number(received) || 0;
+  const printTicket = async () => {
+    if (!result || printing) return;
+    try {
+      setPrinting(true);
+      setPrintError(null);
+      await printSaleTicket(result.id, result.sale_number);
+    } catch (e: any) {
+      setPrintError(e?.response?.data?.message || "No se pudo imprimir el ticket");
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const tendered = received === "" ? total : parseAmount(received) || 0;
   const change = round2(tendered - total);
-  const cashPart = round2(Number(mixedCash) || 0);
+  const cashPart = round2(parseAmount(mixedCash) || 0);
   const cardPart = round2(total - cashPart);
 
   const payments: Payment[] | null = (() => {
@@ -65,16 +91,29 @@ export default function CheckoutModal({ visible, total, initialMethod, onClose, 
     return null;
   })();
 
+  // Guardia síncrona: Enter + clic (o dos Enter) en el mismo instante no
+  // deben registrar dos ventas antes de que `saving` llegue al render.
+  const submittingRef = useRef(false);
+
   const confirm = async () => {
-    if (!payments || saving) return;
+    if (!payments || saving || submittingRef.current) return;
+    submittingRef.current = true;
     try {
       setSaving(true);
       setError(null);
       setResult(await onSubmit(payments));
     } catch (e: any) {
       const data = e?.response?.data;
-      setError((data?.errors && (Object.values(data.errors).flat()[0] as string)) || data?.message || "No se pudo registrar la venta");
+      const timedOut = e?.code === "ECONNABORTED" || /timeout/i.test(e?.message ?? "");
+      setError(
+        (data?.errors && (Object.values(data.errors).flat()[0] as string)) ||
+          data?.message ||
+          (timedOut
+            ? "El servidor tardó en responder. Revisa en Ventas si la venta quedó registrada antes de cobrar de nuevo."
+            : "No se pudo registrar la venta"),
+      );
     } finally {
+      submittingRef.current = false;
       setSaving(false);
     }
   };
@@ -84,13 +123,17 @@ export default function CheckoutModal({ visible, total, initialMethod, onClose, 
     onDone();
   };
 
-  // En web, Enter en la pantalla de "Venta registrada" empieza la siguiente.
+  // En web, en la pantalla de "Venta registrada": Enter empieza la
+  // siguiente y P imprime el ticket.
   useEffect(() => {
     if (!result || Platform.OS !== "web") return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Enter") {
         e.preventDefault();
         finish();
+      } else if (e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        printTicket();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -113,6 +156,18 @@ export default function CheckoutModal({ visible, total, initialMethod, onClose, 
                   <Text style={styles.changeValue}>{formatMoney(result.change)}</Text>
                 </View>
               )}
+              <Button
+                mode="outlined"
+                icon="printer"
+                onPress={printTicket}
+                loading={printing}
+                disabled={printing}
+                style={styles.printButton}
+                contentStyle={{ height: 44 }}
+              >
+                {Platform.OS === "web" ? "Imprimir ticket (P)" : "Imprimir ticket"}
+              </Button>
+              {!!printError && <Text style={styles.printError}>{printError}</Text>}
               <Button mode="contained" icon="cart-plus" onPress={finish} style={styles.primary} contentStyle={{ height: 52 }}>
                 Nueva venta (Enter)
               </Button>
@@ -141,6 +196,7 @@ export default function CheckoutModal({ visible, total, initialMethod, onClose, 
                     onChangeText={setReceived}
                     placeholder={total.toFixed(2)}
                     keyboardType="decimal-pad"
+                    placeholderTextColor={palette.textMuted}
                     autoFocus
                     onSubmitEditing={confirm}
                     style={styles.input}
@@ -164,6 +220,7 @@ export default function CheckoutModal({ visible, total, initialMethod, onClose, 
                     onChangeText={setMixedCash}
                     placeholder="0.00"
                     keyboardType="decimal-pad"
+                    placeholderTextColor={palette.textMuted}
                     autoFocus
                     onSubmitEditing={confirm}
                     style={styles.input}
@@ -178,7 +235,10 @@ export default function CheckoutModal({ visible, total, initialMethod, onClose, 
               {!!error && <Text style={styles.error}>{error}</Text>}
 
               <View style={styles.actions}>
-                <Button mode="outlined" onPress={onClose} style={{ flex: 1 }}>Cancelar (Esc)</Button>
+                {/* "Cancelar (Esc)" no cabía y se cortaba; el atajo ya está en la barra de atajos. */}
+                <Button mode="outlined" onPress={onClose} style={{ flex: 1 }}>
+                  Cancelar
+                </Button>
                 <Button mode="contained" icon="check" onPress={confirm} loading={saving} disabled={!payments || saving} style={{ flex: 2 }} contentStyle={{ height: 48 }}>
                   Cobrar {formatMoney(total)}
                 </Button>
@@ -192,7 +252,7 @@ export default function CheckoutModal({ visible, total, initialMethod, onClose, 
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(15,23,42,.45)", alignItems: "center", justifyContent: "center", padding: 16 },
+  overlay: { flex: 1, backgroundColor: palette.overlay, alignItems: "center", justifyContent: "center", padding: 16 },
   card: { width: "100%", maxWidth: 460, backgroundColor: palette.surface, borderRadius: 16, padding: 20 },
   header: { alignItems: "center", marginBottom: 12 },
   totalLabel: { color: palette.textSecondary },
@@ -212,6 +272,8 @@ const styles = StyleSheet.create({
   done: { alignItems: "center", paddingVertical: 8 },
   doneTitle: { fontWeight: "700", marginTop: 8, color: palette.text },
   doneMeta: { color: palette.textSecondary },
+  printButton: { alignSelf: "stretch", marginTop: 16 },
+  printError: { color: palette.error, marginTop: 6, textAlign: "center" },
   changeBox: { alignItems: "center", marginTop: 16, padding: 16, borderRadius: 12, backgroundColor: palette.successSoft, alignSelf: "stretch" },
   changeLabel: { color: palette.textSecondary },
   changeValue: { fontSize: 42, fontWeight: "800", color: palette.success },

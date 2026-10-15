@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useAuth } from "@/contexts/AuthContext";
 import Services from "@/utils/services";
@@ -77,13 +78,16 @@ export default function ExpenseForm(props: ExpenseFormProps) {
     try {
       setLoading(true);
       const response = await Services.expenses.show(expenseId);
-      const expense = response.data;
+      // El backend responde un ExpenseResource: { data: { ...gasto } }.
+      const body: any = response.data;
+      const expense: App.Entities.Expense & { paid_from_cash?: boolean } =
+        body?.data ?? body;
 
       setCategory(expense.category);
-      setAmount(expense.amount.toString());
+      setAmount(expense.amount != null ? String(expense.amount) : "");
       setPaymentMethod(expense.payment_method);
       setPaidFromCash(expense.paid_from_cash ?? true);
-      setDescription(expense.description);
+      setDescription(expense.description ?? "");
       setExpenseDate(parseLocalDate(expense.expense_date));
     } catch (error) {
       console.error("Error loading expense:", error);
@@ -128,7 +132,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
         alerts.success("Gasto creado correctamente");
       }
 
-      router.back();
+      goBack();
     } catch (error: any) {
       console.error("Error saving expense:", error);
       alerts.error(
@@ -167,7 +171,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
             <View style={styles.input}>
               <AppSelect
                 value={category}
-                onChange={setCategory}
+                onChange={(value) => setCategory(String(value))}
                 data={categories}
                 placeholder="Selecciona una categoría"
               />
@@ -268,7 +272,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
         <View style={styles.actions}>
           <Button
             mode="outlined"
-            onPress={() => router.back()}
+            onPress={() => goBack()}
             style={styles.button}
             disabled={saving}
           >
@@ -320,13 +324,16 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 16,
   },
+  // Envuelve a otra línea si no caben (en celular "Transferencia" se salía).
   paymentMethodsContainer: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: 8,
     marginBottom: 16,
   },
   paymentButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 110,
   },
   infoSection: {
     flexDirection: "row",

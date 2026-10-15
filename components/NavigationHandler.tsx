@@ -23,6 +23,17 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 
+/**
+ * Al cambiar de sucursal se desmonta la navegación (se muestra el loader) y
+ * vuelve a empezar en Inicio. Una pantalla puede pedir que se regrese a ella
+ * al terminar: el punto de venta, al cambiarse a la sucursal del turno.
+ */
+let routeAfterSwitch: string | null = null;
+
+export function returnAfterLocationSwitch(route: string | null) {
+  routeAfterSwitch = route;
+}
+
 export default function NavigationHandler({
   children,
 }: {
@@ -89,10 +100,16 @@ export default function NavigationHandler({
     }
 
     if (user && inLogin) {
-      // Usuario autenticado en login, redirigir a home
-      router.replace("/(tabs)/home");
+      // Usuario autenticado en login, redirigir a home (o a la pantalla que
+      // pidió volver tras cambiar de sucursal).
+      // No se limpia aquí: justo tras el cambio el navegador todavía se está
+      // montando y este replace puede perderse; el efecto vuelve a correr.
+      router.replace((routeAfterSwitch ?? "/(tabs)/home") as any);
       return;
     }
+
+    // Ya fuera de login: el regreso pendiente (si había) se cumplió.
+    routeAfterSwitch = null;
 
     // 2. Verificar compañía (solo si está autenticado y no está cargando)
     if (user && !isLoadingCompanies) {

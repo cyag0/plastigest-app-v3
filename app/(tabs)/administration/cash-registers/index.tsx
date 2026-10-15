@@ -1,46 +1,63 @@
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import AppChip from "@/components/App/Chip";
 import palette from "@/constants/palette";
-import { generateCrudMenu } from "@/utils/routes";
+import { useAuth } from "@/contexts/AuthContext";
 import Services from "@/utils/services";
+import { router, useLocalSearchParams } from "expo-router";
 import * as React from "react";
 import { StyleSheet } from "react-native";
-import { Avatar, Chip } from "react-native-paper";
+import { Avatar } from "react-native-paper";
 
-/** Estado de la caja: libre, con turno abierto de alguien, o desactivada. */
-function StatusChip({ item }: { item: App.Entities.CashRegister }) {
+/**
+ * Estado de la caja: libre, con turno abierto de alguien, o desactivada.
+ * Corto en la tarjeta (en celular el chip sólido con el nombre del cajero
+ * dejaba al nombre de la caja una letra por renglón); en la tabla, con quién.
+ */
+function StatusChip({ item, withCashier = false }: { item: App.Entities.CashRegister; withCashier?: boolean }) {
   if (!item.is_active) {
     return (
-      <Chip compact style={{ backgroundColor: palette.error }} textStyle={styles.chipText}>
+      <AppChip size="sm" variant="default">
         Inactiva
-      </Chip>
+      </AppChip>
     );
   }
   if (item.open_session) {
     return (
-      <Chip compact icon="account-clock" style={{ backgroundColor: palette.warning }} textStyle={styles.chipText}>
-        {`Turno: ${item.open_session.user_name ?? "abierto"}`}
-      </Chip>
+      <AppChip size="sm" variant="warning" icon="account-clock">
+        {withCashier ? `Turno: ${item.open_session.user_name ?? "abierto"}` : "En turno"}
+      </AppChip>
     );
   }
   return (
-    <Chip compact style={{ backgroundColor: palette.success }} textStyle={styles.chipText}>
+    <AppChip size="sm" variant="success">
       Libre
-    </Chip>
+    </AppChip>
   );
 }
 
+const BASE = "/(tabs)/administration/cash-registers";
+
 export default function CashRegistersIndexScreen() {
+  // ?scope=location: solo las cajas de la sucursal actual (Administración ›
+  // Esta sucursal); las nuevas se crean en ella.
+  const { scope } = useLocalSearchParams<{ scope?: string }>();
+  const branchScope = scope === "location";
+  const suffix = branchScope ? "?scope=location" : "";
+  const { location } = useAuth();
+
   const columns: AppListColumn<App.Entities.CashRegister>[] = [
     { title: "Código", dataIndex: "code", key: "code", width: 110 },
     { title: "Nombre", dataIndex: "name", key: "name", width: 180 },
-    { title: "Sucursal", dataIndex: "location_name", key: "location_name", width: 200 },
+    ...(branchScope
+      ? []
+      : [{ title: "Sucursal", dataIndex: "location_name", key: "location_name", width: 200 } as AppListColumn<App.Entities.CashRegister>]),
     {
       title: "Estado",
       key: "status",
       width: 180,
       align: "center",
-      render: (_, item) => <StatusChip item={item} />,
+      render: (_, item) => <StatusChip item={item} withCashier />,
     },
   ];
 
@@ -48,21 +65,32 @@ export default function CashRegistersIndexScreen() {
     <AppList<App.Entities.CashRegister>
       title="Cajas"
       service={Services.cashRegisters}
+      defaultFilters={branchScope ? { current_location: 1 } : undefined}
       columns={columns}
       renderCard={({ item }) => ({
         title: item.name,
-        description: `${item.code} · ${item.location_name ?? ""}`,
-        left: <Avatar.Icon size={46} icon="cash-register" style={styles.avatar} />,
+        description: branchScope ? item.code : `${item.code} · ${item.location_name ?? ""}`,
+        left: <Avatar.Icon size={40} icon="cash-register" style={styles.avatar} />,
         right: <StatusChip item={item} />,
+        bottom: item.open_session
+          ? [{ label: "Turno de", value: item.open_session.user_name ?? "alguien" }]
+          : [],
       })}
-      menu={generateCrudMenu("/(tabs)/administration/cash-registers" as any)}
+      menu={{
+        onCreate: () => router.push(`${BASE}/form${suffix}` as any),
+        onShow: (item) => router.push(`${BASE}/${item.id}${suffix}` as any),
+        onEdit: (item) => router.push(`${BASE}/${item.id}/edit${suffix}` as any),
+      }}
       searchPlaceholder="Buscar por nombre o código..."
-      emptyMessage="Aún no hay cajas. Crea una por cada punto de cobro."
+      emptyMessage={
+        branchScope
+          ? `Aún no hay cajas en ${location?.name ?? "esta sucursal"}. Crea una por cada punto de cobro.`
+          : "Aún no hay cajas. Crea una por cada punto de cobro."
+      }
     />
   );
 }
 
 const styles = StyleSheet.create({
   avatar: { backgroundColor: palette.primary },
-  chipText: { color: "white" },
 });

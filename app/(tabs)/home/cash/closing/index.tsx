@@ -1,13 +1,20 @@
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
+import AppChip from "@/components/App/Chip";
 import palette from "@/constants/palette";
+import { tokens } from "@/constants/tokens";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
+import { formatMoney } from "@/utils/format";
+import { shortLocationName } from "@/utils/locations";
 import { generateCrudMenu } from "@/utils/routes";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React from "react";
-import { View } from "react-native";
-import { Chip, Text } from "react-native-paper";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Text } from "react-native-paper";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -21,12 +28,6 @@ const formatCurrency = (value: number | string) => {
   })}`;
 };
 
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return "—";
-  const [y, m, d] = dateStr.split("-");
-  return `${d}/${m}/${y}`;
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Columns
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +38,7 @@ const formatDate = (dateStr: string) => {
 
 export default function CashClosingIndex() {
   const alerts = useAlerts();
+  const { selectedCompany } = useAuth();
   const { downloadPdfFromApi } = usePdfDownload({
     onError: (error) => alerts.error("Error al descargar el PDF: " + error.message),
   });
@@ -54,8 +56,21 @@ export default function CashClosingIndex() {
   };
 
   return (
+    <>
+      {/* Esta lista es histórica: ya nadie hace el cierre diario y vacía no
+          decía por qué. */}
+      <View style={styles.note}>
+        <MaterialCommunityIcons name="information-outline" size={18} color={palette.info} />
+        <Text style={styles.noteText}>
+          El corte ahora se hace al cerrar cada turno de caja. Aquí quedan los cierres diarios de antes.
+        </Text>
+        <Pressable onPress={() => router.push("/(tabs)/home/cash/sessions" as any)} hitSlop={8}>
+          <Text style={styles.noteLink}>Ver turnos</Text>
+        </Pressable>
+      </View>
     <AppList
       title="Cierres anteriores"
+      emptyMessage="No hay cierres diarios anteriores."
       service={Services.cashClosings}
       columns={[
         {
@@ -69,7 +84,7 @@ export default function CashClosingIndex() {
           key: "location",
           dataIndex: "location.name",
           width: 130,
-          title: "Ubicacion",
+          title: "Ubicación",
           render: (value) => value ?? "—",
         },
         {
@@ -116,28 +131,27 @@ export default function CashClosingIndex() {
       }}
       renderCard={({ item }: { item: any }) => {
         const diff = parseFloat(item.difference ?? "0");
-        const diffColor =
-          diff === 0 ? palette.success : diff > 0 ? palette.blue : palette.error;
+        const location = item.location?.name ? shortLocationName(item.location.name, selectedCompany?.name) : null;
 
         return {
           title: formatDate(item.closing_date),
-          subtitle: item.location?.name ?? "—",
-          description: `${item.movements_count ?? 0} movimientos`,
+          // `subtitle` no existe en las tarjetas: la sucursal no se veía.
+          description: [location, `${item.movements_count ?? 0} movimientos`].filter(Boolean).join(" · "),
           right: (
-            <View style={{ alignItems: "flex-end", gap: 6 }}>
+            <View style={{ alignItems: "flex-end", gap: 4 }}>
               <Text style={{ fontWeight: "700", color: palette.text }}>
                 {formatCurrency(item.expected_balance ?? 0)}
               </Text>
-              {item.difference != null && (
-                <Chip
-                  compact
-                  style={{ backgroundColor: `${diffColor}20`, height: 22 }}
-                  textStyle={{ fontSize: 10, color: diffColor }}
-                >
-                  {diff >= 0 ? "+" : ""}
-                  {formatCurrency(diff)}
-                </Chip>
-              )}
+              {item.difference != null &&
+                (Math.abs(diff) < 0.005 ? (
+                  <AppChip size="sm" variant="success" icon="check">
+                    Cuadra
+                  </AppChip>
+                ) : diff < 0 ? (
+                  <AppChip size="sm" variant="error">{`Faltan ${formatMoney(Math.abs(diff))}`}</AppChip>
+                ) : (
+                  <AppChip size="sm" variant="info">{`Sobran ${formatMoney(diff)}`}</AppChip>
+                ))}
             </View>
           ),
           bottom: [
@@ -147,5 +161,29 @@ export default function CashClosingIndex() {
         };
       }}
     />
+    </>
   );
 }
+
+const styles = StyleSheet.create({
+  note: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing[2],
+    marginHorizontal: tokens.spacing[4],
+    marginTop: tokens.spacing[3],
+    padding: tokens.spacing[3],
+    borderRadius: tokens.radius.md,
+    backgroundColor: palette.infoSoft,
+  },
+  noteText: {
+    ...tokens.typography.caption,
+    color: palette.text,
+    flex: 1,
+  },
+  noteLink: {
+    ...tokens.typography.caption,
+    color: palette.primary,
+    fontWeight: "700",
+  },
+});

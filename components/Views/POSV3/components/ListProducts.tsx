@@ -261,7 +261,7 @@ const ProductCard = React.memo(
                 style={styles.code}
                 numberOfLines={1}
               >
-                {item.code || "Sin codigo"}
+                {item.code || "Sin código"}
               </Text>
               <Text
                 style={styles.name}
@@ -575,7 +575,7 @@ export default function ListProducts({
         {showSearch && (
           <View style={styles.searchWrap}>
             <SearchInput
-              placeholder="Buscar productos o escanear codigo"
+              placeholder="Buscar productos o escanear código"
               value={searchQuery}
               onChangeText={(text: string) => {
                 setSearchQuery(text);
@@ -741,7 +741,7 @@ export default function ListProducts({
                   ? "Intenta con otros términos de búsqueda"
                   : isHidingOutOfStock
                     ? "Los productos sin stock están ocultos por defecto"
-                    : "Agrega productos para empezar a vender"
+                    : "Da de alta productos en Inventario para verlos aquí"
             }
           />
         ) : (

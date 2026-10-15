@@ -1,7 +1,7 @@
 import palette from "@/constants/palette";
-import { formatMoney, PosLine } from "@/hooks/usePosCart";
+import { allowsDecimalQuantity, formatMoney, PosLine } from "@/hooks/usePosCart";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { forwardRef, useImperativeHandle, useRef } from "react";
+import React, { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { FlatList, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { IconButton, Text } from "react-native-paper";
 
@@ -21,6 +21,14 @@ export interface CartTableRef {
   focusQuantity: (key: string) => void;
 }
 
+/** Acepta coma o punto decimal; vacío o texto inválido → NaN. */
+const parseNumber = (text: string) => {
+  const raw = text.trim().replace(",", ".");
+  return raw === "" ? NaN : Number(raw);
+};
+
+const formatQuantity = (n: number) => String(Math.round(n * 1000) / 1000);
+
 /** Carrito: tabla en escritorio, lista compacta en celular. */
 const CartTable = forwardRef<CartTableRef, Props>(function CartTable(props, ref) {
   const { lines, selectedKey, canEditPrice, compact } = props;
@@ -34,7 +42,11 @@ const CartTable = forwardRef<CartTableRef, Props>(function CartTable(props, ref)
     return (
       <View style={styles.empty}>
         <MaterialCommunityIcons name="barcode-scan" size={48} color={palette.textMuted} />
-        <Text style={styles.emptyText}>Escanea un producto o presiona F2 para buscar</Text>
+        <Text style={styles.emptyText}>
+          {compact
+            ? "Escanea o busca un producto para empezar"
+            : "Escanea un producto o presiona F2 para buscar"}
+        </Text>
       </View>
     );
   }
@@ -61,19 +73,12 @@ const CartTable = forwardRef<CartTableRef, Props>(function CartTable(props, ref)
           const qty = (
             <View style={styles.qtyBox}>
               <IconButton icon="minus" size={16} onPress={() => props.onQuantity(line.key, line.quantity - 1)} style={styles.qtyBtn} />
-              <TextInput
+              <QuantityInput
                 ref={(r) => { inputs.current[line.key] = r; }}
-                defaultValue={String(line.quantity)}
-                key={`${line.key}-${line.quantity}`}
-                keyboardType="decimal-pad"
-                selectTextOnFocus
+                value={line.quantity}
+                allowDecimal={allowsDecimalQuantity(line.item)}
                 onFocus={() => props.onSelect(line.key)}
-                onSubmitEditing={(e) => props.onQuantity(line.key, Number(e.nativeEvent.text) || 0)}
-                onBlur={(e: any) => {
-                  const v = Number(e?.nativeEvent?.text ?? e?.target?.value);
-                  if (!Number.isNaN(v) && v !== line.quantity) props.onQuantity(line.key, v);
-                }}
-                style={styles.qtyInput}
+                onCommit={(quantity) => props.onQuantity(line.key, quantity)}
               />
               <IconButton icon="plus" size={16} onPress={() => props.onQuantity(line.key, line.quantity + 1)} style={styles.qtyBtn} />
             </View>
@@ -120,16 +125,107 @@ const CartTable = forwardRef<CartTableRef, Props>(function CartTable(props, ref)
   );
 });
 
+interface QuantityInputProps {
+  value: number;
+  allowDecimal: boolean;
+  onFocus: () => void;
+  onCommit: (quantity: number) => void;
+}
+
+/**
+ * Cantidad editable. Mientras tiene el foco muestra lo que se escribe y
+ * aplica cada valor válido al momento; sin foco muestra siempre la cantidad
+ * real del carrito. Antes se leía el texto del
+ * evento onBlur, que en Android no lo trae: la cantidad tecleada se ignoraba
+ * pero seguía viéndose en el campo y se cobraba la anterior.
+ */
+const QuantityInput = forwardRef<TextInput, QuantityInputProps>(function QuantityInput(
+  { value, allowDecimal, onFocus, onCommit },
+  ref,
+) {
+  const [focused, setFocused] = useState(false);
+  const [text, setText] = useState(formatQuantity(value));
+  // Enter seguido del blur que provoca cerrar el teclado: aplicar una vez.
+  const committedRef = useRef<string | null>(null);
+
+  const commit = () => {
+    if (committedRef.current === text) return;
+    committedRef.current = text;
+    const parsed = parseNumber(text);
+    // Vacío o inválido: se descarta y vuelve a mostrarse la cantidad actual.
+    if (!Number.isFinite(parsed) || parsed === value) return;
+    onCommit(parsed);
+  };
+
+  // Se aplica mientras se escribe: en Android ocultar el teclado o tocar
+  // "Cobrar" no quita el foco al campo, así que esperar a Enter o al blur
+  // dejaba la cantidad tecleada en pantalla y se cobraba la anterior.
+  const handleChange = (next: string) => {
+    setText(next);
+    const parsed = parseNumber(next);
+    if (Number.isFinite(parsed) && parsed > 0 && parsed !== value) {
+      committedRef.current = next;
+      onCommit(parsed);
+    }
+  };
+
+  return (
+    <TextInput
+      ref={ref}
+      value={focused ? text : formatQuantity(value)}
+      onChangeText={handleChange}
+      keyboardType={allowDecimal ? "decimal-pad" : "number-pad"}
+      returnKeyType="done"
+      selectTextOnFocus
+      onFocus={() => {
+        committedRef.current = null;
+        setText(formatQuantity(value));
+        setFocused(true);
+        onFocus();
+      }}
+      onSubmitEditing={commit}
+      onBlur={() => {
+        commit();
+        setFocused(false);
+      }}
+      style={styles.qtyInput}
+    />
+  );
+});
+
+/** Precio/descuento editable (solo escritorio, con permiso sales_discount). */
 function MoneyInput({ value, onChange, style }: { value: number; onChange: (v: number) => void; style: any }) {
+  const [focused, setFocused] = useState(false);
+  const [text, setText] = useState(value.toFixed(2));
+  const committedRef = useRef<string | null>(null);
+
+  const commit = () => {
+    if (committedRef.current === text) return;
+    committedRef.current = text;
+    const parsed = parseNumber(text);
+    if (!Number.isFinite(parsed)) return;
+    const next = Math.max(0, Math.round(parsed * 100) / 100);
+    if (next !== value) onChange(next);
+  };
+
   return (
     <View style={style}>
       <TextInput
-        defaultValue={value.toFixed(2)}
-        key={value.toFixed(2)}
+        value={focused ? text : value.toFixed(2)}
+        onChangeText={setText}
         keyboardType="decimal-pad"
+        returnKeyType="done"
         selectTextOnFocus
-        onSubmitEditing={(e) => onChange(Math.max(0, Number(e.nativeEvent.text) || 0))}
-        onBlur={(e: any) => onChange(Math.max(0, Number(e?.nativeEvent?.text ?? e?.target?.value) || 0))}
+        onFocus={() => {
+          committedRef.current = null;
+          setText(value.toFixed(2));
+          setFocused(true);
+        }}
+        onSubmitEditing={commit}
+        onBlur={() => {
+          commit();
+          setFocused(false);
+        }}
         style={styles.moneyInput}
       />
     </View>

@@ -1,7 +1,9 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Command } from "cmdk";
 import React, { useEffect, useMemo, useState } from "react";
+import palette from "@/constants/palette";
 import { formatMoney } from "@/hooks/usePosCart";
+import { WEB_FONT_STACK } from "@/utils/globalFont";
 
 type Item = App.Entities.PosCatalogItem;
 
@@ -77,25 +79,27 @@ export default function CmdkPalette({ open, onOpenChange, search, onSelect }: Pr
   );
 }
 
+// Misma tipografía y paleta que el resto de la app.
 const CSS = `
-.pos-cmdk-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 1000; }
+.pos-cmdk-overlay { position: fixed; inset: 0; background: ${palette.overlay}; z-index: 1000; }
 .pos-cmdk { position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); width: min(680px, 92vw);
-  background: #fff; border-radius: 14px; box-shadow: 0 24px 60px rgba(15,23,42,.35); z-index: 1001; overflow: hidden;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  background: ${palette.surface}; border: 1px solid ${palette.border}; border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(31, 36, 27, .25); z-index: 1001; overflow: hidden; font-family: ${WEB_FONT_STACK}; }
 .pos-cmdk * { font-family: inherit; }
 .pos-cmdk-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.pos-cmdk [cmdk-input] { width: 100%; box-sizing: border-box; border: 0; border-bottom: 1px solid #e2e8f0; outline: none;
-  font-size: 18px; padding: 18px 20px; }
+.pos-cmdk [cmdk-input] { width: 100%; box-sizing: border-box; border: 0; border-bottom: 1px solid ${palette.border}; outline: none;
+  font-size: 18px; padding: 18px 20px; color: ${palette.text}; background: transparent; }
+.pos-cmdk [cmdk-input]::placeholder { color: ${palette.textMuted}; }
 .pos-cmdk [cmdk-list] { max-height: 52vh; overflow: auto; padding: 6px; }
 .pos-cmdk [cmdk-item] { padding: 10px 12px; border-radius: 10px; cursor: pointer; }
-.pos-cmdk [cmdk-item][data-selected="true"] { background: #ecf3e7; }
+.pos-cmdk [cmdk-item][data-selected="true"] { background: ${palette.primarySoft}; }
 .pos-cmdk [cmdk-item][data-disabled="true"] { opacity: .45; cursor: not-allowed; }
-.pos-cmdk [cmdk-empty] { padding: 24px; text-align: center; color: #64748b; }
+.pos-cmdk [cmdk-empty] { padding: 24px; text-align: center; color: ${palette.textSecondary}; }
 .pos-cmdk-row { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
-.pos-cmdk-name { font-size: 15px; color: #0f172a; display: flex; flex-direction: column; }
-.pos-cmdk-code { font-size: 12px; color: #94a3b8; }
-.pos-cmdk-meta { display: flex; gap: 14px; align-items: center; font-size: 15px; white-space: nowrap; }
-.pos-cmdk-stock { font-size: 12px; color: #16a34a; }
-.pos-cmdk-stock.out { color: #dc2626; }
-.pos-cmdk-footer { border-top: 1px solid #e2e8f0; padding: 8px 14px; font-size: 12px; color: #94a3b8; }
+.pos-cmdk-name { font-size: 15px; color: ${palette.text}; display: flex; flex-direction: column; }
+.pos-cmdk-code { font-size: 12px; color: ${palette.textMuted}; }
+.pos-cmdk-meta { display: flex; gap: 14px; align-items: center; font-size: 15px; white-space: nowrap; color: ${palette.text}; }
+.pos-cmdk-stock { font-size: 12px; color: ${palette.success}; }
+.pos-cmdk-stock.out { color: ${palette.error}; }
+.pos-cmdk-footer { border-top: 1px solid ${palette.border}; padding: 8px 14px; font-size: 12px; color: ${palette.textMuted}; }
 `;

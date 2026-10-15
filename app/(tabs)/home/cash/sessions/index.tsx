@@ -1,42 +1,62 @@
+import { formatDateTime, formatTime } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
-import palette from "@/constants/palette";
-import { formatMoney } from "@/hooks/usePosCart";
+import AppChip from "@/components/App/Chip";
+import { useAuth } from "@/contexts/AuthContext";
+import { formatMoney } from "@/utils/format";
+import { shortLocationName } from "@/utils/locations";
 import { createCrudService } from "@/utils/services/crudService";
 import { router } from "expo-router";
 import React from "react";
 import { View } from "react-native";
-import { Chip, Text } from "react-native-paper";
 
 type Session = App.Entities.CashRegisterSession;
 
 const service = createCrudService<Session>("/auth/admin/cash-register-sessions");
 
-const formatDateTime = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" }) : "—";
-
+/**
+ * Cómo quedó el corte, dicho en palabras: "Cuadra", "Faltan $50.00",
+ * "Sobran $20.00". Antes era solo el número ("-$50.00"), con el Chip de
+ * Paper que en Android cortaba el texto a la mitad.
+ */
 function DifferenceChip({ value }: { value: number | null | undefined }) {
-  if (value == null) return <Text style={{ color: palette.textSecondary }}>—</Text>;
-  const color = value === 0 ? palette.success : value > 0 ? palette.blue : palette.error;
-  return (
-    <Chip compact style={{ backgroundColor: `${color}20`, height: 24 }} textStyle={{ fontSize: 11, color }}>
-      {value > 0 ? "+" : value < 0 ? "-" : ""}
-      {formatMoney(Math.abs(value))}
-    </Chip>
+  if (value == null) return null;
+  if (Math.abs(value) < 0.005) {
+    return (
+      <AppChip size="sm" variant="success" icon="check">
+        Cuadra
+      </AppChip>
+    );
+  }
+  return value < 0 ? (
+    <AppChip size="sm" variant="error">{`Faltan ${formatMoney(Math.abs(value))}`}</AppChip>
+  ) : (
+    <AppChip size="sm" variant="info">{`Sobran ${formatMoney(value)}`}</AppChip>
   );
 }
 
 function StatusChip({ status }: { status: Session["status"] }) {
-  const open = status === "open";
-  const color = open ? palette.warning : palette.textSecondary;
-  return (
-    <Chip compact style={{ backgroundColor: `${color}20`, height: 24 }} textStyle={{ fontSize: 11, color }}>
-      {open ? "Abierto" : "Cerrado"}
-    </Chip>
+  return status === "open" ? (
+    <AppChip size="sm" variant="warning" icon="clock-outline">
+      Abierto
+    </AppChip>
+  ) : (
+    <AppChip size="sm" variant="default">
+      Cerrado
+    </AppChip>
   );
+}
+
+/** "15 oct 2026, 6:35 a.m. – 6:55 a.m." (la fecha del cierre solo si es otro día). */
+function shiftTime(item: Session): string {
+  const opened = formatDateTime(item.opened_at);
+  if (!item.closed_at) return opened;
+  const sameDay = new Date(item.opened_at).toDateString() === new Date(item.closed_at).toDateString();
+  return `${opened} – ${sameDay ? formatTime(item.closed_at) : formatDateTime(item.closed_at)}`;
 }
 
 /** Historial de turnos de caja (reemplaza al cierre diario). */
 export default function CashSessionsIndex() {
+  const { selectedCompany } = useAuth();
   const show = (item: Session) => router.push(`/(tabs)/home/cash/sessions/${item.id}` as any);
 
   return (
@@ -65,19 +85,27 @@ export default function CashSessionsIndex() {
         { key: "location_name", title: "Sucursal", width: 140, render: (_, item) => item.location_name ?? "—" },
         { key: "status", title: "Estado", width: 100, render: (_, item) => <StatusChip status={item.status} /> },
         { key: "expected_cash", title: "Esperado", width: 110, render: (_, item) => (item.expected_cash == null ? "—" : formatMoney(item.expected_cash)) },
-        { key: "difference", title: "Diferencia", width: 120, render: (_, item) => <DifferenceChip value={item.difference} /> },
+        {
+          key: "difference",
+          title: "Diferencia",
+          width: 130,
+          render: (_, item) => (item.difference == null ? "—" : <DifferenceChip value={item.difference} />),
+        },
       ]}
       renderCard={({ item }) => ({
-        title: `${item.cash_register_name ?? "Caja"} · ${item.user_name ?? ""}`,
-        subtitle: formatDateTime(item.opened_at),
-        description: item.location_name ?? undefined,
+        title: `${item.cash_register_name ?? "Caja"} · ${item.user_name ?? "—"}`,
+        description: shiftTime(item),
         right: (
-          <View style={{ alignItems: "flex-end", gap: 6 }}>
+          <View style={{ alignItems: "flex-end", gap: 4 }}>
             <StatusChip status={item.status} />
-            <DifferenceChip value={item.difference} />
+            <DifferenceChip value={item.status === "closed" ? item.difference : null} />
           </View>
         ),
+        bottom: item.location_name
+          ? [{ label: "", value: shortLocationName(item.location_name, selectedCompany?.name) }]
+          : [],
       })}
+      emptyMessage="Aún no hay turnos de caja."
     />
   );
 }

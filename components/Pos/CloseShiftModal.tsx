@@ -37,10 +37,15 @@ export default function CloseShiftModal({ visible, sessionId, onClose, onClosed 
       .catch(() => setError("No se pudo cargar el resumen del turno"));
   }, [visible, sessionId]);
 
-  const countedNum = Number(counted);
-  const difference = summary && counted !== "" ? Math.round((countedNum - summary.expected_cash) * 100) / 100 : null;
+  // Acepta coma decimal ("1500,50").
+  const countedNum = Number(counted.trim().replace(",", "."));
+  const difference =
+    summary && counted !== "" && Number.isFinite(countedNum)
+      ? Math.round((countedNum - summary.expected_cash) * 100) / 100
+      : null;
 
   const submit = async () => {
+    if (saving) return;
     if (counted === "" || Number.isNaN(countedNum) || countedNum < 0) {
       setError("Captura el efectivo contado");
       return;
@@ -83,6 +88,7 @@ export default function CloseShiftModal({ visible, sessionId, onClose, onClosed 
                     onChangeText={setCounted}
                     keyboardType="decimal-pad"
                     placeholder="0.00"
+                    placeholderTextColor={palette.textMuted}
                     autoFocus
                     style={styles.input}
                     onSubmitEditing={submit}

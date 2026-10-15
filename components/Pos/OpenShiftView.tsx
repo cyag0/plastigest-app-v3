@@ -39,11 +39,19 @@ export default function OpenShiftView({ locationName, onOpened }: Props) {
   }, []);
 
   const open = async () => {
-    if (!selected) return;
+    if (!selected || saving) return;
+    // Acepta coma decimal ("500,50"); un monto inválido ya no se manda en 0
+    // sin avisar.
+    const raw = amount.trim().replace(",", ".");
+    const openingAmount = raw === "" ? 0 : Number(raw);
+    if (!Number.isFinite(openingAmount) || openingAmount < 0) {
+      setError("Captura un fondo inicial válido");
+      return;
+    }
     try {
       setSaving(true);
       setError(null);
-      await Services.cashRegisterSessions.open({ cash_register_id: selected, opening_amount: Number(amount) || 0 });
+      await Services.cashRegisterSessions.open({ cash_register_id: selected, opening_amount: openingAmount });
       onOpened();
     } catch (e: any) {
       const data = e?.response?.data;
@@ -56,7 +64,7 @@ export default function OpenShiftView({ locationName, onOpened }: Props) {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.card}>
-        <MaterialCommunityIcons name="cash-register" size={44} color={palette.primary} />
+        <MaterialCommunityIcons name="cash-register" size={44} color={palette.primary} style={{ alignSelf: "center" }} />
         <Text variant="headlineSmall" style={styles.title}>Abrir turno</Text>
         <Text style={styles.subtitle}>{locationName}</Text>
 
@@ -80,7 +88,10 @@ export default function OpenShiftView({ locationName, onOpened }: Props) {
                     onPress={() => setSelected(r.id)}
                     style={[styles.register, active && styles.registerActive, busy && styles.registerBusy]}
                   >
-                    <Text style={[styles.registerName, active && { color: palette.primary }]}>{r.name}</Text>
+                    <View style={styles.registerTop}>
+                      <Text style={[styles.registerName, active && { color: palette.primaryHover }]}>{r.name}</Text>
+                      {active && <MaterialCommunityIcons name="check-circle" size={18} color={palette.primary} />}
+                    </View>
                     <Text style={styles.registerMeta}>
                       {busy ? `En uso: ${r.open_session?.user_name ?? "otro cajero"}` : r.code}
                     </Text>
@@ -88,6 +99,12 @@ export default function OpenShiftView({ locationName, onOpened }: Props) {
                 );
               })}
             </View>
+            {!selected && registers.some((r) => !r.open_session) && (
+              <Text style={styles.hint}>Elige la caja en la que vas a cobrar.</Text>
+            )}
+            {registers.every((r) => !!r.open_session) && (
+              <Text style={styles.hint}>Todas las cajas de esta sucursal están en uso.</Text>
+            )}
 
             <Text style={styles.label}>Fondo inicial (efectivo en caja)</Text>
             <TextInput
@@ -95,6 +112,7 @@ export default function OpenShiftView({ locationName, onOpened }: Props) {
               onChangeText={setAmount}
               keyboardType="decimal-pad"
               placeholder="0.00"
+              placeholderTextColor={palette.textMuted}
               style={styles.amount}
               onSubmitEditing={open}
             />
@@ -121,7 +139,9 @@ const styles = StyleSheet.create({
   register: { flexGrow: 1, minWidth: 130, padding: 12, borderRadius: 10, borderWidth: 1.5, borderColor: palette.border },
   registerActive: { borderColor: palette.primary, backgroundColor: palette.primarySoft },
   registerBusy: { opacity: 0.5 },
+  registerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 },
   registerName: { fontWeight: "700", color: palette.text },
+  hint: { color: palette.textSecondary, fontSize: 13, marginTop: 8 },
   registerMeta: { fontSize: 12, color: palette.textSecondary },
   amount: { borderWidth: 1, borderColor: palette.border, borderRadius: 10, padding: 12, fontSize: 22, color: palette.text },
   error: { color: palette.error, marginTop: 10 },

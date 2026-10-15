@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 type Item = App.Entities.PosCatalogItem;
 
@@ -11,22 +11,44 @@ export interface PosLine {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+/**
+ * Las piezas (unidad de tipo "quantity") y los paquetes se venden enteros;
+ * peso, volumen y longitud admiten decimales (0.5 kg).
+ */
+export const allowsDecimalQuantity = (item: Item): boolean =>
+  !item.package_id && !!item.unit?.type && item.unit.type !== "quantity";
+
+const stockMessage = (item: Item) =>
+  `Solo hay ${item.stock} ${item.unit?.abbreviation ?? ""} de ${item.name}`.trim();
 
 /**
  * Carrito del punto de venta: renglones, renglón seleccionado (para los
  * atajos de teclado), totales y armado del pago para la API.
  */
 export function usePosCart() {
-  const [lines, setLines] = useState<PosLine[]>([]);
+  const [lines, setLinesState] = useState<PosLine[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // Copia síncrona de los renglones: con un lector de códigos dos escaneos
+  // pueden llegar antes de que React vuelva a renderizar y el segundo leía la
+  // cantidad vieja (se perdía una pieza o se saltaba la validación de stock).
+  const linesRef = useRef<PosLine[]>([]);
+
+  const setLines = useCallback((updater: (prev: PosLine[]) => PosLine[]) => {
+    const next = updater(linesRef.current);
+    linesRef.current = next;
+    setLinesState(next);
+  }, []);
 
   /** Agrega o suma. Devuelve un mensaje si la existencia no alcanza. */
   const add = useCallback(
     (item: Item, quantity = 1): string | null => {
-      const current = lines.find((l) => l.key === item.key)?.quantity ?? 0;
-      const next = current + quantity;
+      const current =
+        linesRef.current.find((l) => l.key === item.key)?.quantity ?? 0;
+      const next = round3(current + quantity);
       if (next > item.stock) {
-        return `Solo hay ${item.stock} ${item.unit?.abbreviation ?? ""} de ${item.name}`.trim();
+        return stockMessage(item);
       }
       setLines((prev) =>
         prev.some((l) => l.key === item.key)
@@ -36,44 +58,68 @@ export function usePosCart() {
       setSelectedKey(item.key);
       return null;
     },
-    [lines],
+    [setLines],
   );
 
+  /**
+   * Cambia la cantidad de un renglón (0 o menos lo quita). Devuelve un
+   * mensaje si la cantidad no es válida o la existencia no alcanza.
+   */
   const setQuantity = useCallback(
     (key: string, quantity: number): string | null => {
-      const line = lines.find((l) => l.key === key);
+      const line = linesRef.current.find((l) => l.key === key);
       if (!line) return null;
+      if (!Number.isFinite(quantity)) {
+        return "Cantidad inválida";
+      }
       if (quantity <= 0) {
         setLines((prev) => prev.filter((l) => l.key !== key));
         return null;
       }
-      if (quantity > line.item.stock) {
-        return `Solo hay ${line.item.stock} ${line.item.unit?.abbreviation ?? ""} de ${line.item.name}`.trim();
+      if (!allowsDecimalQuantity(line.item) && !Number.isInteger(quantity)) {
+        return `${line.item.name} se vende por pieza: usa una cantidad entera.`;
       }
-      setLines((prev) => prev.map((l) => (l.key === key ? { ...l, quantity } : l)));
+      const next = round3(quantity);
+      if (next > line.item.stock) {
+        return stockMessage(line.item);
+      }
+      setLines((prev) => prev.map((l) => (l.key === key ? { ...l, quantity: next } : l)));
       return null;
     },
-    [lines],
+    [setLines],
   );
 
   const remove = useCallback((key: string) => {
-    setLines((prev) => {
-      const index = prev.findIndex((l) => l.key === key);
-      const next = prev.filter((l) => l.key !== key);
-      // La selección pasa al renglón vecino para seguir borrando con Supr.
-      setSelectedKey(next[Math.min(index, next.length - 1)]?.key ?? null);
-      return next;
-    });
-  }, []);
+    const index = linesRef.current.findIndex((l) => l.key === key);
+    setLines((prev) => prev.filter((l) => l.key !== key));
+    // La selección pasa al renglón vecino para seguir borrando con Supr.
+    const next = linesRef.current;
+    setSelectedKey(next[Math.min(index, next.length - 1)]?.key ?? null);
+  }, [setLines]);
 
-  const updatePrice = useCallback((key: string, changes: { unitPrice?: number; discount?: number }) => {
-    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...changes } : l)));
-  }, []);
+  const updatePrice = useCallback(
+    (key: string, changes: { unitPrice?: number; discount?: number }) => {
+      setLines((prev) =>
+        prev.map((l) => {
+          if (l.key !== key) return l;
+          const unitPrice = Math.max(0, changes.unitPrice ?? l.unitPrice);
+          // El descuento no puede dejar el renglón en negativo.
+          const lineSubtotal = round2(l.quantity * unitPrice);
+          const discount = Math.min(
+            Math.max(0, changes.discount ?? l.discount),
+            lineSubtotal,
+          );
+          return { ...l, unitPrice, discount };
+        }),
+      );
+    },
+    [setLines],
+  );
 
   const clear = useCallback(() => {
-    setLines([]);
+    setLines(() => []);
     setSelectedKey(null);
-  }, []);
+  }, [setLines]);
 
   const totals = useMemo(() => {
     const subtotal = round2(lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0));
@@ -82,7 +128,7 @@ export function usePosCart() {
       subtotal,
       discount,
       total: round2(subtotal - discount),
-      items: lines.reduce((s, l) => s + l.quantity, 0),
+      items: round3(lines.reduce((s, l) => s + l.quantity, 0)),
     };
   }, [lines]);
 

@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
@@ -5,8 +6,10 @@ import { FormSwitch } from "@/components/Form/AppSwitch";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import palette from "@/constants/palette";
 import React, { useMemo } from "react";
 import { StyleSheet, View } from "react-native";
+import { Text } from "react-native-paper";
 import * as Yup from "yup";
 
 const validationSchema = Yup.object().shape({
@@ -25,6 +28,8 @@ export default function CashRegisterFormScreen(props: Props) {
   const router = useRouter();
   const { selectedLocation } = useSelectedLocation();
   const id = props.id ?? (params.id ? Number(params.id) : undefined);
+  // Desde Administración › Esta sucursal la caja es de la sucursal actual.
+  const branchScope = params.scope === "location";
 
   // Memorizado: AppForm reinicia el formulario si cambia la identidad.
   const initialValues = useMemo(
@@ -34,17 +39,25 @@ export default function CashRegisterFormScreen(props: Props) {
 
   return (
     <AppForm
+      deletePermission="cash_registers_delete"
       api={Services.cashRegisters}
       id={id}
       readonly={props.readonly}
       initialValues={initialValues}
       validationSchema={validationSchema}
-      onSuccess={() => router.back()}
+      onSuccess={() => goBack()}
+      card
     >
       <View style={styles.container}>
         <FormInput name="name" label="Nombre" placeholder="Ej: Caja 1, Caja mostrador" required />
         <FormInput name="code" label="Código" placeholder="Ej: CAJA-1" required />
-        <FormProSelect name="location_id" label="Sucursal" model="admin.locations" required />
+        {branchScope ? (
+          <Text variant="bodySmall" style={styles.branchNote}>
+            Sucursal: {selectedLocation?.name}
+          </Text>
+        ) : (
+          <FormProSelect name="location_id" label="Sucursal" model="admin.locations" required />
+        )}
         <FormSwitch name="is_active" text="Caja activa (se puede abrir turno)" />
         <FormInput name="notes" label="Notas" multiline numberOfLines={3} />
       </View>
@@ -53,5 +66,6 @@ export default function CashRegisterFormScreen(props: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, gap: 8 },
+  container: { gap: 8 },
+  branchNote: { color: palette.textSecondary, marginBottom: 8 },
 });

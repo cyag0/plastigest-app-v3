@@ -9,12 +9,18 @@ interface Props {
   registerName?: string | null;
   cashierName?: string;
   compact?: boolean;
-  onCloseShift: () => void;
+  /** Sin turno abierto no hay nada que cerrar: la opción no se muestra. */
+  onCloseShift?: () => void;
   onExit: () => void;
+  /** Corte parcial: imprime el corte del turno abierto. */
+  onPrintShift?: () => void;
+  /** Ancho del rollo de la impresora de esta caja. */
+  ticketWidth?: 58 | 80;
+  onToggleTicketWidth?: () => void;
 }
 
 /** Encabezado del POS: sucursal · caja · cajero · hora. */
-export default function PosHeader({ locationName, registerName, cashierName, compact, onCloseShift, onExit }: Props) {
+export default function PosHeader({ locationName, registerName, cashierName, compact, onCloseShift, onExit, onPrintShift, ticketWidth, onToggleTicketWidth }: Props) {
   const [now, setNow] = useState(new Date());
   const [menu, setMenu] = useState(false);
 
@@ -28,18 +34,51 @@ export default function PosHeader({ locationName, registerName, cashierName, com
   return (
     <View style={styles.bar}>
       <IconButton icon="arrow-left" iconColor={palette.textInverse} size={20} onPress={onExit} />
-      <View style={styles.info}>
-        {!compact && <Item icon="store" text={locationName} />}
-        <Item icon="cash-register" text={registerName ?? undefined} strong />
-        {!compact && <Item icon="account" text={cashierName} />}
-      </View>
+      {compact ? (
+        // Celular: la sucursal de la caja también se ve (el turno puede ser
+        // de otra sucursal que la seleccionada en la app).
+        <View style={styles.compactInfo}>
+          {registerName ? (
+            <>
+              <Item icon="cash-register" text={registerName} strong />
+              {locationName ? (
+                <Text style={styles.compactSub} numberOfLines={1}>
+                  {locationName}
+                </Text>
+              ) : null}
+            </>
+          ) : (
+            // Sin turno todavía no hay caja: solo la sucursal.
+            <Item icon="store" text={locationName} strong />
+          )}
+        </View>
+      ) : (
+        <View style={styles.info}>
+          <Item icon="store" text={locationName} />
+          <Item icon="cash-register" text={registerName ?? undefined} strong />
+          <Item icon="account" text={cashierName} />
+        </View>
+      )}
       <Text style={styles.time}>{time}</Text>
       <Menu
         visible={menu}
         onDismiss={() => setMenu(false)}
+        anchorPosition="bottom"
         anchor={<IconButton icon="dots-vertical" iconColor={palette.textInverse} onPress={() => setMenu(true)} />}
       >
-        <Menu.Item leadingIcon="lock" title="Cerrar turno" onPress={() => { setMenu(false); onCloseShift(); }} />
+        {onPrintShift && (
+          <Menu.Item leadingIcon="printer" title="Imprimir corte parcial" onPress={() => { setMenu(false); onPrintShift(); }} />
+        )}
+        {onToggleTicketWidth && (
+          <Menu.Item
+            leadingIcon="receipt-text-outline"
+            title={`Cambiar ticket a ${ticketWidth === 58 ? 80 : 58} mm`}
+            onPress={() => { setMenu(false); onToggleTicketWidth(); }}
+          />
+        )}
+        {onCloseShift && (
+          <Menu.Item leadingIcon="lock" title="Cerrar turno" onPress={() => { setMenu(false); onCloseShift(); }} />
+        )}
         <Menu.Item leadingIcon="exit-to-app" title="Salir del punto de venta" onPress={() => { setMenu(false); onExit(); }} />
       </Menu>
     </View>
@@ -57,6 +96,8 @@ function Item({ icon, text, strong }: { icon: string; text?: string; strong?: bo
 }
 
 const styles = StyleSheet.create({
+  compactInfo: { flex: 1, minWidth: 0, justifyContent: "center", paddingVertical: 4 },
+  compactSub: { color: palette.textInverse, opacity: 0.85, fontSize: 12, marginLeft: 22 },
   bar: { flexDirection: "row", alignItems: "center", backgroundColor: palette.primary, paddingRight: 4, minHeight: 52 },
   info: { flex: 1, flexDirection: "row", gap: 20, alignItems: "center", flexWrap: "wrap" },
   item: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 260 },

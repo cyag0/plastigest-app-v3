@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import { FormInput } from "@/components/Form/AppInput";
@@ -50,7 +51,7 @@ export default function CashMovementForm() {
         notes: "",
       }}
       validationSchema={validationSchema}
-      onSuccess={() => router.back()}
+      onSuccess={() => goBack()}
     >
      <View style={{ backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 } }}>
        <FormSelectSimple name="type" label="Tipo" data={TYPE_OPTIONS} />

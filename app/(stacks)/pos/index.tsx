@@ -4,6 +4,8 @@ import CloseShiftModal from "@/components/Pos/CloseShiftModal";
 import CmdkPalette from "@/components/Pos/CmdkPalette";
 import CustomerPicker, { PosCustomer } from "@/components/Pos/CustomerPicker";
 import OpenShiftView from "@/components/Pos/OpenShiftView";
+import OtherLocationShift from "@/components/Pos/OtherLocationShift";
+import { returnAfterLocationSwitch } from "@/components/NavigationHandler";
 import PosHeader from "@/components/Pos/PosHeader";
 import ShortcutsBar from "@/components/Pos/ShortcutsBar";
 import SimpleSearchModal from "@/components/Pos/SimpleSearchModal";
@@ -16,6 +18,7 @@ import { usePosCatalog } from "@/hooks/usePosCatalog";
 import { usePosHotkeys } from "@/hooks/usePosHotkeys";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import { getTicketWidth, printShiftTicket, setTicketWidth } from "@/utils/printDocument";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -34,12 +37,15 @@ type Session = App.Entities.CashRegisterSession;
 export default function PosScreen() {
   const router = useRouter();
   const alerts = useAlerts();
-  const { user, hasPermission } = useAuth();
-  const { selectedLocation } = useSelectedLocation();
+  const { user, hasPermission, selectedCompany } = useAuth();
+  const { selectedLocation, selectLocation } = useSelectedLocation();
   const { isMobile } = useResponsive();
+  const compact = isMobile || Platform.OS !== "web";
 
   const [session, setSession] = useState<Session | null>(null);
   const [loadingSession, setLoadingSession] = useState(true);
+  const [switching, setSwitching] = useState(false);
+  const [closeOtherOpen, setCloseOtherOpen] = useState(false);
 
   const loadSession = useCallback(async () => {
     try {
@@ -59,6 +65,44 @@ export default function PosScreen() {
 
   // Se entra al POS por URL o desde Inicio; salir siempre regresa a Inicio.
   const exit = () => router.replace("/(tabs)/home" as any);
+
+  const handleShiftClosed = async (closed: Session) => {
+    const diff = closed.difference ?? 0;
+    alerts.success(diff === 0 ? "Turno cerrado. La caja cuadra." : `Turno cerrado. ${diff > 0 ? "Sobrante" : "Faltante"} de ${formatMoney(Math.abs(diff))}.`);
+    setSession(null);
+    // El corte impreso es el comprobante que firman cajero y encargado.
+    const print = await alerts.confirm("¿Imprimir el corte de caja para firmarlo?", {
+      title: "Corte de caja",
+      okText: "Imprimir",
+      cancelText: "Ahora no",
+    });
+    if (print) {
+      printShiftTicket(closed.id).catch(() => alerts.error("No se pudo imprimir el corte"));
+    }
+  };
+
+  /** Cambia la app a la sucursal del turno abierto para seguir cobrando ahí. */
+  const switchToShiftLocation = async () => {
+    if (!session || switching) return;
+    try {
+      setSwitching(true);
+      const res: any = await Services.admin.locations.index({ company_id: selectedCompany?.id, is_active: true } as any);
+      const list: App.Entities.Location[] = Array.isArray(res?.data) ? res.data : res?.data?.data ?? [];
+      const target = list.find((l) => l.id === session.location_id);
+      if (!target) {
+        alerts.error(`No tienes acceso a ${session.location_name ?? "esa sucursal"}.`);
+        return;
+      }
+      // El cambio de sucursal reinicia la navegación: volver aquí al terminar.
+      returnAfterLocationSwitch("/(stacks)/pos");
+      await selectLocation(target);
+    } catch {
+      returnAfterLocationSwitch(null);
+      alerts.error("No se pudo cambiar de sucursal");
+    } finally {
+      setSwitching(false);
+    }
+  };
 
   if (!hasPermission("sales_pos")) {
     return (
@@ -80,24 +124,46 @@ export default function PosScreen() {
   if (!session) {
     return (
       <SafeAreaView style={styles.screen}>
-        <PosHeader locationName={selectedLocation?.name} cashierName={user?.name} onCloseShift={() => {}} onExit={exit} />
-        <OpenShiftView locationName={selectedLocation?.name} onOpened={loadSession} />
+        <PosHeader locationName={selectedLocation?.name} cashierName={user?.name} compact={compact} onExit={exit} />
+        {/* key: al cambiar de sucursal se vuelven a pedir sus cajas. */}
+        <OpenShiftView key={selectedLocation?.id ?? "none"} locationName={selectedLocation?.name} onOpened={loadSession} />
+      </SafeAreaView>
+    );
+  }
+
+  if (selectedLocation && session.location_id !== selectedLocation.id) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <PosHeader locationName={selectedLocation.name} cashierName={user?.name} compact={compact} onExit={exit} />
+        <OtherLocationShift
+          session={session}
+          currentLocationName={selectedLocation.name}
+          switching={switching}
+          onSwitch={switchToShiftLocation}
+          onCloseShift={() => setCloseOtherOpen(true)}
+        />
+        <CloseShiftModal
+          visible={closeOtherOpen}
+          sessionId={session.id}
+          onClose={() => setCloseOtherOpen(false)}
+          onClosed={(closed) => {
+            setCloseOtherOpen(false);
+            handleShiftClosed(closed);
+          }}
+        />
       </SafeAreaView>
     );
   }
 
   return (
     <PosRegister
+      key={session.id}
       session={session}
-      compact={isMobile || Platform.OS !== "web"}
+      compact={compact}
       canEditPrice={hasPermission("sales_discount")}
       cashierName={user?.name}
       onExit={exit}
-      onShiftClosed={(closed) => {
-        const diff = closed.difference ?? 0;
-        alerts.success(diff === 0 ? "Turno cerrado. La caja cuadra." : `Turno cerrado. ${diff > 0 ? "Sobrante" : "Faltante"} de ${formatMoney(Math.abs(diff))}.`);
-        setSession(null);
-      }}
+      onShiftClosed={handleShiftClosed}
     />
   );
 }
@@ -176,6 +242,12 @@ function PosRegister({ session, compact, canEditPrice, cashierName, onExit, onSh
     onScan,
   });
 
+  // Ancho del rollo de la impresora de esta caja (se guarda en el equipo).
+  const [ticketWidth, setTicketWidthState] = useState<58 | 80>(80);
+  useEffect(() => {
+    getTicketWidth().then(setTicketWidthState);
+  }, []);
+
   const header = (
     <PosHeader
       locationName={session.location_name ?? undefined}
@@ -184,6 +256,14 @@ function PosRegister({ session, compact, canEditPrice, cashierName, onExit, onSh
       compact={compact}
       onCloseShift={() => setCloseOpen(true)}
       onExit={onExit}
+      onPrintShift={() => printShiftTicket(session.id).catch(() => alerts.error("No se pudo imprimir el corte"))}
+      ticketWidth={ticketWidth}
+      onToggleTicketWidth={() => {
+        const next = ticketWidth === 58 ? 80 : 58;
+        setTicketWidthState(next);
+        setTicketWidth(next);
+        alerts.success(`Los tickets se imprimirán en ${next} mm`);
+      }}
     />
   );
 

@@ -1,43 +1,54 @@
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import AppChip, { ChipVariant } from "@/components/App/Chip";
 import PermissionGate from "@/components/App/PermissionGate";
-import palette from "@/constants/palette";
-import { generateCrudMenu } from "@/utils/routes";
+import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { formatMoney } from "@/utils/format";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
-import { Chip, Text } from "react-native-paper";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
+import { Pressable, Text, View } from "react-native";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-const formatCurrency = (value: number) =>
-  `$${value.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const TYPE_COLORS: Record<string, string> = {
-  income: palette.success,
-  expense: palette.error,
-  adjustment: palette.blue,
+const TYPE_META: Record<string, { label: string; variant: ChipVariant }> = {
+  income: { label: "Ingreso", variant: "success" },
+  expense: { label: "Egreso", variant: "error" },
+  adjustment: { label: "Ajuste", variant: "info" },
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  income: "Ingreso",
-  expense: "Egreso",
-  adjustment: "Ajuste",
-};
+/**
+ * Concepto para mostrar. Los movimientos guardados antes llevaban el id
+ * interno y el folio ("Venta #4668 (SAL-20261015-0003)"): se deja el folio,
+ * que es el que se conoce.
+ */
+function displayConcept(concept: string | null | undefined): string {
+  if (!concept) return "Movimiento";
+  return concept.replace(/#\d+ \(([^)]+)\)$/, "$1");
+}
 
-const PAYMENT_META: Record<string, { icon: string; label: string }> = {
-  cash:     { icon: "cash",          label: "Efectivo" },
-  card:     { icon: "credit-card",   label: "Tarjeta" },
-  transfer: { icon: "bank-transfer", label: "Transferencia" },
-  other:    { icon: "dots-horizontal", label: "Otro" },
-};
+/**
+ * Pantalla del documento que originó el movimiento. Los gastos no tienen
+ * detalle: se abren en su formulario (los movimientos viejos apuntaban a una
+ * ruta que no existe).
+ */
+function sourceRoute(item: any): string | null {
+  if (item.source_type === "expense" && item.source_id) {
+    return `/(tabs)/home/expenses/form?id=${item.source_id}`;
+  }
+  return item.source_url || null;
+}
+
+const signedMoney = (item: any) => `${item.type === "expense" ? "−" : "+"}${formatMoney(item.amount)}`;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Stats banner
+// Resumen
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface CashStats {
@@ -53,147 +64,135 @@ interface CashStats {
   >;
 }
 
-function CashStatsBanner() {
+/**
+ * Saldo y accesos a turnos y cierres. Compacto a propósito: va arriba de la
+ * lista y en celular dejaba poco espacio para los movimientos. Antes los
+ * botones de turnos/cierres se encimaban con los saldos por método en Android.
+ */
+function CashSummary() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [stats, setStats] = useState<CashStats | null>(null);
 
-  useEffect(() => {
-    Services.cashMovements.stats().then(setStats).catch(console.error);
-  }, []);
+  // Se recarga al volver (p. ej. después de registrar un movimiento).
+  useFocusEffect(
+    useCallback(() => {
+      Services.cashMovements.stats().then(setStats).catch(console.error);
+    }, []),
+  );
 
-  if (!stats) return null;
-
-  const balanceColor = stats.balance_actual >= 0 ? palette.success : palette.error;
-
-  const paymentEntries = Object.entries(stats.by_payment_method);
+  const methods = Object.entries(stats?.by_payment_method ?? {});
+  const balance = stats?.balance_actual ?? 0;
 
   return (
-    <View style={styles.bannerContainer}>
-      {/* Fila principal: saldo + mes */}
-      <View style={styles.statsRow}>
-        {/* Saldo actual */}
-        <View style={[styles.balanceCard, { borderLeftColor: balanceColor }]}>
-          <View style={styles.balanceHeader}>
-            <MaterialCommunityIcons
-              name={balanceColor === palette.success ? "trending-up" : "trending-down"}
-              size={18}
-              color={balanceColor}
-            />
-            <Text style={styles.balanceLabel}>Saldo actual</Text>
+    <View style={styles.summaryWrap}>
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryTop}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.summaryLabel}>Saldo actual</Text>
+            <Text style={[styles.summaryValue, { color: balance >= 0 ? colors.text : colors.error }]} numberOfLines={1}>
+              {stats ? formatMoney(balance) : "—"}
+            </Text>
           </View>
-          <Text style={[styles.balanceValue, { color: balanceColor }]}>
-            {formatCurrency(stats.balance_actual)}
-          </Text>
-          <Text style={styles.balanceSub}>
-            {stats.today_count} mov. hoy
-          </Text>
+          {stats && (
+            <AppChip size="sm" variant="default">
+              {`${stats.today_count} ${stats.today_count === 1 ? "movimiento" : "movimientos"} hoy`}
+            </AppChip>
+          )}
         </View>
 
-        {/* Ingresos / Egresos del mes */}
-        <View style={styles.sideStats}>
-          <View style={styles.sideStat}>
-            <View style={styles.sideStatHeader}>
-              <MaterialCommunityIcons name="arrow-down-circle" size={14} color={palette.success} />
-              <Text style={styles.sideStatLabel}>Ingresos mes</Text>
+        {methods.length > 0 && (
+          <Text style={styles.methods}>
+            {methods.map(([method, data], index) => (
+              <Text key={method}>
+                {index > 0 ? "  ·  " : ""}
+                {data.label}{" "}
+                <Text style={[styles.methodValue, data.balance < 0 && { color: colors.error }]}>
+                  {formatMoney(data.balance)}
+                </Text>
+              </Text>
+            ))}
+          </Text>
+        )}
+
+        {stats && (
+          <View style={styles.monthRow}>
+            <View style={styles.monthItem}>
+              <MaterialCommunityIcons name="arrow-down-circle-outline" size={16} color={colors.success} />
+              <Text style={styles.monthLabel}>Ingresos del mes</Text>
+              <Text style={[styles.monthValue, { color: colors.success }]} numberOfLines={1}>
+                {formatMoney(stats.total_income)}
+              </Text>
             </View>
-            <Text style={[styles.sideStatValue, { color: palette.success }]}>
-              {formatCurrency(stats.total_income)}
-            </Text>
-          </View>
-          <View style={[styles.sideStat, { borderTopWidth: 1, borderTopColor: palette.border }]}>
-            <View style={styles.sideStatHeader}>
-              <MaterialCommunityIcons name="arrow-up-circle" size={14} color={palette.error} />
-              <Text style={styles.sideStatLabel}>Egresos mes</Text>
+            <View style={styles.monthItem}>
+              <MaterialCommunityIcons name="arrow-up-circle-outline" size={16} color={colors.error} />
+              <Text style={styles.monthLabel}>Egresos del mes</Text>
+              <Text style={[styles.monthValue, { color: colors.error }]} numberOfLines={1}>
+                {formatMoney(stats.total_expense)}
+              </Text>
             </View>
-            <Text style={[styles.sideStatValue, { color: palette.error }]}>
-              {formatCurrency(stats.total_expense)}
-            </Text>
           </View>
-        </View>
+        )}
       </View>
 
-      {/* Por método de pago + acceso directo a cierres de caja */}
-      {paymentEntries.length > 0 && (
-        <View style={styles.methodRow}>
-          <View style={styles.methodChips}>
-            {paymentEntries.map(([method, data]) => {
-              const meta = PAYMENT_META[method] ?? { icon: "cash", label: data.label };
-              const color = data.balance >= 0 ? palette.success : palette.error;
-              return (
-                <View key={method} style={styles.methodChip}>
-                  <View style={styles.methodChipHeader}>
-                    <MaterialCommunityIcons name={meta.icon as any} size={14} color={color} />
-                    <Text style={[styles.methodChipLabel, { color }]} numberOfLines={1}>
-                      {data.label || meta.label}
-                    </Text>
-                  </View>
-                  <Text style={[styles.methodChipValue, { color }]} numberOfLines={1}>
-                    {formatCurrency(data.balance)}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-
-          <View style={styles.closingLinks}>
-            <TouchableOpacity
-              style={styles.closingButton}
-              onPress={() => router.push("/(tabs)/home/cash/sessions" as any)}
-              activeOpacity={0.7}
-            >
-              <MaterialCommunityIcons name="cash-register" size={14} color={palette.primary} />
-              <Text style={styles.closingButtonText} numberOfLines={1}>
-                Turnos de caja
-              </Text>
-              <MaterialCommunityIcons name="chevron-right" size={14} color={palette.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.closingButton}
-              onPress={() => router.push("/(tabs)/home/cash/closing")}
-              activeOpacity={0.7}
-            >
-              <MaterialCommunityIcons name="history" size={14} color={palette.primary} />
-              <Text style={styles.closingButtonText} numberOfLines={1}>
-                Cierres anteriores
-              </Text>
-              <MaterialCommunityIcons name="chevron-right" size={14} color={palette.primary} />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
+      {/* Dos botones del mismo ancho: no se encimen ni se envuelvan raro. */}
+      <View style={styles.linksRow}>
+        <Pressable
+          onPress={() => router.push("/(tabs)/home/cash/sessions" as any)}
+          style={({ pressed }) => [styles.link, pressed && { opacity: 0.7 }]}
+        >
+          <MaterialCommunityIcons name="cash-register" size={18} color={colors.primary} />
+          <Text style={styles.linkText} numberOfLines={1}>
+            Turnos de caja
+          </Text>
+          <MaterialCommunityIcons name="chevron-right" size={18} color={colors.primary} />
+        </Pressable>
+        <Pressable
+          onPress={() => router.push("/(tabs)/home/cash/closing" as any)}
+          style={({ pressed }) => [styles.link, pressed && { opacity: 0.7 }]}
+        >
+          <MaterialCommunityIcons name="history" size={18} color={colors.primary} />
+          <Text style={styles.linkText} numberOfLines={1}>
+            Cierres anteriores
+          </Text>
+          <MaterialCommunityIcons name="chevron-right" size={18} color={colors.primary} />
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main screen
+// Pantalla
 // ─────────────────────────────────────────────────────────────────────────────
 
-const route = "/(tabs)/home/cash" as const;
+const FORM = "/(tabs)/home/cash/form";
 
 export default function CashMovementsIndex() {
+  const { colors } = useTheme();
+
   const columns: AppListColumn<any>[] = [
     {
       title: "Fecha",
       key: "movement_date",
       width: 110,
-      render: (_, item) => item.movement_date ?? "—",
+      render: (_, item) => formatDate(item.movement_date),
     },
     {
       title: "Tipo",
       key: "type",
       width: 110,
       align: "center",
-      render: (_, item) => (
-        <Chip
-          style={{ backgroundColor: TYPE_COLORS[item.type] ?? palette.surface }}
-          textStyle={{ color: "white", fontSize: 11 }}
-          compact
-        >
-          {TYPE_LABELS[item.type] ?? item.type}
-        </Chip>
-      ),
+      render: (_, item) => {
+        const meta = TYPE_META[item.type];
+        return (
+          <AppChip size="sm" variant={meta?.variant ?? "default"}>
+            {meta?.label ?? item.type}
+          </AppChip>
+        );
+      },
     },
-    { title: "Concepto", dataIndex: "concept", key: "concept", width: 260 },
+    { title: "Concepto", key: "concept", width: 260, render: (_, item) => displayConcept(item.concept) },
     {
       title: "Método",
       key: "payment_method",
@@ -206,22 +205,24 @@ export default function CashMovementsIndex() {
       width: 130,
       align: "right",
       render: (_, item) => (
-        <Text
-          style={{
-            fontWeight: "bold",
-            color: TYPE_COLORS[item.type] ?? palette.text,
-          }}
-        >
-          {item.type === "expense" ? "-" : "+"}
-          {formatCurrency(item.amount)}
+        <Text style={{ fontWeight: "700", color: item.type === "expense" ? colors.error : colors.success }}>
+          {signedMoney(item)}
         </Text>
       ),
     },
   ];
 
+  // Tocar un movimiento abre lo que lo originó (la venta, la compra, el
+  // gasto); uno capturado a mano se abre para editarlo. Antes ambos llevaban
+  // a una pantalla inexistente ("Página no encontrada").
+  const open = (item: any) => {
+    const route = sourceRoute(item);
+    router.push((route ?? `${FORM}?id=${item.id}`) as any);
+  };
+
   return (
     <PermissionGate permission="cash_movements_list">
-        <CashStatsBanner />
+      <CashSummary />
       <AppList
         title="Caja"
         service={Services.cashMovements}
@@ -251,176 +252,135 @@ export default function CashMovementsIndex() {
             ],
           },
         ]}
-        renderCard={({ item }) => ({
-          title: item.concept,
-          description: item.notes || item.payment_method_label,
-          right: (
-            <View style={{ alignItems: "flex-end", gap: 4 }}>
-              <Text
-                style={{
-                  fontWeight: "bold",
-                  fontSize: 16,
-                  color: TYPE_COLORS[item.type] ?? palette.text,
-                }}
-              >
-                {item.type === "expense" ? "-" : "+"}
-                {formatCurrency(item.amount)}
-              </Text>
-              <Chip
-                style={{
-                  backgroundColor: TYPE_COLORS[item.type] ?? palette.surface,
-                }}
-                textStyle={{ color: "white", fontSize: 10 }}
-                compact
-              >
-                {TYPE_LABELS[item.type] ?? item.type}
-              </Chip>
-            </View>
-          ),
-          bottom: [
-            { label: "Fecha", value: item.movement_date ?? "—" },
-            { label: "Método", value: item.payment_method_label ?? item.payment_method },
-            ...(item.user?.name ? [{ label: "Registrado por", value: item.user.name }] : []),
-          ],
-        })}
-        onItemPress={(item) => {
-          if (item.source_url) {
-            router.push(item.source_url as any);
-          }
+        renderCard={({ item }) => {
+          const meta = TYPE_META[item.type];
+          return {
+            title: displayConcept(item.concept),
+            description: item.notes || undefined,
+            right: (
+              <View style={{ alignItems: "flex-end", gap: 4 }}>
+                <Text
+                  style={{
+                    fontWeight: "700",
+                    fontSize: 15,
+                    color: item.type === "expense" ? colors.error : colors.success,
+                  }}
+                >
+                  {signedMoney(item)}
+                </Text>
+                <AppChip size="sm" variant={meta?.variant ?? "default"}>
+                  {meta?.label ?? item.type}
+                </AppChip>
+              </View>
+            ),
+            // Sin etiquetas ("Fecha", "Método"…): el dato se entiende solo.
+            bottom: [
+              { label: "", value: formatDate(item.movement_date) },
+              { label: "", value: item.payment_method_label ?? item.payment_method },
+              ...(item.user?.name ? [{ label: "", value: item.user.name }] : []),
+            ],
+          };
         }}
-        onPressCreate={() => router.push("/(tabs)/home/cash/form")}
+        onPressCreate={() => router.push(FORM as any)}
         searchPlaceholder="Buscar movimientos..."
-        menu={generateCrudMenu(route)}
+        // Los movimientos que genera el sistema (ventas, compras, gastos,
+        // devoluciones) no se editan ni se borran a mano: descuadrarían el corte.
+        menu={{
+          onShow: open,
+          showView: (item: any) => !!sourceRoute(item),
+          onEdit: (item: any) => router.push(`${FORM}?id=${item.id}` as any),
+          showEdit: (item: any) => !item.source_type,
+          showDelete: (item: any) => !item.source_type,
+        }}
       />
     </PermissionGate>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Styles
+// Estilos
 // ─────────────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  bannerContainer: {
-    padding: 12,
-    paddingBottom: 4,
-    gap: 10,
+const makeStyles = (c: ReturnType<typeof useTheme>["colors"]) => ({
+  summaryWrap: {
+    paddingHorizontal: tokens.spacing[4],
+    paddingTop: tokens.spacing[3],
+    gap: tokens.spacing[2],
+    width: "100%" as const,
+    maxWidth: 900,
+    alignSelf: "center" as const,
   },
-  statsRow: {
-    flexDirection: "row",
-    gap: 10,
+  summaryCard: {
+    backgroundColor: c.surface,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: tokens.spacing[3],
+    gap: tokens.spacing[2],
   },
-  balanceCard: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    borderLeftWidth: 4,
-    padding: 12,
-    elevation: 1,
+  summaryTop: {
+    flexDirection: "row" as const,
+    alignItems: "flex-start" as const,
+    gap: tokens.spacing[2],
   },
-  balanceHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginBottom: 2,
+  summaryLabel: {
+    ...tokens.typography.caption,
+    color: c.textSecondary,
   },
-  balanceLabel: {
-    fontSize: 11,
-    color: palette.textSecondary,
-  },
-  balanceValue: {
-    fontSize: 22,
-    fontWeight: "800",
+  summaryValue: {
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: "800" as const,
     letterSpacing: -0.5,
   },
-  balanceSub: {
-    fontSize: 11,
-    color: palette.textSecondary,
-    marginTop: 2,
+  methods: {
+    ...tokens.typography.caption,
+    color: c.textSecondary,
   },
-  sideStats: {
+  methodValue: {
+    fontWeight: "700" as const,
+    color: c.text,
+  },
+  monthRow: {
+    flexDirection: "row" as const,
+    gap: tokens.spacing[2],
+    borderTopWidth: 1,
+    borderTopColor: c.border,
+    paddingTop: tokens.spacing[2],
+  },
+  monthItem: {
     flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    elevation: 1,
-    overflow: "hidden",
+    minWidth: 0,
+    gap: 1,
   },
-  sideStat: {
+  monthLabel: {
+    ...tokens.typography.caption,
+    color: c.textSecondary,
+  },
+  monthValue: {
+    ...tokens.typography.bodyMd,
+    fontWeight: "700" as const,
+  },
+  linksRow: {
+    flexDirection: "row" as const,
+    gap: tokens.spacing[2],
+  },
+  link: {
     flex: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    justifyContent: "center",
-  },
-  sideStatHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginBottom: 2,
-  },
-  sideStatValue: {
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  sideStatLabel: {
-    fontSize: 11,
-    color: palette.textSecondary,
-  },
-  methodRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 8,
-    marginTop: 2,
-  },
-  methodChips: {
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  methodChip: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 0,
-    minWidth: 100,
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    elevation: 1,
-  },
-  closingLinks: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 8,
-  },
-  closingButton: {
-    flexDirection: "row",
-    alignItems: "center",
+    minWidth: 0,
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: `${palette.primary}15`,
-    alignSelf: "center",
+    paddingVertical: 10,
+    paddingHorizontal: tokens.spacing[2],
+    borderRadius: tokens.radius.md,
+    backgroundColor: c.primarySoft,
   },
-  closingButtonText: {
-    fontSize: 12,
-    color: palette.primary,
-    fontWeight: "600",
-  },
-  methodChipHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    marginBottom: 2,
-  },
-  methodChipLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  methodChipValue: {
-    fontSize: 14,
-    fontWeight: "700",
+  linkText: {
+    ...tokens.typography.bodySm,
+    fontWeight: "600" as const,
+    color: c.primary,
+    flexShrink: 1,
   },
 });

@@ -1,3 +1,4 @@
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
@@ -150,11 +151,7 @@ export default function ExpensesIndex() {
                 </Text>
               </View>
               <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
-                {new Date(expense.expense_date).toLocaleDateString("es-MX", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })}
+                {formatDate(expense.expense_date)}
               </Text>
             </View>
           </View>

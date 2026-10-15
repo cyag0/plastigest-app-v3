@@ -1,3 +1,4 @@
+import { SafeAreaView } from "react-native-safe-area-context";
 import BarcodeScanner, { BarcodeScannerRef } from "@/components/Form/BarcodeScanner";
 import palette from "@/constants/palette";
 import { formatMoney } from "@/hooks/usePosCart";
@@ -43,13 +44,14 @@ export default function SimpleSearchModal({ visible, onClose, search, findByCode
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
         <View style={styles.bar}>
           <IconButton icon="arrow-left" onPress={onClose} />
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Buscar producto o código"
+            placeholderTextColor={palette.textMuted}
             autoFocus
             returnKeyType="search"
             onSubmitEditing={submit}
@@ -80,7 +82,7 @@ export default function SimpleSearchModal({ visible, onClose, search, findByCode
             );
           }}
         />
-      </View>
+      </SafeAreaView>
 
       <BarcodeScanner
         ref={scanner}

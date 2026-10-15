@@ -1,3 +1,4 @@
+import { formatDate } from "@/utils/dates";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -21,12 +22,6 @@ const formatCurrency = (value: number | string | null | undefined) => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
-};
-
-const formatDate = (dateStr: string | undefined) => {
-  if (!dateStr) return "—";
-  const [y, m, d] = (dateStr.split("T")[0] ?? dateStr).split("-");
-  return `${d}/${m}/${y}`;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
