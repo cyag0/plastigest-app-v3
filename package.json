@@ -1,6 +1,6 @@
 {
   "name": "plastigest",
-  "main": "expo-router/entry",
+  "main": "index.js",
   "version": "1.0.0",
   "scripts": {
     "start": "expo start",
@@ -12,6 +12,7 @@
     "lint": "expo lint"
   },
   "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
     "@expo/vector-icons": "^15.0.3",
     "@freakycoder/react-native-helpers": "^2.5.1",
     "@radix-ui/react-dialog": "^1.1.23",
@@ -38,9 +39,8 @@
     "expo-image-picker": "~56.0.18",
     "expo-linear-gradient": "^56.0.4",
     "expo-linking": "~56.0.14",
-    "expo-location": "~56.0.18",
-    "expo-media-library": "~56.0.7",
     "expo-notifications": "~56.0.18",
+    "expo-print": "~56.0.4",
     "expo-router": "~56.2.11",
     "expo-sharing": "~56.0.18",
     "expo-splash-screen": "~56.0.10",
@@ -81,6 +81,7 @@
     "@types/react": "~19.2.14",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~56.0.4",
+    "playwright": "^1.62.1",
     "typescript": "~6.0.3"
   },
   "reanimated": {

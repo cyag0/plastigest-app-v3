@@ -10,6 +10,10 @@ web-build/
 expo-env.d.ts
 
 # Native
+# se generan con `npx expo prebuild` (CNG). No se versionan para que
+# EAS Build aplique app.json (íconos, permisos, plugins) en cada build.
+/android
+/ios
 .kotlin/
 *.orig.*
 *.jks
