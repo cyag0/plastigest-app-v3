@@ -73,6 +73,8 @@ namespace App {
       payments: { method: PosPaymentMethod; amount: number; tendered?: number }[];
       customer_id?: number | null;
       notes?: string;
+      /** Llave del intento de cobro: el reintento con la misma no duplica la venta. */
+      client_request_id?: string;
     }
 
     interface PosSaleResult {
