@@ -164,7 +164,6 @@ export default function HistoryTransfersScreen() {
         service={transferService}
         defaultFilters={{
           company_id: company.id,
-          mode: "history",
           status: "completed,rejected,cancelled",
         }}
         filters={[
@@ -180,13 +179,15 @@ export default function HistoryTransfersScreen() {
             ],
           },
           {
+            // Desde la sucursal actual: "sent" = salió de aquí, "received" =
+            // llegó aquí (igual que las insignias ENVIADO / RECIBIDO).
             type: "simple",
             name: "direction",
             label: "Dirección",
             options: [
               { label: "Todas", value: "" },
-              { label: "Enviadas", value: "sent" },
-              { label: "Recibidas", value: "received" },
+              { label: "Enviadas (salieron de aquí)", value: "sent" },
+              { label: "Recibidas (llegaron aquí)", value: "received" },
             ],
           },
         ]}
