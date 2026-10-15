@@ -99,6 +99,12 @@ const MODULE_SECTIONS: ModuleSection[] = [
         icon: "swap-horizontal",
         route: "/(tabs)/home/transfers-menu",
       },
+      {
+        label: "Qué pedir",
+        description: "Qué mandar, comprar o producir para mañana",
+        icon: "chart-timeline-variant",
+        route: "/(tabs)/home/transfers/suggestions",
+      },
     ],
   },
   {
@@ -192,6 +198,7 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/(tabs)/home/purchases": "purchases_list",
   "/(tabs)/home/adjustment": "inventory_list",
   "/(tabs)/home/transfers-menu": "transfers_list",
+  "/(tabs)/home/transfers/suggestions": "transfers_list",
   "/(tabs)/home/sales": "sales_list",
   "/(tabs)/home/sales-orders": "sales_orders_list",
   "/(tabs)/home/cash": "cash_movements_list",

@@ -259,6 +259,12 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
+        name="transfers/suggestions/index"
+        options={{
+          title: "Qué pedir",
+        }}
+      />
+      <Stack.Screen
         name="transfers/pending/index"
         options={{
           title: "Solicitudes Pendientes",

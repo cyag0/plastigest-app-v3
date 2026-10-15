@@ -420,6 +420,83 @@ namespace App {
       source?: "default" | "company" | "location";
     }
 
+    // ─── Reabastecimiento ──────────────────────────────────────────────────
+
+    interface ReplenishmentProduct {
+      id: number;
+      name: string;
+      code: string | null;
+      unit_id: number | null;
+      unit: string | null;
+    }
+
+    interface ReplenishmentLocation {
+      id: number;
+      name: string;
+    }
+
+    /** Cómo se llegó a lo que necesita (o le sobra a) una sucursal. */
+    interface ReplenishmentExplanation {
+      daily_average: number;
+      weekday_factor: number;
+      season_factor: number;
+      sold_today: number;
+      rest_of_today: number;
+      forecast: number;
+      safety: number;
+      minimum: number;
+      target: number;
+      stock: number;
+      incoming: number;
+      committed: number;
+      available: number;
+      history_days: number;
+      stockout_days: number;
+      /** Días seguidos agotado, de ayer hacia atrás. */
+      stockout_streak: number;
+    }
+
+    interface ReplenishmentTransferItem {
+      product: ReplenishmentProduct;
+      quantity: number;
+      destination: ReplenishmentExplanation;
+      source: ReplenishmentExplanation;
+    }
+
+    interface ReplenishmentNeed {
+      location: ReplenishmentLocation;
+      quantity: number;
+    }
+
+    interface ReplenishmentPlan {
+      today: string;
+      coverage_days: number;
+      horizon: { from: string; to: string };
+      history_days: number;
+      transfers: {
+        from: ReplenishmentLocation;
+        to: ReplenishmentLocation;
+        items: ReplenishmentTransferItem[];
+      }[];
+      purchases: {
+        location: ReplenishmentLocation;
+        supplier: { id: number; name: string } | null;
+        total: number;
+        items: {
+          product: ReplenishmentProduct;
+          quantity: number;
+          unit_cost: number | null;
+          total: number | null;
+          needs: ReplenishmentNeed[];
+        }[];
+      }[];
+      production: {
+        location: ReplenishmentLocation;
+        items: { product: ReplenishmentProduct; quantity: number; needs: ReplenishmentNeed[] }[];
+      }[];
+      shortages: { product: ReplenishmentProduct; quantity: number; needs: ReplenishmentNeed[] }[];
+    }
+
     interface NotificationEligibleUser {
       id: number;
       name: string;

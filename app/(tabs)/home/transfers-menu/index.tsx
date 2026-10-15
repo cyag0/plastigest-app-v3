@@ -30,6 +30,17 @@ interface TransferModule {
 
 const modules: TransferModule[] = [
   {
+    id: "suggestions",
+    title: "Qué pedir para mañana",
+    description:
+      "Sugerencias según lo que vende cada sucursal: qué mandar, comprar o producir",
+    icon: "chart-timeline-variant",
+    route: "/(tabs)/home/transfers/suggestions",
+    color: palette.success,
+    badge: "Nuevo",
+    badgeVariant: "success",
+  },
+  {
     id: "pending",
     title: "Solicitudes Pendientes",
     description:

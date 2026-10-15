@@ -101,6 +101,16 @@ const Services = {
       return response.data.url;
     },
   },
+  /**
+   * Sugerencias de reabastecimiento: qué mandar a cada sucursal y qué comprar
+   * o producir para lo que queda de hoy y los días a cubrir.
+   */
+  replenishment: {
+    async index(params?: { coverage_days?: number }): Promise<App.Entities.ReplenishmentPlan> {
+      const response = await axiosClient.get("/auth/admin/replenishment", { params });
+      return response.data.data;
+    },
+  },
   /** Bitácora: "me" (default), un id de usuario o "all" (toda la empresa). */
   activity: {
     async index(params: {
