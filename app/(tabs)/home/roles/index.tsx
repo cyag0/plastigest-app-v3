@@ -10,6 +10,11 @@ import * as React from "react";
 import { View } from "react-native";
 import { Chip } from "react-native-paper";
 
+/** Total de permisos del rol (el índice manda solo los primeros 10 nombres). */
+function permissionsCount(item: any): number {
+  return item.permissions_count ?? item.permissions?.length ?? 0;
+}
+
 export default function RolesListScreen() {
   const navigation = useRouter();
   const modalRef = React.useRef<AppModalRef>(null);
@@ -21,7 +26,8 @@ export default function RolesListScreen() {
       key: "permissions",
       width: 100,
       align: "center",
-      render: (_, item) => item.permissions?.length ?? 0,
+      // El listado solo trae los primeros 10 permisos; el total viene aparte.
+      render: (_, item) => permissionsCount(item),
     },
     {
       title: "Estado",
@@ -79,7 +85,7 @@ export default function RolesListScreen() {
                     {permission}
                   </Chip>
                 ))}
-                {item.permissions && item.permissions.length > 8 && (
+                {permissionsCount(item) > 8 && (
                   <Chip
                     style={{
                       backgroundColor: palette.primary,
@@ -94,7 +100,7 @@ export default function RolesListScreen() {
                       fontWeight: "bold",
                     }}
                   >
-                    +{item.permissions.length - 8}
+                    +{permissionsCount(item) - 8}
                   </Chip>
                 )}
               </View>
