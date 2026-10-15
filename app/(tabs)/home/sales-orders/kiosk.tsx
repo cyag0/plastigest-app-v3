@@ -1,11 +1,32 @@
 import BarcodeScanner, {
   BarcodeScannerRef,
 } from "@/components/Form/BarcodeScanner";
+import AmountPreview from "@/components/Pos/AmountPreview";
+import OpenShiftModal from "@/components/Pos/OpenShiftModal";
+import {
+  apiErrorCode,
+  apiErrorMessage,
+  isOutcomeUnknown,
+  SALE_ERROR_CODES,
+} from "@/components/Pos/saleErrors";
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { parseMoney } from "@/utils/format";
+import {
+  amountToCents,
+  centsToAmount,
+  lineTotalCents,
+  roundMoney,
+  roundQuantity,
+  sumCents,
+} from "@/utils/money";
+import { newClientRequestId } from "@/utils/requestId";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { usePreventRemove } from "expo-router/react-navigation";
 import React, {
   memo,
   useCallback,
@@ -48,8 +69,21 @@ type Package = {
   id: number;
   package_name: string;
   quantity_per_package: number;
+  /** Precio propio del paquete (ProductResource lo manda como sale_price). */
+  sale_price?: string | number | null;
   price?: number;
   barcode?: string;
+};
+
+type PaymentMethod = "cash" | "card" | "transfer";
+
+/** Aviso dentro del diálogo de cobro. */
+type PayMessage = {
+  text: string;
+  /** "warning": la venta pudo registrarse, no es un rechazo. */
+  tone: "error" | "warning" | "info";
+  /** Ofrecer abrir el turno de caja (cobro en efectivo sin turno). */
+  openShift?: boolean;
 };
 type Product = {
   id: number;
@@ -93,6 +127,20 @@ const fmt = (value: number) =>
 
 const makeKey = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+/**
+ * Precio de un paquete como lo cobra el servidor: el suyo si tiene, si no el
+ * del producto por su contenido. Antes se leía `price`, que la API no manda,
+ * y el paquete se cobraba al precio de una sola pieza.
+ */
+const packagePrice = (pkg: Package, unitPrice: number) => {
+  const own = Number(pkg.sale_price ?? pkg.price ?? 0);
+  return own > 0 ? own : roundMoney(unitPrice * Number(pkg.quantity_per_package ?? 1));
+};
+
+/** Importe del renglón en centavos, redondeado como el servidor. */
+const itemCents = (item: Pick<CartItem, "quantity" | "unit_price">) =>
+  lineTotalCents(item.quantity, item.unit_price);
 
 const resolveImage = (img: any) => {
   if (!img) return null;
@@ -227,7 +275,7 @@ const CartRow = memo(function CartRow({
       </View>
       <View style={{ alignItems: "flex-end" }}>
         <Text style={{ fontWeight: "700" }}>
-          {fmt(item.unit_price * item.quantity)}
+          {fmt(centsToAmount(itemCents(item)))}
         </Text>
         <IconButton
           icon="trash-can-outline"
@@ -244,13 +292,15 @@ const CartRow = memo(function CartRow({
 
 export default function KioskScreen() {
   const alerts = useAlerts();
+  const { hasPermission } = useAuth();
   const screenWidth = Dimensions.get("window").width;
   const wide = screenWidth >= 900;
 
   const scannerRef = useRef<BarcodeScannerRef>(null);
 
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  // Candado del cobro: un doble toque no manda dos ventas.
+  const { submitting, run } = useSubmitGuard();
   const [products, setProducts] = useState<Product[]>([]);
   const [customers, setCustomers] = useState<{ id: number; name: string }[]>([]);
   const [query, setQuery] = useState("");
@@ -262,11 +312,25 @@ export default function KioskScreen() {
 
   // Checkout dialog
   const [payDialog, setPayDialog] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "transfer" | "credit">("cash");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [isPaid, setIsPaid] = useState(true);
   const [customerId, setCustomerId] = useState<number | null>(null);
   const [customerMenu, setCustomerMenu] = useState(false);
-  const paidAmountRef = useRef<string>("");
+  const [paidAmount, setPaidAmount] = useState("");
+  const [payMessage, setPayMessage] = useState<PayMessage | null>(null);
+  const [openShiftVisible, setOpenShiftVisible] = useState(false);
+  // Llave de cobro (client_request_id) del carrito: la misma en cada
+  // reintento hasta que la venta queda registrada o se vacía el carrito. Si el
+  // primer envío sí se registró, el servidor devuelve ese pedido en lugar de
+  // crear otro.
+  const requestIdRef = useRef<string | null>(null);
+  /** El último cobro se quedó sin respuesta: no se sabe si se registró. */
+  const [pendingUnknown, setPendingUnknown] = useState(false);
+
+  // Con el cobro en envío no se sale del kiosko: el resultado se perdería.
+  usePreventRemove(submitting, () => {
+    alerts.warning("Espera a que termine de registrarse la venta.");
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -278,9 +342,7 @@ export default function KioskScreen() {
         setProducts(data?.products ?? []);
         setCustomers(data?.customers ?? []);
       } catch (e: any) {
-        alerts.error(
-          e?.response?.data?.message || e?.message || "Error al cargar productos",
-        );
+        alerts.error(apiErrorMessage(e, "Error al cargar productos"));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -289,6 +351,17 @@ export default function KioskScreen() {
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Existencias al día (después de un rechazo por stock). */
+  const reloadProducts = useCallback(async () => {
+    try {
+      const res = await Services.salesOrders.getInitialData();
+      const data = res?.data ?? res;
+      setProducts(data?.products ?? []);
+    } catch {
+      // Se siguen usando las que había.
+    }
   }, []);
 
   // ---------- Derived ----------
@@ -303,10 +376,11 @@ export default function KioskScreen() {
     );
   }, [products, query]);
 
+  // En centavos, como lo calcula el servidor.
   const totals = useMemo(() => {
-    const total = cart.reduce((acc, c) => acc + c.unit_price * c.quantity, 0);
+    const totalCents = sumCents(cart.map(itemCents));
     const count = cart.reduce((acc, c) => acc + c.quantity, 0);
-    return { total, count };
+    return { total: centsToAmount(totalCents), totalCents, count };
   }, [cart]);
 
   // ---------- Cart logic ----------
@@ -334,7 +408,7 @@ export default function KioskScreen() {
       const available = Number(product.available_stock ?? 0);
       const basePerUnit = pkg ? Number(pkg.quantity_per_package ?? 1) : 1;
       const basePrice = Number(product.sale_price ?? product.price ?? 0);
-      const price = pkg ? Number(pkg.price ?? basePrice) : basePrice;
+      const price = pkg ? packagePrice(pkg, basePrice) : basePrice;
 
       if (!canTake(product.id, available, basePerUnit)) {
         alerts.error(`Stock insuficiente para ${product.name}`);
@@ -443,23 +517,19 @@ export default function KioskScreen() {
           alerts.error("Producto no disponible en este inventario");
           return;
         }
-        const localPkg =
+        const localPkg: Package | null =
           product.active_packages?.find((p) => p.id === pkg.id) ??
           (pkg.id
             ? {
                 id: pkg.id,
                 package_name: pkg.package_name,
                 quantity_per_package: Number(pkg.quantity_per_package ?? 1),
-                price: Number(pkg.price ?? product.price ?? 0),
+                sale_price: pkg.sale_price ?? null,
               }
             : null);
         handleAddFromCard(product, localPkg ?? null);
       } catch (e: any) {
-        alerts.error(
-          e?.response?.data?.message ||
-            e?.message ||
-            "No se pudo buscar el código",
-        );
+        alerts.error(apiErrorMessage(e, "No se pudo buscar el código"));
       }
     },
     [products, handleAddFromCard, alerts],
@@ -467,68 +537,115 @@ export default function KioskScreen() {
 
   // ---------- Submit ----------
 
-  const submitOrder = useCallback(async () => {
-    if (cart.length === 0) {
-      alerts.error("El carrito está vacío");
-      return;
+  /** Vacía el carrito; con un cobro sin confirmar, avisa antes. */
+  const clearCart = useCallback(async () => {
+    if (pendingUnknown) {
+      const ok = await alerts.confirm(
+        "No se pudo confirmar si la última venta quedó registrada. Si vacías el carrito y vuelves a cobrar estos productos podría quedar dos veces: revísala en Pedidos.",
+        { title: "Vaciar carrito", okText: "Vaciar", cancelText: "Volver" },
+      );
+      if (!ok) return;
     }
-    const paid = parseFloat(paidAmountRef.current.replace(",", "."));
-    const totalNum = totals.total;
-    const paidValid = isPaid
-      ? (Number.isFinite(paid) ? paid : totalNum)
-      : 0;
+    setCart([]);
+    requestIdRef.current = null;
+    setPendingUnknown(false);
+    setPayMessage(null);
+  }, [pendingUnknown, alerts]);
 
-    try {
-      setSubmitting(true);
-      // 1. Create the sales order in kiosk channel
-      const orderRes = await Services.salesOrders.store({
-        channel: "kiosk",
-        service_mode: "counter",
-        customer_id: customerId,
-        details: cart.map((c) => ({
-          product_id: c.product_id,
-          package_id: c.package_id,
-          unit_id: c.unit_id,
-          requested_quantity: c.quantity,
-          unit_price: c.unit_price,
-        })),
-      });
-      const order = orderRes?.data?.data ?? orderRes?.data ?? orderRes;
-      if (!order?.id) {
-        throw new Error("Respuesta inválida al crear el pedido");
+  /**
+   * Crea el pedido y lo cobra en una sola llamada (antes eran dos: si fallaba
+   * el cobro quedaba un pedido pendiente y el reintento creaba otro).
+   */
+  const submitOrder = () =>
+    run(async () => {
+      setPayMessage(null);
+      if (cart.length === 0) {
+        setPayMessage({ text: "El carrito está vacío", tone: "error" });
+        return;
       }
 
-      // 2. Checkout (reserves + decrements stock atomically, creates closed Sale)
-      const checkoutRes = await Services.salesOrders.checkout(order.id, {
-        payment_method: paymentMethod,
-        paid_amount: paidValid,
-      });
-      const updated =
-        checkoutRes?.data?.data ?? checkoutRes?.data ?? checkoutRes;
+      // Vacío = el total exacto. Se lee en formato mexicano ("1,500" son mil
+      // quinientos, no 1.5) y un monto que no se entiende se avisa.
+      let paidCents = 0;
+      if (isPaid) {
+        const parsed = paidAmount.trim() === "" ? totals.total : parseMoney(paidAmount);
+        if (parsed === null || parsed < 0) {
+          setPayMessage({
+            text: "El monto recibido no es válido: escríbelo como 1500 o 1,500.50.",
+            tone: "error",
+          });
+          return;
+        }
+        paidCents = amountToCents(parsed);
+      }
 
-      alerts.success("Venta registrada");
-      setCart([]);
-      setPayDialog(false);
-      setCustomerId(null);
-      paidAmountRef.current = "";
-      const finalId = updated?.id ?? order.id;
-      router.replace(`/home/sales-orders/${finalId}`);
-    } catch (e: any) {
-      const errors = e?.response?.data?.errors;
-      const firstError =
-        errors && typeof errors === "object"
-          ? (Object.values(errors)[0] as any)?.[0]
-          : null;
-      alerts.error(
-        firstError ||
-          e?.response?.data?.message ||
-          e?.message ||
-          "No se pudo completar la venta",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }, [cart, totals.total, paymentMethod, isPaid, customerId, alerts]);
+      const clientRequestId = requestIdRef.current ?? newClientRequestId();
+      requestIdRef.current = clientRequestId;
+      setPendingUnknown(true);
+
+      try {
+        const body: any = await Services.salesOrders.quickCheckout({
+          channel: "kiosk",
+          service_mode: "counter",
+          customer_id: customerId,
+          details: cart.map((c) => ({
+            product_id: c.product_id,
+            package_id: c.package_id,
+            unit_id: c.unit_id,
+            requested_quantity: roundQuantity(c.quantity),
+            unit_price: roundMoney(c.unit_price),
+          })),
+          payment_method: paymentMethod,
+          paid_amount: centsToAmount(paidCents),
+          client_request_id: clientRequestId,
+        });
+        const order = body?.data?.order ?? body?.order ?? body?.data ?? body;
+
+        // Registrada: el siguiente carrito lleva una llave nueva.
+        requestIdRef.current = null;
+        setPendingUnknown(false);
+        setCart([]);
+        setPayDialog(false);
+        setCustomerId(null);
+        setPaidAmount("");
+        alerts.success(order?.order_number ? `Venta registrada (${order.order_number})` : "Venta registrada");
+        if (order?.id) router.replace(`/home/sales-orders/${order.id}`);
+      } catch (e: any) {
+        if (isOutcomeUnknown(e)) {
+          // Sin respuesta: el pedido pudo quedar cobrado. Reintentar con la
+          // misma llave no lo duplica.
+          setPayMessage({
+            text: `${apiErrorMessage(e, "No llegó la respuesta del servidor.")} No se pudo confirmar si la venta quedó registrada: vuelve a presionar «Confirmar venta» (si ya se registró no se cobra dos veces) y no vacíes el carrito sin revisarla en Pedidos.`,
+            tone: "warning",
+          });
+          return;
+        }
+
+        // Rechazada: no se registró nada.
+        setPendingUnknown(false);
+        const code = apiErrorCode(e);
+        if (code === SALE_ERROR_CODES.noOpenSession) {
+          const canOpen = hasPermission("sales_pos");
+          setPayMessage({
+            text: `${apiErrorMessage(e, "Abre un turno de caja para cobrar en efectivo.")}${
+              canOpen ? "" : " También puedes cobrarla con tarjeta o transferencia."
+            }`,
+            tone: "error",
+            openShift: canOpen,
+          });
+          return;
+        }
+        if (code === SALE_ERROR_CODES.insufficientStock) {
+          // Existencias al día para corregir el carrito.
+          reloadProducts();
+        }
+        setPayMessage({ text: apiErrorMessage(e, "No se pudo completar la venta"), tone: "error" });
+      }
+    });
+
+  const paidPreviewCents = isPaid && paidAmount.trim() !== "" ? amountToCents(paidAmount) : NaN;
+  const changeCents =
+    paymentMethod === "cash" && Number.isFinite(paidPreviewCents) ? paidPreviewCents - totals.totalCents : 0;
 
   // ---------- Render ----------
 
@@ -617,7 +734,8 @@ export default function KioskScreen() {
           <Button
             compact
             textColor={palette.error}
-            onPress={() => setCart([])}
+            onPress={clearCart}
+            disabled={submitting}
           >
             Vaciar
           </Button>
@@ -665,7 +783,9 @@ export default function KioskScreen() {
           disabled={cart.length === 0 || submitting}
           loading={submitting}
           onPress={() => {
-            paidAmountRef.current = String(totals.total.toFixed(2));
+            setPaidAmount(totals.total.toFixed(2));
+            // El aviso de un cobro sin confirmar se queda hasta resolverlo.
+            if (!pendingUnknown) setPayMessage(null);
             setPayDialog(true);
           }}
         >
@@ -705,7 +825,12 @@ export default function KioskScreen() {
       <Portal>
         <Dialog
           visible={payDialog}
-          onDismiss={() => setPayDialog(false)}
+          // Mientras se cobra no se cierra (tocar fuera, botón atrás).
+          onDismiss={() => {
+            if (!submitting) setPayDialog(false);
+          }}
+          dismissable={!submitting}
+          dismissableBackButton={!submitting}
           style={{ maxWidth: 480, alignSelf: "center", width: "100%" }}
         >
           <Dialog.Title>Finalizar venta</Dialog.Title>
@@ -794,7 +919,10 @@ export default function KioskScreen() {
               </Text>
               <RadioButton.Group
                 value={paymentMethod}
-                onValueChange={(v) => setPaymentMethod(v as "cash" | "card" | "transfer" | "credit")}
+                onValueChange={(v) => {
+                  setPaymentMethod(v as PaymentMethod);
+                  if (!pendingUnknown) setPayMessage(null);
+                }}
               >
                 <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
                   <RadioButton.Item label="Efectivo" value="cash" />
@@ -826,20 +954,63 @@ export default function KioskScreen() {
               </Pressable>
 
               {isPaid && (
-                <TextInput
-                  mode="outlined"
-                  dense
-                  label="Monto recibido"
-                  keyboardType="decimal-pad"
-                  defaultValue={String(totals.total.toFixed(2))}
-                  onChangeText={(t) => (paidAmountRef.current = t)}
-                  style={{ marginTop: 10 }}
-                />
+                <>
+                  <TextInput
+                    mode="outlined"
+                    dense
+                    label="Monto recibido"
+                    keyboardType="decimal-pad"
+                    value={paidAmount}
+                    onChangeText={(t) => {
+                      setPaidAmount(t);
+                      if (!pendingUnknown) setPayMessage(null);
+                    }}
+                    disabled={submitting}
+                    style={{ marginTop: 10 }}
+                  />
+                  <AmountPreview value={paidAmount} label="Recibido" />
+                  {changeCents > 0 && (
+                    <Text variant="bodyMedium" style={{ marginTop: 4, color: palette.success, fontWeight: "600" }}>
+                      Cambio: {fmt(centsToAmount(changeCents))}
+                    </Text>
+                  )}
+                </>
+              )}
+
+              {payMessage && (
+                <View style={styles.payMessage}>
+                  <Text
+                    variant="bodyMedium"
+                    style={{
+                      color:
+                        payMessage.tone === "error"
+                          ? palette.error
+                          : payMessage.tone === "warning"
+                            ? palette.warning
+                            : palette.text,
+                    }}
+                  >
+                    {payMessage.text}
+                  </Text>
+                  {payMessage.openShift && (
+                    <Button
+                      mode="outlined"
+                      icon="cash-register"
+                      compact
+                      onPress={() => setOpenShiftVisible(true)}
+                      style={{ alignSelf: "flex-start" }}
+                    >
+                      Abrir turno
+                    </Button>
+                  )}
+                </View>
               )}
             </ScrollView>
           </Dialog.ScrollArea>
           <Dialog.Actions>
-            <Button onPress={() => setPayDialog(false)}>Cancelar</Button>
+            <Button onPress={() => setPayDialog(false)} disabled={submitting}>
+              Cancelar
+            </Button>
             <Button
               mode="contained"
               onPress={submitOrder}
@@ -852,6 +1023,16 @@ export default function KioskScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      {/* Cobro en efectivo sin turno: abrirlo aquí sin perder el carrito. */}
+      <OpenShiftModal
+        visible={openShiftVisible}
+        onClose={() => setOpenShiftVisible(false)}
+        onOpened={() => {
+          setOpenShiftVisible(false);
+          setPayMessage({ text: "Turno abierto. Confirma la venta de nuevo.", tone: "info" });
+        }}
+      />
 
       <BarcodeScanner ref={scannerRef} onScanned={handleScanned} />
     </View>
@@ -953,5 +1134,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: palette.border ?? "#EEEAE0",
+  },
+  payMessage: {
+    marginTop: 14,
+    gap: 8,
   },
 });
