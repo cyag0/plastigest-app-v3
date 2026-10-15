@@ -1,9 +1,14 @@
 import { goBack } from "@/utils/navigation";
+import AmountPreview from "@/components/Pos/AmountPreview";
+import { apiErrorCode, apiErrorMessage, SALE_ERROR_CODES } from "@/components/Pos/saleErrors";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { parseMoney } from "@/utils/format";
+import { roundMoney } from "@/utils/money";
 import Services from "@/utils/services";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
@@ -33,7 +38,14 @@ export default function ExpenseForm(props: ExpenseFormProps) {
   const { location, selectedCompany } = useAuth();
 
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  // Candado del guardado: un doble toque no crea dos gastos.
+  const { submitting: saving, run } = useSubmitGuard();
+  // El gasto ya entró en un turno de caja cerrado: monto, método, fecha y
+  // "pagado con caja" no se pueden cambiar (el corte ya se firmó).
+  const [moneyLocked, setMoneyLocked] = useState(false);
+  const [lockMessage, setLockMessage] = useState<string | null>(null);
+  // Lo cargado del gasto, para devolver los campos de dinero al bloquearlos.
+  const loadedRef = useRef<{ amount: string; paymentMethod: string; paidFromCash: boolean; expenseDate: Date } | null>(null);
 
   // Form fields
   const [category, setCategory] = useState("");
@@ -83,12 +95,19 @@ export default function ExpenseForm(props: ExpenseFormProps) {
       const expense: App.Entities.Expense & { paid_from_cash?: boolean } =
         body?.data ?? body;
 
+      const loaded = {
+        amount: expense.amount != null ? String(expense.amount) : "",
+        paymentMethod: expense.payment_method,
+        paidFromCash: expense.paid_from_cash ?? true,
+        expenseDate: parseLocalDate(expense.expense_date),
+      };
+      loadedRef.current = loaded;
       setCategory(expense.category);
-      setAmount(expense.amount != null ? String(expense.amount) : "");
-      setPaymentMethod(expense.payment_method);
-      setPaidFromCash(expense.paid_from_cash ?? true);
+      setAmount(loaded.amount);
+      setPaymentMethod(loaded.paymentMethod);
+      setPaidFromCash(loaded.paidFromCash);
       setDescription(expense.description ?? "");
-      setExpenseDate(parseLocalDate(expense.expense_date));
+      setExpenseDate(loaded.expenseDate);
     } catch (error) {
       console.error("Error loading expense:", error);
       alerts.error("Error al cargar el gasto");
@@ -97,51 +116,72 @@ export default function ExpenseForm(props: ExpenseFormProps) {
     }
   };
 
-  const handleSubmit = async () => {
-    // Validations
-    if (!category) {
-      alerts.error("Selecciona una categoría");
-      return;
-    }
-    if (!amount || parseFloat(amount) <= 0) {
-      alerts.error("Ingresa un monto válido");
-      return;
-    }
-    if (!description) {
-      alerts.error("Ingresa una descripción");
-      return;
-    }
+  /** Monto escrito en formato mexicano ("1,500" son mil quinientos; antes se leía 1). */
+  const parsedAmount = parseMoney(amount);
 
-    try {
-      setSaving(true);
+  /**
+   * Turno cerrado: los campos de dinero vuelven a lo guardado y se bloquean;
+   * categoría y descripción se pueden seguir cambiando y guardando.
+   */
+  const lockMoneyFields = (message: string) => {
+    const loaded = loadedRef.current;
+    if (loaded) {
+      setAmount(loaded.amount);
+      setPaymentMethod(loaded.paymentMethod);
+      setPaidFromCash(loaded.paidFromCash);
+      setExpenseDate(loaded.expenseDate);
+    }
+    setMoneyLocked(true);
+    setLockMessage(
+      `${message} Solo puedes cambiar la categoría y la descripción; los demás campos se dejaron como estaban.`,
+    );
+  };
 
-      const data = {
-        category,
-        amount: parseFloat(amount),
-        payment_method: paymentMethod,
-        paid_from_cash: paymentMethod === "efectivo" ? paidFromCash : false,
-        description,
-        expense_date: toLocalDateString(expenseDate),
-      };
-
-      if (expenseId) {
-        await Services.expenses.update(expenseId, data);
-        alerts.success("Gasto actualizado correctamente");
-      } else {
-        await Services.expenses.store(data);
-        alerts.success("Gasto creado correctamente");
+  const handleSubmit = () =>
+    run(async () => {
+      // Validations
+      if (!category) {
+        alerts.error("Selecciona una categoría");
+        return;
+      }
+      if (parsedAmount === null || parsedAmount <= 0) {
+        alerts.error("Ingresa un monto válido: escríbelo como 1500 o 1,500.50");
+        return;
+      }
+      if (!description) {
+        alerts.error("Ingresa una descripción");
+        return;
       }
 
-      goBack();
-    } catch (error: any) {
-      console.error("Error saving expense:", error);
-      alerts.error(
-        error.response?.data?.message || "Error al guardar el gasto"
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
+      try {
+        const data = {
+          category,
+          amount: roundMoney(parsedAmount),
+          payment_method: paymentMethod,
+          paid_from_cash: paymentMethod === "efectivo" ? paidFromCash : false,
+          description,
+          expense_date: toLocalDateString(expenseDate),
+        };
+
+        if (expenseId) {
+          await Services.expenses.update(expenseId, data);
+          alerts.success("Gasto actualizado correctamente");
+        } else {
+          await Services.expenses.store(data);
+          alerts.success("Gasto creado correctamente");
+        }
+
+        goBack();
+      } catch (error: any) {
+        console.error("Error saving expense:", error);
+        const message = apiErrorMessage(error, "Error al guardar el gasto");
+        if (expenseId && apiErrorCode(error) === SALE_ERROR_CODES.closedSession) {
+          lockMoneyFields(message);
+          return;
+        }
+        alerts.error(message);
+      }
+    });
 
   const paymentMethods = [
     { label: "Efectivo", value: "efectivo", icon: "cash" },
@@ -167,6 +207,15 @@ export default function ExpenseForm(props: ExpenseFormProps) {
       <ScrollView style={styles.container}>
         <Card style={styles.card}>
           <Card.Content>
+            {!!lockMessage && (
+              <View style={styles.lockBanner}>
+                <MaterialCommunityIcons name="lock-outline" size={18} color={palette.warning} />
+                <Text variant="bodySmall" style={styles.lockText}>
+                  {lockMessage}
+                </Text>
+              </View>
+            )}
+
             {/* Categoría */}
             <View style={styles.input}>
               <AppSelect
@@ -184,10 +233,14 @@ export default function ExpenseForm(props: ExpenseFormProps) {
               onChangeText={setAmount}
               keyboardType="decimal-pad"
               mode="outlined"
-              style={styles.input}
+              style={[styles.input, { marginBottom: 0 }]}
               left={<TextInput.Icon icon="currency-usd" />}
-              error={!!amount && parseFloat(amount) <= 0}
+              error={!!amount.trim() && (parsedAmount === null || parsedAmount <= 0)}
+              disabled={moneyLocked}
             />
+            <View style={styles.amountPreview}>
+              <AmountPreview value={amount} label="Se registrará" />
+            </View>
 
             {/* Método de Pago */}
             <Text variant="labelLarge" style={styles.label}>
@@ -199,6 +252,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
                   key={method.value}
                   mode={paymentMethod === method.value ? "contained" : "outlined"}
                   onPress={() => setPaymentMethod(method.value)}
+                  disabled={moneyLocked}
                   icon={method.icon}
                   style={styles.paymentButton}
                   buttonColor={
@@ -224,7 +278,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
                       : "No afecta el corte (lo pagó el dueño u otra fuente)."}
                   </Text>
                 </View>
-                <Switch value={paidFromCash} onValueChange={setPaidFromCash} />
+                <Switch value={paidFromCash} onValueChange={setPaidFromCash} disabled={moneyLocked} />
               </View>
             )}
 
@@ -237,6 +291,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
               inputMode="start"
               mode="outlined"
               style={styles.input}
+              disabled={moneyLocked}
             />
 
             {/* Descripción */}
@@ -323,6 +378,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     marginBottom: 16,
+  },
+  amountPreview: {
+    marginBottom: 16,
+    minHeight: 4,
+  },
+  lockBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.warning,
+  },
+  lockText: {
+    flex: 1,
+    color: palette.text,
+    lineHeight: 18,
   },
   // Envuelve a otra línea si no caben (en celular "Transferencia" se salía).
   paymentMethodsContainer: {
