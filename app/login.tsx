@@ -10,6 +10,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState, useRef } from "react";
 import {
   KeyboardAvoidingView,
+  Linking,
   Platform,
   ScrollView,
   Text as RNText,
@@ -21,6 +22,17 @@ import {
   TextInput,
 } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
+
+// Aviso de privacidad y baja de cuenta: páginas estáticas de public/ que
+// piden las tiendas. En la web son del mismo sitio; en el teléfono se abren en
+// el sitio web publicado (EXPO_PUBLIC_WEB_URL, por defecto el de producción).
+const WEB_URL = (
+  process.env.EXPO_PUBLIC_WEB_URL || "https://app.cocos-francisco.com"
+).replace(/\/+$/, "");
+const openLegalPage = (page: string) => {
+  const url = Platform.OS === "web" ? `/${page}` : `${WEB_URL}/${page}`;
+  Linking.openURL(url).catch(() => {});
+};
 
 export default function LoginScreen() {
   const { login, isLoading } = useAuth();
@@ -246,6 +258,19 @@ export default function LoginScreen() {
     footerText: {
       ...tokens.typography.caption,
       color: c.textMuted,
+    },
+    legalLinks: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: tokens.spacing[2],
+      gap: tokens.spacing[2],
+    },
+    legalLink: {
+      ...tokens.typography.caption,
+      color: c.textMuted,
+      textDecorationLine: "underline",
     },
   }));
 
@@ -522,6 +547,23 @@ export default function LoginScreen() {
               />
               <RNText style={styles.footerText}>
                 GCStock v{getAppVersionLabel()}
+              </RNText>
+            </View>
+            <View style={styles.legalLinks}>
+              <RNText
+                style={styles.legalLink}
+                accessibilityRole="link"
+                onPress={() => openLegalPage("privacidad.html")}
+              >
+                Aviso de privacidad
+              </RNText>
+              <RNText style={styles.footerText}>·</RNText>
+              <RNText
+                style={styles.legalLink}
+                accessibilityRole="link"
+                onPress={() => openLegalPage("eliminar-cuenta.html")}
+              >
+                Eliminar mi cuenta
               </RNText>
             </View>
           </View>

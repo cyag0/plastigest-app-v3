@@ -12,6 +12,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.cocos-francisco.com/api",
+        "EXPO_PUBLIC_WEB_URL": "https://app.cocos-francisco.com",
         "EXPO_PUBLIC_APP_ENV": "preview",
         "EXPO_PUBLIC_APP_NAME": "GCStock",
         "EXPO_PUBLIC_DEBUG_MODE": "false",
@@ -22,6 +23,7 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.cocos-francisco.com/api",
+        "EXPO_PUBLIC_WEB_URL": "https://app.cocos-francisco.com",
         "EXPO_PUBLIC_APP_ENV": "production",
         "EXPO_PUBLIC_APP_NAME": "GCStock",
         "EXPO_PUBLIC_DEBUG_MODE": "false",
