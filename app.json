@@ -88,7 +88,9 @@
           "cameraPermission": "Permite a $(PRODUCT_NAME) usar la cámara para tomar fotos de productos y comprobantes.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-image",
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true
