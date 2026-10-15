@@ -90,7 +90,13 @@
         }
       ],
       "expo-image",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios, { AxiosInstance, AxiosResponse, isCancel } from "axios";
+import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { API_BASE_URL, API_CONFIG_ERROR } from "./appConfig";
 
@@ -273,8 +274,10 @@ axiosClient.interceptors.request.use(
     }
 
     try {
-      // Obtener token desde AsyncStorage usando la variable de entorno
-      const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+      // Token de la sesión (SecureStore en el teléfono, AsyncStorage en web).
+      // Si no se puede leer, la petición sale sin token pero con empresa y
+      // sucursal.
+      const token = await getAuthToken();
 
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
@@ -414,7 +417,7 @@ axiosClient.interceptors.response.use(
       const usedToken: string | null = error.config?._authToken ?? null;
       let currentToken: string | null = null;
       try {
-        currentToken = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+        currentToken = await readStoredToken();
       } catch {
         currentToken = null;
       }
@@ -467,10 +470,90 @@ axiosClient.interceptors.response.use(
   },
 );
 
+// --- Token de sesión -------------------------------------------------------
+//
+// En el teléfono el token va en expo-secure-store (Keychain en iOS, cifrado
+// con el Android Keystore); AsyncStorage es un archivo sin cifrar. En web se
+// queda en AsyncStorage (localStorage): lo comparten las pestañas (ver
+// onSessionChangedInOtherTab) y SecureStore no existe en web.
+const USE_SECURE_TOKEN_STORE = Platform.OS !== "web";
+// SecureStore solo acepta letras, números, ".", "-" y "_" en la llave.
+const SECURE_TOKEN_KEY = AUTH_TOKEN_KEY.replace(/[^\w.-]/g, "_");
+const SECURE_TOKEN_OPTIONS: SecureStore.SecureStoreOptions = {
+  // iOS: se puede leer con el equipo bloqueado después del primer desbloqueo
+  // (la app puede despertar en segundo plano con una notificación) y no pasa
+  // a otro iPhone en un respaldo, como en Android (allowBackup: false).
+  keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+};
+// "Esta instalación ya guarda el token en SecureStore". Vive en AsyncStorage,
+// que se borra al desinstalar la app; el Keychain de iOS no, y sin la marca
+// una reinstalación entraría con la sesión de la instalación anterior.
+const SECURE_TOKEN_MARKER_KEY = "auth_token_in_secure_store";
+
+// Copia en memoria del token en el teléfono: el interceptor lo lee en cada
+// petición y SecureStore descifra en cada lectura. undefined = aún no se leyó.
+let nativeTokenCache: string | null | undefined;
+let nativeTokenStoreReady: Promise<void> | null = null;
+
+/**
+ * Una vez por arranque, antes de la primera lectura o escritura del token en
+ * el teléfono: el token que una versión anterior dejó en AsyncStorage pasa a
+ * SecureStore y se borra de AsyncStorage, y en una instalación nueva se
+ * descarta el que haya quedado en el Keychain de una instalación anterior.
+ */
+const prepareNativeTokenStore = (): Promise<void> => {
+  nativeTokenStoreReady ??= (async () => {
+    try {
+      const [legacyToken, marker] = await Promise.all([
+        AsyncStorage.getItem(AUTH_TOKEN_KEY),
+        AsyncStorage.getItem(SECURE_TOKEN_MARKER_KEY),
+      ]);
+      if (legacyToken) {
+        await SecureStore.setItemAsync(SECURE_TOKEN_KEY, legacyToken, SECURE_TOKEN_OPTIONS);
+        await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+      } else if (!marker) {
+        await SecureStore.deleteItemAsync(SECURE_TOKEN_KEY, SECURE_TOKEN_OPTIONS);
+      }
+      if (!marker) {
+        await AsyncStorage.setItem(SECURE_TOKEN_MARKER_KEY, "1");
+      }
+    } catch (error) {
+      // Se reintenta en el siguiente arranque; mientras, readStoredToken
+      // sigue encontrando el token en AsyncStorage.
+      console.error("Error moving token to SecureStore:", describeError(error));
+    }
+  })();
+  return nativeTokenStoreReady;
+};
+
+/** Token guardado: SecureStore en el teléfono (con copia en memoria), AsyncStorage en web. */
+const readStoredToken = async (): Promise<string | null> => {
+  if (!USE_SECURE_TOKEN_STORE) {
+    return AsyncStorage.getItem(AUTH_TOKEN_KEY);
+  }
+  if (nativeTokenCache !== undefined) return nativeTokenCache;
+  await prepareNativeTokenStore();
+  const stored =
+    (await SecureStore.getItemAsync(SECURE_TOKEN_KEY, SECURE_TOKEN_OPTIONS)) ??
+    // La migración no pudo terminar: el token sigue en AsyncStorage.
+    (await AsyncStorage.getItem(AUTH_TOKEN_KEY));
+  // Si mientras se leía se inició o se cerró sesión, vale lo más reciente.
+  if (nativeTokenCache === undefined) nativeTokenCache = stored;
+  return nativeTokenCache;
+};
+
 // Funciones helper para manejo de tokens
 export const setAuthToken = async (token: string): Promise<void> => {
   try {
-    await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+    if (USE_SECURE_TOKEN_STORE) {
+      await prepareNativeTokenStore();
+      // Primero en memoria: si SecureStore falla, la sesión sigue mientras la
+      // app esté abierta.
+      nativeTokenCache = token;
+      await SecureStore.setItemAsync(SECURE_TOKEN_KEY, token, SECURE_TOKEN_OPTIONS);
+    } else {
+      await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+    }
   } catch (error) {
     console.error("Error saving token:", error);
   }
@@ -478,7 +561,7 @@ export const setAuthToken = async (token: string): Promise<void> => {
 
 export const getAuthToken = async (): Promise<string | null> => {
   try {
-    return await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+    return await readStoredToken();
   } catch (error) {
     console.error("Error getting token:", error);
     return null;
@@ -486,16 +569,27 @@ export const getAuthToken = async (): Promise<string | null> => {
 };
 
 /**
- * Borra todo lo que pertenece a la sesión: token, usuario, empresa y
- * sucursal seleccionadas, lista de empresas y los cachés de permisos y
- * sucursales. Se usa en logout y cuando la sesión expira, para que en un
- * equipo compartido el siguiente usuario no herede la empresa, la sucursal ni
- * los permisos del anterior. Las preferencias del equipo (tema, sidebar) se
- * conservan.
+ * Borra todo lo que pertenece a la sesión: token (en el teléfono, de
+ * SecureStore), usuario, empresa y sucursal seleccionadas, lista de empresas
+ * y los cachés de permisos y sucursales. Se usa en logout y cuando la sesión
+ * expira, para que en un equipo compartido el siguiente usuario no herede la
+ * empresa, la sucursal ni los permisos del anterior. Las preferencias del
+ * equipo (tema, sidebar) se conservan.
  */
 export const clearSessionStorage = async (): Promise<void> => {
   clearTabSelection();
+  if (USE_SECURE_TOKEN_STORE) {
+    // Sin token desde ya, aunque SecureStore tarde o falle.
+    nativeTokenCache = null;
+    try {
+      await prepareNativeTokenStore();
+      await SecureStore.deleteItemAsync(SECURE_TOKEN_KEY, SECURE_TOKEN_OPTIONS);
+    } catch (error) {
+      console.error("Error clearing token:", describeError(error));
+    }
+  }
   const fixedKeys = [
+    // En web, el token; en el teléfono, una copia vieja sin migrar.
     AUTH_TOKEN_KEY,
     USER_DATA_KEY,
     SELECTED_COMPANY_KEY,
