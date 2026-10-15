@@ -466,8 +466,35 @@ export default function NavigationSidebar({
         ))}
       </ScrollView>
 
-      {/* Footer: campana + sucursal + usuario */}
+      {/* Footer: ayuda + campana + sucursal + usuario */}
       <View style={styles.footer}>
+        {!collapsed ? (
+          <TouchableOpacity
+            onPress={() => handleNavigation("/(stacks)/help")}
+            style={styles.footerRow}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="help-circle-outline"
+              size={20}
+              color={iconSecondary}
+            />
+            <Text style={styles.footerLabel}>Ayuda</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={() => handleNavigation("/(stacks)/help")}
+            style={styles.collapsedLocationButton}
+            accessibilityLabel="Ayuda"
+          >
+            <MaterialCommunityIcons
+              name="help-circle-outline"
+              size={18}
+              color={iconSecondary}
+            />
+          </TouchableOpacity>
+        )}
+
         {/* Notificaciones (compactas) */}
         {!collapsed && (
           <TouchableOpacity

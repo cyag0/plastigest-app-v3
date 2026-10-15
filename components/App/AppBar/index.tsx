@@ -1,5 +1,6 @@
 import NotificationBell from "@/components/Notifications/NotificationBell";
 import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
+import HelpButton from "@/components/Help/HelpButton";
 import UserMenu from "@/components/App/UserMenu";
 import { tokens } from "@/constants/tokens";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -197,6 +198,9 @@ export default function AppBar({
             size={20}
           />
         )}
+
+        {/* Ayuda del módulo: solo aparece si la pantalla tiene guía (help/) */}
+        <HelpButton iconColor={resolvedIconColor} />
 
         {/* Campana de notificaciones */}
         {showNotificationButton && <NotificationBell iconColor={resolvedIconColor} />}

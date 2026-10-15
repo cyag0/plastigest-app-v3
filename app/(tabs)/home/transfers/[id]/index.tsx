@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/utils/dates";
 import {
   getCurrentStepFromTransfer,
   TransferWizardStatusCard,
@@ -10,6 +11,7 @@ import {
 } from "@/components/Views/transfers";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useHelpSection } from "@/help";
 import { useAlerts } from "@/hooks/useAlerts";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import transferService from "@/utils/services/transferService";
@@ -17,6 +19,14 @@ import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
+
+// Sección de la ayuda que abre el botón "?" según el paso que se está viendo.
+const HELP_SECTION_BY_STEP: Record<number, string> = {
+  1: "aprobar",
+  2: "enviar",
+  3: "recibir",
+  4: "detalle",
+};
 
 export default function TransferDetailWizardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,6 +43,8 @@ export default function TransferDetailWizardScreen() {
 
   const transferId = useMemo(() => Number(id), [id]);
   const currentLocationId = auth.location?.id;
+
+  useHelpSection(transfer ? HELP_SECTION_BY_STEP[selectedStep] : null);
 
   const getInitialStepForActor = (data: InventoryTransfer) => {
     return getCurrentStepFromTransfer(data);
@@ -63,20 +75,7 @@ export default function TransferDetailWizardScreen() {
     }
   };
 
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return "-";
-    const date = new Date(dateString);
-
-    if (Number.isNaN(date.getTime())) return "-";
-
-    return date.toLocaleString("es-MX", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  const formatDate = (dateString?: string) => formatDateTime(dateString);
 
   if (loading) {
     return (

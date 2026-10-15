@@ -55,10 +55,15 @@ export default function UserMenu({
     router.push("/(tabs)/preferences" as any);
   }, [onDismiss, router]);
 
+  const handleHelp = useCallback(() => {
+    onDismiss();
+    router.push("/(stacks)/help" as any);
+  }, [onDismiss, router]);
+
   const handleLogout = useCallback(async () => {
     onDismiss();
-    const confirmed = await alerts.confirm("¿Cerrar sesion?", {
-      title: "Cerrar sesion",
+    const confirmed = await alerts.confirm("¿Cerrar sesión?", {
+      title: "Cerrar sesión",
       okText: "Salir",
       cancelText: "Cancelar",
     });
@@ -122,12 +127,13 @@ export default function UserMenu({
         label="Preferencias"
         onPress={handlePreferences}
       />
+      <MenuItem icon="help-circle-outline" label="Ayuda" onPress={handleHelp} />
 
       <Divider style={styles.divider} />
 
       <MenuItem
         icon="logout"
-        label="Cerrar sesion"
+        label="Cerrar sesión"
         onPress={handleLogout}
         danger
       />

@@ -1,7 +1,6 @@
 import AppBar from "@/components/App/AppBar";
-import { router, Stack } from "expo-router";
+import { Stack } from "expo-router";
 import React from "react";
-import { Appbar } from "react-native-paper";
 
 export default function _layout() {
   return (
@@ -251,26 +250,12 @@ export default function _layout() {
         name="transfers-menu/index"
         options={{
           title: "Transferencias",
-          headerRight: () => (
-            <Appbar.Action
-              icon="help-circle-outline"
-              onPress={() => router.push("/(tabs)/home/transfers/log-guide")}
-              accessibilityLabel="Ver ayuda del log de transferencias"
-            />
-          ),
         }}
       />
       <Stack.Screen
         name="transfers/formv2/index"
         options={{
           title: "Nueva Solicitud de Transferencia",
-          headerRight: () => (
-            <Appbar.Action
-              icon="help-circle-outline"
-              onPress={() => router.push("/(tabs)/home/transfers/log-guide")}
-              accessibilityLabel="Ver ayuda del log de transferencias"
-            />
-          ),
         }}
       />
       <Stack.Screen
@@ -283,12 +268,6 @@ export default function _layout() {
         name="transfers/history/index"
         options={{
           title: "Historial de Transferencias",
-        }}
-      />
-      <Stack.Screen
-        name="transfers/log-guide"
-        options={{
-          title: "Guía del Log de Transferencias",
         }}
       />
       <Stack.Screen

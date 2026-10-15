@@ -52,6 +52,12 @@ const MODULE_SECTIONS: ModuleSection[] = [
         icon: "view-dashboard-outline",
         route: "/(tabs)/reports",
       },
+      {
+        label: "Ayuda",
+        description: "Guías de cada módulo",
+        icon: "help-circle-outline",
+        route: "/(stacks)/help",
+      },
     ],
   },
   {

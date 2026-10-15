@@ -29,6 +29,7 @@ const segmentLabels: Record<string, string> = {
   form: "Nuevo",
   formv2: "Nuevo",
   formulas: "Fórmulas",
+  help: "Ayuda",
   history: "Historial",
   home: "Inicio",
   inventory: "Inventario",
@@ -73,7 +74,6 @@ const pathLabels: Record<string, string> = {
   "/home/purchases/formv2": "Nueva compra",
   "/home/sales/formv2": "Nueva venta",
   "/home/transfers/formv2": "Nueva solicitud",
-  "/home/transfers/log-guide": "Guia del log",
   "/inventory/weekly-inventory/form": "Crear inventario",
   "/inventory/products/type/all": "Todos",
 };

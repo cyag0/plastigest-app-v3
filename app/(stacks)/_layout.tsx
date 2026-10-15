@@ -61,6 +61,18 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
+        name="help/index"
+        options={{
+          title: "Centro de ayuda",
+        }}
+      />
+      <Stack.Screen
+        name="help/[topic]"
+        options={{
+          title: "Ayuda",
+        }}
+      />
+      <Stack.Screen
         name="tasks/index"
         options={{
           title: "Tareas",
