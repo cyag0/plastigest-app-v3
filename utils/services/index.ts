@@ -700,6 +700,22 @@ const Services = {
     ...createCrudService<App.Entities.InventoryCount.InventoryCount>(
       "/auth/admin/inventory-counts",
     ),
+    /**
+     * Completa el conteo: solo el encabezado y el estado, en JSON (los
+     * renglones ya se guardaron uno por uno). Como multipart con todo el
+     * formulario, un conteo grande rebasaba max_input_vars de PHP y la
+     * petición llegaba cortada.
+     */
+    async complete(
+      id: number,
+      data: { name?: string; count_date?: string; notes?: string },
+    ) {
+      return axiosClient.put(
+        `/auth/admin/inventory-counts/${id}`,
+        { ...data, status: "completed" },
+        { headers: { "Content-Type": "application/json" } },
+      );
+    },
   },
   inventoryCountsDetails: {
     ...createCrudService<App.Entities.InventoryCount.Detail>(

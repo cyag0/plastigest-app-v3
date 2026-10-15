@@ -288,9 +288,8 @@ export default function InventoryIndex() {
               location_id: selectedLocation?.id || null,
               notes: "",
             }}
-            onSubmit={(values, form) => {
-              console.log("Submitting form with values:", values);
-              return handleCreateInventory(values);
+            onSubmit={async (values) => {
+              await handleCreateInventory(values);
             }}
           >
             <FormInput

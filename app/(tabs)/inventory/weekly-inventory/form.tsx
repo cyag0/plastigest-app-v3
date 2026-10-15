@@ -12,6 +12,7 @@ import useDebounce from "@/hooks/useDebounce";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
+import { formatQuantity, parseQuantity } from "@/utils/format";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Redirect, useRouter } from "expo-router";
 import { useFormikContext } from "formik";
@@ -58,6 +59,25 @@ const detailKey = (productId: number) => `product_${productId}`;
 // Lee el cuerpo del recurso devuelto por la API (Laravel envuelve en `data`).
 function unwrap(res: any): any {
   return res?.data?.data ?? res?.data ?? null;
+}
+
+// Número que manda la API ("12.000"), o el respaldo si no viene.
+function toNumber(value: any, fallback: number): number {
+  if (value === null || value === undefined || value === "") return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** Motivo que manda el backend; nunca el texto en inglés de axios. */
+function apiMessage(error: any, fallback: string): string {
+  if (error?.isAxiosError && !error.response) {
+    return "sin conexión con el servidor";
+  }
+  const data = error?.response?.data;
+  const fieldError = data?.errors
+    ? (Object.values(data.errors).flat()[0] as string | undefined)
+    : undefined;
+  return fieldError || data?.message || data?.error || fallback;
 }
 
 // Ejecuta un trabajo asíncrono en lotes para no saturar la red al "marcar todo".
@@ -122,7 +142,9 @@ function InventoryForm(props: InventoryFormProps) {
           id: prev?.id ?? undefined,
           product_id: product.id,
           location_id: prev?.location_id ?? selectedLocation?.id,
-          system_quantity: system,
+          // Lo ya contado se compara contra la existencia que tomó el servidor
+          // al guardarlo (de ahí sale la diferencia), no contra la de ahora.
+          system_quantity: toNumber(prev?.system_quantity, system),
           counted_quantity:
             prev?.counted_quantity != null
               ? Number(prev.counted_quantity)
@@ -215,8 +237,14 @@ function InventoryForm(props: InventoryFormProps) {
         );
         if (!ok) return valuesFormData;
 
-        valuesFormData.append("status", "completed");
-        await Services.inventoryCounts.update(props.id, valuesFormData);
+        // Solo el encabezado y el estado, en JSON: los renglones ya se
+        // guardaron uno por uno. Antes iba todo el formulario como multipart
+        // (7 campos por producto) y con ~142 productos PHP cortaba la petición.
+        await Services.inventoryCounts.complete(props.id, {
+          name: current?.name,
+          count_date: current?.count_date,
+          notes: current?.notes,
+        });
         alerts.success("Conteo completado correctamente");
         router.navigate("/inventory/weekly-inventory");
         return valuesFormData;
@@ -317,7 +345,9 @@ function CountingManager({
       const d = details[detailKey(p.id)];
       if (d?.id != null) {
         counted++;
-        if (Number(d.counted_quantity) === Number(p.current_stock || 0)) ok++;
+        // Contra la existencia que tomó el servidor al guardar el renglón.
+        const system = toNumber(d.system_quantity, Number(p.current_stock || 0));
+        if (Number(d.counted_quantity) === system) ok++;
         else diff++;
       }
     });
@@ -333,15 +363,23 @@ function CountingManager({
   }, [products, details]);
 
   // --- Persistencia de un detalle (solo API, devuelve el detalle nuevo) ---
+  // Con matches_system ("Correcto", "Marcar todo") la cantidad contada la
+  // pone el servidor: su existencia en el momento de guardar. Antes se
+  // mandaba la que la pantalla cargó al abrir y, si mientras tanto hubo
+  // ventas o recepciones, el cierre metía ajustes fantasma por esa diferencia.
   const storeDetail = useCallback(
     async (
       product: App.Entities.Product,
-      patch: { counted_quantity?: number; notes?: string },
+      patch: { counted_quantity?: number; notes?: string; matches_system?: boolean },
     ): Promise<Detail> => {
       const key = detailKey(product.id);
       const current = valuesRef.current.details?.[key];
-      const system = Number(product.current_stock || 0);
-      const counted = patch.counted_quantity ?? current?.counted_quantity ?? 0;
+      const system = toNumber(current?.system_quantity, Number(product.current_stock || 0));
+      // Con matches_system se manda también la cifra de la pantalla: un
+      // servidor que aún no conozca el campo guarda lo mismo que antes.
+      const counted = patch.matches_system
+        ? Number(product.current_stock || 0)
+        : patch.counted_quantity ?? current?.counted_quantity ?? 0;
       const notes = patch.notes ?? current?.notes ?? "";
 
       const res = await Services.inventoryCountsDetails.store({
@@ -350,34 +388,46 @@ function CountingManager({
         location_id: selectedLocationId,
         system_quantity: system,
         counted_quantity: counted,
+        ...(patch.matches_system ? { matches_system: 1 } : {}),
         notes,
       } as any);
 
+      // Lo que guardó el servidor: su existencia del momento y lo contado.
       const saved = unwrap(res);
+      const savedSystem = toNumber(saved?.system_quantity, system);
+      const savedCounted = toNumber(saved?.counted_quantity, Number(counted));
       return {
         id: saved?.id ?? current?.id,
         product_id: product.id,
         location_id: selectedLocationId,
-        system_quantity: system,
-        counted_quantity: Number(counted),
-        difference: Number(counted) - system,
-        notes,
+        system_quantity: savedSystem,
+        counted_quantity: savedCounted,
+        difference: toNumber(saved?.difference, savedCounted - savedSystem),
+        notes: saved?.notes ?? notes,
       };
     },
     [inventoryCountId, selectedLocationId],
   );
 
-  // Guardado individual (lo usan las tarjetas).
+  // Guardado individual (lo usan las tarjetas). Antes un error al guardar
+  // no se avisaba: la tarjeta seguía como si se hubiera guardado.
   const saveDetail = useCallback(
     async (
       product: App.Entities.Product,
-      patch: { counted_quantity?: number; notes?: string },
+      patch: { counted_quantity?: number; notes?: string; matches_system?: boolean },
     ) => {
-      const detail = await storeDetail(product, patch);
-      setFieldValue(`details.${detailKey(product.id)}`, detail);
-      return detail;
+      try {
+        const detail = await storeDetail(product, patch);
+        setFieldValue(`details.${detailKey(product.id)}`, detail);
+        return detail;
+      } catch (error) {
+        alerts.error(
+          `No se guardó el conteo de ${product.name}: ${apiMessage(error, "intenta de nuevo")}`,
+        );
+        throw error;
+      }
     },
-    [storeDetail, setFieldValue],
+    [storeDetail, setFieldValue, alerts],
   );
 
   // Marcar todos los productos pendientes como correctos (stock = sistema).
@@ -390,25 +440,38 @@ function CountingManager({
       return;
     }
     const ok = await alerts.confirm(
-      `Se marcarán ${pending.length} producto(s) como correctos (el stock coincide con el sistema). ¿Continuar?`,
+      `Se marcarán ${pending.length} producto(s) como correctos: se toma como contada la existencia del sistema al guardar cada uno. ¿Continuar?`,
       { title: "Marcar todo como correcto", okText: "Sí, marcar" },
     );
     if (!ok) return;
 
     setBulkLoading(true);
+    // Los que sí se guardaron se muestran aunque otros fallen (antes un solo
+    // error dejaba la pantalla sin ninguno).
+    const updates: Record<string, Detail> = {};
+    let failed = 0;
     try {
-      const updates: Record<string, Detail> = {};
       await runChunked(pending, async (p) => {
-        updates[detailKey(p.id)] = await storeDetail(p, {
-          counted_quantity: Number(p.current_stock || 0),
-        });
+        try {
+          updates[detailKey(p.id)] = await storeDetail(p, {
+            matches_system: true,
+          });
+        } catch (error) {
+          failed++;
+          console.error("Error al marcar como correcto:", error);
+        }
       });
-      setFieldValue("details", { ...valuesRef.current.details, ...updates });
-      alerts.success(`${pending.length} producto(s) marcados como correctos`);
-    } catch {
-      alerts.error("Ocurrió un error al marcar los productos");
     } finally {
+      setFieldValue("details", { ...valuesRef.current.details, ...updates });
       setBulkLoading(false);
+    }
+    const saved = Object.keys(updates).length;
+    if (failed === 0) {
+      alerts.success(`${saved} producto(s) marcados como correctos`);
+    } else {
+      alerts.warning(
+        `${saved} producto(s) marcados como correctos; ${failed} no se pudieron guardar. Vuelve a intentarlo.`,
+      );
     }
   }, [products, storeDetail, setFieldValue, alerts]);
 
@@ -594,7 +657,7 @@ interface ProductCardProps {
   colors: ReturnType<typeof useTheme>["colors"];
   onSave: (
     product: App.Entities.Product,
-    patch: { counted_quantity?: number; notes?: string },
+    patch: { counted_quantity?: number; notes?: string; matches_system?: boolean },
   ) => Promise<Detail>;
 }
 
@@ -606,11 +669,18 @@ const ProductCard = React.memo(function ProductCard({
   colors,
   onSave,
 }: ProductCardProps) {
-  const system = Number(product.current_stock || 0);
-  const unit = product.unit?.abbreviation || "u";
-
   const savedId = detail?.id;
   const savedCounted = detail?.counted_quantity;
+  // Ya contado: la existencia que tomó el servidor al guardarlo (contra ella
+  // se calcula la diferencia). Pendiente: la existencia al abrir el conteo.
+  const system =
+    savedId != null
+      ? toNumber(detail?.system_quantity, Number(product.current_stock || 0))
+      : Number(product.current_stock || 0);
+  const unit = product.unit?.abbreviation || "u";
+  // Peso y volumen se cuentan con decimales (2.5 kg); las piezas, enteras.
+  const allowDecimal =
+    !!product.unit?.unit_type && product.unit.unit_type !== "quantity";
 
   const derivedMode: "pending" | "correct" | "adjust" =
     savedId == null
@@ -625,6 +695,7 @@ const ProductCard = React.memo(function ProductCard({
   );
   const [saving, setSaving] = useState(false);
   const [flash, setFlash] = useState(false);
+  const [invalid, setInvalid] = useState(false);
 
   // Borrador para que el guardado debounced envíe siempre los últimos valores.
   const draftRef = useRef({
@@ -659,13 +730,33 @@ const ProductCard = React.memo(function ProductCard({
     }
   }, [onSave, product]);
 
-  const { run: debouncedPersist } = useDebounce(persist, { time: 450 });
+  const { run: debouncedPersist, cancel: cancelPersist } = useDebounce(
+    persist,
+    { time: 450 },
+  );
 
-  const onPressCorrect = () => {
+  // "Correcto": la cantidad contada la pone el servidor con su existencia al
+  // guardar (no la que esta pantalla cargó al abrir, que pudo cambiar).
+  const onPressCorrect = async () => {
+    // Una cantidad escrita que esperaba guardarse ya no aplica.
+    cancelPersist();
     setMode("correct");
-    setCounted(String(system));
-    draftRef.current.counted = system;
-    persist();
+    setInvalid(false);
+    try {
+      setSaving(true);
+      const saved = await onSave(product, {
+        matches_system: true,
+        notes: draftRef.current.notes,
+      });
+      setCounted(String(saved.counted_quantity));
+      draftRef.current.counted = saved.counted_quantity;
+      setFlash(true);
+      setTimeout(() => setFlash(false), 1400);
+    } catch {
+      // El gestor ya mostró el error.
+    } finally {
+      setSaving(false);
+    }
   };
 
   const onPressAdjust = () => {
@@ -673,13 +764,33 @@ const ProductCard = React.memo(function ProductCard({
   };
 
   const changeCounted = (next: number) => {
-    const v = Math.max(0, next);
+    const v = Math.max(0, Math.round(next * 1000) / 1000);
     setCounted(String(v));
+    setInvalid(false);
     draftRef.current.counted = v;
     debouncedPersist();
   };
 
-  const difference = (Number(counted) || 0) - system;
+  // Lo escrito solo se guarda si es una cantidad válida. Antes se leía con
+  // parseInt: los decimales se perdían (2.5 kg → 2) y un campo vacío
+  // guardaba 0.
+  const changeCountedText = (text: string) => {
+    setCounted(text);
+    const parsed = parseQuantity(text);
+    const valid =
+      parsed !== null &&
+      parsed >= 0 &&
+      (allowDecimal || Number.isInteger(parsed));
+    setInvalid(!valid);
+    if (!valid) {
+      cancelPersist();
+      return;
+    }
+    draftRef.current.counted = Math.round(parsed * 1000) / 1000;
+    debouncedPersist();
+  };
+
+  const difference = (parseQuantity(counted) ?? 0) - system;
 
   // ---- Modo lectura ----
   if (readonly) {
@@ -698,7 +809,7 @@ const ProductCard = React.memo(function ProductCard({
         <View style={styles.readonlyRow}>
           <Text style={styles.readonlyLabel}>Cantidad contada</Text>
           <Text style={styles.readonlyValue}>
-            {countedVal} {unit}
+            {formatQuantity(countedVal, unit)}
           </Text>
         </View>
         {diff !== 0 && (
@@ -770,7 +881,7 @@ const ProductCard = React.memo(function ProductCard({
           <View style={styles.stepper}>
             <Pressable
               style={[styles.stepBtn, { backgroundColor: colors.errorSoft }]}
-              onPress={() => changeCounted((Number(counted) || 0) - 1)}
+              onPress={() => changeCounted((parseQuantity(counted) ?? 0) - 1)}
             >
               <MaterialCommunityIcons
                 name="minus"
@@ -780,15 +891,15 @@ const ProductCard = React.memo(function ProductCard({
             </Pressable>
             <TextInput
               value={counted}
-              onChangeText={(t) => changeCounted(parseInt(t) || 0)}
-              keyboardType="numeric"
-              style={styles.stepInput}
+              onChangeText={changeCountedText}
+              keyboardType={allowDecimal ? "decimal-pad" : "number-pad"}
+              style={[styles.stepInput, invalid && { borderColor: colors.error }]}
               selectTextOnFocus
             />
             <Text style={styles.stepUnit}>{unit}</Text>
             <Pressable
               style={[styles.stepBtn, { backgroundColor: colors.successSoft }]}
-              onPress={() => changeCounted((Number(counted) || 0) + 1)}
+              onPress={() => changeCounted((parseQuantity(counted) ?? 0) + 1)}
             >
               <MaterialCommunityIcons
                 name="plus"
@@ -798,14 +909,20 @@ const ProductCard = React.memo(function ProductCard({
             </Pressable>
           </View>
 
-          {difference !== 0 && (
+          {invalid ? (
+            <Text style={[styles.fieldLabel, { color: colors.error, marginTop: 4 }]}>
+              {allowDecimal
+                ? "Escribe una cantidad válida (por ejemplo 2.5)"
+                : "Escribe una cantidad entera"}
+            </Text>
+          ) : difference !== 0 ? (
             <DiffBadge
               diff={difference}
               unit={unit}
               styles={styles}
               colors={colors}
             />
-          )}
+          ) : null}
 
           <Text style={[styles.fieldLabel, { marginTop: tokens.spacing[3] }]}>
             Notas (opcional)
@@ -878,7 +995,7 @@ function ProductHeader({
         <Text style={styles.productStock}>
           Stock sistema:{" "}
           <Text style={{ color: colors.primary, fontWeight: "700" }}>
-            {system} {unit}
+            {formatQuantity(system, unit)}
           </Text>
         </Text>
       </View>
@@ -925,7 +1042,7 @@ function DiffBadge({
         color={color}
       />
       <Text style={[styles.diffText, { color }]}>
-        {positive ? "Excedente" : "Faltante"}: {Math.abs(diff)} {unit}
+        {positive ? "Excedente" : "Faltante"}: {formatQuantity(Math.abs(diff), unit)}
       </Text>
     </View>
   );
