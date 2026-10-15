@@ -1,12 +1,25 @@
 import { formatDate, formatDateTime } from "@/utils/dates";
 import { goBack } from "@/utils/navigation";
+import AmountPreview from "@/components/Pos/AmountPreview";
+import OpenShiftModal from "@/components/Pos/OpenShiftModal";
+import {
+  apiErrorCode,
+  apiErrorMessage,
+  isOutcomeUnknown,
+  SALE_ERROR_CODES,
+} from "@/components/Pos/saleErrors";
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { parseMoney } from "@/utils/format";
+import { amountToCents, centsToAmount } from "@/utils/money";
 import { printSaleTicket } from "@/utils/printDocument";
+import { newClientRequestId } from "@/utils/requestId";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
-import React, { useLayoutEffect, useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import {
   Image,
   Modal,
@@ -50,6 +63,20 @@ const PS_CONFIG: Record<string, { color: string; label: string }> = {
   pending: { color: "#B9412C", label: "Pendiente" },
 };
 
+/**
+ * Métodos de un abono. Sin "Crédito": un abono es dinero que sí entró; a
+ * crédito, el saldo se quedaba como pagado sin haber cobrado nada.
+ */
+const PAYMENT_METHOD_OPTIONS: [string, string][] = [
+  ["cash", "Efectivo"],
+  ["card", "Tarjeta"],
+  ["transfer", "Transferencia"],
+];
+
+/** Espera antes de revisar un abono cuya respuesta se perdió: pudo seguir en proceso. */
+const VERIFY_DELAY_MS = 1500;
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 function TotalRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <View style={styles.totalRowLine}>
@@ -78,8 +105,16 @@ export default function SaleDetail() {
   // El error se muestra dentro del modal: los alerts globales quedarían
   // ocultos detrás del Modal nativo mientras está abierto.
   const [paymentError, setPaymentError] = useState("");
-  const [savingPayment, setSavingPayment] = useState(false);
+  const [paymentNeedsShift, setPaymentNeedsShift] = useState(false);
+  const [openShiftVisible, setOpenShiftVisible] = useState(false);
+  // Candado del abono: un doble toque no lo registra dos veces.
+  const { submitting: savingPayment, run } = useSubmitGuard();
+  // Abono en curso: su llave (client_request_id), reusada en los reintentos
+  // hasta que queda registrado, y lo pagado antes de mandarlo para saber si
+  // entró cuando se pierde la respuesta.
+  const paymentAttemptRef = useRef<{ id: string; paidBeforeCents: number; amountCents: number } | null>(null);
   const alerts = useAlerts();
+  const { hasPermission } = useAuth();
 
   React.useEffect(() => {
     loadSale();
@@ -118,42 +153,98 @@ export default function SaleDetail() {
     }
   };
 
-  const handleAddPayment = async () => {
-    if (savingPayment) return;
-    if (!paymentAmount || parseFloat(paymentAmount) <= 0) {
-      setPaymentError("Ingresa un monto válido");
-      return;
-    }
-    const amount = parseFloat(paymentAmount);
-    const pending = toNum(sale?.total) - toNum(sale?.paid_amount);
-    if (amount > pending) {
-      setPaymentError(
-        `El monto no puede ser mayor al saldo pendiente (${fmt(pending)})`,
-      );
-      return;
-    }
-    setPaymentError("");
-    setSavingPayment(true);
-    try {
-      await (Services.sales as any).addPayment(id, {
-        amount,
-        payment_method: paymentMethod,
-        notes: paymentNotes || undefined,
-      });
-      setShowPaymentDialog(false);
-      setPaymentAmount("");
-      setPaymentNotes("");
-      // El alert de éxito ya es visible porque el modal se cerró.
-      alerts.success("Pago registrado correctamente");
-      loadSale();
-    } catch (e: any) {
-      setPaymentError(
-        e.response?.data?.message || "Error al registrar el pago",
-      );
-    } finally {
-      setSavingPayment(false);
-    }
+  /**
+   * ¿Entró el abono que se quedó sin respuesta? Recarga la venta y compara lo
+   * pagado con lo que había antes de mandarlo.
+   */
+  const pendingPaymentWentThrough = async (): Promise<boolean> => {
+    const attempt = paymentAttemptRef.current;
+    if (!attempt) return false;
+    const response = await Services.sales.show(id);
+    const fresh = response.data.data;
+    setSale(fresh);
+    return amountToCents(toNum(fresh?.paid_amount)) - attempt.paidBeforeCents >= attempt.amountCents;
   };
+
+  const paymentRegistered = (message: string) => {
+    paymentAttemptRef.current = null;
+    setShowPaymentDialog(false);
+    setPaymentAmount("");
+    setPaymentNotes("");
+    // El alert de éxito ya es visible porque el modal se cerró.
+    alerts.success(message);
+    loadSale();
+  };
+
+  const handleAddPayment = () =>
+    run(async () => {
+      setPaymentNeedsShift(false);
+      // Formato mexicano: "1,000" son mil (antes se leía 1 y quedaban $999
+      // pendientes).
+      const amount = parseMoney(paymentAmount);
+      if (amount === null || amount <= 0) {
+        setPaymentError("Ingresa un monto válido: escríbelo como 1500 o 1,500.50");
+        return;
+      }
+      const amountCents = amountToCents(amount);
+      const paidCents = amountToCents(toNum(sale?.paid_amount));
+      const pendingCents = amountToCents(toNum(sale?.total)) - paidCents;
+      if (amountCents > pendingCents) {
+        setPaymentError(
+          `El monto no puede ser mayor al saldo pendiente (${fmt(centsToAmount(pendingCents))})`,
+        );
+        return;
+      }
+      setPaymentError("");
+
+      const previous = paymentAttemptRef.current;
+      const attempt = previous
+        ? { ...previous, amountCents: Math.min(previous.amountCents, amountCents) }
+        : { id: newClientRequestId(), paidBeforeCents: paidCents, amountCents };
+      paymentAttemptRef.current = attempt;
+
+      try {
+        await Services.sales.addPayment(Number(id), {
+          amount: centsToAmount(amountCents),
+          payment_method: paymentMethod,
+          notes: paymentNotes || undefined,
+          client_request_id: attempt.id,
+        });
+        paymentRegistered("Pago registrado correctamente");
+      } catch (e: any) {
+        if (isOutcomeUnknown(e)) {
+          await wait(VERIFY_DELAY_MS);
+          try {
+            if (await pendingPaymentWentThrough()) {
+              paymentRegistered("El pago quedó registrado.");
+              return;
+            }
+          } catch {
+            // Tampoco se pudo consultar la venta.
+          }
+          setPaymentError(
+            `${apiErrorMessage(e, "No llegó la respuesta del servidor.")} No se pudo confirmar si el pago quedó registrado: vuelve a presionar «Confirmar» (si ya se registró no se duplica).`,
+          );
+          return;
+        }
+
+        // Rechazado. Si había un intento anterior sin respuesta, pudo ser ese
+        // el que ya entró (p. ej. "excede el saldo pendiente").
+        if (previous) {
+          try {
+            if (await pendingPaymentWentThrough()) {
+              paymentRegistered("El pago anterior sí quedó registrado.");
+              return;
+            }
+          } catch {
+            // Sin cambios: se muestra el rechazo.
+          }
+        }
+        paymentAttemptRef.current = null;
+        setPaymentNeedsShift(apiErrorCode(e) === SALE_ERROR_CODES.noOpenSession && hasPermission("sales_pos"));
+        setPaymentError(apiErrorMessage(e, "Error al registrar el pago"));
+      }
+    });
 
   if (loading) {
     return (
@@ -242,7 +333,12 @@ export default function SaleDetail() {
           <Button
             mode="contained"
             onPress={() => {
-              setPaymentError("");
+              setPaymentNeedsShift(false);
+              setPaymentError(
+                paymentAttemptRef.current
+                  ? "No se confirmó si el último pago quedó registrado: si lo vuelves a mandar no se duplica."
+                  : "",
+              );
               setShowPaymentDialog(true);
             }}
             icon="cash-plus"
@@ -366,7 +462,10 @@ export default function SaleDetail() {
         visible={showPaymentDialog}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowPaymentDialog(false)}
+        // Mientras se registra el pago no se cierra (Esc, botón atrás).
+        onRequestClose={() => {
+          if (!savingPayment) setShowPaymentDialog(false);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -388,28 +487,25 @@ export default function SaleDetail() {
 
               <Text style={styles.inputLabel}>Monto a pagar *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { marginBottom: 0 }]}
                 placeholder="0.00"
                 value={paymentAmount}
                 onChangeText={(t) => {
                   setPaymentAmount(t);
                   if (paymentError) setPaymentError("");
                 }}
+                editable={!savingPayment}
                 keyboardType="decimal-pad"
               />
+              <AmountPreview value={paymentAmount} label="Se registrará" />
 
-              <Text style={styles.inputLabel}>Método de Pago</Text>
+              <Text style={[styles.inputLabel, { marginTop: 16 }]}>Método de Pago</Text>
               <RadioButton.Group
                 onValueChange={setPaymentMethod}
                 value={paymentMethod}
               >
                 <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
-                  {[
-                    ["cash", "Efectivo"],
-                    ["card", "Tarjeta"],
-                    ["transfer", "Transferencia"],
-                    ["credit", "Crédito"],
-                  ].map(([val, label]) => (
+                  {PAYMENT_METHOD_OPTIONS.map(([val, label]) => (
                     <View
                       key={val}
                       style={{ flexDirection: "row", alignItems: "center" }}
@@ -435,6 +531,17 @@ export default function SaleDetail() {
               {!!paymentError && (
                 <Text style={styles.modalError}>{paymentError}</Text>
               )}
+              {paymentNeedsShift && (
+                <Button
+                  mode="outlined"
+                  icon="cash-register"
+                  compact
+                  onPress={() => setOpenShiftVisible(true)}
+                  style={{ alignSelf: "flex-start", marginTop: 8 }}
+                >
+                  Abrir turno
+                </Button>
+              )}
             </ScrollView>
 
             <View style={styles.modalActions}>
@@ -457,6 +564,17 @@ export default function SaleDetail() {
           </View>
         </View>
       </Modal>
+
+      {/* Abono en efectivo sin turno: abrirlo aquí y volver a confirmar. */}
+      <OpenShiftModal
+        visible={openShiftVisible}
+        onClose={() => setOpenShiftVisible(false)}
+        onOpened={() => {
+          setOpenShiftVisible(false);
+          setPaymentNeedsShift(false);
+          setPaymentError("Turno abierto. Confirma el pago de nuevo.");
+        }}
+      />
     </ScrollView>
   );
 }
