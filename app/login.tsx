@@ -294,17 +294,10 @@ export default function LoginScreen() {
           }
         }
 
-        // Mostrar error específico según el tipo
-        let errorMessage = "";
-        if (
-          result.error?.includes("CORS") ||
-          result.error?.includes("Network")
-        ) {
-          errorMessage =
-            "Error de conexión. Verifica que el servidor esté ejecutándose.";
-        } else {
-          errorMessage = result.error || "Error desconocido";
-        }
+        // AuthContext ya trae el motivo en español (credenciales, bloqueo
+        // por intentos o falla de conexión, ver utils/axios).
+        const errorMessage =
+          result.error || "No se pudo iniciar sesión. Intenta nuevamente.";
 
         setError(errorMessage);
         alerts.error(errorMessage);
@@ -316,16 +309,9 @@ export default function LoginScreen() {
         setRetryCountdown(null);
         alerts.success("Sesión iniciada correctamente");
       }
-    } catch (error: any) {
-      let errorMessage = "";
-      // Manejar diferentes tipos de errores
-      if (error.code === "NETWORK_ERROR" || error.message?.includes("CORS")) {
-        errorMessage =
-          "Error de conexión con el servidor. Verifica la configuración CORS.";
-      } else {
-        errorMessage = "Error al iniciar sesión. Intenta nuevamente.";
-      }
-
+    } catch {
+      // login() atrapa sus errores; esto sólo cubre algo inesperado.
+      const errorMessage = "Error al iniciar sesión. Intenta nuevamente.";
       setError(errorMessage);
       alerts.error(errorMessage);
     } finally {

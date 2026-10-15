@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios, { AxiosInstance, AxiosResponse } from "axios";
+import axios, { AxiosInstance, AxiosResponse, isCancel } from "axios";
 import { Platform } from "react-native";
 import { API_BASE_URL, API_CONFIG_ERROR } from "./appConfig";
 
@@ -128,6 +128,7 @@ const LONG_TIMEOUT_PATHS: RegExp[] = [
   /^\/auth\/admin\/sales$/,
   /^\/auth\/admin\/sales\/[^/]+\/add-payment$/,
   /^\/auth\/admin\/sales-orders$/,
+  /^\/auth\/admin\/sales-orders\/quick-checkout$/,
   /^\/auth\/admin\/sales-orders\/[^/]+\/checkout$/,
 ];
 
@@ -153,6 +154,99 @@ const needsLongTimeout = (config: any): boolean => {
   if (isMultipartBody(config.data)) return true;
   const path = normalizePath(config.url, config.baseURL);
   return LONG_TIMEOUT_PATHS.some((pattern) => pattern.test(path));
+};
+
+// Mensajes para el usuario cuando no hubo respuesta del servidor. Antes salía
+// el texto de axios en inglés ("Network Error", "timeout of 10000ms
+// exceeded"). Para distinguir los casos en código usar isTimeoutError /
+// isNetworkError (error.code no cambia).
+export const NETWORK_ERROR_MESSAGE =
+  "No se pudo conectar con el servidor. Revisa tu conexión a internet e inténtalo de nuevo.";
+export const TIMEOUT_ERROR_MESSAGE =
+  "El servidor tardó demasiado en responder. Si estabas guardando algo, revisa si quedó registrado antes de intentarlo otra vez.";
+
+/** La petición se cortó por tiempo (el servidor pudo haberla procesado). */
+export const isTimeoutError = (error: any): boolean =>
+  error?.code === "ECONNABORTED" || error?.code === "ETIMEDOUT";
+
+/** No hubo respuesta del servidor (sin red, servidor caído, CORS o tiempo agotado). */
+export const isNetworkError = (error: any): boolean =>
+  Boolean(error?.isAxiosError) && !error.response && !isCancel(error);
+
+// Textos genéricos de Laravel (en inglés) que pueden llegar en
+// response.data.message; los mensajes propios del backend no se tocan.
+const UNAVAILABLE_FEATURE_MESSAGE =
+  "Esta función no está disponible en el servidor. Recarga la página o actualiza la app.";
+const GENERIC_SERVER_MESSAGES: [RegExp, string][] = [
+  [/^Server Error$/i, "Ocurrió un error en el servidor. Inténtalo de nuevo; si continúa, avisa al administrador."],
+  [/^Service Unavailable$/i, "El servidor está en mantenimiento. Inténtalo de nuevo en unos minutos."],
+  [/^This action is unauthorized\.?$/i, "No tienes permiso para realizar esta acción."],
+  [/^Unauthenticated\.?$/i, "Tu sesión expiró. Inicia sesión de nuevo."],
+  [/^No query results for model/i, "No se encontró el registro; puede que se haya eliminado."],
+  [/^The route .+ could not be found\.?$/i, UNAVAILABLE_FEATURE_MESSAGE],
+  [/^The (GET|HEAD|POST|PUT|PATCH|DELETE) method is not supported/i, UNAVAILABLE_FEATURE_MESSAGE],
+  [/^Not Found$/i, "No se encontró lo que buscas."],
+  [/^Too Many (Attempts|Requests)\.?$/i, "Demasiadas solicitudes. Espera un momento e inténtalo de nuevo."],
+  [/^(Content|Payload|Request Entity) Too Large$/i, "Los datos o el archivo que mandaste son demasiado grandes."],
+  [/^(CSRF token mismatch|Page Expired)\.?$/i, "La página expiró. Recárgala e inténtalo de nuevo."],
+];
+
+/**
+ * Deja en español lo que ve el usuario: el mensaje de axios cuando no hubo
+ * respuesta o la respuesta no trae mensaje (p. ej. la página de error 502 del
+ * proxy), y los textos genéricos de Laravel. Las pantallas siguen leyendo
+ * response.data.message y, si no hay, error.message.
+ */
+function localizeError(error: any): void {
+  if (!error?.isAxiosError || isCancel(error)) return;
+  const response = error.response;
+
+  if (!response) {
+    error.message = isTimeoutError(error) ? TIMEOUT_ERROR_MESSAGE : NETWORK_ERROR_MESSAGE;
+    return;
+  }
+
+  const data = response.data;
+  if (data && typeof data === "object" && typeof data.message === "string") {
+    const generic = GENERIC_SERVER_MESSAGES.find(([pattern]) => pattern.test(data.message.trim()));
+    if (generic) {
+      data.message = generic[1];
+    } else {
+      // Resumen de validación sin traducir: "… (and 2 more errors)".
+      data.message = data.message.replace(
+        /\s*\(and (\d+) more errors?\)$/,
+        (_match: string, count: string) => ` (y ${count} ${count === "1" ? "error" : "errores"} más)`,
+      );
+    }
+    return;
+  }
+
+  if (response.status >= 500) {
+    error.message = `El servidor no está disponible en este momento (error ${response.status}). Inténtalo de nuevo en unos minutos.`;
+  }
+}
+
+/**
+ * Resumen de un error para la consola: estado, método, ruta y mensaje. Nunca
+ * el objeto completo: config.headers lleva el token (Authorization: Bearer …).
+ */
+export const describeError = (error: unknown): string => {
+  const e = error as any;
+  if (e?.isAxiosError) {
+    const status = e.response?.status ?? e.code ?? "sin respuesta";
+    const method = String(e.config?.method ?? "get").toUpperCase();
+    const path = normalizePath(e.config?.url, e.config?.baseURL);
+    const serverMessage =
+      typeof e.response?.data?.message === "string" ? e.response.data.message : undefined;
+    return `[${status}] ${method} ${path}: ${serverMessage ?? e.message}`;
+  }
+  if (e instanceof Error) return `${e.name}: ${e.message}`;
+  if (typeof e === "string") return e;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
 };
 
 // Crear instancia de axios
@@ -305,7 +399,10 @@ axiosClient.interceptors.response.use(
     return response;
   },
   async (error: any) => {
-    console.error("Response error:", error.response?.data || error.message);
+    localizeError(error);
+    if (!isCancel(error)) {
+      console.error("Response error:", describeError(error));
+    }
 
     const path = normalizePath(error.config?.url, error.config?.baseURL);
 

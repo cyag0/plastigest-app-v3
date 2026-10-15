@@ -3,9 +3,11 @@ import {
   authAPI,
   clearSessionStorage,
   clearTabSelection,
+  describeError,
   getAuthToken,
   getSelectedCompany,
   getSelectedLocation,
+  isNetworkError,
   removeSelectedCompany,
   removeSelectedLocation,
   setAuthToken,
@@ -328,7 +330,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setPermissions(perms);
       await AsyncStorage.setItem(permissionsKey, JSON.stringify(perms));
     } catch (error) {
-      console.error("Error loading permissions:", error);
+      console.error("Error loading permissions:", describeError(error));
       // Intentar restaurar desde caché
       try {
         const cached = await AsyncStorage.getItem(permissionsKey);
@@ -370,7 +372,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
       return [];
     } catch (error) {
-      console.error("Error loading companies:", error);
+      console.error("Error loading companies:", describeError(error));
       // Intentar cargar desde caché local
       try {
         const cachedCompanies = await AsyncStorage.getItem(COMPANIES_DATA_KEY);
@@ -541,7 +543,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         // Sin red, timeout o error del servidor: no es motivo para cerrar la
         // sesión. Se continúa con el usuario guardado y se vuelve a verificar
         // en cuanto haya conexión (ver efecto de re-verificación).
-        console.warn("No se pudo verificar la sesión:", error?.message ?? error);
+        console.warn("No se pudo verificar la sesión:", describeError(error));
         const cachedUser = await readCachedUser();
         if (!cachedUser) {
           setUser(null);
@@ -567,7 +569,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch (error: any) {
       // Errores locales inesperados (storage). No se borra el token: el
       // usuario puede reintentar.
-      console.error("Error checking auth status:", error);
+      console.error("Error checking auth status:", describeError(error));
       setAuthError(
         "No se pudo restaurar la sesión. Inténtalo de nuevo.",
       );
@@ -679,9 +681,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       return { success: true };
     } catch (error: any) {
-      console.error("Login error:", error?.message ?? error);
+      console.error("Login error:", describeError(error));
 
-      let errorMessage = "Error de conexión. Inténtalo de nuevo.";
+      // Sin respuesta del servidor: el interceptor ya dejó el motivo en
+      // español (sin red o tiempo agotado).
+      let errorMessage = isNetworkError(error)
+        ? error.message
+        : "Error de conexión. Inténtalo de nuevo.";
 
       // Extraer info de rate limit de los headers de la respuesta.
       // Laravel siempre envía X-RateLimit-Limit y X-RateLimit-Remaining en
@@ -744,7 +750,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       try {
         await deactivateToken();
       } catch (error) {
-        console.warn("No se pudo desactivar el token FCM:", error);
+        console.warn("No se pudo desactivar el token FCM:", describeError(error));
       }
 
       // Intentar hacer logout en el servidor
@@ -754,7 +760,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         // Si falla el logout en el servidor, continuar con el logout local
         console.warn(
           "Server logout failed, continuing with local logout:",
-          error
+          describeError(error)
         );
       }
 
