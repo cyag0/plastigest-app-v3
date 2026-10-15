@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/contexts/ThemeContext";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { useAlerts } from "@/hooks/useAlerts";
+import { getAppVersionLabel } from "@/utils/appVersion";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState, useRef } from "react";
@@ -534,7 +535,7 @@ export default function LoginScreen() {
                 color={colors.textMuted}
               />
               <RNText style={styles.footerText}>
-                GCStock v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
+                GCStock v{getAppVersionLabel()}
               </RNText>
             </View>
           </View>

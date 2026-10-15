@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { getAppVersionLabel } from "@/utils/appVersion";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Camera } from "expo-camera";
 import * as Notifications from "expo-notifications";
@@ -155,7 +156,7 @@ export default function ProfileScreen() {
     .substring(0, 2);
   const role = user?.roles?.[0]?.name;
   const memberSince = user?.created_at ? formatCalendarDate(user.created_at, "long") : null;
-  const version = process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0";
+  const version = getAppVersionLabel();
 
   const styles = useThemedStyles((c) => ({
     scroll: {

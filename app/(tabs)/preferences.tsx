@@ -3,6 +3,7 @@ import SectionHeader from "@/components/App/SectionHeader";
 import { tokens } from "@/constants/tokens";
 import { useTheme, ThemePreference } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { getAppVersionLabel } from "@/utils/appVersion";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -98,7 +99,7 @@ export default function PreferencesScreen() {
     );
   };
 
-  const appVersion = process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0";
+  const appVersion = getAppVersionLabel();
 
   return (
     <SafeAreaView
