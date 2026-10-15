@@ -1,5 +1,7 @@
 import palette from "@/constants/palette";
-import { allowsDecimalQuantity, formatMoney, PosLine } from "@/hooks/usePosCart";
+import { allowsDecimalQuantity, formatMoney, lineCents, PosLine } from "@/hooks/usePosCart";
+import { parseMoney, parseQuantity } from "@/utils/format";
+import { centsToAmount } from "@/utils/money";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { FlatList, Pressable, StyleSheet, TextInput, View } from "react-native";
@@ -21,11 +23,14 @@ export interface CartTableRef {
   focusQuantity: (key: string) => void;
 }
 
-/** Acepta coma o punto decimal; vacío o texto inválido → NaN. */
-const parseNumber = (text: string) => {
-  const raw = text.trim().replace(",", ".");
-  return raw === "" ? NaN : Number(raw);
-};
+/**
+ * Cantidad capturada ("1.5", "1,5"); vacío o ambiguo ("1,500": ¿1.5 kg o
+ * 1500 piezas?) → NaN y se descarta.
+ */
+const parseNumber = (text: string) => parseQuantity(text) ?? NaN;
+
+/** Precio o descuento capturado en formato mexicano ("1,500" = mil quinientos). */
+const parseAmount = (text: string) => parseMoney(text) ?? NaN;
 
 const formatQuantity = (n: number) => String(Math.round(n * 1000) / 1000);
 
@@ -69,7 +74,8 @@ const CartTable = forwardRef<CartTableRef, Props>(function CartTable(props, ref)
         keyboardShouldPersistTaps="handled"
         renderItem={({ item: line }) => {
           const selected = line.key === selectedKey;
-          const total = line.quantity * line.unitPrice - line.discount;
+          // Redondeado a centavos como el servidor: la suma de renglones es el total cobrado.
+          const total = centsToAmount(lineCents(line));
           const qty = (
             <View style={styles.qtyBox}>
               <IconButton icon="minus" size={16} onPress={() => props.onQuantity(line.key, line.quantity - 1)} style={styles.qtyBtn} />
@@ -202,7 +208,7 @@ function MoneyInput({ value, onChange, style }: { value: number; onChange: (v: n
   const commit = () => {
     if (committedRef.current === text) return;
     committedRef.current = text;
-    const parsed = parseNumber(text);
+    const parsed = parseAmount(text);
     if (!Number.isFinite(parsed)) return;
     const next = Math.max(0, Math.round(parsed * 100) / 100);
     if (next !== value) onChange(next);

@@ -1,6 +1,19 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import type { PosCustomer } from "@/components/Pos/CustomerPicker";
+import {
+  amountToCents,
+  centsToAmount,
+  lineTotalCents,
+  roundMoney,
+  roundQuantity,
+  sumCents,
+} from "@/utils/money";
+import { newClientRequestId } from "@/utils/requestId";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Item = App.Entities.PosCatalogItem;
+
+export type CheckoutMethod = "cash" | "card" | "mixed";
 
 export interface PosLine {
   key: string;
@@ -10,7 +23,12 @@ export interface PosLine {
   discount: number;
 }
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+/** Cambio del catálogo que afecta a un renglón del carrito. */
+export type PosCatalogChange =
+  | { kind: "price"; name: string; from: number; to: number }
+  | { kind: "stock"; name: string; quantity: number; stock: number; unit: string }
+  | { kind: "removed"; name: string };
+
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /**
@@ -23,23 +41,272 @@ export const allowsDecimalQuantity = (item: Item): boolean =>
 const stockMessage = (item: Item) =>
   `Solo hay ${item.stock} ${item.unit?.abbreviation ?? ""} de ${item.name}`.trim();
 
+/** Importe del renglón en centavos (cantidad × precio − descuento), igual que el backend. */
+export const lineCents = (line: Pick<PosLine, "quantity" | "unitPrice" | "discount">) =>
+  lineTotalCents(line.quantity, line.unitPrice, line.discount);
+
+/** El descuento no puede dejar el renglón en negativo. */
+const clampDiscount = (quantity: number, unitPrice: number, discount: number) =>
+  Math.min(Math.max(0, discount), centsToAmount(lineTotalCents(quantity, unitPrice)));
+
+/* ───────────────────────── Carrito guardado en el equipo ───────────────────────── */
+
+const STORAGE_PREFIX = "pos_cart:";
+/** Carritos de otros usuarios que nadie volvió a abrir: se borran después de una semana. */
+const STALE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Llave del carrito guardado: uno por cajero, sucursal y turno. */
+export const posCartStorageKey = (userId: number, locationId: number, sessionId: number) =>
+  `${STORAGE_PREFIX}${userId}:${locationId}:${sessionId}`;
+
+interface StoredCart {
+  version: 1;
+  lines: PosLine[];
+  customer: PosCustomer | null;
+  method: CheckoutMethod;
+  requestId: string | null;
+  requestUnknown: boolean;
+  savedAt: number;
+}
+
+const isFiniteNumber = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+
+function isValidLine(line: any): line is PosLine {
+  const item = line?.item;
+  return (
+    typeof line?.key === "string" &&
+    item &&
+    typeof item === "object" &&
+    item.key === line.key &&
+    isFiniteNumber(item.product_id) &&
+    typeof item.name === "string" &&
+    isFiniteNumber(item.price) &&
+    isFiniteNumber(item.stock) &&
+    isFiniteNumber(line.quantity) &&
+    line.quantity > 0 &&
+    isFiniteNumber(line.unitPrice) &&
+    line.unitPrice >= 0 &&
+    isFiniteNumber(line.discount) &&
+    line.discount >= 0
+  );
+}
+
+/** Lee lo guardado; cualquier cosa rara se descarta en lugar de romper el punto de venta. */
+export function parseStoredCart(raw: string | null): StoredCart | null {
+  if (!raw) return null;
+  let data: any;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!data || data.version !== 1 || !Array.isArray(data.lines)) return null;
+
+  const requestId =
+    typeof data.requestId === "string" && data.requestId.length > 0 && data.requestId.length <= 64
+      ? data.requestId
+      : null;
+  const customer =
+    data.customer && isFiniteNumber(data.customer.id) && typeof data.customer.name === "string"
+      ? { id: data.customer.id, name: data.customer.name }
+      : null;
+
+  return {
+    version: 1,
+    lines: data.lines.filter(isValidLine),
+    customer,
+    method: ["cash", "card", "mixed"].includes(data.method) ? data.method : "cash",
+    requestId,
+    requestUnknown: !!requestId && data.requestUnknown === true,
+    savedAt: isFiniteNumber(data.savedAt) ? data.savedAt : 0,
+  };
+}
+
+/**
+ * Borra los carritos guardados de turnos anteriores del mismo cajero (ya no
+ * se pueden cobrar en ellos) y los de otros que llevan una semana sin usarse.
+ */
+async function pruneStoredCarts(keepKey: string) {
+  const userPrefix = keepKey.slice(0, keepKey.indexOf(":", STORAGE_PREFIX.length) + 1);
+  const keys = (await AsyncStorage.getAllKeys()).filter((k) => k.startsWith(STORAGE_PREFIX) && k !== keepKey);
+  if (keys.length === 0) return;
+
+  const now = Date.now();
+  const entries = await AsyncStorage.multiGet(keys);
+  const toRemove = entries
+    .filter(([key, raw]) => key.startsWith(userPrefix) || now - (parseStoredCart(raw)?.savedAt ?? 0) > STALE_MS)
+    .map(([key]) => key);
+  if (toRemove.length > 0) await AsyncStorage.multiRemove(toRemove);
+}
+
+/**
+ * Renglones con el catálogo recién descargado (ver syncWithCatalog del
+ * hook): `changed` indica si hay que reemplazar los renglones.
+ */
+export function syncLinesWithCatalog(
+  lines: PosLine[],
+  items: Item[],
+): { next: PosLine[]; changes: PosCatalogChange[]; changed: boolean } {
+  const byKey = new Map(items.map((i) => [i.key, i]));
+  const changes: PosCatalogChange[] = [];
+  const next: PosLine[] = [];
+  let changed = false;
+
+  for (const line of lines) {
+    const fresh = byKey.get(line.key);
+    if (!fresh) {
+      changes.push({ kind: "removed", name: line.item.name });
+      changed = true;
+      continue;
+    }
+
+    let unitPrice = line.unitPrice;
+    const oldPrice = amountToCents(line.item.price);
+    if (amountToCents(fresh.price) !== oldPrice && amountToCents(line.unitPrice) === oldPrice) {
+      unitPrice = fresh.price;
+      changes.push({ kind: "price", name: fresh.name, from: line.item.price, to: fresh.price });
+    }
+    if (line.quantity > fresh.stock) {
+      changes.push({
+        kind: "stock",
+        name: fresh.name,
+        quantity: line.quantity,
+        stock: fresh.stock,
+        unit: fresh.unit?.abbreviation ?? "",
+      });
+    }
+
+    const discount = clampDiscount(line.quantity, unitPrice, line.discount);
+    if (fresh !== line.item || unitPrice !== line.unitPrice || discount !== line.discount) changed = true;
+    next.push({ ...line, item: fresh, unitPrice, discount });
+  }
+
+  return { next, changes, changed };
+}
+
+/* ─────────────────────────────────── Hook ─────────────────────────────────── */
+
 /**
  * Carrito del punto de venta: renglones, renglón seleccionado (para los
- * atajos de teclado), totales y armado del pago para la API.
+ * atajos de teclado), cliente, método de pago, totales y armado del pago para
+ * la API.
+ *
+ * Los totales se calculan en centavos enteros con el mismo algoritmo que el
+ * backend (utils/money): antes se sumaban decimales y se redondeaba al final,
+ * y cobros de producto a granel se rechazaban por un centavo.
+ *
+ * Con `storageKey` el carrito se guarda en el equipo (por cajero, sucursal y
+ * turno) y se recupera al volver a entrar: un F5, un "Salir" o un cierre de la
+ * app ya no obligan a escanear todo otra vez.
+ *
+ * Llave de cobro (client_request_id): se crea en el primer intento de cobro y
+ * se conserva con el carrito (también guardada) hasta que la venta queda
+ * registrada o se descarta el carrito. Reintentar con la misma llave nunca
+ * cobra dos veces: si la venta ya existía, el servidor la devuelve.
+ * `requestUnknown` indica que el último envío se quedó sin respuesta y hay
+ * que verificar en qué quedó antes de cobrar otra vez.
  */
-export function usePosCart() {
+export function usePosCart(storageKey?: string | null) {
   const [lines, setLinesState] = useState<PosLine[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [customer, setCustomerState] = useState<PosCustomer | null>(null);
+  const [method, setMethodState] = useState<CheckoutMethod>("cash");
+  const [requestId, setRequestId] = useState<string | null>(null);
+  const [requestUnknown, setRequestUnknown] = useState(false);
+  // Llave cuyo carrito guardado ya se leyó. Sin almacenamiento no hay nada
+  // que recuperar.
+  const [restoredKey, setRestoredKey] = useState<string | null>(null);
+  const restored = !storageKey || restoredKey === storageKey;
+  /** Renglones recuperados al entrar (0 si el carrito empezó vacío). */
+  const [restoredLines, setRestoredLines] = useState(0);
+
   // Copia síncrona de los renglones: con un lector de códigos dos escaneos
   // pueden llegar antes de que React vuelva a renderizar y el segundo leía la
   // cantidad vieja (se perdía una pieza o se saltaba la validación de stock).
   const linesRef = useRef<PosLine[]>([]);
+  // Copia síncrona del resto, para guardar en el momento de cobrar.
+  const draftRef = useRef<{
+    customer: PosCustomer | null;
+    method: CheckoutMethod;
+    requestId: string | null;
+    requestUnknown: boolean;
+  }>({ customer: null, method: "cash", requestId: null, requestUnknown: false });
 
   const setLines = useCallback((updater: (prev: PosLine[]) => PosLine[]) => {
     const next = updater(linesRef.current);
     linesRef.current = next;
     setLinesState(next);
   }, []);
+
+  const setCustomer = useCallback((value: PosCustomer | null) => {
+    draftRef.current.customer = value;
+    setCustomerState(value);
+  }, []);
+
+  const setMethod = useCallback((value: CheckoutMethod) => {
+    draftRef.current.method = value;
+    setMethodState(value);
+  }, []);
+
+  const setRequest = useCallback((id: string | null, unknown: boolean) => {
+    draftRef.current.requestId = id;
+    draftRef.current.requestUnknown = !!id && unknown;
+    setRequestId(id);
+    setRequestUnknown(!!id && unknown);
+  }, []);
+
+  /** Guarda (o borra, si no queda nada pendiente) el carrito en el equipo. */
+  const writeStorage = useCallback(() => {
+    if (!storageKey) return;
+    const draft = draftRef.current;
+    const current = linesRef.current;
+    const write =
+      current.length === 0 && !draft.requestId
+        ? AsyncStorage.removeItem(storageKey)
+        : AsyncStorage.setItem(
+            storageKey,
+            JSON.stringify({ version: 1, lines: current, ...draft, savedAt: Date.now() } satisfies StoredCart),
+          );
+    // Sin almacenamiento (modo privado, cuota llena) el carrito sigue en memoria.
+    write.catch(() => undefined);
+  }, [storageKey]);
+
+  // Recuperar lo guardado al entrar.
+  useEffect(() => {
+    if (!storageKey) return;
+    let cancelled = false;
+    (async () => {
+      let stored: StoredCart | null = null;
+      try {
+        stored = parseStoredCart(await AsyncStorage.getItem(storageKey));
+      } catch {
+        stored = null;
+      }
+      if (cancelled) return;
+
+      // Lo escaneado mientras se leía el almacenamiento se respeta, salvo que
+      // haya un cobro sin confirmar: ese manda, para verificarlo.
+      if (stored && (linesRef.current.length === 0 || stored.requestUnknown)) {
+        linesRef.current = stored.lines;
+        setLinesState(stored.lines);
+        setSelectedKey(stored.lines[stored.lines.length - 1]?.key ?? null);
+        setCustomer(stored.customer);
+        setMethod(stored.method);
+        setRequest(stored.requestId, stored.requestUnknown);
+        setRestoredLines(stored.lines.length);
+      }
+      setRestoredKey(storageKey);
+      pruneStoredCarts(storageKey).catch(() => undefined);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey, setCustomer, setMethod, setRequest]);
+
+  // Guardar cada cambio (después de recuperar, para no pisar lo guardado).
+  useEffect(() => {
+    if (restored) writeStorage();
+  }, [restored, lines, customer, method, requestId, requestUnknown, writeStorage]);
 
   /** Agrega o suma. Devuelve un mensaje si la existencia no alcanza. */
   const add = useCallback(
@@ -52,7 +319,11 @@ export function usePosCart() {
       }
       setLines((prev) =>
         prev.some((l) => l.key === item.key)
-          ? prev.map((l) => (l.key === item.key ? { ...l, quantity: next } : l))
+          ? prev.map((l) =>
+              l.key === item.key
+                ? { ...l, quantity: next, discount: clampDiscount(next, l.unitPrice, l.discount) }
+                : l,
+            )
           : [...prev, { key: item.key, item, quantity: next, unitPrice: item.price, discount: 0 }],
       );
       setSelectedKey(item.key);
@@ -83,7 +354,13 @@ export function usePosCart() {
       if (next > line.item.stock) {
         return stockMessage(line.item);
       }
-      setLines((prev) => prev.map((l) => (l.key === key ? { ...l, quantity: next } : l)));
+      // Con menos cantidad, un descuento fijo podía dejar el renglón en
+      // negativo y el cobro no cuadraba con el del servidor.
+      setLines((prev) =>
+        prev.map((l) =>
+          l.key === key ? { ...l, quantity: next, discount: clampDiscount(next, l.unitPrice, l.discount) } : l,
+        ),
+      );
       return null;
     },
     [setLines],
@@ -102,13 +379,8 @@ export function usePosCart() {
       setLines((prev) =>
         prev.map((l) => {
           if (l.key !== key) return l;
-          const unitPrice = Math.max(0, changes.unitPrice ?? l.unitPrice);
-          // El descuento no puede dejar el renglón en negativo.
-          const lineSubtotal = round2(l.quantity * unitPrice);
-          const discount = Math.min(
-            Math.max(0, changes.discount ?? l.discount),
-            lineSubtotal,
-          );
+          const unitPrice = Math.max(0, roundMoney(changes.unitPrice ?? l.unitPrice));
+          const discount = clampDiscount(l.quantity, unitPrice, roundMoney(changes.discount ?? l.discount));
           return { ...l, unitPrice, discount };
         }),
       );
@@ -116,36 +388,94 @@ export function usePosCart() {
     [setLines],
   );
 
+  /** Vacía el carrito: renglones, cliente, método y la llave de cobro. */
   const clear = useCallback(() => {
     setLines(() => []);
     setSelectedKey(null);
-  }, [setLines]);
+    setCustomer(null);
+    setMethod("cash");
+    setRequest(null, false);
+  }, [setLines, setCustomer, setMethod, setRequest]);
+
+  /**
+   * Antes de mandar el cobro: devuelve la llave del carrito (la crea en el
+   * primer intento) y lo deja marcado como "sin confirmar" ya guardado, por
+   * si la app se cierra antes de que llegue la respuesta.
+   */
+  const beginAttempt = useCallback((): string => {
+    const id = draftRef.current.requestId ?? newClientRequestId();
+    setRequest(id, true);
+    writeStorage();
+    return id;
+  }, [setRequest, writeStorage]);
+
+  /**
+   * El servidor respondió que no registró la venta (la rechazó o la búsqueda
+   * no la encontró): se puede corregir el carrito y cobrar de nuevo. La llave
+   * se conserva: si el primer envío llegara a registrarse tarde, el
+   * reintento devolvería esa venta en lugar de crear otra.
+   */
+  const markNotCharged = useCallback(() => {
+    if (draftRef.current.requestId) setRequest(draftRef.current.requestId, false);
+  }, [setRequest]);
+
+  /** Llave actual, leída al momento (no la del último render). */
+  const getRequestId = useCallback(() => draftRef.current.requestId, []);
+
+  /**
+   * Aplica el catálogo recién descargado: precio y existencia al día en cada
+   * renglón. El precio de un renglón que nadie editó se actualiza (si no, se
+   * mandaría como precio cambiado y el servidor lo rechaza o cobra el viejo);
+   * uno editado a mano se respeta. Los que ya no están a la venta se quitan.
+   * Devuelve qué cambió para avisarle al cajero.
+   *
+   * No toca un carrito con un cobro sin confirmar: lo que se mandó tiene que
+   * seguir igual hasta saber si se registró.
+   */
+  const syncWithCatalog = useCallback(
+    (items: Item[]): PosCatalogChange[] => {
+      if (items.length === 0 || linesRef.current.length === 0 || draftRef.current.requestUnknown) {
+        return [];
+      }
+      const { next, changes, changed } = syncLinesWithCatalog(linesRef.current, items);
+
+      if (changed) {
+        setLines(() => next);
+        setSelectedKey((key) => (next.some((l) => l.key === key) ? key : next[next.length - 1]?.key ?? null));
+      }
+      return changes;
+    },
+    [setLines],
+  );
 
   const totals = useMemo(() => {
-    const subtotal = round2(lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0));
-    const discount = round2(lines.reduce((s, l) => s + l.discount, 0));
+    const subtotalCents = sumCents(lines.map((l) => lineTotalCents(l.quantity, l.unitPrice)));
+    const discountCents = sumCents(lines.map((l) => amountToCents(l.discount)));
+    const totalCents = subtotalCents - discountCents;
     return {
-      subtotal,
-      discount,
-      total: round2(subtotal - discount),
+      subtotal: centsToAmount(subtotalCents),
+      discount: centsToAmount(discountCents),
+      total: centsToAmount(totalCents),
+      totalCents,
       items: round3(lines.reduce((s, l) => s + l.quantity, 0)),
     };
   }, [lines]);
 
   /**
-   * Renglones para la API. El precio solo viaja si se cambió: un cajero sin
+   * Renglones para la API, con cantidad y precio ya redondeados como los
+   * redondea el servidor. El precio solo viaja si se cambió: un cajero sin
    * permiso nunca manda precios (y el backend rechaza si lo hiciera).
    */
   const toDetails = useCallback(
     (): App.Entities.PosSalePayload["details"] =>
-      lines.map((l) => ({
+      linesRef.current.map((l) => ({
         product_id: l.item.product_id,
         package_id: l.item.package_id,
-        quantity: l.quantity,
-        ...(l.unitPrice !== l.item.price ? { unit_price: l.unitPrice } : {}),
-        ...(l.discount > 0 ? { discount: l.discount } : {}),
+        quantity: roundQuantity(l.quantity),
+        ...(amountToCents(l.unitPrice) !== amountToCents(l.item.price) ? { unit_price: roundMoney(l.unitPrice) } : {}),
+        ...(amountToCents(l.discount) > 0 ? { discount: roundMoney(l.discount) } : {}),
       })),
-    [lines],
+    [],
   );
 
   return {
@@ -160,6 +490,18 @@ export function usePosCart() {
     clear,
     totals,
     toDetails,
+    customer,
+    setCustomer,
+    method,
+    setMethod,
+    requestId,
+    requestUnknown,
+    getRequestId,
+    beginAttempt,
+    markNotCharged,
+    syncWithCatalog,
+    restored,
+    restoredLines,
   };
 }
 
