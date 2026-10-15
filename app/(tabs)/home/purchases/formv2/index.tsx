@@ -11,12 +11,11 @@ import { useAlerts } from "@/hooks/useAlerts";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useNavigation, useLocalSearchParams, useRouter } from "expo-router";
+import { useNavigation, useRouter } from "expo-router";
 import { useFormikContext } from "formik";
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { Image, StyleSheet, Text as RNText, TouchableOpacity, View } from "react-native";
 import { Button, Text } from "react-native-paper";
-import Services from "@/utils/services";
 import { usePurchase } from "./PurchaseContext";
 import { toLocalDateString } from "@/utils/dates";
 
@@ -64,9 +63,6 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
   const purchaseContext = usePurchase();
   const { selectedLocation } = useSelectedLocation();
 
-  const params = useLocalSearchParams();
-  const id = params.id ? parseInt(params.id as string) : undefined;
-
   const cartItemCount = purchaseContext.cartItems?.length ?? 0;
 
   // En mobile inyectamos botón del carrito en el AppBar.
@@ -82,14 +78,18 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
     });
   }, [isMobile, cartItemCount]);
 
-  const initialFormValues = useMemo(() => ({
+  // La compra que se edita la carga el contexto (la de la ruta o el último
+  // borrador) y llena el formulario. Si ya cargó antes de montar el formulario
+  // (se entró por productos), se arranca con ella.
+  const [initialFormValues] = useState(() => ({
     supplier_id: "",
     purchase_date: toLocalDateString(),
     notes: "",
     document_number: "",
     payment_method: "other",
     paid_from_cash: true,
-  }), []);
+    ...(purchaseContext.getDraftHeader() ?? {}),
+  }));
 
   const handleSubmit = async (values: FormData) => {
     try {
@@ -115,11 +115,12 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
         return false;
       }
 
-      // Confirmar la compra usando el contexto
+      // Confirmar la compra usando el contexto: primero manda los cambios
+      // pendientes y verifica que el servidor tenga lo que muestra el carrito.
       // Solo una compra en efectivo puede salir de la caja; con tarjeta,
       // transferencia u otro medio nunca toca el corte.
       const paymentMethod = values.get("payment_method")?.toString();
-      await purchaseContext.confirmPurchase({
+      const confirmed = await purchaseContext.confirmPurchase({
         supplier_id: values.get("supplier_id")?.toString(),
         purchase_date: values.get("purchase_date")?.toString(),
         document_number: values.get("document_number")?.toString(),
@@ -127,6 +128,8 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
         paid_from_cash:
           paymentMethod === "cash" && values.get("paid_from_cash")?.toString() !== "0",
       });
+      // Ya había una confirmación en curso (doble toque).
+      if (!confirmed) return false;
 
       router.replace(`/(tabs)/home/purchases` as any);
       alerts.success("Compra confirmada exitosamente");
@@ -134,15 +137,18 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
       return true;
     } catch (error: any) {
       console.error("Error confirming purchase:", error);
-      console.error("Error details:", {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-      });
 
+      // El motivo del servidor (message o error) o el de la verificación del
+      // carrito; nunca el texto en inglés de axios.
+      const data = error?.response?.data;
       const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
+        (error?.isAxiosError && !error.response
+          ? "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo."
+          : null) ||
+        (data?.errors ? (Object.values(data.errors).flat()[0] as string) : null) ||
+        data?.message ||
+        data?.error ||
+        (!error?.response ? error?.message : null) ||
         "Error al confirmar la compra";
       alerts.error(errorMessage);
       return false;
@@ -155,8 +161,6 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
       // fecha, forma de pago); sin la ref, al reabrir un borrador el carrito
       // tenía productos pero el proveedor quedaba vacío.
       ref={purchaseContext.formRef}
-      api={Services.purchasesV2}
-      id={id}
       submitButtonText="Confirmar Compra"
       initialValues={initialFormValues}
       onSubmit={async (values: any) => {
@@ -168,10 +172,7 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
 
         if (res) {
           await handleSubmit(values);
-          return true;
         }
-
-        return false;
       }}
       containerStyle={{
         paddingBottom: 24,
