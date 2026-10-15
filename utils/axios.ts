@@ -201,6 +201,34 @@ export const isTimeoutError = (error: any): boolean =>
 export const isNetworkError = (error: any): boolean =>
   Boolean(error?.isAxiosError) && !error.response && !isCancel(error);
 
+/** "45 segundos", "20 minutos", "3 horas" (redondeado hacia arriba). */
+const formatWait = (seconds: number): string => {
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const s = Math.ceil(seconds);
+  if (s < 60) return plural(s, "segundo", "segundos");
+  const minutes = Math.ceil(s / 60);
+  if (minutes < 90) return plural(minutes, "minuto", "minutos");
+  return plural(Math.ceil(minutes / 60), "hora", "horas");
+};
+
+/**
+ * Texto de un 429 (demasiados intentos): el mensaje del servidor y, si dice
+ * cuánto esperar (retry_after o el header Retry-After), ese tiempo. null si
+ * el error no es un 429. Lo usan las pantallas de recuperar contraseña, que
+ * mostraban un "Intenta nuevamente" genérico y el usuario seguía intentando.
+ */
+export const rateLimitMessage = (error: any): string | null => {
+  const response = error?.response;
+  if (response?.status !== 429) return null;
+  const serverMessage =
+    typeof response.data?.message === "string" ? response.data.message.trim() : "";
+  const message = serverMessage || "Demasiados intentos. Espera un momento e inténtalo de nuevo.";
+  const seconds = Number(response.data?.retry_after ?? response.headers?.["retry-after"]);
+  return Number.isFinite(seconds) && seconds > 0
+    ? `${message} Tiempo de espera: ${formatWait(seconds)}.`
+    : message;
+};
+
 // Textos genéricos de Laravel (en inglés) que pueden llegar en
 // response.data.message; los mensajes propios del backend no se tocan.
 const UNAVAILABLE_FEATURE_MESSAGE =

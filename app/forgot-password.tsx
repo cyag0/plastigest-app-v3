@@ -3,7 +3,7 @@ import { tokens } from "@/constants/tokens";
 import { useColors } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
-import { authAPI } from "@/utils/axios";
+import { authAPI, rateLimitMessage } from "@/utils/axios";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -114,8 +114,12 @@ export default function ForgotPasswordScreen() {
         pathname: "/reset-password-code" as any,
         params: { email: normalized },
       });
-    } catch {
-      alerts.error("No se pudo enviar el código. Intenta nuevamente.");
+    } catch (error) {
+      // 429: se pueden pedir pocos códigos por hora; el servidor dice cuánto
+      // esperar.
+      alerts.error(
+        rateLimitMessage(error) ?? "No se pudo enviar el código. Intenta nuevamente."
+      );
     } finally {
       setLoading(false);
     }

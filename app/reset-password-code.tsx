@@ -3,7 +3,7 @@ import { tokens } from "@/constants/tokens";
 import { useColors } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
-import { authAPI } from "@/utils/axios";
+import { authAPI, rateLimitMessage } from "@/utils/axios";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -121,8 +121,9 @@ export default function ResetPasswordCodeScreen() {
       });
     } catch (error: any) {
       const message =
-        error?.response?.data?.message ||
-        "El código es inválido o ya expiró. Intenta nuevamente.";
+        rateLimitMessage(error) ??
+        (error?.response?.data?.message ||
+          "El código es inválido o ya expiró. Intenta nuevamente.");
       setCodeError(message);
       alerts.error(message);
     } finally {
@@ -138,8 +139,10 @@ export default function ResetPasswordCodeScreen() {
       setCode("");
       setCodeError("");
       alerts.success("Te enviamos un nuevo código.");
-    } catch {
-      alerts.error("No se pudo reenviar el código. Intenta nuevamente.");
+    } catch (error) {
+      alerts.error(
+        rateLimitMessage(error) ?? "No se pudo reenviar el código. Intenta nuevamente."
+      );
     } finally {
       setResending(false);
     }

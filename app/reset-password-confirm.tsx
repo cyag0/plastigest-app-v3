@@ -3,7 +3,7 @@ import { tokens } from "@/constants/tokens";
 import { useColors } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
-import { authAPI } from "@/utils/axios";
+import { authAPI, rateLimitMessage } from "@/utils/axios";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Formik } from "formik";
@@ -122,8 +122,9 @@ export default function ResetPasswordConfirmScreen() {
       router.replace("/login");
     } catch (error: any) {
       const message =
-        error?.response?.data?.message ||
-        "No se pudo restablecer la contraseña. Intenta nuevamente.";
+        rateLimitMessage(error) ??
+        (error?.response?.data?.message ||
+          "No se pudo restablecer la contraseña. Intenta nuevamente.");
       alerts.error(message);
     } finally {
       setSubmitting(false);
