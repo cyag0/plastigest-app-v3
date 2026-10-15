@@ -1,12 +1,19 @@
 import { SafeAreaView } from "react-native-safe-area-context";
-import { formatMoney } from "@/utils/format";
+import { formatMoney, parseMoney } from "@/utils/format";
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
+import AmountPreview from "@/components/Pos/AmountPreview";
+import OpenShiftModal from "@/components/Pos/OpenShiftModal";
+import { apiErrorCode, apiErrorMessage, SALE_ERROR_CODES } from "@/components/Pos/saleErrors";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { amountToCents, centsToAmount } from "@/utils/money";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
+import { usePreventRemove } from "expo-router/react-navigation";
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal, StyleSheet, Text as RNText, TouchableOpacity, View } from "react-native";
 import { Button, RadioButton, Text, TextInput } from "react-native-paper";
@@ -25,6 +32,20 @@ interface SaleSummary {
   change: number;
   pending: number;
   method: string;
+  saleNumber?: string;
+  /** Se encontró por su llave después de perder la respuesta. */
+  recovered?: boolean;
+  /** Lo registrado no es el carrito que se mandó (una venta anterior del mismo carrito). */
+  mismatch?: boolean;
+}
+
+/** Aviso dentro de la sección de pago (en celular los avisos globales quedan detrás del carrito). */
+interface FormMessage {
+  text: string;
+  /** "warning": la venta pudo registrarse, no es un rechazo. */
+  tone: "error" | "warning" | "info";
+  /** Ofrecer abrir el turno de caja (cobro en efectivo sin turno). */
+  openShift?: boolean;
 }
 
 function CartHeaderButton({ count, onPress }: { count: number; onPress: () => void }) {
@@ -62,23 +83,34 @@ export default function SaleFormScreen() {
   const saleContext = useSale();
   const navigation = useNavigation();
   const { isMobile } = useResponsive();
+  const { hasPermission } = useAuth();
 
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [paymentAmount, setPaymentAmount] = useState("");
   // Indica si el usuario editó manualmente el monto a pagar. Mientras sea
   // false, el input se mantiene sincronizado con el total de la venta.
   const [paymentTouched, setPaymentTouched] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Un toque doble (o confirmar mientras se envía) no abre dos
+  // confirmaciones ni manda dos ventas.
+  const { submitting: isSubmitting, run } = useSubmitGuard();
   const [lastSale, setLastSale] = useState<SaleSummary | null>(null);
   const [cartVisible, setCartVisible] = useState(false);
+  const [formMessage, setFormMessage] = useState<FormMessage | null>(null);
+  const [openShiftVisible, setOpenShiftVisible] = useState(false);
+
+  // Con la venta en envío no se sale de la pantalla (atrás, menú): el
+  // resultado se perdería y el carrito, con su llave, también.
+  const sending = isSubmitting || saleContext.submitting;
+  usePreventRemove(sending, () => {
+    alerts.warning("Espera a que termine de registrarse la venta.");
+  });
 
   // El contexto ya expone los items del carrito con el formato de Cart.
   const cartItems = saleContext.cartItems;
 
-  const totalAmount = useMemo(
-    () => cartItems.reduce((sum, item) => sum + item.total, 0),
-    [cartItems],
-  );
+  // En centavos, como lo calcula el servidor.
+  const totalAmount = centsToAmount(saleContext.totalCents);
+  const isCredit = paymentMethod === "credit";
 
   const itemCount = useMemo(
     () => cartItems.reduce((sum, item) => sum + item.quantity, 0),
@@ -90,10 +122,26 @@ export default function SaleFormScreen() {
   // a 0 para crédito) si lo desea. Mientras no haya editado el campo a mano,
   // se mantiene sincronizado con el total.
   useEffect(() => {
-    if (!paymentTouched) {
+    if (!paymentTouched && !isCredit) {
       setPaymentAmount(totalAmount > 0 ? totalAmount.toFixed(2) : "");
     }
-  }, [totalAmount, paymentTouched]);
+  }, [totalAmount, paymentTouched, isCredit]);
+
+  /**
+   * A crédito no se cobra nada ahora: el monto queda en 0 y bloqueado. Antes
+   * seguía el total y, si se tocaba, la venta a crédito quedaba como pagada
+   * con un ingreso que nunca entró.
+   */
+  const changePaymentMethod = (method: string) => {
+    setPaymentMethod(method);
+    setFormMessage(null);
+    if (method === "credit") {
+      setPaymentTouched(true);
+      setPaymentAmount("0");
+    } else if (isCredit) {
+      setPaymentTouched(false);
+    }
+  };
 
   // En mobile inyectamos el botón del carrito en el AppBar.
   useEffect(() => {
@@ -105,12 +153,38 @@ export default function SaleFormScreen() {
     });
   }, [isMobile, itemCount]);
 
-  const handleConfirmSale = async () => {
-    if (isSubmitting) return;
-    try {
+  const handleConfirmSale = () =>
+    run(async () => {
+      setFormMessage(null);
       if (cartItems.length === 0) {
-        alerts.error("Debes agregar al menos un producto");
+        setFormMessage({ text: "Debes agregar al menos un producto", tone: "error" });
         return;
+      }
+
+      // Si el usuario no editó el monto, se paga el total completo: enviamos
+      // `undefined` para que el backend use el total exacto. A crédito va 0.
+      // Si lo editó, se lee en formato mexicano ("1,500" son mil quinientos)
+      // y un monto que no se entiende se avisa: antes "1,500" se mandaba como
+      // 1 y la venta quedaba con $1 pagado.
+      let paidAmountForApi: number | undefined;
+      let paidCents: number;
+      if (isCredit) {
+        paidAmountForApi = 0;
+        paidCents = 0;
+      } else if (!paymentTouched) {
+        paidAmountForApi = undefined;
+        paidCents = saleContext.totalCents;
+      } else {
+        const parsed = parseMoney(paymentAmount);
+        if (parsed === null || parsed < 0) {
+          setFormMessage({
+            text: "El monto a pagar no es válido: escríbelo como 1500 o 1,500.50 (0 si queda pendiente).",
+            tone: "error",
+          });
+          return;
+        }
+        paidCents = amountToCents(parsed);
+        paidAmountForApi = centsToAmount(paidCents);
       }
 
       const confirmed = await alerts.confirm("¿Deseas confirmar esta venta?", {
@@ -121,61 +195,83 @@ export default function SaleFormScreen() {
 
       if (!confirmed) return;
 
-      setIsSubmitting(true);
+      // Capturar el carrito ANTES de confirmar: si se registra, el contexto
+      // lo vacía y perderíamos los datos para el modal.
+      const totalCents = saleContext.totalCents;
+      const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
-      // Si el usuario no editó el monto, se paga el total completo: enviamos
-      // `undefined` para que el backend use el total exacto (evita problemas de
-      // redondeo). Si lo editó, enviamos el monto explícito —incluido 0, que
-      // deja la venta como pendiente/crédito en lugar de marcarla como pagada.
-      let paidAmountForApi: number | undefined;
-      let paidAmountForSummary: number;
-      if (!paymentTouched) {
-        paidAmountForApi = undefined;
-        paidAmountForSummary = totalAmount;
-      } else {
-        const parsed = parseFloat(paymentAmount.trim());
-        paidAmountForSummary = Number.isFinite(parsed) ? parsed : 0;
-        paidAmountForApi = paidAmountForSummary;
-      }
-
-      // Capturar el resumen ANTES de confirmar, porque confirmSale limpia
-      // el carrito (clearCart) y perderíamos los datos para el modal.
-      const summary: SaleSummary = {
-        total: totalAmount,
-        itemCount: cartItems.reduce((sum, item) => sum + item.quantity, 0),
-        method: paymentMethod,
-        change:
-          paymentMethod === "cash" && paidAmountForSummary > totalAmount
-            ? paidAmountForSummary - totalAmount
-            : 0,
-        pending:
-          paidAmountForSummary < totalAmount
-            ? totalAmount - paidAmountForSummary
-            : 0,
-      };
-
-      await saleContext.confirmSale({
+      const attempt = await saleContext.confirmSale({
         payment_method: paymentMethod,
         paid_amount: paidAmountForApi,
       });
+      if (!attempt) return; // ya había un envío en curso
 
-      // Cerrar carrito y mostrar modal de éxito
-      setCartVisible(false);
-      setPaymentAmount("");
-      setPaymentTouched(false);
-      setPaymentMethod("cash");
-      setLastSale(summary);
-    } catch (error: any) {
-      console.error("Error confirming sale:", error);
-      const errorMessage =
-        error.response?.data?.message ||
-        error.message ||
-        "Error al confirmar la venta";
-      alerts.error(errorMessage);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      if (attempt.status === "charged") {
+        // El resumen sale de lo que registró el servidor.
+        const sale = attempt.sale ?? {};
+        const saleTotalCents = sale.total != null ? amountToCents(Number(sale.total)) : totalCents;
+        const paidServer =
+          sale.paid_amount != null
+            ? Number(sale.paid_amount)
+            : Array.isArray(sale.payments)
+              ? sale.payments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0)
+              : centsToAmount(paidCents);
+        const mismatch = saleTotalCents !== totalCents;
+        setCartVisible(false);
+        setPaymentAmount("");
+        setPaymentTouched(false);
+        setPaymentMethod("cash");
+        setLastSale({
+          total: centsToAmount(saleTotalCents),
+          itemCount,
+          method: paymentMethod,
+          change:
+            !mismatch && paymentMethod === "cash" && paidCents > totalCents
+              ? centsToAmount(paidCents - totalCents)
+              : 0,
+          pending: Math.max(0, centsToAmount(saleTotalCents - amountToCents(paidServer))),
+          saleNumber: sale.sale_number,
+          recovered: attempt.recovered,
+          mismatch,
+        });
+        return;
+      }
+
+      if (attempt.status === "not_charged") {
+        setFormMessage({
+          text: "La venta no se registró: no llegó la respuesta del servidor. Inténtalo de nuevo.",
+          tone: "error",
+        });
+        return;
+      }
+
+      if (attempt.status === "unknown") {
+        setFormMessage({
+          text: `${apiErrorMessage(attempt.error, "No llegó la respuesta del servidor.")} No se pudo confirmar si la venta quedó registrada: vuelve a presionar «Confirmar venta» (si ya se registró no se cobra dos veces) y no vacíes el carrito sin revisarla en Ventas.`,
+          tone: "warning",
+        });
+        return;
+      }
+
+      // Rechazada: no se registró nada.
+      const code = apiErrorCode(attempt.error);
+      if (code === SALE_ERROR_CODES.noOpenSession) {
+        const canOpen = hasPermission("sales_pos");
+        setFormMessage({
+          text: `${apiErrorMessage(attempt.error, "Abre un turno de caja para cobrar en efectivo.")}${
+            canOpen ? "" : " También puedes cobrarla con tarjeta o transferencia."
+          }`,
+          tone: "error",
+          openShift: canOpen,
+        });
+        return;
+      }
+      if (code === SALE_ERROR_CODES.insufficientStock) {
+        // Existencias al día para corregir el carrito.
+        saleContext.loadData();
+      }
+      setFormMessage({ text: apiErrorMessage(attempt.error, "No se pudo registrar la venta."), tone: "error" });
+    });
 
   const handleStartAnotherSale = () => {
     setLastSale(null);
@@ -200,7 +296,7 @@ export default function SaleFormScreen() {
             <View style={styles.field}>
               <Text style={styles.label}>Método de Pago</Text>
               <RadioButton.Group
-                onValueChange={setPaymentMethod}
+                onValueChange={changePaymentMethod}
                 value={paymentMethod}
               >
                 <View style={styles.radioRow}>
@@ -232,7 +328,9 @@ export default function SaleFormScreen() {
                 Monto Total: {formatMoney(totalAmount)}
               </Text>
               <Text style={styles.sublabel}>
-                Monto a pagar ahora (cámbialo a 0 para dejarlo a crédito)
+                {isCredit
+                  ? "A crédito: no se cobra nada ahora, queda pendiente todo el total"
+                  : "Monto a pagar ahora (cámbialo a 0 para dejarlo pendiente)"}
               </Text>
               <TextInput
                 style={styles.input}
@@ -241,22 +339,44 @@ export default function SaleFormScreen() {
                 onChangeText={(text) => {
                   setPaymentTouched(true);
                   setPaymentAmount(text);
+                  setFormMessage(null);
                 }}
                 keyboardType="decimal-pad"
+                disabled={isCredit || sending}
               />
+              {!isCredit && <AmountPreview value={paymentAmount} label="Pagado" />}
             </View>
+
+            {formMessage && (
+              <View style={styles.formMessage}>
+                <Text
+                  style={[
+                    styles.formMessageText,
+                    formMessage.tone === "error" && { color: palette.error },
+                    formMessage.tone === "warning" && { color: palette.warning },
+                  ]}
+                >
+                  {formMessage.text}
+                </Text>
+                {formMessage.openShift && (
+                  <Button mode="outlined" icon="cash-register" compact onPress={() => setOpenShiftVisible(true)} style={styles.formMessageAction}>
+                    Abrir turno
+                  </Button>
+                )}
+              </View>
+            )}
 
             {/* Botón confirmar */}
             <Button
               mode="contained"
               onPress={handleConfirmSale}
-              disabled={cartItems.length === 0 || isSubmitting}
-              loading={isSubmitting}
+              disabled={cartItems.length === 0 || sending}
+              loading={sending}
               style={styles.confirmButton}
               buttonColor={palette.primary}
               icon="check"
             >
-              {isSubmitting ? "Procesando..." : "Confirmar Venta"}
+              {sending ? "Procesando..." : "Confirmar Venta"}
             </Button>
           </View>
         </Cart>
@@ -289,13 +409,17 @@ export default function SaleFormScreen() {
         <Modal
           visible={cartVisible}
           animationType="slide"
-          onRequestClose={() => setCartVisible(false)}
+          // Mientras se registra la venta el carrito no se cierra.
+          onRequestClose={() => {
+            if (!sending) setCartVisible(false);
+          }}
         >
           <SafeAreaView style={styles.cartModal} edges={["top", "bottom"]}>
             <View style={styles.cartModalHeader}>
               <Text style={styles.cartModalTitle}>Carrito</Text>
               <TouchableOpacity
                 onPress={() => setCartVisible(false)}
+                disabled={sending}
                 style={styles.cartModalClose}
                 activeOpacity={0.7}
               >
@@ -322,10 +446,22 @@ export default function SaleFormScreen() {
 
             <Text style={styles.modalTitle}>Venta registrada</Text>
             <Text style={styles.modalSubtitle}>
+              {lastSale?.saleNumber ? `${lastSale.saleNumber} · ` : ""}
               {lastSale?.itemCount}{" "}
               {lastSale?.itemCount === 1 ? "producto" : "productos"} ·{" "}
               {PAYMENT_LABELS[lastSale?.method ?? "cash"] ?? lastSale?.method}
             </Text>
+            {!!lastSale?.recovered && (
+              <Text style={styles.modalNote}>
+                Se confirmó después de una falla de conexión: quedó registrada una sola vez.
+              </Text>
+            )}
+            {!!lastSale?.mismatch && (
+              <Text style={[styles.modalNote, { color: palette.warning }]}>
+                El total registrado no es el del carrito: quedó registrada una venta anterior de este carrito. Revísala en Ventas
+                antes de seguir.
+              </Text>
+            )}
 
             <View style={styles.modalTotalBox}>
               <Text style={styles.modalTotalLabel}>Total</Text>
@@ -365,6 +501,16 @@ export default function SaleFormScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Cobro en efectivo sin turno: abrirlo aquí sin perder el carrito. */}
+      <OpenShiftModal
+        visible={openShiftVisible}
+        onClose={() => setOpenShiftVisible(false)}
+        onOpened={() => {
+          setOpenShiftVisible(false);
+          setFormMessage({ text: "Turno abierto. Confirma la venta de nuevo.", tone: "info" });
+        }}
+      />
     </View>
   );
 }
@@ -448,6 +594,18 @@ const styles = StyleSheet.create({
   confirmButton: {
     marginTop: 8,
   },
+  formMessage: {
+    marginBottom: 12,
+    gap: 8,
+  },
+  formMessageText: {
+    fontSize: 13,
+    color: palette.text,
+    lineHeight: 19,
+  },
+  formMessageAction: {
+    alignSelf: "flex-start",
+  },
 
   // --- Modal de éxito ---
   modalOverlay: {
@@ -484,6 +642,13 @@ const styles = StyleSheet.create({
     color: palette.textSecondary,
     marginTop: 4,
     textAlign: "center",
+  },
+  modalNote: {
+    fontSize: 13,
+    color: palette.textSecondary,
+    marginTop: 10,
+    textAlign: "center",
+    lineHeight: 19,
   },
   modalTotalBox: {
     width: "100%",

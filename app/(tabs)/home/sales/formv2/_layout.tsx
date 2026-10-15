@@ -4,13 +4,16 @@ import palette from "@/constants/palette";
 import { Stack, usePathname, useRouter } from "expo-router";
 import React from "react";
 import { View } from "react-native";
-import { SaleProvider } from "./SaleContext";
+import { SaleProvider, useSale } from "./SaleContext";
 
 function StackContent() {
   const router = useRouter();
   const pathname = usePathname();
+  const { submitting } = useSale();
 
   const handleBack = () => {
+    // Con la venta en envío no se sale: el resultado se perdería.
+    if (submitting) return;
     // En la pantalla principal del POS (termina en /formv2) volver al
     // índice de ventas; en cualquier otra ruta (p. ej. scanner) hacer
     // back normal.

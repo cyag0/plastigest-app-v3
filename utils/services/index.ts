@@ -1,4 +1,4 @@
-import { default as api, default as axiosClient } from "../axios";
+import { default as api, default as axiosClient, LONG_REQUEST_TIMEOUT } from "../axios";
 import admin from "./admin/admin";
 import { createCrudService } from "./crudService";
 
@@ -309,7 +309,13 @@ const Services = {
     },
     async addPayment(
       id: number,
-      data: { amount: number; payment_method: string; notes?: string },
+      data: {
+        amount: number;
+        payment_method: string;
+        notes?: string;
+        /** Llave del abono: el reintento con la misma no lo registra dos veces. */
+        client_request_id?: string;
+      },
     ) {
       const response = await axiosClient.post(
         `/auth/admin/sales/${id}/add-payment`,
@@ -384,11 +390,42 @@ const Services = {
         payment_method?: "cash" | "card" | "transfer" | "credit";
         paid_amount?: number;
         notes?: string;
+        /** Llave del cobro: el reintento con la misma no cobra dos veces. */
+        client_request_id?: string;
       },
     ) {
       const response = await axiosClient.post(
         `/auth/admin/sales-orders/${id}/checkout`,
         data ?? {},
+      );
+      return response.data;
+    },
+    /**
+     * Kiosko: crea el pedido y lo cobra en una sola transacción. Con la misma
+     * client_request_id, un reintento devuelve el pedido ya cobrado en lugar
+     * de crear otro (antes eran dos llamadas: si fallaba el cobro quedaba un
+     * pedido pendiente y el reintento creaba uno nuevo).
+     */
+    async quickCheckout(payload: {
+      channel: "kiosk";
+      service_mode: "counter";
+      customer_id?: number | null;
+      details: {
+        product_id: number;
+        package_id?: number | null;
+        unit_id: number;
+        requested_quantity: number;
+        unit_price: number;
+      }[];
+      payment_method: "cash" | "card" | "transfer";
+      paid_amount: number;
+      notes?: string;
+      client_request_id: string;
+    }) {
+      const response = await axiosClient.post(
+        "/auth/admin/sales-orders/quick-checkout",
+        payload,
+        { timeout: LONG_REQUEST_TIMEOUT },
       );
       return response.data;
     },
@@ -795,6 +832,22 @@ const Services = {
     async sale(payload: App.Entities.PosSalePayload) {
       const response = await axiosClient.post("/auth/admin/pos/sales", payload);
       return response.data as { message: string; data: App.Entities.PosSaleResult };
+    },
+    /**
+     * Venta ya registrada con esa llave (client_request_id), con la misma
+     * forma que el alta; null si no existe. Sirve para saber en qué quedó un
+     * cobro que se quedó sin respuesta antes de cobrar otra vez.
+     */
+    async findSaleByRequest(clientRequestId: string) {
+      try {
+        const response = await axiosClient.get(
+          `/auth/admin/pos/sales/request/${encodeURIComponent(clientRequestId)}`,
+        );
+        return response.data as { message?: string; data: App.Entities.PosSaleResult };
+      } catch (error: any) {
+        if (error?.response?.status === 404) return null;
+        throw error;
+      }
     },
   },
   cashClosings: {

@@ -17,10 +17,12 @@ interface Props {
   /** Ancho del rollo de la impresora de esta caja. */
   ticketWidth?: 58 | 80;
   onToggleTicketWidth?: () => void;
+  /** Vuelve a descargar precios y existencias. */
+  onRefreshCatalog?: () => void;
 }
 
 /** Encabezado del POS: sucursal · caja · cajero · hora. */
-export default function PosHeader({ locationName, registerName, cashierName, compact, onCloseShift, onExit, onPrintShift, ticketWidth, onToggleTicketWidth }: Props) {
+export default function PosHeader({ locationName, registerName, cashierName, compact, onCloseShift, onExit, onPrintShift, ticketWidth, onToggleTicketWidth, onRefreshCatalog }: Props) {
   const [now, setNow] = useState(new Date());
   const [menu, setMenu] = useState(false);
 
@@ -66,6 +68,9 @@ export default function PosHeader({ locationName, registerName, cashierName, com
         anchorPosition="bottom"
         anchor={<IconButton icon="dots-vertical" iconColor={palette.textInverse} onPress={() => setMenu(true)} />}
       >
+        {onRefreshCatalog && (
+          <Menu.Item leadingIcon="refresh" title="Actualizar productos" onPress={() => { setMenu(false); onRefreshCatalog(); }} />
+        )}
         {onPrintShift && (
           <Menu.Item leadingIcon="printer" title="Imprimir corte parcial" onPress={() => { setMenu(false); onPrintShift(); }} />
         )}

@@ -1,10 +1,23 @@
 import { formatDate } from "@/utils/dates";
+import AmountPreview from "@/components/Pos/AmountPreview";
+import OpenShiftModal from "@/components/Pos/OpenShiftModal";
+import {
+  apiErrorCode,
+  apiErrorMessage,
+  isOutcomeUnknown,
+  SALE_ERROR_CODES,
+} from "@/components/Pos/saleErrors";
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { parseMoney } from "@/utils/format";
+import { amountToCents, centsToAmount } from "@/utils/money";
+import { newClientRequestId } from "@/utils/requestId";
 import services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, TextInput, View } from "react-native";
 import {
   ActivityIndicator,
@@ -44,20 +57,41 @@ const PM_OPTIONS: { value: "cash" | "card" | "transfer" | "credit"; label: strin
   { value: "credit", label: "Crédito", icon: "account-clock" },
 ];
 
+/** Espera antes de revisar un cobro cuya respuesta se perdió: pudo seguir en proceso. */
+const VERIFY_DELAY_MS = 1500;
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Aviso dentro del diálogo de cobro. */
+type CheckoutMessage = {
+  text: string;
+  /** "warning": el cobro pudo registrarse, no es un rechazo. */
+  tone: "error" | "warning" | "info";
+  /** Ofrecer abrir el turno de caja (cobro en efectivo sin turno). */
+  openShift?: boolean;
+};
+
 export default function SalesOrderDetail() {
   const params = useLocalSearchParams();
   const id = params.id as string;
   const alerts = useAlerts();
+  const { hasPermission } = useAuth();
 
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
+  // Candado de las acciones (cobrar, preparar, enviar, entregar, cancelar):
+  // un doble toque no manda dos veces ni abre dos confirmaciones.
+  const { submitting: actionLoading, run } = useSubmitGuard();
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] =
     useState<"cash" | "card" | "transfer" | "credit">("cash");
   const [paidAmount, setPaidAmount] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [checkoutMessage, setCheckoutMessage] = useState<CheckoutMessage | null>(null);
+  const [openShiftVisible, setOpenShiftVisible] = useState(false);
+  // Llave del cobro (client_request_id): la misma en cada reintento hasta que
+  // el pedido queda cobrado.
+  const checkoutKeyRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -78,97 +112,149 @@ export default function SalesOrderDetail() {
     load();
   }, [load]);
 
-  const runAction = async (
+  const runAction = (
     label: string,
     fn: () => Promise<any>,
     confirm = true,
-  ) => {
-    if (confirm) {
-      const ok = await alerts.confirm(`¿Deseas ${label.toLowerCase()}?`, {
-        title: label,
+  ) =>
+    run(async () => {
+      if (confirm) {
+        const ok = await alerts.confirm(`¿Deseas ${label.toLowerCase()}?`, {
+          title: label,
+          okText: "Confirmar",
+          cancelText: "Cancelar",
+        });
+        if (!ok) return;
+      }
+      try {
+        const res = await fn();
+        alerts.success(res?.message || `${label} aplicado`);
+        await load();
+      } catch (e: any) {
+        alerts.error(apiErrorMessage(e, `No se pudo ${label.toLowerCase()}`));
+      }
+    });
+
+  const totalCents = amountToCents(toNum(order?.total_amount));
+
+  const openCheckout = () => {
+    setPaidAmount(paymentMethod === "credit" ? "0" : centsToAmount(totalCents).toFixed(2));
+    setCheckoutMessage(null);
+    setCheckoutOpen(true);
+  };
+
+  /**
+   * A crédito no se cobra nada ahora: el monto queda en 0 y bloqueado. Antes
+   * se quedaba el total precargado y el pedido a crédito quedaba como pagado.
+   */
+  const changePaymentMethod = (method: "cash" | "card" | "transfer" | "credit") => {
+    setPaymentMethod(method);
+    setCheckoutMessage(null);
+    if (method === "credit") setPaidAmount("0");
+    else if (paymentMethod === "credit") setPaidAmount(centsToAmount(totalCents).toFixed(2));
+  };
+
+  const onCheckoutSubmit = () =>
+    run(async () => {
+      setCheckoutMessage(null);
+
+      // Formato mexicano ("1,500" son mil quinientos). Un monto que no se
+      // entiende se avisa: antes "1,500" se mandaba como 0 y el pedido quedaba
+      // a crédito sin que nadie lo notara.
+      let paid = 0;
+      if (paymentMethod !== "credit") {
+        const parsed = parseMoney(paidAmount);
+        if (parsed === null || parsed < 0) {
+          setCheckoutMessage({
+            text: "Captura el monto pagado (0 si queda pendiente): escríbelo como 1500 o 1,500.50.",
+            tone: "error",
+          });
+          return;
+        }
+        paid = centsToAmount(amountToCents(parsed));
+      }
+
+      const clientRequestId = checkoutKeyRef.current ?? newClientRequestId();
+      checkoutKeyRef.current = clientRequestId;
+
+      try {
+        const res = await services.salesOrders.checkout(Number(id), {
+          payment_method: paymentMethod,
+          paid_amount: paid,
+          notes: paymentNotes || undefined,
+          client_request_id: clientRequestId,
+        });
+        checkoutKeyRef.current = null;
+        setCheckoutOpen(false);
+        alerts.success(res?.message || "Pedido cobrado");
+        await load();
+      } catch (e: any) {
+        if (isOutcomeUnknown(e)) {
+          // Sin respuesta: el pedido dice si quedó cobrado (sale_id).
+          await wait(VERIFY_DELAY_MS);
+          try {
+            const fresh = await services.salesOrders.show(id);
+            const data = (fresh as any).data?.data ?? (fresh as any).data;
+            if (data?.sale_id) {
+              checkoutKeyRef.current = null;
+              setOrder(data);
+              setCheckoutOpen(false);
+              alerts.success("El pedido quedó cobrado.");
+              return;
+            }
+          } catch {
+            // Tampoco se pudo consultar.
+          }
+          setCheckoutMessage({
+            text: `${apiErrorMessage(e, "No llegó la respuesta del servidor.")} No se pudo confirmar si el cobro quedó registrado: vuelve a presionar «Confirmar cobro» (si ya se registró no se cobra dos veces).`,
+            tone: "warning",
+          });
+          return;
+        }
+
+        if (apiErrorCode(e) === SALE_ERROR_CODES.noOpenSession) {
+          const canOpen = hasPermission("sales_pos");
+          setCheckoutMessage({
+            text: `${apiErrorMessage(e, "Abre un turno de caja para cobrar en efectivo.")}${
+              canOpen ? "" : " También puedes cobrarlo con tarjeta, transferencia o a crédito."
+            }`,
+            tone: "error",
+            openShift: canOpen,
+          });
+          return;
+        }
+        setCheckoutMessage({ text: apiErrorMessage(e, "No se pudo cobrar el pedido"), tone: "error" });
+      }
+    });
+
+  const handlePrepare = () =>
+    run(async () => {
+      const ok = await alerts.confirm("¿Deseas marcar como preparando?", {
+        title: "Marcar como preparando",
         okText: "Confirmar",
         cancelText: "Cancelar",
       });
       if (!ok) return;
-    }
-    try {
-      setActionLoading(true);
-      const res = await fn();
-      alerts.success(res?.message || `${label} aplicado`);
-      await load();
-    } catch (e: any) {
-      const errors = e?.response?.data?.errors;
-      const firstError =
-        errors && typeof errors === "object"
-          ? (Object.values(errors)[0] as any)?.[0]
-          : null;
-      alerts.error(
-        firstError ||
-          e?.response?.data?.error ||
-          e?.response?.data?.message ||
-          e?.message ||
-          `No se pudo ${label.toLowerCase()}`,
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const onCheckoutSubmit = async () => {
-    setCheckoutOpen(false);
-    await runAction(
-      "Cobrar pedido",
-      () =>
-        services.salesOrders.checkout(Number(id), {
-          payment_method: paymentMethod,
-          paid_amount: paidAmount ? toNum(paidAmount) : undefined,
-          notes: paymentNotes || undefined,
-        }),
-      false,
-    );
-  };
-
-  const handlePrepare = async () => {
-    const ok = await alerts.confirm("¿Deseas marcar como preparando?", {
-      title: "Marcar como preparando",
-      okText: "Confirmar",
-      cancelText: "Cancelar",
+      try {
+        const res = await services.salesOrders.prepare(Number(id));
+        alerts.success((res as any)?.message || "Preparando aplicado");
+        services.tasks
+          .store({
+            title: `Preparar pedido #${order.order_number}`,
+            description: `Preparar productos del pedido ${order.order_number} para despacho o entrega.`,
+            type: "custom",
+            priority: "high",
+            location_id: order.location?.id ?? undefined,
+            due_date: order.promised_at ?? undefined,
+            related_type: "sales_order",
+            related_id: order.id,
+          })
+          .catch(() => {});
+        await load();
+      } catch (e: any) {
+        alerts.error(apiErrorMessage(e, "No se pudo marcar como preparando"));
+      }
     });
-    if (!ok) return;
-    try {
-      setActionLoading(true);
-      const res = await services.salesOrders.prepare(Number(id));
-      alerts.success((res as any)?.message || "Preparando aplicado");
-      services.tasks
-        .store({
-          title: `Preparar pedido #${order.order_number}`,
-          description: `Preparar productos del pedido ${order.order_number} para despacho o entrega.`,
-          type: "custom",
-          priority: "high",
-          location_id: order.location?.id ?? undefined,
-          due_date: order.promised_at ?? undefined,
-          related_type: "sales_order",
-          related_id: order.id,
-        })
-        .catch(() => {});
-      await load();
-    } catch (e: any) {
-      const errors = e?.response?.data?.errors;
-      const firstError =
-        errors && typeof errors === "object"
-          ? (Object.values(errors)[0] as any)?.[0]
-          : null;
-      alerts.error(
-        firstError ||
-          e?.response?.data?.error ||
-          e?.response?.data?.message ||
-          e?.message ||
-          "No se pudo marcar como preparando",
-      );
-    } finally {
-      setActionLoading(false);
-    }
-  };
 
   if (loading || !order) {
     return (
@@ -472,7 +558,15 @@ export default function SalesOrderDetail() {
         )}
 
         <Portal>
-          <Dialog visible={checkoutOpen} onDismiss={() => setCheckoutOpen(false)}>
+          <Dialog
+            visible={checkoutOpen}
+            // Mientras se cobra no se cierra (tocar fuera, botón atrás).
+            onDismiss={() => {
+              if (!actionLoading) setCheckoutOpen(false);
+            }}
+            dismissable={!actionLoading}
+            dismissableBackButton={!actionLoading}
+          >
             <Dialog.Title>Cobrar pedido</Dialog.Title>
             <Dialog.Content>
               <Text variant="bodyMedium" style={{ marginBottom: 8 }}>
@@ -482,23 +576,28 @@ export default function SalesOrderDetail() {
                 Método de pago
               </Text>
               <RadioButton.Group
-                onValueChange={(v) => setPaymentMethod(v as any)}
+                onValueChange={(v) => changePaymentMethod(v as any)}
                 value={paymentMethod}
               >
                 {PM_OPTIONS.map((pm) => (
-                  <RadioButton.Item key={pm.value} label={pm.label} value={pm.value} />
+                  <RadioButton.Item key={pm.value} label={pm.label} value={pm.value} disabled={actionLoading} />
                 ))}
               </RadioButton.Group>
               <Text variant="bodySmall" style={{ marginTop: 8 }}>
-                Monto pagado
+                {paymentMethod === "credit" ? "A crédito: no se cobra nada ahora" : "Monto pagado"}
               </Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, paymentMethod === "credit" && styles.inputDisabled]}
                 keyboardType="decimal-pad"
                 value={paidAmount}
-                onChangeText={setPaidAmount}
+                onChangeText={(t) => {
+                  setPaidAmount(t);
+                  setCheckoutMessage(null);
+                }}
+                editable={paymentMethod !== "credit" && !actionLoading}
                 placeholder="0.00"
               />
+              {paymentMethod !== "credit" && <AmountPreview value={paidAmount} label="Pagado" />}
               <Text variant="bodySmall" style={{ marginTop: 8 }}>
                 Notas (opcional)
               </Text>
@@ -507,17 +606,58 @@ export default function SalesOrderDetail() {
                 multiline
                 value={paymentNotes}
                 onChangeText={setPaymentNotes}
+                editable={!actionLoading}
                 placeholder="Observaciones del cobro"
               />
+              {checkoutMessage && (
+                <View style={{ marginTop: 12, gap: 8 }}>
+                  <Text
+                    variant="bodyMedium"
+                    style={{
+                      color:
+                        checkoutMessage.tone === "error"
+                          ? palette.error
+                          : checkoutMessage.tone === "warning"
+                            ? palette.warning
+                            : palette.text,
+                    }}
+                  >
+                    {checkoutMessage.text}
+                  </Text>
+                  {checkoutMessage.openShift && (
+                    <Button
+                      mode="outlined"
+                      icon="cash-register"
+                      compact
+                      onPress={() => setOpenShiftVisible(true)}
+                      style={{ alignSelf: "flex-start" }}
+                    >
+                      Abrir turno
+                    </Button>
+                  )}
+                </View>
+              )}
             </Dialog.Content>
             <Dialog.Actions>
-              <Button onPress={() => setCheckoutOpen(false)}>Cancelar</Button>
-              <Button mode="contained" onPress={onCheckoutSubmit}>
+              <Button onPress={() => setCheckoutOpen(false)} disabled={actionLoading}>
+                Cancelar
+              </Button>
+              <Button mode="contained" onPress={onCheckoutSubmit} loading={actionLoading} disabled={actionLoading}>
                 Confirmar cobro
               </Button>
             </Dialog.Actions>
           </Dialog>
         </Portal>
+
+        {/* Cobro en efectivo sin turno: abrirlo aquí y volver a cobrar. */}
+        <OpenShiftModal
+          visible={openShiftVisible}
+          onClose={() => setOpenShiftVisible(false)}
+          onOpened={() => {
+            setOpenShiftVisible(false);
+            setCheckoutMessage({ text: "Turno abierto. Confirma el cobro de nuevo.", tone: "info" });
+          }}
+        />
       </ScrollView>
 
       {hasAnyAction && (
@@ -555,10 +695,7 @@ export default function SalesOrderDetail() {
                 icon="cash-register"
                 loading={actionLoading}
                 disabled={actionLoading}
-                onPress={() => {
-                  setPaidAmount(String(toNum(order.total_amount)));
-                  setCheckoutOpen(true);
-                }}
+                onPress={openCheckout}
                 buttonColor="#3F8A3A"
                 style={{ borderRadius: 10 }}
               >
@@ -639,5 +776,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 8,
     marginTop: 4,
+  },
+  inputDisabled: {
+    backgroundColor: palette.surfaceMuted,
+    color: palette.textSecondary,
   },
 });
