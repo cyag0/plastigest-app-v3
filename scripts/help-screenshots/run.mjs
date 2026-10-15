@@ -80,10 +80,13 @@ async function startApp() {
 
   if (!skipBuild || !fs.existsSync(path.join(WEB_DIR, "index.html"))) {
     console.log("› Exportando la app web (producción)…");
-    const result = spawnSync("npx", ["expo", "export", "--platform", "web", "--output-dir", WEB_DIR], {
+    // Build de producción contra el backend local: hay que permitirlo
+    // (utils/appConfig.ts lo bloquea) y limpiar la caché de Metro, que guarda
+    // la URL del API ya incrustada de un export anterior.
+    const result = spawnSync("npx", ["expo", "export", "--platform", "web", "--output-dir", WEB_DIR, "--clear"], {
       cwd: ROOT,
       stdio: "inherit",
-      env: { ...process.env, CI: "1" },
+      env: { ...process.env, CI: "1", EXPO_PUBLIC_ALLOW_LOCAL_API: "true" },
     });
     if (result.status !== 0) throw new Error("Falló expo export");
   }

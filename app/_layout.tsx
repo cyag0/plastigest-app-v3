@@ -4,12 +4,14 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import "react-native-reanimated";
 
+import ConfigErrorScreen from "@/components/App/ConfigErrorScreen";
 import { SelectDataProvider } from "@/components/Form/AppProSelect";
 import NavigationHandler from "@/components/NavigationHandler";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { AlertsDialogs, AlertsProvider } from "@/hooks/useAlerts";
+import { API_CONFIG_ERROR } from "@/utils/appConfig";
 import {
   configureFonts,
   MD3DarkTheme,
@@ -65,6 +67,12 @@ export default function RootLayout() {
   if (!loaded && !fontError) {
     // En web (y en desarrollo) las fuentes se cargan de forma asíncrona.
     return null;
+  }
+
+  // Build sin dirección del servidor (o apuntando a localhost): se explica en
+  // pantalla en vez de montar la sesión, que mandaría peticiones a otro lado.
+  if (API_CONFIG_ERROR) {
+    return <ConfigErrorScreen message={API_CONFIG_ERROR} />;
   }
 
   return (

@@ -1,13 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios, { AxiosInstance, AxiosResponse } from "axios";
+import { API_BASE_URL, API_CONFIG_ERROR } from "./appConfig";
 
 // Configuración base para el cliente axios usando variables de entorno.
-// La URL se lee de EXPO_PUBLIC_API_URL definida en .env (o .env.production
-// al momento de hacer `eas build --profile production`).
-// En desarrollo local, dejar el fallback para que el bundler no truene si
-// olvidaste definir la variable.
-const BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || "http://localhost/api";
+// La URL sale de EXPO_PUBLIC_API_URL (ver utils/appConfig): en desarrollo se
+// conserva el fallback a localhost; en un build de producción no hay valor
+// por defecto y, si falta o es local, no sale ninguna petición.
+const BASE_URL = API_BASE_URL;
 const API_TIMEOUT = parseInt(process.env.EXPO_PUBLIC_API_TIMEOUT || "10000");
 // Subidas de archivos (fotos de evidencia, imágenes de producto) y altas de
 // venta pueden tardar más de 10 s con datos móviles. Si se cortan por timeout
@@ -83,6 +82,12 @@ const axiosClient: AxiosInstance = axios.create({
 // Interceptor para requests - agregar token de autenticación
 axiosClient.interceptors.request.use(
   async (config: any) => {
+    // Build mal configurado: la app muestra la pantalla de configuración
+    // (app/_layout.tsx); por si algo pide datos antes, no sale nada.
+    if (API_CONFIG_ERROR) {
+      throw new Error(API_CONFIG_ERROR);
+    }
+
     // Solo se alarga el timeout por defecto; si la llamada pidió uno propio
     // se respeta.
     if (config.timeout === API_TIMEOUT && needsLongTimeout(config)) {
