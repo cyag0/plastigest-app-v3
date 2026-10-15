@@ -208,8 +208,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     });
   }, []);
 
-  // Igual con la empresa (403 "company_forbidden"): se quita empresa y
-  // sucursal y el NavigationHandler abre el selector de empresa.
+  // Igual con la empresa (403 "company_forbidden", o "company_required" si
+  // tiene varias y no hay una elegida): se quita empresa y sucursal y el
+  // NavigationHandler abre el selector de empresa, sin cerrar la sesión.
   useEffect(() => {
     return onCompanyForbidden(() => {
       setSelectedCompany(null);

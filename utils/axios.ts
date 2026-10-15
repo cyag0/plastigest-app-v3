@@ -95,6 +95,34 @@ async function writeSelection(key: string, value: string | null): Promise<void> 
   }
 }
 
+/** id (texto) de la empresa guardada, o null si no hay o no se entiende. */
+function companyIdOf(selection: string | null): string | null {
+  if (!selection) return null;
+  try {
+    const id = JSON.parse(selection)?.id;
+    return id ? String(id) : null;
+  } catch (parseError) {
+    console.error("Error parsing company data:", parseError);
+    return null;
+  }
+}
+
+/** 403 que piden elegir otra empresa: inaccesible o falta elegir una. */
+const COMPANY_SELECTION_CODES = ["company_forbidden", "company_required"];
+
+/**
+ * ¿La petición salió con la empresa que sigue guardada en esta pestaña? Si el
+ * usuario ya eligió o cambió de empresa, el 403 es de la selección anterior y
+ * no se borra la nueva. Si no se puede leer, se asume que sí.
+ */
+async function isStoredCompany(sentCompanyId: string | null): Promise<boolean> {
+  try {
+    return companyIdOf(await readSelection(SELECTED_COMPANY_KEY)) === sentCompanyId;
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Olvida la selección propia de esta pestaña (al cerrar sesión): la siguiente
  * lectura vuelve a tomar la de localStorage.
@@ -291,15 +319,11 @@ axiosClient.interceptors.request.use(
       const selectedCompanyData = await readSelection(SELECTED_COMPANY_KEY);
       const selectedLocationData = await readSelection(SELECTED_LOCATION_KEY);
 
-      if (selectedCompanyData && config.headers) {
-        try {
-          const company = JSON.parse(selectedCompanyData);
-          if (company.id) {
-            config.headers["X-Company-ID"] = company.id.toString();
-          }
-        } catch (parseError) {
-          console.error("Error parsing company data:", parseError);
-        }
+      // Con qué empresa salió la petición: un 403 de empresa tardío (de
+      // antes de elegir o cambiar de empresa) no debe borrar la nueva.
+      config._companyId = companyIdOf(selectedCompanyData);
+      if (config._companyId && config.headers) {
+        config.headers["X-Company-ID"] = config._companyId;
       }
 
       if (selectedLocationData && config.headers) {
@@ -339,8 +363,10 @@ export const onLocationForbidden = (listener: LocationForbiddenListener) => {
 };
 
 // La empresa guardada ya no es accesible para el usuario (backend responde
-// 403 con code "company_forbidden"). AuthContext limpia empresa y sucursal y
-// el NavigationHandler muestra el selector de empresa.
+// 403 con code "company_forbidden") o la petición salió sin empresa y el
+// usuario tiene varias ("company_required"). AuthContext limpia empresa y
+// sucursal y el NavigationHandler muestra el selector de empresa; la sesión
+// sigue abierta.
 type CompanyForbiddenListener = () => void;
 const companyForbiddenListeners = new Set<CompanyForbiddenListener>();
 
@@ -443,7 +469,8 @@ axiosClient.interceptors.response.use(
 
     if (
       error.response?.status === 403 &&
-      error.response?.data?.code === "company_forbidden"
+      COMPANY_SELECTION_CODES.includes(error.response?.data?.code) &&
+      (await isStoredCompany(error.config?._companyId ?? null))
     ) {
       try {
         await writeSelection(SELECTED_COMPANY_KEY, null);
