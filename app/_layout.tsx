@@ -4,6 +4,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import "react-native-reanimated";
 
+import AppUpdateGate from "@/components/App/AppUpdateGate";
 import ConfigErrorScreen from "@/components/App/ConfigErrorScreen";
 import { SelectDataProvider } from "@/components/Form/AppProSelect";
 import NavigationHandler from "@/components/NavigationHandler";
@@ -158,65 +159,68 @@ function ThemedApp() {
     <PaperProvider theme={{
       ...theme,
     }}>
-      <SelectDataProvider>
-        <AlertsProvider>
-          <NavigationHandler>
-            {/* View raiz: fondo del tema actual. Garantiza que TODAS
-                las pantallas tengan el bg correcto sin migrar cada
-                una individualmente. Las vistas que usen backgroundColor
-                explicito en su contenedor sobrescribiran este fondo. */}
-            <View
-              style={{
-                flex: 1,
-                backgroundColor: colors.background,
-              }}
-            >
-              <Stack
-                screenOptions={{ headerShown: false }}
-                initialRouteName="login"
+      {/* Versión mínima del teléfono / aviso de despliegue nuevo en web. */}
+      <AppUpdateGate>
+        <SelectDataProvider>
+          <AlertsProvider>
+            <NavigationHandler>
+              {/* View raiz: fondo del tema actual. Garantiza que TODAS
+                  las pantallas tengan el bg correcto sin migrar cada
+                  una individualmente. Las vistas que usen backgroundColor
+                  explicito en su contenedor sobrescribiran este fondo. */}
+              <View
+                style={{
+                  flex: 1,
+                  backgroundColor: colors.background,
+                }}
               >
-                <Stack.Screen
-                  name="login"
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="forgot-password"
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="reset-password-code"
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="reset-password-confirm"
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="(stacks)"
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen
-                  name="(tabs)"
-                  options={{ headerShown: false }}
-                />
-                <Stack.Screen name="+not-found" />
-              </Stack>
-            </View>
-            {__DEV__ && <PermissionsOverlay />}
-          </NavigationHandler>
-          {/* Renderizar los dialogs (ConfirmDialog, AlertSnackbar) al
-              FINAL del arbol, pero DENTRO de <AlertsProvider> para que
-              AlertsDialogs pueda leer las refs imperativas del provider
-              (si queda fuera, useContext(AlertsRefsContext) devuelve null
-              y AlertsDialogs retorna null — los portales nunca se montan
-              y todos los alerts.* se vuelven no-op silenciosos).
-              Como usan <Portal> de Paper, todos los portales viven en el
-              mismo host del PaperProvider; al estar al final del subarbol
-              quedan por encima de cualquier otro modal abierto (p. ej. el
-              ContextSwitcherModal del sidebar). */}
-          <AlertsDialogs />
-        </AlertsProvider>
-      </SelectDataProvider>
+                <Stack
+                  screenOptions={{ headerShown: false }}
+                  initialRouteName="login"
+                >
+                  <Stack.Screen
+                    name="login"
+                    options={{ headerShown: false }}
+                  />
+                  <Stack.Screen
+                    name="forgot-password"
+                    options={{ headerShown: false }}
+                  />
+                  <Stack.Screen
+                    name="reset-password-code"
+                    options={{ headerShown: false }}
+                  />
+                  <Stack.Screen
+                    name="reset-password-confirm"
+                    options={{ headerShown: false }}
+                  />
+                  <Stack.Screen
+                    name="(stacks)"
+                    options={{ headerShown: false }}
+                  />
+                  <Stack.Screen
+                    name="(tabs)"
+                    options={{ headerShown: false }}
+                  />
+                  <Stack.Screen name="+not-found" />
+                </Stack>
+              </View>
+              {__DEV__ && <PermissionsOverlay />}
+            </NavigationHandler>
+            {/* Renderizar los dialogs (ConfirmDialog, AlertSnackbar) al
+                FINAL del arbol, pero DENTRO de <AlertsProvider> para que
+                AlertsDialogs pueda leer las refs imperativas del provider
+                (si queda fuera, useContext(AlertsRefsContext) devuelve null
+                y AlertsDialogs retorna null — los portales nunca se montan
+                y todos los alerts.* se vuelven no-op silenciosos).
+                Como usan <Portal> de Paper, todos los portales viven en el
+                mismo host del PaperProvider; al estar al final del subarbol
+                quedan por encima de cualquier otro modal abierto (p. ej. el
+                ContextSwitcherModal del sidebar). */}
+            <AlertsDialogs />
+          </AlertsProvider>
+        </SelectDataProvider>
+      </AppUpdateGate>
     </PaperProvider>
   );
 }
