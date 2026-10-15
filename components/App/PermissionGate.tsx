@@ -2,6 +2,7 @@
  * PermissionGate — muestra una pantalla de "Sin acceso" si el usuario
  * no tiene el permiso requerido. De lo contrario renderiza los children.
  */
+import { goBack } from "@/utils/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -41,7 +42,7 @@ export default function PermissionGate({
         </Text>
         <Button
           mode="outlined"
-          onPress={() => router.back()}
+          onPress={() => goBack()}
           style={styles.button}
           textColor={palette.primary}
         >

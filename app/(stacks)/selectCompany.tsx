@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import EmptyState from "@/components/App/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -87,10 +88,22 @@ export default function SelectCompanyScreen() {
     }
   };
 
+  // Con una sola empresa no hay nada que elegir: se selecciona sola en el
+  // arranque (la mayoría de los usuarios trabaja en una sola empresa).
+  const autoSelectedRef = React.useRef(false);
+  useEffect(() => {
+    if (autoSelectedRef.current || currentCompany || isLoadingCompanies) return;
+    if (companies.length === 1) {
+      autoSelectedRef.current = true;
+      handleSelectCompany(companies[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companies.length, currentCompany, isLoadingCompanies]);
+
   const handleSelectCompany = async (companyId: number) => {
     const companyToSelect = companies.find((c) => c.id === companyId);
     if (!companyToSelect) {
-      alerts.error("Compania no encontrada");
+      alerts.error("Compañía no encontrada");
       return;
     }
     if (currentCompany?.id === companyId) {
@@ -98,7 +111,7 @@ export default function SelectCompanyScreen() {
       // pedir confirmacion. Antes el onPress hacia short-circuit
       // con `!isCurrent && ...` y este `router.back()` nunca
       // llegaba a ejecutarse, dejando al usuario atascado.
-      router.back();
+      goBack();
       return;
     }
 
@@ -130,9 +143,9 @@ export default function SelectCompanyScreen() {
           ? `Has cambiado a ${companyToSelect.name}`
           : `Empresa ${companyToSelect.name} seleccionada`
       );
-      router.back();
+      goBack();
     } catch {
-      alerts.error("No se pudo cambiar de compania. Intenta nuevamente.");
+      alerts.error("No se pudo cambiar de compañía. Intenta nuevamente.");
     } finally {
       setLoading(false);
     }
@@ -340,7 +353,7 @@ export default function SelectCompanyScreen() {
             <ActivityIndicator size="large" color={styles.title.color} />
             <Text style={styles.loadingText}>
               {loadingLocations
-                ? "Configurando ubicacion..."
+                ? "Configurando ubicación..."
                 : "Cargando empresas..."}
             </Text>
           </View>
@@ -433,8 +446,8 @@ export default function SelectCompanyScreen() {
             color={styles.infoText.color}
           />
           <Text style={styles.infoText}>
-            Al cambiar de empresa, la sucursal se reiniciara. Si la empresa
-            tiene solo una sucursal, se seleccionara automaticamente.
+            Al cambiar de empresa, la sucursal se reiniciará. Si la empresa
+            tiene solo una sucursal, se seleccionará automáticamente.
           </Text>
         </View>
       </ScrollView>

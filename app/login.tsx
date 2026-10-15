@@ -6,7 +6,7 @@ import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { useAlerts } from "@/hooks/useAlerts";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -23,6 +23,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function LoginScreen() {
   const { login, isLoading } = useAuth();
+  // isLoading del contexto no cambia mientras se inicia sesión: el botón
+  // necesita su propio estado para mostrar "cargando" y no aceptar otro Enter.
+  const [submitting, setSubmitting] = useState(false);
+  const busy = isLoading || submitting;
   const alerts = useAlerts();
   const colors = useColors();
   const router = useRouter();
@@ -244,7 +248,13 @@ export default function LoginScreen() {
     },
   }));
 
+  // Enter en el correo pasa a la contraseña; Enter en la contraseña entra.
+  const passwordRef = useRef<any>(null);
+
   const handleLogin = async () => {
+    // Enter repetido mientras ya se está entrando.
+    if (busy) return;
+
     // Limpiar errores previos
     setError("");
 
@@ -263,6 +273,7 @@ export default function LoginScreen() {
       return;
     }
 
+    setSubmitting(true);
     try {
       // Intentar login
       const result = await login(email.trim().toLowerCase(), password);
@@ -316,6 +327,8 @@ export default function LoginScreen() {
 
       setError(errorMessage);
       alerts.error(errorMessage);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -365,8 +378,11 @@ export default function LoginScreen() {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoComplete="email"
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => passwordRef.current?.focus()}
                   error={!!emailError}
-                  disabled={isLoading}
+                  disabled={busy}
                   theme={paperTheme}
                   outlineColor={colors.border}
                   activeOutlineColor={colors.primary}
@@ -397,10 +413,13 @@ export default function LoginScreen() {
                   }}
                   onBlur={() => validatePassword(password)}
                   mode="outlined"
+                  ref={passwordRef}
                   secureTextEntry={!showPassword}
                   autoComplete="password"
+                  returnKeyType="go"
+                  onSubmitEditing={handleLogin}
                   error={!!passwordError}
-                  disabled={isLoading}
+                  disabled={busy}
                   theme={paperTheme}
                   outlineColor={colors.border}
                   activeOutlineColor={colors.primary}
@@ -481,13 +500,13 @@ export default function LoginScreen() {
                 mode="contained"
                 onPress={handleLogin}
                 style={styles.submitButton}
-                disabled={isLoading || isBlocked}
-                loading={isLoading}
+                disabled={busy || isBlocked}
+                loading={busy}
                 buttonColor={isBlocked ? colors.textMuted : colors.primary}
-                icon={isLoading ? undefined : "login"}
+                icon={busy ? undefined : "login"}
                 contentStyle={styles.submitButtonContent}
               >
-                {isLoading
+                {busy
                   ? "Iniciando sesión..."
                   : isBlocked
                     ? `Bloqueado (${retryCountdown}s)`
@@ -500,7 +519,7 @@ export default function LoginScreen() {
                 onPress={() => router.push("/forgot-password" as any)}
                 style={styles.forgotPassword}
                 textColor={colors.primary}
-                disabled={isLoading}
+                disabled={busy}
                 compact
               >
                 ¿Olvidaste tu contraseña?

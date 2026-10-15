@@ -170,6 +170,26 @@ const MODULE_SECTIONS: ModuleSection[] = [
   },
 ];
 
+// Permiso que pide cada pantalla destino: sin él el módulo no se lista (antes
+// solo el punto de venta se filtraba y los demás llevaban a "sin permiso").
+const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
+  "/(tabs)/reports": "reports_view",
+  "/(tabs)/inventory": ["products_list", "inventory_list"],
+  "/(tabs)/home/production": "production_orders_list",
+  "/(tabs)/home/purchases": "purchases_list",
+  "/(tabs)/home/adjustment": "inventory_list",
+  "/(tabs)/home/transfers-menu": "transfers_list",
+  "/(tabs)/home/sales": "sales_list",
+  "/(tabs)/home/sales-orders": "sales_orders_list",
+  "/(tabs)/home/cash": "cash_movements_list",
+  "/(tabs)/home/expenses": "expenses_list",
+  "/(tabs)/home/reminders": "reminders_list",
+  "/(tabs)/home/sales-reports": "reports_list",
+  "/(tabs)/home/companies": "companies_list",
+  "/(tabs)/administration/company-users": "users_list",
+  "/(tabs)/home/roles": "roles_list",
+};
+
 export default function AllModulesScreen() {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -179,8 +199,14 @@ export default function AllModulesScreen() {
     () =>
       MODULE_SECTIONS.map((section) => ({
         ...section,
-        items: section.items.filter((item) => !item.permission || hasPermission(item.permission)),
-      })),
+        items: section.items.filter((item) => {
+          const required = item.permission ?? ROUTE_PERMISSIONS[item.route];
+          if (!required) return true;
+          return (Array.isArray(required) ? required : [required]).some((p) =>
+            hasPermission(p),
+          );
+        }),
+      })).filter((section) => section.items.length > 0),
     [hasPermission]
   );
 

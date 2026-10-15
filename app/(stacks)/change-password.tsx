@@ -1,11 +1,13 @@
+import { goBack } from "@/utils/navigation";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAlerts } from "@/hooks/useAlerts";
 import { authAPI } from "@/utils/axios";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { Formik } from "formik";
 import React, { useState } from "react";
-import { Alert, SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
+import { SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
 import { Button, Card, HelperText, Text, TextInput } from "react-native-paper";
 import * as Yup from "yup";
 
@@ -22,6 +24,7 @@ const schema = Yup.object({
 export default function ChangePasswordScreen() {
   const router = useRouter();
   const { logout } = useAuth();
+  const alerts = useAlerts();
 
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNew, setShowNew] = useState(false);
@@ -35,18 +38,16 @@ export default function ChangePasswordScreen() {
     },
     { setFieldError, setSubmitting }: any
   ) => {
+    let changed = false;
     try {
+      // Nombres que valida el backend (antes se mandaba `password` y la
+      // petición siempre regresaba 422 en new_password).
       await authAPI.changePassword({
         current_password: values.current_password,
-        password: values.new_password,
-        password_confirmation: values.new_password_confirmation,
+        new_password: values.new_password,
+        new_password_confirmation: values.new_password_confirmation,
       });
-
-      Alert.alert(
-        "Contraseña actualizada",
-        "Tu contraseña fue cambiada exitosamente. Por seguridad, se cerrará la sesión en todos los dispositivos.",
-        [{ text: "Aceptar", onPress: () => logout() }]
-      );
+      changed = true;
     } catch (error: any) {
       const status = error?.response?.status;
       const errors = error?.response?.data?.errors;
@@ -56,10 +57,23 @@ export default function ChangePasswordScreen() {
       } else if (status === 422 && errors?.new_password) {
         setFieldError("new_password", errors.new_password[0]);
       } else {
-        Alert.alert("Error", "No se pudo cambiar la contraseña. Inténtalo de nuevo.");
+        alerts.error(
+          error?.response?.data?.message ||
+            "No se pudo cambiar la contraseña. Inténtalo de nuevo.",
+        );
       }
     } finally {
       setSubmitting(false);
+    }
+
+    if (changed) {
+      // El backend revoca todos los tokens: se cierra la sesión aquí mismo.
+      // Antes era un Alert.alert con botón, que en web no hace nada: la
+      // sesión quedaba muerta y el usuario atorado en esta pantalla.
+      alerts.success(
+        "Contraseña actualizada. Por seguridad se cerró la sesión en todos los dispositivos; inicia sesión con tu nueva contraseña.",
+      );
+      await logout();
     }
   };
 
@@ -197,7 +211,7 @@ export default function ChangePasswordScreen() {
                 <View style={styles.actions}>
                   <Button
                     mode="outlined"
-                    onPress={() => router.back()}
+                    onPress={() => goBack()}
                     style={styles.cancelButton}
                     disabled={isSubmitting}
                   >

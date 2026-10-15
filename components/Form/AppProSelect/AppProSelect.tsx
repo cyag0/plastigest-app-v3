@@ -5,7 +5,12 @@ import { View } from "react-native";
 import { Text } from "react-native-paper";
 import MakeForm from "../AppForm/hoc";
 import AppSelect from "../AppSelect/AppSelect";
-import { ServicePath, useSelectData } from "./context";
+import {
+  SELECT_CACHE_RETRY_MS,
+  SELECT_CACHE_TTL_MS,
+  ServicePath,
+  useSelectData,
+} from "./context";
 
 export interface AppProSelectProps {
   // Props principales
@@ -130,19 +135,34 @@ export default function AppProSelect(props: AppProSelectProps) {
       model,
       effectiveFetchParams
     );
+    const hasData = (cachedData.data || []).length > 0;
 
-    // Actualizar estados locales
+    // Actualizar estados locales. Mientras se recarga un catálogo que ya
+    // tenía opciones se siguen mostrando (no se bloquea el select).
     setInternalData(cachedData.data || []);
-    setIsLoading(cachedData.loading);
-    setError(cachedData.error);
+    setIsLoading(cachedData.loading && !hasData);
+    setError(hasData ? null : cachedData.error);
 
-    // Hacer fetch si no hay datos en cache
-    if (
-      !(cachedData.data || []).length &&
-      !cachedData.loading &&
-      !cachedData.error
-    ) {
+    if (cachedData.loading) return;
+
+    const now = Date.now();
+    if (cachedData.error) {
+      // Reintentar un catálogo que falló, pero no en cada render.
+      if (
+        !cachedData.failedAt ||
+        now - cachedData.failedAt > SELECT_CACHE_RETRY_MS
+      ) {
+        selectDataContext.fetchData(model, effectiveFetchParams, true);
+      }
+      return;
+    }
+
+    // Sin cargar todavía, invalidado (alta/edición en ese catálogo, cambio de
+    // empresa) o vencido: pedirlo de nuevo.
+    if (cachedData.lastFetch === null) {
       selectDataContext.fetchData(model, effectiveFetchParams);
+    } else if (now - cachedData.lastFetch > SELECT_CACHE_TTL_MS) {
+      selectDataContext.fetchData(model, effectiveFetchParams, true);
     }
   }, [
     model,
@@ -176,7 +196,7 @@ export default function AppProSelect(props: AppProSelectProps) {
   }, [internalData, valueField, labelField, filterItem]);
 
   // Manejar cambio de valor
-  const handleChange = (newValue: string[] | number[]) => {
+  const handleChange = (newValue: string[] | number[] | string | number) => {
     if (onChange) {
       onChange(newValue);
     }

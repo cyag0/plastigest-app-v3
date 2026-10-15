@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import LocationSelector from "@/components/LocationSelector";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useRouter } from "expo-router";
@@ -16,7 +17,7 @@ export default function SelectLocationScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <LocationSelector onLocationSelected={() => router.back()} />
+      <LocationSelector onLocationSelected={() => goBack()} />
     </View>
   );
 }

@@ -28,7 +28,27 @@ interface NavItem {
   label: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   route: string;
+  /** Permiso (o cualquiera de varios) que pide la pantalla destino. Sin él
+   * la entrada no se muestra, en lugar de llevar a "sin permiso". */
+  permission?: string | string[];
 }
+
+// Cualquiera de estos da acceso a alguna opción de Administración.
+const ADMIN_PERMISSIONS = [
+  "companies_manage",
+  "users_manage",
+  "companies_update",
+  "users_list",
+  "locations_list",
+  "locations_update",
+  "cash_registers_list",
+  "roles_list",
+  "categories_list",
+  "units_list",
+  "products_list",
+  "suppliers_list",
+  "customers_list",
+];
 
 interface NavSection {
   label: string;
@@ -48,6 +68,7 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Dashboard",
         icon: "view-dashboard-outline",
         route: "/(tabs)/reports",
+        permission: "reports_view",
       },
     ],
   },
@@ -58,16 +79,25 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Inventario",
         icon: "archive-outline",
         route: "/(tabs)/inventory",
+        permission: ["products_list", "inventory_list"],
+      },
+      {
+        label: "Compras",
+        icon: "truck-delivery-outline",
+        route: "/(tabs)/home/purchases",
+        permission: "purchases_list",
       },
       {
         label: "Producción",
         icon: "factory",
         route: "/(tabs)/home/production",
+        permission: "production_orders_list",
       },
       {
         label: "Transferencias",
         icon: "swap-horizontal",
         route: "/(tabs)/home/transfers-menu",
+        permission: "transfers_list",
       },
     ],
   },
@@ -78,16 +108,19 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Ventas",
         icon: "cart-outline",
         route: "/(tabs)/home/sales",
+        permission: "sales_list",
       },
       {
         label: "Pedidos",
         icon: "clipboard-list-outline",
         route: "/(tabs)/home/sales-orders",
+        permission: "sales_orders_list",
       },
       {
         label: "Caja",
         icon: "cash-multiple",
         route: "/(tabs)/home/cash",
+        permission: "cash_movements_list",
       },
     ],
   },
@@ -98,6 +131,7 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Administración",
         icon: "cog-outline",
         route: "/(tabs)/administration",
+        permission: ADMIN_PERMISSIONS,
       },
     ],
   },
@@ -122,8 +156,22 @@ export default function NavigationSidebar({
   onRequestClose,
 }: NavigationSidebarProps) {
   const pathname = usePathname();
-  const { loadUnreadNotificationsCount, unreadNotificationsCount, location } =
-    useAuth();
+  const {
+    loadUnreadNotificationsCount,
+    unreadNotificationsCount,
+    location,
+    hasPermission,
+  } = useAuth();
+
+  const canSee = (item: NavItem) => {
+    if (!item.permission) return true;
+    const required = Array.isArray(item.permission) ? item.permission : [item.permission];
+    return required.some((p) => hasPermission(p));
+  };
+  const visibleSections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter(canSee),
+  })).filter((section) => section.items.length > 0);
   const { mode } = useTheme();
 
   const [collapsedPref, setCollapsedPref] = useState(false);
@@ -389,7 +437,7 @@ export default function NavigationSidebar({
         contentContainerStyle={styles.navigationContent}
         showsVerticalScrollIndicator={false}
       >
-        {NAV_SECTIONS.map((section) => (
+        {visibleSections.map((section) => (
           <View key={section.label}>
             <SidebarSectionLabel
               label={section.label}
