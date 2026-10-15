@@ -1,7 +1,7 @@
 import "@/utils/silenceLogs";
 import { applyGlobalFont, WEB_FONT_STACK } from "@/utils/globalFont";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import "react-native-reanimated";
 
 import AppUpdateGate from "@/components/App/AppUpdateGate";
@@ -14,6 +14,10 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { AlertsDialogs, AlertsProvider } from "@/hooks/useAlerts";
 import { API_CONFIG_ERROR } from "@/utils/appConfig";
 import {
+  installGlobalErrorHandlers,
+  setErrorReportingRoute,
+} from "@/utils/errorReporting";
+import {
   configureFonts,
   MD3DarkTheme,
   MD3LightTheme,
@@ -21,11 +25,15 @@ import {
 } from "react-native-paper";
 import { es, registerTranslation } from "react-native-paper-dates";
 import PermissionsOverlay from "@/components/Debug/PermissionsOverlay";
-import React from "react";
+import React, { useEffect } from "react";
 import { Platform, StatusBar, View } from "react-native";
 
 // Antes de cualquier render: Text/TextInput con Inter (ver utils/globalFont).
 applyGlobalFont();
+
+// Errores que nada atrapa (window.onerror, promesas sin catch, ErrorUtils):
+// se reportan al servidor (utils/errorReporting).
+installGlobalErrorHandlers();
 
 // Inter para Paper. En web la familia CSS con todos sus grosores; en el
 // teléfono la regular (el envoltorio de Text cambia la familia según el grosor).
@@ -110,6 +118,12 @@ export default function RootLayout() {
  */
 function ThemedApp() {
   const { mode, colors } = useTheme();
+
+  // Ruta actual para adjuntarla a los reportes de errores.
+  const pathname = usePathname();
+  useEffect(() => {
+    setErrorReportingRoute(pathname);
+  }, [pathname]);
   const base = mode === "dark" ? MD3DarkTheme : MD3LightTheme;
   const theme = {
     ...base,

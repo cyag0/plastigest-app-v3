@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   Platform,
   Pressable,
@@ -15,6 +15,10 @@ import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
+
+// Error del menú/pestañas o de una pantalla sin sección propia (perfil,
+// reportes, preferencias): se reemplaza esta área y el error se reporta.
+export { RouteErrorBoundary as ErrorBoundary } from "@/components/ErrorBoundary";
 
 /**
  * Pantallas para la versión web. Se reutiliza tanto cuando el
@@ -86,10 +90,13 @@ function WebTabLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // Al pasar a un ancho mayor, cerramos el overlay para no dejar
-  // el drawer "pegado" sobre un sidebar inline.
-  useEffect(() => {
-    if (!isNarrow && drawerOpen) setDrawerOpen(false);
-  }, [isNarrow, drawerOpen]);
+  // el drawer "pegado" sobre un sidebar inline. Se ajusta durante el
+  // render (sin efecto que vuelva a pintar).
+  const [wasNarrow, setWasNarrow] = useState(isNarrow);
+  if (wasNarrow !== isNarrow) {
+    setWasNarrow(isNarrow);
+    if (!isNarrow) setDrawerOpen(false);
+  }
 
   const styles = useThemedStyles((colors) => ({
     container: {
