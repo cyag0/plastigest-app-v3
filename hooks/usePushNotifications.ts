@@ -1,10 +1,11 @@
 import { getNotificationEntityId } from "@/components/Notifications/notificationLinks";
-import axiosClient from "@/utils/axios";
+import { APP_VERSION } from "@/utils/appVersion";
+import axiosClient, { describeError } from "@/utils/axios";
+import { reportClientError } from "@/utils/errorReporting";
 import {
   notificationOpenedBus,
   type NotificationOpenedPayload,
 } from "@/utils/notificationEvents";
-import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -31,6 +32,16 @@ interface PushSetupResult {
   cleanup?: () => void;
 }
 
+// Resultado del setup web: "unavailable" no se arregla reintentando (faltan
+// claves de Firebase en el build, navegador sin soporte, sin HTTPS);
+// "failed" sí (falló el token o el registro en el backend).
+type WebPushSetup =
+  | { status: "registered"; token: string; cleanup: () => void }
+  | { status: "unavailable"; reason: string }
+  | { status: "failed"; reason: string };
+
+type WebPushState = "idle" | "registered" | "failed" | "unavailable";
+
 const WEB_VAPID_KEY = process.env.EXPO_PUBLIC_FIREBASE_VAPID_KEY;
 
 // Marca en `data` de las notificaciones locales que se muestran cuando llega
@@ -47,6 +58,33 @@ let initialNotificationHandled = false;
 const debugLog = (...args: unknown[]) => {
   if (__DEV__) console.log(...args);
 };
+
+// Permiso actual del navegador (en el teléfono no se usa: "default").
+function readWebPermission(): WebPermission {
+  if (Platform.OS !== "web") return "default";
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    return "unsupported";
+  }
+  return Notification.permission;
+}
+
+// Un build web sin las claves de Firebase deja el push apagado para todos: se
+// reporta al servidor (utils/errorReporting) como mucho una vez al día por
+// navegador, para que se note sin llenar el log.
+const PUSH_CONFIG_REPORT_KEY = "web_push_config_reported_at";
+function reportMissingWebPushConfig(missing: string[]) {
+  try {
+    const last = Number(globalThis.localStorage?.getItem(PUSH_CONFIG_REPORT_KEY) ?? 0);
+    if (Date.now() - last < 24 * 60 * 60 * 1000) return;
+    globalThis.localStorage?.setItem(PUSH_CONFIG_REPORT_KEY, String(Date.now()));
+  } catch {
+    // sin almacenamiento: se reporta (el reporte también deduplica)
+  }
+  reportClientError(
+    new Error(`Notificaciones push web sin configurar: faltan ${missing.join(", ")}`),
+    { source: "web-push" },
+  );
+}
 
 if (Platform.OS !== "web") {
   Notifications.setNotificationHandler({
@@ -68,10 +106,11 @@ export function usePushNotifications({
 }: UsePushNotificationsOptions = {}) {
   const [fcmToken, setFcmToken] = useState<string>();
   const [notification, setNotification] = useState<PushNotification>();
-  // Estado del permiso de notificaciones. En web partimos de "default" y la
-  // UI lo actualizara cuando el usuario haga click en "Activar". En native
-  // mantenemos "default" (el sistema operativo maneja su propio dialog).
-  const [permissionStatus, setPermissionStatus] = useState<WebPermission>("default");
+  // Permiso del navegador (web). En native mantenemos "default": el sistema
+  // operativo maneja su propio dialog.
+  const [permissionStatus, setPermissionStatus] = useState<WebPermission>(readWebPermission);
+  // Si el token web quedó registrado en el backend (ver exposedPermission).
+  const [webPushState, setWebPushState] = useState<WebPushState>("idle");
 
   // Mantemos el callback en un ref para que setupNative... no se vuelva a
   // ejecutar cada vez que el padre pasa una función nueva (mala práctica que
@@ -100,31 +139,23 @@ export function usePushNotifications({
       const result = await setupWebPushNotifications(setNotification, (message) =>
         onForegroundMessageRef.current?.(message),
       );
-      if (result) {
-        webCleanupRef.current = result.cleanup ?? null;
-        if (result.token) {
-          setFcmToken(result.token);
-        }
-      } else {
-        // El setup no completo (sin HTTPS/localhost, faltan vars de Firebase,
-        // getToken fallo...). Liberamos el guard para poder reintentar luego.
-        webSetupStartedRef.current = false;
+      if (result.status === "registered") {
+        webCleanupRef.current = result.cleanup;
+        setFcmToken(result.token);
+        setWebPushState("registered");
+        return;
       }
+      // No quedó registrado: no se dice que el push está activo.
+      console.warn(`Notificaciones push web no activadas: ${result.reason}`);
+      setWebPushState(result.status);
+      // Lo que se puede arreglar reintentando libera el guard (otro intento al
+      // volver a "Activar" o en el siguiente inicio de sesión).
+      if (result.status === "failed") webSetupStartedRef.current = false;
     } catch (error) {
       webSetupStartedRef.current = false;
+      setWebPushState("failed");
       throw error;
     }
-  }, []);
-
-  // Lee el estado actual del permiso (solo web). En native no usamos este
-  // estado; RNFirebase resuelve internamente.
-  useEffect(() => {
-    if (Platform.OS !== "web") return;
-    if (typeof window === "undefined" || !("Notification" in window)) {
-      setPermissionStatus("unsupported");
-      return;
-    }
-    setPermissionStatus(Notification.permission);
   }, []);
 
   // Si el permiso YA esta concedido al cargar (sesion previa donde el usuario
@@ -147,9 +178,9 @@ export function usePushNotifications({
     // cargar (sesion previa). Si esta en "default"/"denied", la UI muestra el
     // banner y al conceder, requestPermission() llama a ensureWebPush().
     if (Platform.OS === "web") {
-      if (permissionStatus === "granted") {
+      if (permissionStatus === "granted" && webPushState !== "unavailable") {
         ensureWebPush().catch((error) => {
-          console.error("Error configurando Firebase web push:", error);
+          console.error("Error configurando Firebase web push:", describeError(error));
         });
       }
       // Los listeners web persisten entre renders (se liberan en logout); no
@@ -182,13 +213,15 @@ export function usePushNotifications({
     };
 
     runSetup().catch((error) => {
-      console.error("Error configurando Firebase push notifications:", error);
+      console.error("Error configurando Firebase push notifications:", describeError(error));
     });
 
     return () => {
       isMounted = false;
       cleanup?.();
     };
+    // webPushState solo evita reintentos inútiles; no debe volver a correr el setup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, permissionStatus, ensureWebPush]);
 
   // Pide permiso al usuario y, si lo concede, dispara el setup. ESTA funcion
@@ -214,7 +247,7 @@ export function usePushNotifications({
         } catch (error) {
           console.error(
             "Error registrando el token FCM web tras conceder el permiso:",
-            error,
+            describeError(error),
           );
         }
       }
@@ -240,15 +273,31 @@ export function usePushNotifications({
         token: fcmToken,
       });
     } catch (error) {
-      console.warn("No se pudo desactivar el token FCM en el backend:", error);
+      console.warn("No se pudo desactivar el token FCM en el backend:", describeError(error));
     }
   }, [fcmToken]);
+
+  // Lo que ve la UI (banner de notificaciones): "granted" sólo si el push
+  // puede funcionar. Con el permiso del navegador concedido pero sin token
+  // registrado no se dice que está activo: si no se puede en este build o
+  // navegador, "unsupported" (sin banner; el aviso queda en consola y en el
+  // reporte); si falló el registro, "default", y "Activar" lo reintenta.
+  // Mientras se registra por primera vez se mantiene "granted" para no
+  // parpadear el banner en cada carga.
+  const exposedPermission: WebPermission =
+    Platform.OS === "web" && permissionStatus === "granted"
+      ? webPushState === "unavailable"
+        ? "unsupported"
+        : webPushState === "failed"
+          ? "default"
+          : "granted"
+      : permissionStatus;
 
   return {
     fcmToken,
     notification,
     deactivateToken,
-    permissionStatus,
+    permissionStatus: exposedPermission,
     requestPermission,
   };
 }
@@ -288,8 +337,7 @@ async function setupNativePushNotifications(
 
   const token = await messagingInstance.getToken();
 
-  if (token) {
-    await registerTokenInBackend(token);
+  if (token && (await registerTokenInBackend(token))) {
     debugLog("FCM token nativo registrado");
   }
 
@@ -364,19 +412,17 @@ async function setupNativePushNotifications(
 async function setupWebPushNotifications(
   setNotification: (notification: PushNotification) => void,
   onForegroundMessage?: (message: PushNotification) => void,
-): Promise<PushSetupResult | undefined> {
+): Promise<WebPushSetup> {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
-    return undefined;
+    return { status: "unavailable", reason: "sin navegador" };
   }
 
   if (!window.isSecureContext) {
-    console.warn("Firebase Web Push requiere HTTPS o localhost.");
-    return undefined;
+    return { status: "unavailable", reason: "Firebase Web Push requiere HTTPS o localhost." };
   }
 
   if (!("Notification" in window) || !("serviceWorker" in navigator)) {
-    console.warn("Este navegador no soporta Web Push Notifications.");
-    return undefined;
+    return { status: "unavailable", reason: "este navegador no soporta notificaciones push." };
   }
 
   // El hook se encarga de NO llamarnos si el permiso no esta "granted",
@@ -385,21 +431,20 @@ async function setupWebPushNotifications(
     debugLog(
       "[web-push] Permiso aún no concedido, saltando setup. La UI debe llamar a requestPermission().",
     );
-    return undefined;
+    return { status: "failed", reason: "el permiso del navegador no está concedido." };
   }
 
+  // Sin estas variables de compilación (Cloudflare) el push web no puede
+  // funcionar; la app sí, y la campana se actualiza cada minuto.
+  const missingConfig = getMissingWebConfigEnv();
+  if (missingConfig.length > 0) {
+    reportMissingWebPushConfig(missingConfig);
+    return {
+      status: "unavailable",
+      reason: `faltan ${missingConfig.join(", ")} en las variables de compilación del build web.`,
+    };
+  }
   const firebaseConfig = getWebFirebaseConfig();
-  const missingConfig = getMissingWebConfigKeys(firebaseConfig);
-
-  if (missingConfig.length > 0 || !WEB_VAPID_KEY) {
-    console.warn(
-      "Faltan variables EXPO_PUBLIC_FIREBASE_* para activar Firebase Web Push:",
-      [...missingConfig, !WEB_VAPID_KEY ? "vapidKey" : undefined].filter(
-        Boolean,
-      ),
-    );
-    return undefined;
-  }
 
   const [{ getApps, initializeApp }, messagingModule] = await Promise.all([
     import("firebase/app"),
@@ -409,8 +454,7 @@ async function setupWebPushNotifications(
   const isMessagingSupported = await messagingModule.isSupported();
 
   if (!isMessagingSupported) {
-    console.warn("Firebase Messaging no está soportado en este navegador.");
-    return undefined;
+    return { status: "unavailable", reason: "Firebase Messaging no está soportado en este navegador." };
   }
 
   const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
@@ -434,13 +478,15 @@ async function setupWebPushNotifications(
   });
 
   if (!token) {
-    console.warn(
-      "Firebase Web Messaging no devolvio token FCM. Revisa que el SW este activo y la VAPID key sea correcta.",
-    );
-    return undefined;
+    return {
+      status: "failed",
+      reason: "Firebase no devolvió token FCM (revisa que el service worker esté activo y la VAPID key sea correcta).",
+    };
   }
 
-  await registerTokenInBackend(token);
+  if (!(await registerTokenInBackend(token))) {
+    return { status: "failed", reason: "no se pudo registrar el token en el servidor." };
+  }
   debugLog("FCM token web registrado");
 
   const unsubscribeForeground = messagingModule.onMessage(
@@ -473,6 +519,7 @@ async function setupWebPushNotifications(
   navigator.serviceWorker.addEventListener("message", onSwMessage);
 
   return {
+    status: "registered",
     token,
     cleanup: () => {
       unsubscribeForeground();
@@ -579,18 +626,21 @@ function getWebFirebaseConfig(): FirebaseOptions {
   };
 }
 
-function getMissingWebConfigKeys(config: FirebaseOptions) {
-  const requiredKeys: (keyof FirebaseOptions)[] = [
-    "apiKey",
-    "projectId",
-    "messagingSenderId",
-    "appId",
+// Variables de compilación obligatorias para el push web, por su nombre real
+// (para el aviso). Se leen una por una: Expo sólo incrusta process.env.X.
+function getMissingWebConfigEnv(): string[] {
+  const required: [string, string | undefined][] = [
+    ["EXPO_PUBLIC_FIREBASE_API_KEY", process.env.EXPO_PUBLIC_FIREBASE_API_KEY],
+    ["EXPO_PUBLIC_FIREBASE_PROJECT_ID", process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID],
+    ["EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID", process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID],
+    ["EXPO_PUBLIC_FIREBASE_APP_ID", process.env.EXPO_PUBLIC_FIREBASE_APP_ID],
+    ["EXPO_PUBLIC_FIREBASE_VAPID_KEY", WEB_VAPID_KEY],
   ];
-
-  return requiredKeys.filter((key) => !config[key]);
+  return required.filter(([, value]) => !value).map(([name]) => name);
 }
 
-async function registerTokenInBackend(token: string) {
+/** Registra el token en el backend; false si no se pudo (el push no llegará). */
+async function registerTokenInBackend(token: string): Promise<boolean> {
   try {
     await axiosClient.post(
       "/auth/admin/device-tokens/register",
@@ -598,7 +648,7 @@ async function registerTokenInBackend(token: string) {
         token,
         device_type: getBackendDeviceType(),
         device_name: getDeviceName(),
-        app_version: Constants.expoConfig?.version || "1.0.0",
+        app_version: APP_VERSION,
       },
       {
         headers: {
@@ -606,8 +656,10 @@ async function registerTokenInBackend(token: string) {
         },
       },
     );
+    return true;
   } catch (error) {
-    console.error("Error al registrar token FCM en el backend:", error);
+    console.error("Error al registrar token FCM en el backend:", describeError(error));
+    return false;
   }
 }
 

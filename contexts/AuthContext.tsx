@@ -117,9 +117,11 @@ interface AuthContextType {
   clearCompanySelection: () => Promise<void>;
   selectLocation: (location: any | null) => Promise<void>;
   location: App.Entities.Location | null;
-  // Estado del permiso de notificaciones push (web principalmente).
-  // "default" = nunca se ha pedido, "granted" = aceptado, "denied" = bloqueado,
-  // "unsupported" = el navegador no soporta.
+  // Estado de las notificaciones push (web principalmente).
+  // "default" = nunca se ha pedido (o el registro falló y hay que reintentar),
+  // "granted" = aceptado y con el token registrado (o registrándose),
+  // "denied" = bloqueado, "unsupported" = el navegador o este build no lo
+  // permite (p. ej. faltan las claves de Firebase). Ver usePushNotifications.
   notificationPermission: "default" | "granted" | "denied" | "unsupported";
   // Dispara el dialogo nativo del navegador. Debe llamarse desde un onPress
   // (user gesture) para que los navegadores modernos muestren el prompt.
