@@ -986,6 +986,35 @@ namespace App {
       locations: { id: number; name: string }[];
     }
 
+    /** GET /home/summary: lo que muestra Inicio (cada bloque según permisos). */
+    interface HomeSummary {
+      location: { id: number; name: string } | null;
+      sales: {
+        today_total: number;
+        today_count: number;
+        average_ticket: number;
+        yesterday_same_time: number;
+        yesterday_total: number;
+        by_hour: { hour: number; today: number; yesterday: number }[];
+      } | null;
+      cash: {
+        mine: {
+          id: number;
+          register: string | null;
+          location: string | null;
+          stale: boolean;
+          opened_at: string | null;
+          sales_count: number;
+          sales_total: number;
+          expected_cash: number;
+        } | null;
+        open_in_branch: { id: number; register: string | null; user: string | null; opened_at: string | null; stale: boolean }[];
+        can_sell: boolean;
+      } | null;
+      alerts: { key: string; count: number; tone: "error" | "warning" | "info" }[];
+      production_today: number | null;
+    }
+
     /** Un renglón de la bitácora ("Mi actividad"). */
     interface ActivityEntry {
       id: number;

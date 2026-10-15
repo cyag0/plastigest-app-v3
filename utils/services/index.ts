@@ -53,6 +53,13 @@ const Services = {
       return response.data.url;
     },
   },
+  /** Inicio: el día de la sucursal en una sola llamada. */
+  today: {
+    async summary(): Promise<App.Entities.HomeSummary> {
+      const response = await axiosClient.get("/auth/admin/home/summary");
+      return response.data;
+    },
+  },
   /** URL firmadas (30 min) de los documentos para imprimir. */
   print: {
     async saleTicketUrl(saleId: number, width: 58 | 80 = 80): Promise<string> {

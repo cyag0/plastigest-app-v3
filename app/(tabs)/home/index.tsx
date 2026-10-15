@@ -1,636 +1,592 @@
 /**
- * Dashboard PlastiGest v2 — SaaS 2025.
+ * Inicio: el día de la sucursal.
  *
- * Estructura en 4 niveles:
- * 1. Bienvenida
- * 2. KPIs (Ventas hoy, Compras hoy, Órdenes activas, Tareas pendientes)
- * 3. Accesos rápidos (6 módulos prioritarios, cards monocromas)
- * 4. Tareas pendientes (filas compactas de 64px)
+ * En vez de un tablero genérico (saludo, cuatro números en $0 y accesos que
+ * repetían el menú), responde lo que se pregunta quien abre la app:
+ *  1. ¿Cómo vamos hoy? Ventas contra ayer *a esta hora* y por hora.
+ *  2. ¿Cómo está la caja? Mi turno y las cajas abiertas (con las olvidadas).
+ *  3. ¿Qué hay que atender? Sólo avisos con algo pendiente, que llevan a
+ *     donde se resuelven.
+ *  4. Mis tareas.
  *
- * Responsive: 4 cols en lg+, 2x2 en md-, sidebar permanente en
- * md+ y modal en xs/sm. Hook useResponsive para breakpoints.
+ * Todo sale de GET /home/summary (un bloque por permiso) y se recarga al
+ * volver a la pantalla.
  */
 
-import EmptyState from "@/components/App/EmptyState";
-import SectionHeader from "@/components/App/SectionHeader";
-import NotificationPermissionBanner from "@/components/Notifications/NotificationPermissionBanner";
-import NotificationBell from "@/components/Notifications/NotificationBell";
-import UserMenu from "@/components/App/UserMenu";
 import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
-import KpiCard from "@/components/Dashboard/KpiCard";
-import QuickAccessCard from "@/components/Dashboard/QuickAccessCard";
-import TaskRow, { TaskRowStatus } from "@/components/Dashboard/TaskRow";
-import { tokens } from "@/constants/tokens";
+import Skeleton from "@/components/SkeletonLoader";
+import NotificationPermissionBanner from "@/components/Notifications/NotificationPermissionBanner";
+import {
+  getTaskDueDateInfo,
+  getTaskPriorityConfig,
+  getTaskStatusConfig,
+  isTaskOverdue,
+} from "@/components/Tasks/taskPresentation";
+import { fetchMyOpenTasks } from "@/components/Tasks/taskQueries";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
-import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { formatDate, formatTime } from "@/utils/dates";
+import { formatMoney } from "@/utils/format";
+import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useState } from "react";
-import {
-  Platform,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Services from "@/utils/services";
+import React, { useCallback, useMemo, useState } from "react";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 
-interface QuickAccess {
-  key: string;
-  label: string;
-  description: string;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  link: string;
-  permission?: string;
-}
+type Summary = App.Entities.HomeSummary;
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
-// Reducido de 10 a 6 accesos prioritarios. El resto se accede
-// desde el sidebar o desde la vista "Ver todos" en
-// app/(tabs)/home/all-modules.tsx.
-const QUICK_ACCESS: QuickAccess[] = [
-  {
-    key: "produccion",
-    label: "Producción",
-    description: "Órdenes de producción",
-    icon: "factory",
-    link: "/(tabs)/home/production",
+/** Atajos a los módulos que no están en la barra inferior. */
+const SHORTCUTS: { label: string; icon: IconName; link: string; permission: string }[] = [
+  { label: "Punto de venta", icon: "point-of-sale", link: "/(stacks)/pos", permission: "sales_pos" },
+  { label: "Ventas", icon: "receipt-text-outline", link: "/(tabs)/home/sales", permission: "sales_list" },
+  { label: "Compras", icon: "cart-outline", link: "/(tabs)/home/purchases", permission: "purchases_list" },
+  { label: "Producción", icon: "factory", link: "/(tabs)/home/production", permission: "production_orders_list" },
+  { label: "Transferencias", icon: "swap-horizontal", link: "/(tabs)/home/transfers-menu", permission: "transfers_list" },
+  { label: "Ajustes", icon: "tune-variant", link: "/(tabs)/home/adjustment", permission: "inventory_list" },
+];
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
+/** Cada aviso del backend: ícono, frase y a dónde lleva. */
+const ALERTS: Record<string, { icon: IconName; text: (n: number) => string; link: string }> = {
+  out_of_stock: {
+    icon: "package-variant-remove",
+    text: (n) => `${n} ${plural(n, "producto agotado", "productos agotados")}`,
+    link: "/(tabs)/inventory/products/type/all?filter=out_of_stock",
   },
-  {
-    key: "compras",
-    label: "Compras",
-    description: "Compras a proveedores",
-    icon: "cart-outline",
-    link: "/(tabs)/home/purchases",
+  low_stock: {
+    icon: "trending-down",
+    text: (n) => `${n} ${plural(n, "producto", "productos")} bajo el mínimo`,
+    link: "/(tabs)/inventory/products/type/all?filter=low_stock",
   },
-  {
-    key: "pos",
-    label: "Punto de venta",
-    description: "Cobrar en caja",
-    icon: "point-of-sale",
-    link: "/(stacks)/pos",
-    permission: "sales_pos",
-  },
-  {
-    key: "ventas",
-    label: "Ventas",
-    description: "Ventas a clientes",
-    icon: "cash-register",
-    link: "/(tabs)/home/sales",
-  },
-/*   {
-    key: "pedidos",
-    label: "Pedidos",
-    description: "Órdenes de venta",
-    icon: "clipboard-list-outline",
-    link: "/(tabs)/home/sales-orders",
-  }, */
-  {
-    key: "transferencias",
-    label: "Transferencias",
-    description: "Entre sucursales",
-    icon: "swap-horizontal",
+  transfers_to_receive: {
+    icon: "truck-check-outline",
+    text: (n) => `${n} ${plural(n, "transferencia", "transferencias")} por recibir`,
     link: "/(tabs)/home/transfers-menu",
   },
-  {
-    key: "ajustes",
-    label: "Ajustes",
-    description: "Mermas y correcciones",
-    icon: "clipboard-edit-outline",
-    link: "/(tabs)/home/adjustment",
+  transfers_to_approve: {
+    icon: "clipboard-check-outline",
+    text: (n) => `${n} ${plural(n, "transferencia", "transferencias")} por aprobar`,
+    link: "/(tabs)/home/transfers-menu",
   },
-];
+  transfers_to_ship: {
+    icon: "truck-delivery-outline",
+    text: (n) => `${n} ${plural(n, "transferencia", "transferencias")} por enviar`,
+    link: "/(tabs)/home/transfers-menu",
+  },
+  purchases_in_transit: {
+    icon: "truck-outline",
+    text: (n) => `${n} ${plural(n, "compra", "compras")} en camino`,
+    link: "/(tabs)/home/purchases",
+  },
+  tasks_overdue: {
+    icon: "alarm",
+    text: (n) => `${n} ${plural(n, "tarea vencida", "tareas vencidas")}`,
+    link: "/(tabs)/tasks",
+  },
+};
+
+function todayTitle(): string {
+  const text = new Date().toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/** "9:12 a.m." si fue hoy; "18 sep, 9:12 a.m." si fue otro día. */
+function sinceText(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return sameDay ? formatTime(d) : `${d.toLocaleDateString("es-MX", { day: "numeric", month: "short" })}, ${formatTime(d)}`;
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const auth = useAuth();
-  const quickAccess = QUICK_ACCESS.filter((item) => !item.permission || auth.hasPermission(item.permission));
   const { colors } = useTheme();
-  const { selectedLocation } = useSelectedLocation();
   const { isMobile } = useResponsive();
-  const insets = useSafeAreaInsets();
+  const styles = useStyles();
 
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [tasks, setTasks] = useState<App.Entities.Task[]>([]);
+  const [tasksTotal, setTasksTotal] = useState(0);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
-  const styles = useThemedStyles((c) => ({
-    container: {
-      flex: 1,
-      backgroundColor: c.background,
-    },
-    scroll: {
-      flex: 1,
-    },
-    content: {
-      gap: 24,
-    },
-    contentDesktop: {
-      padding: 24,
-      maxWidth: 1280,
-      alignSelf: "center",
-      width: "100%",
-    },
-    contentMobile: {
-      padding: 16,
-    },
-    welcomeRow: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      justifyContent: "space-between",
-      gap: 12,
-      marginTop: 4,
-    },
-    welcomeTextCol: {
-      flex: 1,
-      minWidth: 0,
-    },
-    welcomeActions: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-    },
-    avatarTrigger: {
-      padding: 2,
-    },
-    avatar: {
-      width: 36,
-      height: 36,
-      borderRadius: 9999,
-      backgroundColor: c.primary,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    welcomeTitle: {
-      ...tokens.typography.h1,
-      color: c.text,
-    },
-    welcomeSubtitle: {
-      ...tokens.typography.bodySm,
-      color: c.textSecondary,
-      marginTop: 4,
-    },
-    kpiStrip: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 12,
-    },
-    // En mobile las 4 KPIs no caben en una fila (se truncan a "V…", "C…").
-    // Forzamos 2 columnas con flexBasis ~47% para que envuelvan en 2x2.
-    kpiItemMobile: {
-      flexBasis: "47%",
-    },
-    quickGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 12,
-    },
-    // Mobile: scroll horizontal de tarjetas compactas (ícono + título)
-    quickScroll: {
-      marginHorizontal: -16,
-    },
-    quickScrollContent: {
-      paddingHorizontal: 16,
-      paddingBottom: 4,
-      flexDirection: "row",
-      gap: 10,
-    },
-    quickCompactCard: {
-      width: 82,
-      backgroundColor: c.surface,
-      borderRadius: 12,
-      paddingVertical: 12,
-      paddingHorizontal: 8,
-      alignItems: "center",
-      gap: 8,
-      ...tokens.shadow.sm,
-    },
-    quickCompactIconBox: {
-      width: 42,
-      height: 42,
-      borderRadius: 10,
-      backgroundColor: c.surfaceMuted,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    quickCompactLabel: {
-      ...tokens.typography.caption,
-      color: c.text,
-      fontWeight: "600" as const,
-      textAlign: "center" as const,
-    },
-    taskList: {
-      gap: 8,
-    },
-    tasksLoading: {
-      padding: 32,
-      alignItems: "center",
-    },
-    tasksEmpty: {
-      paddingVertical: 8,
-    },
-    loadingText: {
-      ...tokens.typography.body,
-      color: c.textMuted,
-    },
-  }));
+  const load = useCallback(async () => {
+    if (!auth.selectedCompany) return;
+    const [home, open] = await Promise.all([
+      Services.today.summary().catch(() => null),
+      fetchMyOpenTasks({ perPage: 4 }).catch(() => null),
+    ]);
+    if (home) setSummary(home);
+    if (open) {
+      setTasks(open.items.slice(0, 4));
+      setTasksTotal(open.pendingTotal + open.inProgressTotal);
+    }
+    setLoading(false);
+  }, [auth.selectedCompany]);
 
-  // Estado de KPIs
-  const [kpis, setKpis] = useState<{
-    ventasHoy: number;
-    comprasHoy: number;
-    ordenesActivas: number;
-    tareasPendientes: number;
-    ventasDelta: number | null;
-    comprasDelta: number | null;
-  }>({
-    ventasHoy: 0,
-    comprasHoy: 0,
-    ordenesActivas: 0,
-    tareasPendientes: 0,
-    ventasDelta: null,
-    comprasDelta: null,
-  });
-  const [kpisLoading, setKpisLoading] = useState(true);
-
-  // Tareas
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [tasksLoading, setTasksLoading] = useState(true);
-
-  // Se recarga cada vez que la pantalla recupera el foco: al volver de una
-  // venta, una compra o de completar una tarea, Inicio ya lo refleja. Antes
-  // solo cargaba al montarse y se quedaba con los números viejos.
+  // Al volver de una venta, un turno o una tarea, Inicio ya lo refleja.
   useFocusEffect(
     useCallback(() => {
-      loadKpis();
-      loadTasks();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [auth.selectedCompany, selectedLocation]),
+      load();
+    }, [load, auth.location?.id]),
   );
 
-  async function loadKpis() {
-    if (!auth.selectedCompany) return;
-    setKpisLoading(true);
-    try {
-      const now = new Date();
-      const today = toLocalDate(now);
-      const yesterday = toLocalDate(new Date(now.getTime() - 86_400_000));
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
-      // Hoy y ayer en paralelo, para poder calcular el delta vs. ayer.
-      const [
-        salesToday,
-        salesYesterday,
-        purchasesToday,
-        purchasesYesterday,
-        tasksRes,
-      ] = await Promise.all([
-        Services.sales
-          .stats({ start_date: today, end_date: today })
-          .catch(() => null),
-        Services.sales
-          .stats({ start_date: yesterday, end_date: yesterday })
-          .catch(() => null),
-        // Las compras viven en purchases-v2; /purchases/stats lee el sistema
-        // anterior (tabla movements) y ya no cambia.
-        Services.purchasesV2
-          .getStats({ start_date: today, end_date: today })
-          .catch(() => null),
-        Services.purchasesV2
-          .getStats({ start_date: yesterday, end_date: yesterday })
-          .catch(() => null),
-        Services.tasks
-          .index({ assigned_to: "me", status: "pending", per_page: 1 })
-          .catch(() => null),
-      ]);
+  const shortcuts = SHORTCUTS.filter((s) => auth.hasPermission(s.permission));
+  const go = (link: string) => router.push(link as any);
 
-      const ventasHoy = extractSalesTotal(salesToday);
-      const comprasHoy = extractPurchasesTotal(purchasesToday);
-      const tareasPendientes = extractTotal(tasksRes) ?? 0;
+  const header = (
+    <View style={styles.header}>
+      <Text style={styles.date}>{todayTitle()}</Text>
+      <Pressable onPress={() => setSwitcherOpen(true)} style={styles.branchRow} accessibilityRole="button">
+        <Text style={styles.branch} numberOfLines={2}>
+          {summary?.location?.name ?? auth.location?.name ?? "Elige una sucursal"}
+        </Text>
+        <MaterialCommunityIcons name="chevron-down" size={22} color={colors.textSecondary} />
+      </Pressable>
+    </View>
+  );
 
-      setKpis({
-        ventasHoy,
-        comprasHoy,
-        ordenesActivas: 0, // Pedidos: pendiente de endpoint
-        tareasPendientes,
-        ventasDelta: computeDelta(ventasHoy, extractSalesTotal(salesYesterday)),
-        comprasDelta: computeDelta(
-          comprasHoy,
-          extractPurchasesTotal(purchasesYesterday),
-        ),
-      });
-    } catch (err) {
-      console.warn("Error cargando KPIs:", err);
-    } finally {
-      setKpisLoading(false);
-    }
-  }
+  const sales = summary?.sales ? <SalesToday sales={summary.sales} /> : null;
+  const cash = summary?.cash ? <CashBlock cash={summary.cash} onGo={go} /> : null;
+  const pending = summary ? <PendingBlock alerts={summary.alerts} onGo={go} /> : null;
+  const myTasks = (
+    <Section title="Tus tareas" action={tasksTotal > 0 ? { label: "Ver todas", onPress: () => go("/(tabs)/tasks") } : undefined}>
+      {tasks.length === 0 ? (
+        <Text style={styles.calm}>No tienes tareas abiertas.</Text>
+      ) : (
+        <List>
+          {tasks.map((task) => {
+            const overdue = isTaskOverdue(task);
+            return (
+              <Row
+                key={task.id}
+                icon={overdue ? "alarm" : task.status === "in_progress" ? "progress-clock" : "checkbox-blank-circle-outline"}
+                iconColor={overdue ? colors.error : undefined}
+                title={task.title || "Tarea"}
+                subtitle={buildTaskMeta(task)}
+                onPress={() => go(`/(tabs)/tasks/${task.id}`)}
+              />
+            );
+          })}
+        </List>
+      )}
+    </Section>
+  );
 
-  async function loadTasks() {
-    if (!auth.selectedCompany) return;
-    setTasksLoading(true);
-    try {
-      const res = await Services.tasks
-        .index({
-          assigned_to: "me",
-          status: "pending",
-          sort_by: "due_date",
-          sort_order: "asc",
-          per_page: 5,
-        })
-        .catch(() => null);
-      const data = extractArray(res);
-      setTasks(data);
-    } catch (err) {
-      console.warn("Error cargando tareas:", err);
-    } finally {
-      setTasksLoading(false);
-    }
-  }
-
-  console.log("KPIs:", kpis);
-
-  const firstName = auth.user?.name?.split(" ")[0] || "";
-  const companyName = auth.selectedCompany?.name;
-  const locationName = selectedLocation?.name;
+  const goTo =
+    shortcuts.length > 0 ? (
+      <Section title="Ir a">
+        <View style={styles.shortcuts}>
+          {shortcuts.map((s) => (
+            <Pressable key={s.link} onPress={() => go(s.link)} style={({ pressed }) => [styles.shortcut, pressed && { opacity: 0.7 }]}>
+              <MaterialCommunityIcons name={s.icon} size={18} color={colors.primary} />
+              <Text style={styles.shortcutText}>{s.label}</Text>
+            </Pressable>
+          ))}
+          <Pressable onPress={() => go("/(tabs)/home/all-modules")} style={styles.shortcutGhost}>
+            <Text style={styles.shortcutGhostText}>Todos los módulos</Text>
+          </Pressable>
+        </View>
+      </Section>
+    ) : null;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.screen}>
       <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.content,
-          isMobile ? styles.contentMobile : styles.contentDesktop,
-        ]}
+        contentContainerStyle={[styles.content, !isMobile && styles.contentWide]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
         <NotificationPermissionBanner />
+        {header}
 
-        {/* Nivel 1: Bienvenida + acciones inline (campana, avatar) */}
-        <View style={styles.welcomeRow}>
-          <View style={styles.welcomeTextCol}>
-            <Text style={styles.welcomeTitle} numberOfLines={1}>
-              Hola, {firstName} 👋
-            </Text>
-            {(companyName || locationName) && (
-              <Text style={styles.welcomeSubtitle} numberOfLines={1}>
-                {[locationName, companyName].filter(Boolean).join(" · ")}
-              </Text>
-            )}
+        {loading && !summary ? (
+          // Esqueleto con la forma de la pantalla: antes era un segundo spinner
+          // justo después del de arranque de la app.
+          <HomeSkeleton wide={!isMobile} />
+        ) : isMobile ? (
+          <>
+            {sales}
+            {cash}
+            {pending}
+            {myTasks}
+            {goTo}
+          </>
+        ) : (
+          <View style={styles.columns}>
+            <View style={styles.colMain}>
+              {sales}
+              {cash}
+              {goTo}
+            </View>
+            <View style={styles.colSide}>
+              {pending}
+              {myTasks}
+            </View>
           </View>
-
-
-        </View>
-
-        {/* Nivel 2: KPIs */}
-        <View style={styles.kpiStrip}>
-          <KpiCard
-            icon="cash-multiple"
-            label="Ventas hoy"
-            value={formatCurrency(kpis.ventasHoy)}
-            loading={kpisLoading}
-            style={isMobile ? styles.kpiItemMobile : undefined}
-            delta={
-              kpis.ventasDelta !== null
-                ? { value: kpis.ventasDelta, period: "vs ayer" }
-                : undefined
-            }
-          />
-          <KpiCard
-            icon="cart-outline"
-            label="Compras hoy"
-            value={formatCurrency(kpis.comprasHoy)}
-            loading={kpisLoading}
-            style={isMobile ? styles.kpiItemMobile : undefined}
-            delta={
-              kpis.comprasDelta !== null
-                ? { value: kpis.comprasDelta, period: "vs ayer" }
-                : undefined
-            }
-            inverseDelta
-          />
-          <KpiCard
-            icon="clipboard-list-outline"
-            label="Órdenes activas"
-            value={String(kpis.ordenesActivas || 0)}
-            loading={kpisLoading}
-            style={isMobile ? styles.kpiItemMobile : undefined}
-          />
-          <KpiCard
-            icon="checkbox-marked-circle-outline"
-            label="Tareas pendientes"
-            value={String(kpis.tareasPendientes)}
-            loading={kpisLoading}
-            style={isMobile ? styles.kpiItemMobile : undefined}
-          />
-        </View>
-
-        {/* Nivel 3: Accesos rápidos */}
-        <View>
-          <SectionHeader
-            title="Accesos rápidos"
-            actionLabel="Ver todos"
-            onAction={() => router.push("/(tabs)/home/all-modules" as any)}
-          />
-          {isMobile ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.quickScroll}
-              contentContainerStyle={styles.quickScrollContent}
-            >
-              {quickAccess.map((item) => (
-                <TouchableOpacity
-                  key={item.key}
-                  style={styles.quickCompactCard}
-                  onPress={() => router.push(item.link as any)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.quickCompactIconBox}>
-                    <MaterialCommunityIcons
-                      name={item.icon}
-                      size={24}
-                      color={colors.text}
-                    />
-                  </View>
-                  <Text style={styles.quickCompactLabel} numberOfLines={2}>
-                    {item.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : (
-            <View style={styles.quickGrid}>
-              {quickAccess.map((item) => (
-                <QuickAccessCard
-                  key={item.key}
-                  icon={item.icon}
-                  label={item.label}
-                  description={item.description}
-                  onPress={() => router.push(item.link as any)}
-                />
-              ))}
-            </View>
-          )}
-        </View>
-
-        {/* Nivel 4: Tareas pendientes */}
-        <View>
-          <SectionHeader
-            title="Tareas pendientes"
-            badge={kpis.tareasPendientes}
-            actionLabel="Ver todas"
-            onAction={() => router.push("/(tabs)/tasks" as any)}
-          />
-          {tasksLoading ? (
-            <View style={styles.tasksLoading}>
-              <Text style={styles.loadingText}>Cargando tareas…</Text>
-            </View>
-          ) : tasks.length === 0 ? (
-            <View style={styles.tasksEmpty}>
-              <EmptyState
-                icon="checkbox-marked-circle-outline"
-                title="Sin tareas pendientes"
-                description="Pausa merecida ☕"
-                compact
-              />
-            </View>
-          ) : (
-            <View style={styles.taskList}>
-              {tasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  id={task.id}
-                  icon={(task.icon || "checkbox-marked-circle-outline") as any}
-                  title={task.title || "Tarea"}
-                  meta={buildTaskMeta(task)}
-                  status={mapTaskStatus(task)}
-                  isUnread={task.is_unread || task.isUnread}
-                  onPress={() =>
-                    router.push(`/(tabs)/tasks/${task.id}` as any)
-                  }
-                />
-              ))}
-            </View>
-          )}
-        </View>
+        )}
       </ScrollView>
+
+      <ContextSwitcherModal visible={switcherOpen} onDismiss={() => setSwitcherOpen(false)} initialView="location" />
     </View>
   );
 }
 
-/**
- * Extrae el total de una respuesta que puede ser un AxiosResponse
- * envolviendo LaravelPaginatedResponse | array | { data: [...] }.
- * Tolerante a null.
- */
-function extractTotal(res: any): number | undefined {
-  if (!res) return undefined;
-  // AxiosResponse: tiene .data
-  const data = res.data ?? res;
-  if (typeof data?.total === "number") return data.total;
-  if (typeof data?.meta?.total === "number") return data.meta.total;
-  if (Array.isArray(data)) return data.length;
-  if (Array.isArray(data?.data)) return data.data.length;
-  return undefined;
-}
+// ─── Bloques ────────────────────────────────────────────────────────────────
 
-/**
- * Fecha local en formato YYYY-MM-DD. Se usa en vez de toISOString()
- * (que devuelve UTC) para evitar un desfase de un día en zonas horarias
- * detrás de UTC, p. ej. México (UTC-6): de noche toISOString() ya marca
- * el día siguiente y "hoy" saldría en cero.
- */
-function toLocalDate(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-/**
- * Total de ventas del periodo. sales.stats devuelve
- * { success, data: { overview: { total_amount } } }.
- */
-function extractSalesTotal(res: any): number {
-  return res?.data?.overview?.total_amount ?? 0;
-}
-
-/**
- * Total de compras del periodo. purchases.getStats devuelve
- * { success, data: { total_amount } }.
- */
-/**
- * Total comprado según purchases-v2/stats. Se suma por estado para dejar
- * fuera borradores y canceladas, que no son compras hechas.
- */
-function extractPurchasesTotal(res: any): number {
-  const byStatus = res?.data?.by_status ?? {};
-  return ["ordered", "in_transit", "received"].reduce(
-    (sum, status) => sum + (Number(byStatus[status]?.total) || 0),
-    0,
+function HomeSkeleton({ wide }: { wide: boolean }) {
+  const styles = useStyles();
+  const block = (rows: number) => (
+    <View style={[styles.list, { padding: 14, gap: 16 }]}>
+      {Array.from({ length: rows }, (_, i) => (
+        <View key={i} style={{ gap: 6 }}>
+          <Skeleton width="70%" height={14} borderRadius={6} />
+          <Skeleton width="40%" height={11} borderRadius={6} />
+        </View>
+      ))}
+    </View>
+  );
+  const main = (
+    <View style={{ gap: 22 }}>
+      <View style={{ gap: 10 }}>
+        <Skeleton width={110} height={13} borderRadius={6} />
+        <Skeleton width={180} height={40} borderRadius={8} />
+        <Skeleton width={220} height={12} borderRadius={6} />
+      </View>
+      <View style={{ gap: 8 }}>
+        <Skeleton width={60} height={13} borderRadius={6} />
+        {block(2)}
+      </View>
+    </View>
+  );
+  const side = (
+    <View style={{ gap: 8 }}>
+      <Skeleton width={90} height={13} borderRadius={6} />
+      {block(3)}
+    </View>
+  );
+  return wide ? (
+    <View style={styles.columns}>
+      <View style={styles.colMain}>{main}</View>
+      <View style={styles.colSide}>{side}</View>
+    </View>
+  ) : (
+    <View style={{ gap: 22 }}>
+      {main}
+      {side}
+    </View>
   );
 }
 
-/**
- * Variación porcentual respecto al periodo anterior. Devuelve null cuando
- * no hay base de comparación (ayer en cero) para no mostrar un delta
- * engañoso; en ese caso la tarjeta omite el chip.
- */
-function computeDelta(current: number, previous: number): number | null {
-  if (!previous) return null;
-  return ((current - previous) / previous) * 100;
-}
-
-/**
- * Extrae un array de items de la misma forma de respuesta.
- */
-function extractArray(res: any): any[] {
-  if (!res) return [];
-  const data = res.data ?? res;
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.data)) return data.data;
-  return [];
-}
-
-function formatCurrency(value: number): string {
-  if (!value) return "$0";
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
-function mapTaskStatus(task: any): TaskRowStatus {
-  if (task.is_overdue || task.status === "overdue") return "overdue";
-  if (task.status === "in_progress") return "in_progress";
-  if (task.status === "completed") return "completed";
-  if (task.status === "cancelled") return "cancelled";
-  return "pending";
-}
-
-function buildTaskMeta(task: any): string {
-  const parts: string[] = [];
-  if (task.priority_label) parts.push(task.priority_label);
-  if (task.status_label) parts.push(task.status_label);
-  const due = formatDueDate(task.due_date);
-  if (due) parts.push(due);
-  return parts.join(" · ") || "Sin detalles";
-}
-
-function formatDueDate(dueDate?: string): string | null {
-  if (!dueDate) return null;
-  const date = new Date(dueDate);
-  const now = new Date();
-  const diffDays = Math.ceil(
-    (date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+function Section({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: { label: string; onPress: () => void };
+  children: React.ReactNode;
+}) {
+  const styles = useStyles();
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{title}</Text>
+        {action && (
+          <Pressable onPress={action.onPress} hitSlop={8}>
+            <Text style={styles.sectionAction}>{action.label}</Text>
+          </Pressable>
+        )}
+      </View>
+      {children}
+    </View>
   );
-  if (diffDays < 0) return `Vencida hace ${Math.abs(diffDays)}d`;
-  if (diffDays === 0) return "Vence hoy";
-  if (diffDays === 1) return "Vence mañana";
-  if (diffDays <= 7) return `Vence en ${diffDays}d`;
-  return date.toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "short",
-  });
 }
+
+function SalesToday({ sales }: { sales: NonNullable<Summary["sales"]> }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const base = sales.yesterday_same_time;
+  const change = base > 0 ? ((sales.today_total - base) / base) * 100 : null;
+
+  let comparison: { text: string; color: string };
+  if (change !== null) {
+    const up = change >= 0;
+    comparison = {
+      text: `${up ? "▲" : "▼"} ${Math.abs(change).toFixed(0)}% vs. ayer a esta hora (${formatMoney(base)})`,
+      color: up ? colors.success : colors.error,
+    };
+  } else if (sales.today_total > 0) {
+    comparison = { text: "Ayer a esta hora no había ventas", color: colors.textSecondary };
+  } else {
+    comparison = {
+      text: sales.yesterday_total > 0 ? `Todavía sin ventas · ayer se vendieron ${formatMoney(sales.yesterday_total)}` : "Todavía sin ventas hoy",
+      color: colors.textSecondary,
+    };
+  }
+
+  return (
+    <Section title="Ventas de hoy">
+      <Text style={styles.bigNumber}>{formatMoney(sales.today_total)}</Text>
+      {sales.today_count > 0 && (
+        <Text style={styles.subtle}>
+          {sales.today_count} {plural(sales.today_count, "venta", "ventas")} · ticket promedio {formatMoney(sales.average_ticket)}
+        </Text>
+      )}
+      <Text style={[styles.comparison, { color: comparison.color }]}>{comparison.text}</Text>
+      <HourBars hours={sales.by_hour} />
+    </Section>
+  );
+}
+
+/** Ventas por hora: hoy (barra) contra ayer (sombra detrás). */
+function HourBars({ hours }: { hours: NonNullable<Summary["sales"]>["by_hour"] }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const nowHour = new Date().getHours();
+
+  const { range, max } = useMemo(() => {
+    const active = hours.filter((h) => h.today > 0 || h.yesterday > 0).map((h) => h.hour);
+    const from = Math.min(8, ...active);
+    const to = Math.max(20, nowHour, ...active);
+    const slice = hours.filter((h) => h.hour >= from && h.hour <= to);
+    return { range: slice, max: Math.max(1, ...slice.map((h) => Math.max(h.today, h.yesterday))) };
+  }, [hours, nowHour]);
+
+  if (max <= 1 && range.every((h) => h.today === 0 && h.yesterday === 0)) return null;
+
+  return (
+    <View style={styles.chart}>
+      <View style={styles.bars}>
+        {range.map((h) => (
+          <View key={h.hour} style={styles.barSlot}>
+            <View style={[styles.barGhost, { height: `${(h.yesterday / max) * 100}%`, backgroundColor: colors.border }]} />
+            <View
+              style={[
+                styles.bar,
+                { height: `${(h.today / max) * 100}%`, backgroundColor: h.hour === nowHour ? colors.primary : colors.primary + "B3" },
+              ]}
+            />
+          </View>
+        ))}
+      </View>
+      <View style={styles.barLabels}>
+        {range.map((h) => (
+          <Text key={h.hour} style={styles.barLabel}>
+            {h.hour % 4 === 0 ? `${h.hour}h` : ""}
+          </Text>
+        ))}
+      </View>
+      <View style={styles.legend}>
+        <View style={[styles.legendDot, { backgroundColor: colors.primary }]} />
+        <Text style={styles.legendText}>Hoy</Text>
+        <View style={[styles.legendDot, { backgroundColor: colors.border }]} />
+        <Text style={styles.legendText}>Ayer</Text>
+      </View>
+    </View>
+  );
+}
+
+function CashBlock({ cash, onGo }: { cash: NonNullable<Summary["cash"]>; onGo: (link: string) => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const others = cash.open_in_branch.filter((s) => s.id !== cash.mine?.id);
+  if (!cash.mine && !cash.can_sell && others.length === 0) return null;
+
+  return (
+    <Section title="Caja">
+      <List>
+        {cash.mine ? (
+          <Row
+            icon="cash-register"
+            title={`Tu turno en ${cash.mine.register ?? "caja"}${cash.mine.location ? ` · ${cash.mine.location}` : ""}`}
+            subtitle={`Desde ${sinceText(cash.mine.opened_at)} · ${cash.mine.sales_count} ${plural(cash.mine.sales_count, "venta", "ventas")} · ${formatMoney(cash.mine.sales_total)}`}
+            warning={cash.mine.stale ? "Lleva abierto desde otro día: ciérralo para que el corte cuadre." : undefined}
+            actionLabel="Ir al punto de venta"
+            onPress={() => onGo("/(stacks)/pos")}
+          />
+        ) : cash.can_sell ? (
+          <Row icon="cash-register" title="No tienes turno abierto" subtitle="Ábrelo para empezar a cobrar." actionLabel="Abrir turno" onPress={() => onGo("/(stacks)/pos")} />
+        ) : null}
+        {others.map((s) => (
+          <Row
+            key={s.id}
+            icon="account-cash-outline"
+            title={`${s.register ?? "Caja"} · ${s.user ?? "—"}`}
+            subtitle={`Abierta desde ${sinceText(s.opened_at)}`}
+            warning={s.stale ? "Turno olvidado: sigue abierto desde otro día." : undefined}
+            onPress={() => onGo(`/(tabs)/home/cash/sessions/${s.id}`)}
+          />
+        ))}
+      </List>
+      {others.some((s) => s.stale) && (
+        <Text style={[styles.subtle, { color: colors.warning, marginTop: 6 }]}>
+          Los turnos olvidados mezclan las ventas de varios días en un mismo corte.
+        </Text>
+      )}
+    </Section>
+  );
+}
+
+function PendingBlock({ alerts, onGo }: { alerts: Summary["alerts"]; onGo: (link: string) => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const tone = { error: colors.error, warning: colors.warning, info: colors.info };
+  const known = alerts.filter((a) => ALERTS[a.key]);
+
+  return (
+    <Section title="Por atender">
+      {known.length === 0 ? (
+        <View style={styles.allGood}>
+          <MaterialCommunityIcons name="check-circle-outline" size={20} color={colors.success} />
+          <Text style={styles.calm}>Todo en orden por ahora.</Text>
+        </View>
+      ) : (
+        <List>
+          {known.map((a) => (
+            <Row key={a.key} icon={ALERTS[a.key].icon} iconColor={tone[a.tone]} title={ALERTS[a.key].text(a.count)} onPress={() => onGo(ALERTS[a.key].link)} />
+          ))}
+        </List>
+      )}
+    </Section>
+  );
+}
+
+/** Lista con separadores sólo entre filas (sin doble línea al final). */
+function List({ children }: { children: React.ReactNode }) {
+  const styles = useStyles();
+  const items = React.Children.toArray(children).filter(Boolean);
+  return (
+    <View style={styles.list}>
+      {items.map((child, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <View style={styles.divider} />}
+          {child}
+        </React.Fragment>
+      ))}
+    </View>
+  );
+}
+
+function Row({
+  icon,
+  iconColor,
+  title,
+  subtitle,
+  warning,
+  actionLabel,
+  onPress,
+}: {
+  icon: IconName;
+  iconColor?: string;
+  title: string;
+  subtitle?: string;
+  warning?: string;
+  actionLabel?: string;
+  onPress?: () => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => [styles.row, pressed && onPress && { backgroundColor: colors.surfaceMuted }]}>
+      <MaterialCommunityIcons name={icon} size={20} color={iconColor ?? colors.textSecondary} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.rowTitle}>{title}</Text>
+        {!!subtitle && <Text style={styles.rowSubtitle}>{subtitle}</Text>}
+        {!!warning && <Text style={[styles.rowSubtitle, { color: colors.warning }]}>{warning}</Text>}
+        {/* La acción va debajo: a la derecha apretaba el texto en el teléfono. */}
+        {!!actionLabel && <Text style={styles.rowAction}>{actionLabel} →</Text>}
+      </View>
+      {!actionLabel && onPress ? <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textMuted} /> : null}
+    </Pressable>
+  );
+}
+
+// ─── Tareas ─────────────────────────────────────────────────────────────────
+
+function buildTaskMeta(task: App.Entities.Task): string {
+  const parts: string[] = [getTaskStatusConfig(task.status).label, getTaskPriorityConfig(task.priority).label];
+  const due = getTaskDueDateInfo(task);
+  if (due) parts.push(due.text);
+  return parts.join(" · ");
+}
+
+// ─── Estilos ────────────────────────────────────────────────────────────────
+
+const useStyles = () =>
+  useThemedStyles((c) => ({
+    screen: { flex: 1, backgroundColor: c.background },
+    content: { padding: 16, gap: 22, paddingBottom: 40 },
+    contentWide: { padding: 28, maxWidth: 1180, width: "100%", alignSelf: "center" as const },
+    header: { gap: 2, marginTop: 4 },
+    date: { fontSize: 13, color: c.textSecondary, fontWeight: "500" as const },
+    branchRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: 4, alignSelf: "flex-start" as const },
+    branch: { fontSize: 24, lineHeight: 30, fontWeight: "700" as const, color: c.text, flexShrink: 1, letterSpacing: -0.3 },
+
+    columns: { flexDirection: "row" as const, gap: 28, alignItems: "flex-start" as const },
+    colMain: { flex: 3, gap: 22, minWidth: 0 },
+    colSide: { flex: 2, gap: 22, minWidth: 0 },
+
+    section: { gap: 8 },
+    sectionHeader: { flexDirection: "row" as const, justifyContent: "space-between" as const, alignItems: "baseline" as const },
+    sectionTitle: { fontSize: 14, fontWeight: "600" as const, color: c.textSecondary },
+    sectionAction: { fontSize: 14, fontWeight: "600" as const, color: c.primary },
+
+    bigNumber: { fontSize: 40, lineHeight: 46, fontWeight: "700" as const, color: c.text, letterSpacing: -1, fontVariant: ["tabular-nums"] as any },
+    subtle: { fontSize: 13, color: c.textSecondary },
+    comparison: { fontSize: 13, fontWeight: "600" as const },
+    calm: { fontSize: 14, color: c.textSecondary },
+    allGood: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, paddingVertical: 4 },
+
+    chart: { marginTop: 10, gap: 4 },
+    bars: { flexDirection: "row" as const, alignItems: "flex-end" as const, height: 72, gap: 3 },
+    barSlot: { flex: 1, height: "100%" as const, justifyContent: "flex-end" as const },
+    barGhost: { position: "absolute" as const, left: 0, right: 0, bottom: 0, borderRadius: 3 },
+    bar: { marginHorizontal: "18%" as const, borderRadius: 3, minHeight: 0 },
+    barLabels: { flexDirection: "row" as const, gap: 3 },
+    barLabel: { flex: 1, fontSize: 10, color: c.textMuted },
+    legend: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6, marginTop: 2 },
+    legendDot: { width: 8, height: 8, borderRadius: 2 },
+    legendText: { fontSize: 11, color: c.textMuted, marginRight: 8 },
+
+    list: { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: "hidden" as const },
+    row: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    divider: { height: 1, backgroundColor: c.border, marginLeft: 46 },
+    rowTitle: { fontSize: 15, fontWeight: "500" as const, color: c.text },
+    rowSubtitle: { fontSize: 13, color: c.textSecondary, marginTop: 2 },
+    rowAction: { fontSize: 14, fontWeight: "600" as const, color: c.primary, marginTop: 6 },
+
+    shortcuts: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: 8 },
+    shortcut: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: 999,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    shortcutText: { fontSize: 14, fontWeight: "500" as const, color: c.text },
+    shortcutGhost: { paddingHorizontal: 12, paddingVertical: 9 },
+    shortcutGhostText: { fontSize: 14, fontWeight: "600" as const, color: c.primary },
+  }));
