@@ -121,6 +121,10 @@ export default function BusinessReportsScreen() {
       );
   }, []);
 
+  // Quien no ve todas las sucursales saca el reporte de la suya (la del
+  // header X-Location-ID); sin una elegida el servidor responde 403.
+  const needsBranch = !!options && !options.can_choose_location && !options.current_location;
+
   const range = periodRange(period, custom);
   const rangeLabel = `${dayjs(range.from).format("DD/MM/YYYY")} al ${dayjs(range.to).format("DD/MM/YYYY")}`;
   const asOfValue = asOfDate(asOf, customAsOf);
@@ -197,7 +201,9 @@ export default function BusinessReportsScreen() {
             ))}
           </View>
         ) : (
-          <Text style={styles.value}>{options.current_location?.name ?? "Tu sucursal"}</Text>
+          <Text style={[styles.value, needsBranch && { color: colors.error }]}>
+            {options.current_location?.name ?? "Selecciona una sucursal para sacar sus reportes."}
+          </Text>
         )}
 
         <Text style={[styles.label, { marginTop: tokens.spacing[3] }]}>Periodo</Text>
@@ -259,7 +265,7 @@ export default function BusinessReportsScreen() {
                 icon="file-pdf-box"
                 onPress={() => open(report, "pdf")}
                 loading={busy === `${report.key}:pdf`}
-                disabled={!!busy}
+                disabled={!!busy || needsBranch}
                 style={styles.action}
               >
                 PDF
@@ -269,7 +275,7 @@ export default function BusinessReportsScreen() {
                 icon="microsoft-excel"
                 onPress={() => open(report, "xlsx")}
                 loading={busy === `${report.key}:xlsx`}
-                disabled={!!busy}
+                disabled={!!busy || needsBranch}
                 style={styles.action}
               >
                 Excel
