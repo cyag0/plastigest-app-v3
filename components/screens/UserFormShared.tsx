@@ -6,7 +6,7 @@ import {
   buildUserPayload,
   isProtectedUser,
 } from "@/components/Administration/Users/userAccess";
-import { UserScope, shortLocationName } from "@/components/Administration/Users/userDisplay";
+import { UserScope, apiMessage, shortLocationName } from "@/components/Administration/Users/userDisplay";
 import { useCompanyRoles } from "@/components/Administration/Users/useCompanyRoles";
 import { useUserScope } from "@/components/Administration/Users/useUserScope";
 import AppDependency from "@/components/Form/AppDependency";
@@ -76,6 +76,8 @@ export default function UserFormShared(props: UserFormSharedProps) {
   // cambió).
   const [target, setTarget] = useState<AdminUser | null>(null);
   const initialRef = useRef<UserFormData | null>(null);
+  // No se pudo abrir (403/404: no existe o no hay acceso a él).
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { roleIds } = useCompanyRoles(isEditing);
 
   const branch = shortLocationName(location?.name ?? "esta sucursal", selectedCompany?.name);
@@ -117,8 +119,20 @@ export default function UserFormShared(props: UserFormSharedProps) {
       return empty;
     }
 
-    const response: any = await Services.admin.users.show(id);
+    let response: any;
+    try {
+      response = await Services.admin.users.show(id);
+    } catch (error: any) {
+      initialRef.current = null;
+      setLoadError(
+        error?.response?.status === 404
+          ? "Este usuario no existe o no tienes acceso a él."
+          : apiMessage(error, "No se pudo cargar el usuario."),
+      );
+      return empty;
+    }
     const user: AdminUser = response?.data?.data ?? response?.data ?? {};
+    setLoadError(null);
     setTarget(user);
 
     if (!isBranch) {
@@ -145,6 +159,11 @@ export default function UserFormShared(props: UserFormSharedProps) {
   // Guarda en una sola petición lo que cambió (ver buildUserPayload). Los
   // errores (403, 422) los muestra AppForm con el mensaje del backend.
   const submit = async (values: UserFormData) => {
+    // Sin lo que tenía al abrir no se sabe qué cambió (y no es un alta).
+    if (isEditing && !initialRef.current) {
+      alerts.error("No se cargó el usuario; vuelve a abrir el formulario.");
+      return;
+    }
     const payload = buildUserPayload({
       values,
       initial: isEditing ? initialRef.current : null,
@@ -181,11 +200,21 @@ export default function UserFormShared(props: UserFormSharedProps) {
       validationSchema={validationSchema}
       initialValues={loadInitialValues}
       showResetButton={false}
-      showButtons={!locked}
+      showButtons={!locked && !loadError}
       submitButtonText={isEditing ? "Guardar cambios" : "Crear usuario"}
       onSubmit={(_formData, formik) => submit(formik.values as UserFormData)}
     >
-      {locked ? (
+      {loadError ? (
+        <View style={styles.wrapper}>
+          <View style={styles.lockedBox}>
+            <MaterialCommunityIcons name="account-question-outline" size={22} color={colors.textSecondary} />
+            <Text style={[styles.helper, { flex: 1 }]}>{loadError}</Text>
+          </View>
+          <Button mode="outlined" icon="arrow-left" onPress={() => goBack()} style={styles.lockedBack}>
+            Volver
+          </Button>
+        </View>
+      ) : locked ? (
         <View style={styles.wrapper}>
           <View style={styles.lockedBox}>
             <MaterialCommunityIcons name="shield-lock-outline" size={22} color={colors.info} />
