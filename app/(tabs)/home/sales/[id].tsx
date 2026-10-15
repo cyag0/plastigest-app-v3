@@ -19,6 +19,7 @@ import { newClientRequestId } from "@/utils/requestId";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
+import { usePreventRemove } from "expo-router/react-navigation";
 import React, { useLayoutEffect, useRef, useState } from "react";
 import {
   Image,
@@ -115,6 +116,12 @@ export default function SaleDetail() {
   const paymentAttemptRef = useRef<{ id: string; paidBeforeCents: number; amountCents: number } | null>(null);
   const alerts = useAlerts();
   const { hasPermission } = useAuth();
+
+  // Con el abono en envío no se sale de la pantalla: su llave se perdería y
+  // un reintento desde cero podría registrarlo dos veces.
+  usePreventRemove(savingPayment, () => {
+    alerts.warning("Espera a que termine de registrarse el pago.");
+  });
 
   React.useEffect(() => {
     loadSale();
