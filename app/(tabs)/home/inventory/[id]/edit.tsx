@@ -1,9 +1,9 @@
+import { Redirect, useLocalSearchParams } from "expo-router";
 import React from "react";
-import { useLocalSearchParams } from "expo-router";
-import InventoryForm from "../form";
 
-export default function InventoryEdit() {
-  const { id } = useLocalSearchParams();
+/** Ver home/inventory/index.tsx: el conteo vive en /inventory/weekly-inventory. */
+export default function LegacyInventoryEdit() {
+  const { id } = useLocalSearchParams<{ id: string }>();
 
-  return <InventoryForm id={Number(id)} readonly={false} />;
+  return <Redirect href={`/inventory/weekly-inventory/${id}/edit` as any} />;
 }
