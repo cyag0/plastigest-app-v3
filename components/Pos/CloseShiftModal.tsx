@@ -1,5 +1,10 @@
+import AmountPreview from "@/components/Pos/AmountPreview";
+import { apiErrorMessage } from "@/components/Pos/saleErrors";
 import palette from "@/constants/palette";
 import { formatMoney } from "@/hooks/usePosCart";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { parseMoney } from "@/utils/format";
+import { amountToCents, centsToAmount } from "@/utils/money";
 import Services from "@/utils/services";
 import React, { useEffect, useState } from "react";
 import { Modal, ScrollView, StyleSheet, TextInput, View } from "react-native";
@@ -17,12 +22,18 @@ const METHOD_LABELS: Record<string, string> = { cash: "Efectivo", card: "Tarjeta
 /**
  * Corte del turno: totales por método, efectivo esperado, lo que contó el
  * cajero y la diferencia.
+ *
+ * El efectivo contado se lee en formato mexicano ("1,500" son mil
+ * quinientos; antes se leía 1.5 y el turno cerraba con un faltante falso) y
+ * se muestra cómo se leyó. Un turno cerrado no se puede corregir, así que con
+ * diferencia se pide confirmar antes de cerrar (Enter ya no lo cierra solo).
  */
 export default function CloseShiftModal({ visible, sessionId, onClose, onClosed }: Props) {
   const [summary, setSummary] = useState<App.Entities.CashRegisterSessionSummary | null>(null);
   const [counted, setCounted] = useState("");
   const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const { submitting: saving, run } = useSubmitGuard();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,6 +41,7 @@ export default function CloseShiftModal({ visible, sessionId, onClose, onClosed 
     setSummary(null);
     setCounted("");
     setNotes("");
+    setConfirming(false);
     setError(null);
     Services.cashRegisterSessions
       .show(sessionId)
@@ -37,38 +49,72 @@ export default function CloseShiftModal({ visible, sessionId, onClose, onClosed 
       .catch(() => setError("No se pudo cargar el resumen del turno"));
   }, [visible, sessionId]);
 
-  // Acepta coma decimal ("1500,50").
-  const countedNum = Number(counted.trim().replace(",", "."));
-  const difference =
-    summary && counted !== "" && Number.isFinite(countedNum)
-      ? Math.round((countedNum - summary.expected_cash) * 100) / 100
-      : null;
+  const countedNum = counted.trim() === "" ? null : parseMoney(counted);
+  const countedValid = countedNum !== null && countedNum >= 0;
+  const differenceCents =
+    summary && countedValid ? amountToCents(countedNum) - amountToCents(summary.expected_cash) : null;
+  const difference = differenceCents === null ? null : centsToAmount(differenceCents);
 
-  const submit = async () => {
-    if (saving) return;
-    if (counted === "" || Number.isNaN(countedNum) || countedNum < 0) {
-      setError("Captura el efectivo contado");
+  const close = () =>
+    run(async () => {
+      if (!countedValid) return;
+      try {
+        setError(null);
+        const res = await Services.cashRegisterSessions.close(sessionId, { counted_cash: countedNum, notes: notes || undefined });
+        onClosed(res.data);
+      } catch (e: any) {
+        setConfirming(false);
+        setError(apiErrorMessage(e, "No se pudo cerrar el turno"));
+      }
+    });
+
+  const submit = () => {
+    if (saving || !summary) return;
+    if (!countedValid) {
+      setError(counted.trim() === "" ? "Captura el efectivo contado" : "El efectivo contado no es un monto válido");
       return;
     }
-    try {
-      setSaving(true);
-      setError(null);
-      const res = await Services.cashRegisterSessions.close(sessionId, { counted_cash: countedNum, notes: notes || undefined });
-      onClosed(res.data);
-    } catch (e: any) {
-      setError(e?.response?.data?.message ?? "No se pudo cerrar el turno");
-    } finally {
-      setSaving(false);
+    setError(null);
+    // Con diferencia se confirma antes: el corte cerrado ya no se corrige.
+    if (difference !== 0) {
+      setConfirming(true);
+      return;
     }
+    close();
+  };
+
+  // Mientras se cierra no se puede salir (Esc, botón atrás).
+  const requestClose = () => {
+    if (saving) return;
+    if (confirming) {
+      setConfirming(false);
+      return;
+    }
+    onClose();
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={requestClose}>
       <View style={styles.overlay}>
         <View style={styles.card}>
           <Text variant="titleLarge" style={styles.title}>Cerrar turno</Text>
           {!summary && !error ? (
             <ActivityIndicator style={{ margin: 24 }} />
+          ) : confirming && summary && countedValid && difference !== null ? (
+            <View>
+              <Row label="Efectivo esperado" value={formatMoney(summary.expected_cash)} />
+              <Row label="Efectivo contado" value={formatMoney(countedNum)} strong />
+              <Row
+                label={difference > 0 ? "Sobrante" : "Faltante"}
+                value={formatMoney(Math.abs(difference))}
+                color={palette.error}
+                strong
+              />
+              <Text style={styles.confirmText}>
+                El turno se cerrará con {difference > 0 ? "un sobrante" : "un faltante"} de {formatMoney(Math.abs(difference))}. Un
+                turno cerrado ya no se puede corregir: si el conteo está mal, vuelve a contar.
+              </Text>
+            </View>
           ) : (
             <ScrollView style={{ maxHeight: 460 }} keyboardShouldPersistTaps="handled">
               {summary && (
@@ -85,14 +131,19 @@ export default function CloseShiftModal({ visible, sessionId, onClose, onClosed 
                   <Text style={styles.label}>Efectivo contado</Text>
                   <TextInput
                     value={counted}
-                    onChangeText={setCounted}
+                    onChangeText={(t) => {
+                      setCounted(t);
+                      if (error) setError(null);
+                    }}
                     keyboardType="decimal-pad"
                     placeholder="0.00"
                     placeholderTextColor={palette.textMuted}
                     autoFocus
+                    editable={!saving}
                     style={styles.input}
                     onSubmitEditing={submit}
                   />
+                  <AmountPreview value={counted} label="Contado" />
                   {difference !== null && (
                     <Row
                       label={difference === 0 ? "Cuadra" : difference > 0 ? "Sobrante" : "Faltante"}
@@ -102,17 +153,30 @@ export default function CloseShiftModal({ visible, sessionId, onClose, onClosed 
                     />
                   )}
                   <Text style={styles.label}>Notas</Text>
-                  <TextInput value={notes} onChangeText={setNotes} multiline style={[styles.input, styles.notes]} />
+                  <TextInput value={notes} onChangeText={setNotes} multiline editable={!saving} style={[styles.input, styles.notes]} />
                 </>
               )}
             </ScrollView>
           )}
           {error && <Text style={styles.error}>{error}</Text>}
           <View style={styles.actions}>
-            <Button mode="outlined" onPress={onClose} style={{ flex: 1 }} disabled={saving}>Cancelar</Button>
-            <Button mode="contained" onPress={submit} style={{ flex: 1 }} loading={saving} disabled={saving || !summary}>
-              Cerrar turno
-            </Button>
+            {confirming ? (
+              <>
+                <Button mode="outlined" onPress={() => setConfirming(false)} style={{ flex: 1 }} disabled={saving}>
+                  Corregir
+                </Button>
+                <Button mode="contained" onPress={close} style={{ flex: 1 }} loading={saving} disabled={saving}>
+                  Cerrar así
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button mode="outlined" onPress={requestClose} style={{ flex: 1 }} disabled={saving}>Cancelar</Button>
+                <Button mode="contained" onPress={submit} style={{ flex: 1 }} loading={saving} disabled={saving || !summary}>
+                  Cerrar turno
+                </Button>
+              </>
+            )}
           </View>
         </View>
       </View>
@@ -141,6 +205,7 @@ const styles = StyleSheet.create({
   label: { color: palette.textSecondary, fontWeight: "600", marginTop: 12 },
   input: { borderWidth: 1, borderColor: palette.border, borderRadius: 10, padding: 12, fontSize: 20, marginTop: 6, color: palette.text },
   notes: { fontSize: 15, minHeight: 60 },
+  confirmText: { color: palette.text, marginTop: 12, lineHeight: 20 },
   error: { color: palette.error, marginTop: 10 },
   actions: { flexDirection: "row", gap: 8, marginTop: 16 },
 });

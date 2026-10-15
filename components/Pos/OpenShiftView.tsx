@@ -1,4 +1,8 @@
+import AmountPreview from "@/components/Pos/AmountPreview";
+import { apiErrorMessage } from "@/components/Pos/saleErrors";
 import palette from "@/constants/palette";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { parseMoney } from "@/utils/format";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
@@ -8,18 +12,23 @@ import { ActivityIndicator, Button, Text } from "react-native-paper";
 interface Props {
   locationName?: string;
   onOpened: () => void;
+  /**
+   * Dentro de un modal (atajo para abrir turno desde una venta o un pedido):
+   * muestra "Cancelar" y no pinta el fondo de pantalla completa.
+   */
+  onCancel?: () => void;
 }
 
 /**
  * Sin turno abierto: el cajero elige una caja libre de su sucursal y captura
  * el fondo inicial (el efectivo con el que empieza).
  */
-export default function OpenShiftView({ locationName, onOpened }: Props) {
+export default function OpenShiftView({ locationName, onOpened, onCancel }: Props) {
   const [registers, setRegisters] = useState<App.Entities.CashRegister[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<number | null>(null);
   const [amount, setAmount] = useState("");
-  const [saving, setSaving] = useState(false);
+  const { submitting: saving, run } = useSubmitGuard();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,31 +47,27 @@ export default function OpenShiftView({ locationName, onOpened }: Props) {
     })();
   }, []);
 
-  const open = async () => {
-    if (!selected || saving) return;
-    // Acepta coma decimal ("500,50"); un monto inválido ya no se manda en 0
-    // sin avisar.
-    const raw = amount.trim().replace(",", ".");
-    const openingAmount = raw === "" ? 0 : Number(raw);
-    if (!Number.isFinite(openingAmount) || openingAmount < 0) {
-      setError("Captura un fondo inicial válido");
-      return;
-    }
-    try {
-      setSaving(true);
-      setError(null);
-      await Services.cashRegisterSessions.open({ cash_register_id: selected, opening_amount: openingAmount });
-      onOpened();
-    } catch (e: any) {
-      const data = e?.response?.data;
-      setError((data?.errors && (Object.values(data.errors).flat()[0] as string)) || data?.message || "No se pudo abrir el turno");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const open = () =>
+    run(async () => {
+      if (!selected) return;
+      // Formato mexicano ("1,500" son mil quinientos). Vacío = sin fondo; un
+      // monto que no se entiende se avisa, nunca se manda en 0.
+      const openingAmount = amount.trim() === "" ? 0 : parseMoney(amount);
+      if (openingAmount === null || openingAmount < 0) {
+        setError("Captura un fondo inicial válido");
+        return;
+      }
+      try {
+        setError(null);
+        await Services.cashRegisterSessions.open({ cash_register_id: selected, opening_amount: openingAmount });
+        onOpened();
+      } catch (e: any) {
+        setError(apiErrorMessage(e, "No se pudo abrir el turno"));
+      }
+    });
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <ScrollView contentContainerStyle={[styles.container, onCancel && styles.containerEmbedded]} keyboardShouldPersistTaps="handled">
       <View style={styles.card}>
         <MaterialCommunityIcons name="cash-register" size={44} color={palette.primary} style={{ alignSelf: "center" }} />
         <Text variant="headlineSmall" style={styles.title}>Abrir turno</Text>
@@ -71,9 +76,16 @@ export default function OpenShiftView({ locationName, onOpened }: Props) {
         {loading ? (
           <ActivityIndicator style={{ marginVertical: 24 }} />
         ) : registers.length === 0 ? (
-          <Text style={styles.empty}>
-            Esta sucursal no tiene cajas. Pide a un administrador que la dé de alta en Administración › Cajas.
-          </Text>
+          <>
+            <Text style={styles.empty}>
+              {error ?? "Esta sucursal no tiene cajas. Pide a un administrador que la dé de alta en Administración › Cajas."}
+            </Text>
+            {onCancel && (
+              <Button mode="outlined" onPress={onCancel} style={styles.button}>
+                Cerrar
+              </Button>
+            )}
+          </>
         ) : (
           <>
             <Text style={styles.label}>Caja</Text>
@@ -116,12 +128,18 @@ export default function OpenShiftView({ locationName, onOpened }: Props) {
               style={styles.amount}
               onSubmitEditing={open}
             />
+            <AmountPreview value={amount} label="Fondo inicial" />
 
             {!!error && <Text style={styles.error}>{error}</Text>}
 
             <Button mode="contained" icon="lock-open-variant" onPress={open} loading={saving} disabled={!selected || saving} style={styles.button} contentStyle={{ height: 48 }}>
               Abrir turno
             </Button>
+            {onCancel && (
+              <Button mode="text" onPress={onCancel} disabled={saving} style={styles.cancel}>
+                Cancelar
+              </Button>
+            )}
           </>
         )}
       </View>
@@ -131,6 +149,8 @@ export default function OpenShiftView({ locationName, onOpened }: Props) {
 
 const styles = StyleSheet.create({
   container: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: palette.background },
+  containerEmbedded: { backgroundColor: "transparent" },
+  cancel: { marginTop: 6 },
   card: { width: "100%", maxWidth: 460, backgroundColor: palette.surface, borderRadius: 16, padding: 24, alignItems: "stretch", borderWidth: 1, borderColor: palette.border },
   title: { textAlign: "center", fontWeight: "700", marginTop: 8, color: palette.text },
   subtitle: { textAlign: "center", color: palette.textSecondary, marginBottom: 16 },
