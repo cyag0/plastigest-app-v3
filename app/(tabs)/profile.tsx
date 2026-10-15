@@ -1,42 +1,15 @@
-import AppBar from "@/components/App/AppBar";
-import AppChip from "@/components/App/Chip";
+import { formatDate as formatCalendarDate } from "@/utils/dates";
 import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
-import EmptyState from "@/components/App/EmptyState";
-import SectionHeader from "@/components/App/SectionHeader";
-import QuickAccessCard from "@/components/Dashboard/QuickAccessCard";
-import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
-import { useResponsive } from "@/hooks/useResponsive";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Camera } from "expo-camera";
 import * as Notifications from "expo-notifications";
-import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
-import {
-  Alert,
-  Linking,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-
-// Importaciones dinamicas para evitar errores de tipos
-const Location = require("expo-location");
-// expo-media-library NO tiene implementacion web: el cuerpo de su modulo
-// declara `class Asset extends <modulo nativo>`, y ese modulo nativo es
-// `undefined` en web, por lo que el simple `require` lanza
-// "Class extends value undefined" en tiempo de import. Como expo-router
-// evalua TODAS las rutas al construir el arbol, eso tumbaba toda la app web
-// (incluido /login). Solo lo cargamos en nativo.
-const MediaLibrary =
-  Platform.OS === "web" ? null : require("expo-media-library");
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
+import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 
 interface PermissionStatus {
   granted: boolean;
@@ -44,71 +17,51 @@ interface PermissionStatus {
   status: string;
 }
 
-// Estado por defecto para permisos que no aplican en la plataforma actual
-// (p. ej. galeria en web, donde expo-media-library no esta disponible).
-const UNSUPPORTED_PERMISSION: PermissionStatus = {
-  granted: false,
-  canAskAgain: false,
-  status: "unsupported",
-};
-
+// Solo los permisos que la app usa de verdad: cámara (escáner de códigos y
+// fotos) y notificaciones. La galería no necesita permiso (selector del
+// sistema) y la app no usa ubicación.
 interface AppPermissions {
   camera: PermissionStatus;
   notifications: PermissionStatus;
-  location: PermissionStatus;
-  mediaLibrary: PermissionStatus;
 }
 
-type PermissionTone = "success" | "warning" | "error";
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 const PERMISSION_META: {
   key: keyof AppPermissions;
   label: string;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  icon: IconName;
 }[] = [
-  { key: "camera", label: "Camara", icon: "camera-outline" },
+  { key: "camera", label: "Cámara", icon: "camera-outline" },
   { key: "notifications", label: "Notificaciones", icon: "bell-outline" },
-  { key: "location", label: "Ubicacion", icon: "map-marker-outline" },
-  { key: "mediaLibrary", label: "Galeria", icon: "image-multiple-outline" },
 ];
 
+/**
+ * Perfil: quién eres, dónde estás trabajando y lo que puedes cambiar.
+ *
+ * Antes era una tarjeta con chips (rol, "Verificado"), dos tiles de
+ * contexto, una tarjeta de "Detalles de la cuenta" con ID y fechas, tarjetas
+ * de permisos con íconos de color y una cuadrícula de accesos rápidos que
+ * repetía Empresa/Sucursal. Ahora son listas agrupadas, una fila por cosa.
+ */
 export default function ProfileScreen() {
   const router = useRouter();
   const alerts = useAlerts();
-  const { user, logout, isLoading, selectedCompany, location, permissions: userPermissions } =
-    useAuth();
+  const { user, logout, isLoading, selectedCompany, location } = useAuth();
   const { colors } = useTheme();
-  const { isMobile } = useResponsive();
   const [permissions, setPermissions] = useState<AppPermissions | null>(null);
-  const [loadingPermissions, setLoadingPermissions] = useState(true);
-  // Modal de cambio de empresa/sucursal. Antes estos botones
-  // empujaban a `/(stacks)/selectCompany` y `/(stacks)/selectLocation`,
-  // saliendo del tab de Perfil. Ahora se abren sobre la misma pantalla.
+  const [permissionsFailed, setPermissionsFailed] = useState(false);
+  // Empresa y sucursal se cambian en un modal, sin salir de Perfil.
   const [switcherVisible, setSwitcherVisible] = useState(false);
   const [switcherInitialView, setSwitcherInitialView] = useState<
     "company" | "location"
   >("company");
 
-  useEffect(() => {
-    checkPermissions();
-  }, []);
-
-  const checkPermissions = async () => {
+  const checkPermissions = useCallback(async () => {
     try {
-      setLoadingPermissions(true);
-
-      const [
-        cameraStatus,
-        notificationStatus,
-        locationStatus,
-        mediaLibraryStatus,
-      ] = await Promise.all([
+      const [cameraStatus, notificationStatus] = await Promise.all([
         Camera.getCameraPermissionsAsync(),
         Notifications.getPermissionsAsync(),
-        Location.getForegroundPermissionsAsync(),
-        MediaLibrary
-          ? MediaLibrary.getPermissionsAsync()
-          : Promise.resolve(UNSUPPORTED_PERMISSION),
       ]);
 
       setPermissions({
@@ -122,23 +75,22 @@ export default function ProfileScreen() {
           canAskAgain: notificationStatus.canAskAgain,
           status: notificationStatus.status,
         },
-        location: {
-          granted: locationStatus.granted,
-          canAskAgain: locationStatus.canAskAgain,
-          status: locationStatus.status,
-        },
-        mediaLibrary: {
-          granted: mediaLibraryStatus.granted,
-          canAskAgain: mediaLibraryStatus.canAskAgain,
-          status: mediaLibraryStatus.status,
-        },
       });
+      setPermissionsFailed(false);
     } catch (error) {
       console.error("Error checking permissions:", error);
-    } finally {
-      setLoadingPermissions(false);
+      setPermissionsFailed(true);
     }
-  };
+  }, []);
+
+  // Se revisa al volver a la pantalla: si el usuario activó un permiso en
+  // los ajustes del teléfono, aquí ya sale actualizado (antes había un botón
+  // "Reverificar").
+  useFocusEffect(
+    useCallback(() => {
+      checkPermissions();
+    }, [checkPermissions]),
+  );
 
   const requestPermission = async (permissionType: keyof AppPermissions) => {
     try {
@@ -151,14 +103,6 @@ export default function ProfileScreen() {
         case "notifications":
           result = await Notifications.requestPermissionsAsync();
           break;
-        case "location":
-          result = await Location.requestForegroundPermissionsAsync();
-          break;
-        case "mediaLibrary":
-          result = MediaLibrary
-            ? await MediaLibrary.requestPermissionsAsync()
-            : UNSUPPORTED_PERMISSION;
-          break;
       }
 
       if (result) {
@@ -167,11 +111,11 @@ export default function ProfileScreen() {
         if (!result.granted && !result.canAskAgain) {
           Alert.alert(
             "Permiso Denegado",
-            "Has denegado este permiso permanentemente. Para activarlo, ve a la configuracion de la aplicacion.",
+            "Has denegado este permiso permanentemente. Para activarlo, ve a la configuración de la aplicación.",
             [
               { text: "Cancelar", style: "cancel" },
               {
-                text: "Abrir Configuracion",
+                text: "Abrir Configuración",
                 onPress: () => Linking.openSettings(),
               },
             ]
@@ -184,23 +128,11 @@ export default function ProfileScreen() {
     }
   };
 
-  const getPermissionTone = (p: PermissionStatus): PermissionTone => {
-    if (p.granted) return "success";
-    if (!p.canAskAgain) return "error";
-    return "warning";
-  };
-
-  const getPermissionText = (p: PermissionStatus) => {
-    if (p.granted) return "Concedido";
-    if (!p.canAskAgain) return "Bloqueado";
-    return "No concedido";
-  };
-
   const handleLogout = async () => {
     const confirmed = await alerts.confirm(
-      "¿Estas seguro de que quieres cerrar sesion?",
+      "¿Estás seguro de que quieres cerrar sesión?",
       {
-        title: "Cerrar sesion",
+        title: "Cerrar sesión",
         okText: "Salir",
         cancelText: "Cancelar",
       },
@@ -210,603 +142,205 @@ export default function ProfileScreen() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString("es-ES", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
-    } catch {
-      return "Fecha no disponible";
-    }
+  const openSwitcher = (view: "company" | "location") => {
+    setSwitcherInitialView(view);
+    setSwitcherVisible(true);
   };
 
-  const getInitials = (name: string) => {
-    return (name || "")
-      .split(" ")
-      .map((word) => word.charAt(0))
-      .join("")
-      .toUpperCase()
-      .substring(0, 2);
-  };
-
-  const role = user?.roles?.[0]?.name || "Usuario";
-  const initials = getInitials(user?.name || "Usuario");
-  const memberSince = user?.created_at ? formatDate(user.created_at) : "N/A";
-  const lastUpdate = user?.updated_at ? formatDate(user.updated_at) : "N/A";
-  const grantedPermissions = userPermissions?.length ?? 0;
+  const initials = (user?.name || "Usuario")
+    .split(" ")
+    .map((word) => word.charAt(0))
+    .join("")
+    .toUpperCase()
+    .substring(0, 2);
+  const role = user?.roles?.[0]?.name;
+  const memberSince = user?.created_at ? formatCalendarDate(user.created_at, "long") : null;
+  const version = process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0";
 
   const styles = useThemedStyles((c) => ({
-    safe: {
+    scroll: {
       flex: 1,
       backgroundColor: c.background,
     },
-    scroll: {
-      flex: 1,
-    },
     content: {
-      paddingBottom: tokens.spacing[10],
+      padding: 16,
+      paddingBottom: 32,
+      gap: 8,
+      maxWidth: 720,
+      width: "100%",
+      alignSelf: "center",
     },
-    headerCard: {
-      backgroundColor: c.surface,
-      marginHorizontal: tokens.spacing[5],
-      marginTop: tokens.spacing[5],
-      marginBottom: tokens.spacing[4],
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[5],
-      ...tokens.shadow.sm,
-    },
-    headerTop: {
+    header: {
       flexDirection: "row",
       alignItems: "center",
-      gap: tokens.spacing[4],
+      gap: 14,
+      paddingVertical: 8,
     },
     avatar: {
-      width: 72,
-      height: 72,
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.primary,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: c.primarySoft,
       alignItems: "center",
       justifyContent: "center",
-      flexShrink: 0,
     },
     avatarInitials: {
-      color: c.primaryForeground,
-      fontSize: 24,
+      color: c.primaryHover,
+      fontSize: 20,
       fontWeight: "700",
-      letterSpacing: 0.5,
     },
-    headerInfo: {
-      flex: 1,
-      minWidth: 0,
-      gap: tokens.spacing[2],
-    },
-    headerName: {
-      ...tokens.typography.h1,
+    name: {
+      fontSize: 20,
+      fontWeight: "700",
       color: c.text,
-    },
-    headerMetaRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: tokens.spacing[2],
-    },
-    emailRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      marginTop: 2,
     },
     email: {
-      ...tokens.typography.bodySm,
+      fontSize: 14,
       color: c.textSecondary,
-      flexShrink: 1,
+      marginTop: 2,
     },
-    contextRow: {
-      flexDirection: "row",
-      gap: tokens.spacing[3],
-      paddingHorizontal: tokens.spacing[5],
-      marginBottom: tokens.spacing[5],
-    },
-    contextTile: {
-      flex: 1,
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[4],
-      gap: tokens.spacing[2],
-      minWidth: 0,
-      ...tokens.shadow.sm,
-    },
-    contextIconBox: {
-      width: 32,
-      height: 32,
-      borderRadius: tokens.radius.sm,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    contextLabel: {
-      ...tokens.typography.micro,
+    role: {
+      fontSize: 13,
       color: c.textMuted,
+      marginTop: 2,
     },
-    contextValue: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-    },
-    contextSub: {
-      ...tokens.typography.caption,
+    groupTitle: {
+      fontSize: 14,
+      fontWeight: "600",
       color: c.textSecondary,
+      marginTop: 14,
     },
-    section: {
-      paddingHorizontal: tokens.spacing[5],
-      marginBottom: tokens.spacing[5],
-    },
-    card: {
+    group: {
       backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      ...tokens.shadow.sm,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.border,
       overflow: "hidden",
     },
-    infoRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      padding: tokens.spacing[4],
-      gap: tokens.spacing[3],
-    },
-    infoIconBox: {
-      width: 32,
-      height: 32,
-      borderRadius: tokens.radius.sm,
-      alignItems: "center",
-      justifyContent: "center",
-      flexShrink: 0,
-    },
-    infoLabel: {
-      ...tokens.typography.caption,
-      color: c.textMuted,
-    },
-    infoValue: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-      marginTop: 1,
-    },
-    divider: {
-      height: 1,
-      backgroundColor: c.border,
-      marginLeft: tokens.spacing[4] + 32 + tokens.spacing[3],
-    },
-    permissionsGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: tokens.spacing[3],
-    },
-    permissionCard: {
-      flexBasis: "48%",
-      flexGrow: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[3],
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[3] + 2,
-      minHeight: 64,
-      ...tokens.shadow.sm,
-    },
-    permissionIconBox: {
-      width: 36,
-      height: 36,
-      borderRadius: tokens.radius.md,
-      alignItems: "center",
-      justifyContent: "center",
-      flexShrink: 0,
-    },
-    permissionBody: {
-      flex: 1,
-      minWidth: 0,
-      gap: 4,
-    },
-    permissionLabel: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-    },
-    permissionRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      padding: tokens.spacing[4],
-      gap: tokens.spacing[3],
-    },
-    skeletonTitle: {
-      width: 100,
-      height: 12,
-      borderRadius: 4,
-      backgroundColor: c.surfaceMuted,
-      marginBottom: 6,
-    },
-    skeletonSub: {
-      width: 60,
-      height: 16,
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.surfaceMuted,
-    },
-    actionsGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: tokens.spacing[3],
-    },
-    actionsScroll: {
-      marginHorizontal: -tokens.spacing[5],
-    },
-    actionsScrollContent: {
-      paddingHorizontal: tokens.spacing[5],
-      paddingBottom: 4,
-      flexDirection: "row",
-      gap: tokens.spacing[2] + 2,
-    },
-    actionCompactCard: {
-      width: 82,
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      paddingVertical: tokens.spacing[3],
-      paddingHorizontal: tokens.spacing[2],
-      alignItems: "center",
-      gap: tokens.spacing[2],
-      ...tokens.shadow.sm,
-    },
-    actionCompactIconBox: {
-      width: 42,
-      height: 42,
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.surfaceMuted,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    actionCompactLabel: {
-      ...tokens.typography.caption,
-      color: c.text,
-      fontWeight: "600" as const,
-      textAlign: "center" as const,
-    },
-    logoutButton: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[4],
-      gap: tokens.spacing[3],
-      ...tokens.shadow.sm,
-    },
-    logoutIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: tokens.radius.md,
-      backgroundColor: colors.errorSoft,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    logoutLabel: {
-      ...tokens.typography.bodyMd,
-      color: colors.error,
-      flex: 1,
-    },
     footer: {
-      alignItems: "center",
-      paddingVertical: tokens.spacing[6],
-      gap: 4,
-    },
-    footerText: {
-      ...tokens.typography.caption,
+      fontSize: 12,
       color: c.textMuted,
-    },
-    footerSubtext: {
-      ...tokens.typography.caption,
-      color: c.textMuted,
-      opacity: 0.7,
+      textAlign: "center",
+      marginTop: 16,
     },
   }));
 
   return (
     <>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ============== HEADER CARD ============== */}
-        <View style={styles.headerCard}>
-          <View style={styles.headerTop}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarInitials}>{initials}</Text>
-            </View>
-
-            <View style={styles.headerInfo}>
-              <Text style={styles.headerName} numberOfLines={1}>
-                {user?.name || "Usuario"}
-              </Text>
-              <View style={styles.headerMetaRow}>
-                <AppChip variant="primary" size="sm" icon="shield-account">
-                  {role}
-                </AppChip>
-                {user?.email_verified_at ? (
-                  <AppChip variant="success" size="sm" icon="check-circle">
-                    Verificado
-                  </AppChip>
-                ) : (
-                  <AppChip variant="warning" size="sm" icon="alert-circle">
-                    Sin verificar
-                  </AppChip>
-                )}
-              </View>
-              <View style={styles.emailRow}>
-                <MaterialCommunityIcons
-                  name="email-outline"
-                  size={14}
-                  color={colors.textMuted}
-                />
-                <Text style={styles.email} numberOfLines={1}>
-                  {user?.email || "sin-correo@gcstock.com"}
-                </Text>
-              </View>
-            </View>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarInitials}>{initials}</Text>
           </View>
-        </View>
-
-        {/* ============== CONTEXTO ACTIVO (empresa/sucursal) ============== */}
-        <View style={styles.contextRow}>
-          <ContextTile
-            icon="office-building-outline"
-            label="Empresa"
-            value={selectedCompany?.name || "Sin empresa"}
-            sublabel={selectedCompany?.business_name || undefined}
-            tone="primary"
-          />
-          <ContextTile
-            icon="map-marker-outline"
-            label="Sucursal"
-            value={location?.name || "Sin sucursal"}
-            sublabel={location?.address || undefined}
-            tone="info"
-          />
-        </View>
-
-        {/* ============== DETALLES DE LA CUENTA ============== */}
-        <View style={styles.section}>
-          <SectionHeader
-            title="Detalles de la cuenta"
-            badge={`#${user?.id ?? "—"}`}
-          />
-          <View style={styles.card}>
-            <InfoRow
-              icon="identifier"
-              label="ID de usuario"
-              value={`#${user?.id ?? "—"}`}
-              tone="primary"
-            />
-            <Divider />
-            <InfoRow
-              icon="calendar-plus"
-              label="Miembro desde"
-              value={memberSince}
-              tone="success"
-            />
-            <Divider />
-            <InfoRow
-              icon="update"
-              label="Ultima actualizacion"
-              value={lastUpdate}
-              tone="info"
-            />
-            <Divider />
-            <InfoRow
-              icon="shield-key-outline"
-              label="Permisos del sistema"
-              value={`${grantedPermissions} permiso${grantedPermissions === 1 ? "" : "s"}`}
-              tone="warning"
-            />
-          </View>
-        </View>
-
-        {/* ============== PERMISOS DE LA APLICACION ============== */}
-        <View style={styles.section}>
-          <SectionHeader
-            title="Permisos del dispositivo"
-            actionLabel="Reverificar"
-            onAction={checkPermissions}
-          />
-
-          {loadingPermissions ? (
-            <View style={styles.card}>
-              {[0, 1].map((i) => (
-                <View key={i} style={styles.permissionRow}>
-                  <View style={styles.permissionIconBox} />
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.skeletonTitle} />
-                    <View style={styles.skeletonSub} />
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : permissions ? (
-            <View style={styles.permissionsGrid}>
-              {PERMISSION_META.map((meta) => {
-                const p = permissions[meta.key];
-                const tone = getPermissionTone(p);
-                const blocked = !p.granted && !p.canAskAgain;
-                return (
-                  <TouchableOpacity
-                    key={meta.key}
-                    activeOpacity={0.7}
-                    onPress={() => !p.granted && requestPermission(meta.key)}
-                    style={styles.permissionCard}
-                  >
-                    <View
-                      style={[
-                        styles.permissionIconBox,
-                        {
-                          backgroundColor:
-                            tone === "success"
-                              ? colors.successSoft
-                              : tone === "warning"
-                              ? colors.warningSoft
-                              : colors.errorSoft,
-                        },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name={meta.icon}
-                        size={20}
-                        color={
-                          tone === "success"
-                            ? colors.success
-                            : tone === "warning"
-                            ? colors.warning
-                            : colors.error
-                        }
-                      />
-                    </View>
-                    <View style={styles.permissionBody}>
-                      <Text style={styles.permissionLabel}>{meta.label}</Text>
-                      <AppChip
-                        variant={tone === "success" ? "success" : tone === "warning" ? "warning" : "error"}
-                        size="sm"
-                      >
-                        {getPermissionText(p)}
-                      </AppChip>
-                    </View>
-                    {!p.granted && p.canAskAgain && (
-                      <MaterialCommunityIcons
-                        name="chevron-right"
-                        size={18}
-                        color={colors.textMuted}
-                      />
-                    )}
-                    {blocked && (
-                      <TouchableOpacity
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        onPress={() => Linking.openSettings()}
-                      >
-                        <MaterialCommunityIcons
-                          name="cog-outline"
-                          size={18}
-                          color={colors.error}
-                        />
-                      </TouchableOpacity>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={styles.card}>
-              <EmptyState
-                compact
-                icon="shield-off-outline"
-                title="No se pudieron cargar los permisos"
-                description="Intenta de nuevo desde Reverificar"
-              />
-            </View>
-          )}
-        </View>
-
-        {/* ============== ACCIONES RAPIDAS ============== */}
-        <View style={styles.section}>
-          <SectionHeader title="Acciones rapidas" />
-          {isMobile ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.actionsScroll}
-              contentContainerStyle={styles.actionsScrollContent}
-            >
-              {[
-                { key: "company", label: "Empresa", icon: "office-building-outline" as const, onPress: () => { setSwitcherInitialView("company"); setSwitcherVisible(true); } },
-                { key: "location", label: "Sucursal", icon: "map-marker-outline" as const, onPress: () => { setSwitcherInitialView("location"); setSwitcherVisible(true); } },
-                { key: "prefs", label: "Preferencias", icon: "cog-outline" as const, onPress: () => router.push("/(tabs)/preferences" as any) },
-                { key: "password", label: "Contraseña", icon: "lock-reset" as const, onPress: () => router.push("/(stacks)/change-password" as any) },
-              ].map((item) => (
-                <TouchableOpacity key={item.key} style={styles.actionCompactCard} onPress={item.onPress} activeOpacity={0.7}>
-                  <View style={styles.actionCompactIconBox}>
-                    <MaterialCommunityIcons name={item.icon} size={24} color={colors.text} />
-                  </View>
-                  <Text style={styles.actionCompactLabel} numberOfLines={2}>{item.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : (
-            <View style={styles.actionsGrid}>
-              <QuickAccessCard
-                icon="office-building-outline"
-                label="Cambiar empresa"
-                description="Selecciona otra compania"
-                onPress={() => {
-                  setSwitcherInitialView("company");
-                  setSwitcherVisible(true);
-                }}
-              />
-              <QuickAccessCard
-                icon="map-marker-outline"
-                label="Cambiar sucursal"
-                description="Ubicacion activa"
-                onPress={() => {
-                  setSwitcherInitialView("location");
-                  setSwitcherVisible(true);
-                }}
-              />
-              <QuickAccessCard
-                icon="cog-outline"
-                label="Preferencias"
-                description="Tema, densidad y comportamiento"
-                onPress={() => router.push("/(tabs)/preferences" as any)}
-              />
-              <QuickAccessCard
-                icon="lock-reset"
-                label="Cambiar contrasena"
-                description="Actualiza tu clave"
-                onPress={() => router.push("/(stacks)/change-password" as any)}
-              />
-            </View>
-          )}
-        </View>
-
-        {/* ============== CERRAR SESION ============== */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={styles.logoutButton}
-            onPress={handleLogout}
-            disabled={isLoading}
-          >
-            <View style={styles.logoutIcon}>
-              <MaterialCommunityIcons
-                name="logout"
-                size={18}
-                color={colors.error}
-              />
-            </View>
-            <Text style={styles.logoutLabel}>
-              {isLoading ? "Saliendo..." : "Cerrar sesion"}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.name} numberOfLines={1}>
+              {user?.name || "Usuario"}
             </Text>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={18}
-              color={colors.textMuted}
-            />
-          </TouchableOpacity>
+            {!!user?.email && (
+              <Text style={styles.email} numberOfLines={1}>
+                {user.email}
+              </Text>
+            )}
+            {!!role && <Text style={styles.role}>{role}</Text>}
+          </View>
         </View>
 
-        {/* ============== FOOTER ============== */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            GCStock v{process.env.EXPO_PUBLIC_APP_VERSION || "1.0.0"}
-          </Text>
-          <Text style={styles.footerSubtext}>
-            Hecho con {"\u{1F33F}"} para la gestion de tu negocio
-          </Text>
+        <Text style={styles.groupTitle}>Trabajando en</Text>
+        <View style={styles.group}>
+          <Row
+            icon="office-building-outline"
+            title="Empresa"
+            value={selectedCompany?.name || "Elegir"}
+            onPress={() => openSwitcher("company")}
+          />
+          <Row
+            divider
+            icon="map-marker-outline"
+            title="Sucursal"
+            value={location?.name || "Elegir"}
+            onPress={() => openSwitcher("location")}
+          />
         </View>
+
+        <Text style={styles.groupTitle}>Cuenta</Text>
+        <View style={styles.group}>
+          <Row
+            icon="history"
+            title="Mi actividad"
+            onPress={() => router.push("/(stacks)/activity" as any)}
+          />
+          <Row
+            divider
+            icon="lock-outline"
+            title="Cambiar contraseña"
+            onPress={() => router.push("/(stacks)/change-password" as any)}
+          />
+          <Row
+            divider
+            icon="tune-variant"
+            title="Preferencias"
+            onPress={() => router.push("/(tabs)/preferences" as any)}
+          />
+          <Row
+            divider
+            icon="help-circle-outline"
+            title="Ayuda"
+            onPress={() => router.push("/(stacks)/help" as any)}
+          />
+        </View>
+
+        <Text style={styles.groupTitle}>Este dispositivo</Text>
+        <View style={styles.group}>
+          {PERMISSION_META.map((meta, index) => {
+            const p = permissions?.[meta.key];
+            const blocked = !!p && !p.granted && !p.canAskAgain;
+            let value = permissionsFailed ? "No disponible" : "…";
+            let tone: string = colors.textMuted;
+            if (p?.granted) {
+              value = "Permitido";
+            } else if (blocked) {
+              value = "Bloqueado";
+              tone = colors.error;
+            } else if (p) {
+              value = "Permitir";
+              tone = colors.primary;
+            }
+            return (
+              <Row
+                key={meta.key}
+                divider={index > 0}
+                icon={meta.icon}
+                title={meta.label}
+                value={value}
+                valueColor={tone}
+                chevron={!!p && !p.granted}
+                onPress={
+                  !p || p.granted
+                    ? undefined
+                    : blocked
+                      ? () => Linking.openSettings()
+                      : () => requestPermission(meta.key)
+                }
+              />
+            );
+          })}
+        </View>
+
+        <View style={[styles.group, { marginTop: 22 }]}>
+          <Row
+            icon="logout"
+            title={isLoading ? "Saliendo..." : "Cerrar sesión"}
+            danger
+            chevron={false}
+            onPress={isLoading ? undefined : handleLogout}
+          />
+        </View>
+
+        <Text style={styles.footer}>
+          {memberSince ? `Miembro desde ${memberSince} · ` : ""}GCStock v{version}
+        </Text>
       </ScrollView>
 
-      {/* Modal de cambio de empresa/sucursal. Reemplaza los
-          router.push a las pantallas /selectCompany y /selectLocation
-          para que el usuario no pierda el tab de Perfil. */}
       <ContextSwitcherModal
         visible={switcherVisible}
         onDismiss={() => setSwitcherVisible(false)}
@@ -816,147 +350,77 @@ export default function ProfileScreen() {
   );
 }
 
-// ============== SUBCOMPONENTES ==============
-
-function Divider() {
-  const styles = useThemedStyles((c) => ({
-    divider: {
-      height: 1,
-      backgroundColor: c.border,
-      marginLeft: tokens.spacing[4] + 32 + tokens.spacing[3],
-    },
-  }));
-  return <View style={styles.divider} />;
-}
-
-interface ContextTileProps {
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  label: string;
-  value: string;
-  sublabel?: string;
-  tone: "primary" | "info" | "success" | "warning" | "error";
-}
-
-function ContextTile({ icon, label, value, sublabel, tone }: ContextTileProps) {
+/** Fila de lista: ícono neutro, título, valor opcional a la derecha. */
+function Row({
+  icon,
+  title,
+  value,
+  valueColor,
+  divider,
+  danger,
+  chevron = true,
+  onPress,
+}: {
+  icon: IconName;
+  title: string;
+  value?: string;
+  valueColor?: string;
+  divider?: boolean;
+  danger?: boolean;
+  chevron?: boolean;
+  onPress?: () => void;
+}) {
   const { colors } = useTheme();
   const styles = useThemedStyles((c) => ({
-    contextTile: {
-      flex: 1,
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[4],
-      gap: tokens.spacing[2],
-      minWidth: 0,
-      ...tokens.shadow.sm,
-    },
-    contextIconBox: {
-      width: 32,
-      height: 32,
-      borderRadius: tokens.radius.sm,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    contextLabel: {
-      ...tokens.typography.micro,
-      color: c.textMuted,
-    },
-    contextValue: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-    },
-    contextSub: {
-      ...tokens.typography.caption,
-      color: c.textSecondary,
-    },
-  }));
-
-  const tonePalette = {
-    primary: { bg: colors.primarySoft, fg: colors.primary },
-    info: { bg: colors.infoSoft, fg: colors.info },
-    success: { bg: colors.successSoft, fg: colors.success },
-    warning: { bg: colors.warningSoft, fg: colors.warning },
-    error: { bg: colors.errorSoft, fg: colors.error },
-  }[tone];
-
-  return (
-    <View style={styles.contextTile}>
-      <View style={[styles.contextIconBox, { backgroundColor: tonePalette.bg }]}>
-        <MaterialCommunityIcons name={icon} size={18} color={tonePalette.fg} />
-      </View>
-      <Text style={styles.contextLabel}>{label.toUpperCase()}</Text>
-      <Text style={styles.contextValue} numberOfLines={1}>
-        {value}
-      </Text>
-      {sublabel ? (
-        <Text style={styles.contextSub} numberOfLines={1}>
-          {sublabel}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
-interface InfoRowProps {
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  label: string;
-  value: string;
-  tone: "primary" | "info" | "success" | "warning" | "error";
-}
-
-function InfoRow({ icon, label, value, tone }: InfoRowProps) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles((c) => ({
-    infoRow: {
+    row: {
       flexDirection: "row",
       alignItems: "center",
-      padding: tokens.spacing[4],
-      gap: tokens.spacing[3],
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 14,
     },
-    infoIconBox: {
-      width: 32,
-      height: 32,
-      borderRadius: tokens.radius.sm,
-      alignItems: "center",
-      justifyContent: "center",
-      flexShrink: 0,
+    divider: {
+      borderTopWidth: 1,
+      borderTopColor: c.border,
     },
-    infoLabel: {
-      ...tokens.typography.caption,
-      color: c.textMuted,
-    },
-    infoValue: {
-      ...tokens.typography.bodyMd,
+    title: {
+      fontSize: 15,
+      fontWeight: "500",
       color: c.text,
-      marginTop: 1,
+    },
+    value: {
+      flex: 1,
+      fontSize: 14,
+      color: c.textMuted,
+      textAlign: "right",
     },
   }));
-  const tonePalette = {
-    primary: { bg: colors.primarySoft, fg: colors.primary },
-    info: { bg: colors.infoSoft, fg: colors.info },
-    success: { bg: colors.successSoft, fg: colors.success },
-    warning: { bg: colors.warningSoft, fg: colors.warning },
-    error: { bg: colors.errorSoft, fg: colors.error },
-  }[tone];
 
   return (
-    <View style={styles.infoRow}>
-      <View style={[styles.infoIconBox, { backgroundColor: tonePalette.bg }]}>
-        <MaterialCommunityIcons name={icon} size={16} color={tonePalette.fg} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={styles.infoValue} numberOfLines={1}>
-          {value}
-        </Text>
-      </View>
-    </View>
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
+        styles.row,
+        divider && styles.divider,
+        pressed && { backgroundColor: colors.surfaceMuted },
+      ]}
+    >
+      <MaterialCommunityIcons
+        name={icon}
+        size={20}
+        color={danger ? colors.error : colors.textSecondary}
+      />
+      <Text style={[styles.title, danger && { color: colors.error }]}>{title}</Text>
+      <Text
+        style={[styles.value, valueColor ? { color: valueColor } : null]}
+        numberOfLines={1}
+      >
+        {value ?? ""}
+      </Text>
+      {chevron && (
+        <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textMuted} />
+      )}
+    </Pressable>
   );
-}
-
-// ============== STYLES ==============
-
-
-// Hack visual: la transicion de hover en web para las cards
-if (Platform.OS === "web") {
-  // no-op: tokens.shadow.sm se aplica estaticamente
 }
