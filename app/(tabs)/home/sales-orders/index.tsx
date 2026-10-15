@@ -59,7 +59,9 @@ export default function SalesOrdersIndex() {
           },
           {
             type: "dateRange",
-            name: "date_range",
+            // "date" → date_from/date_to, que es lo que lee CrudController
+            // (date_range_* se ignoraba y el filtro no hacía nada).
+            name: "date",
             label: "Rango de Fechas",
             placeholder: "Seleccionar fechas",
           },
