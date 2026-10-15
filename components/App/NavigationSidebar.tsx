@@ -70,6 +70,12 @@ const NAV_SECTIONS: NavSection[] = [
         route: "/(tabs)/reports",
         permission: "reports_view",
       },
+      {
+        label: "Reportes",
+        icon: "file-chart-outline",
+        route: "/(tabs)/home/business-reports",
+        permission: "reports_view",
+      },
     ],
   },
   {

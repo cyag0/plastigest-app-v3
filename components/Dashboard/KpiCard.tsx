@@ -15,7 +15,13 @@ export interface KpiCardProps {
     period?: string;
   };
   loading?: boolean;
+  /** Bajar es bueno (p. ej. mermas): el color se invierte. */
   inverseDelta?: boolean;
+  /** Subir o bajar no es bueno ni malo (p. ej. compras): sin color. */
+  neutralDelta?: boolean;
+  /** Texto bajo el valor (p. ej. "37% de los productos"); a diferencia de
+   * `delta` no es una variación, así que no lleva flecha ni color. */
+  caption?: string;
   /** Estilo extra para el contenedor; usado para controlar el ancho/columnas
    * de forma responsiva desde el padre (p. ej. flexBasis en mobile). */
   style?: StyleProp<ViewStyle>;
@@ -32,6 +38,8 @@ export default function KpiCard({
   delta,
   loading = false,
   inverseDelta = false,
+  neutralDelta = false,
+  caption,
   style,
 }: KpiCardProps) {
   // IMPORTANTE: useTheme() debe ir ANTES de cualquier return temprano
@@ -45,15 +53,17 @@ export default function KpiCard({
       flexBasis: 0,
       minWidth: 0,
       backgroundColor: c.surface,
-      borderRadius: 16,
-      padding: 16,
-      ...tokens.shadow.sm,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
     },
     header: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
-      marginBottom: 12,
+      gap: 6,
+      marginBottom: 6,
     },
     iconBox: {
       width: 28,
@@ -63,16 +73,23 @@ export default function KpiCard({
       alignItems: "center",
       justifyContent: "center",
     },
+    // Etiqueta en minúsculas normales, sin cuadrito de ícono: la mayúscula
+    // espaciada + ícono en pastel era el sello de "tablero de plantilla".
     label: {
-      ...tokens.typography.micro,
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: "500" as const,
       color: c.textSecondary,
       flexShrink: 1,
     },
     value: {
       ...tokens.typography.numeric,
+      fontSize: 26,
+      lineHeight: 32,
+      letterSpacing: -0.5,
       color: c.text,
       fontVariant: ["tabular-nums"],
-      marginBottom: 12,
+      marginBottom: 4,
     },
     deltaRow: {
       flexDirection: "row",
@@ -108,7 +125,6 @@ export default function KpiCard({
     return (
       <View style={[styles.card, style]}>
         <View style={styles.header}>
-          <View style={styles.iconBox} />
           <View style={styles.labelSkeleton} />
         </View>
         <View style={styles.valueSkeleton} />
@@ -120,32 +136,20 @@ export default function KpiCard({
   let deltaVariant: "success" | "error" | "default" = "default";
   let deltaIcon: keyof typeof MaterialCommunityIcons.glyphMap = "minus";
   if (delta) {
-    const isPositive = inverseDelta ? delta.value < 0 : delta.value > 0;
-    const isNegative = inverseDelta ? delta.value > 0 : delta.value < 0;
-    if (isPositive) {
-      deltaVariant = "success";
-      deltaIcon = "trending-up";
-    } else if (isNegative) {
-      deltaVariant = "error";
-      deltaIcon = "trending-down";
-    } else {
-      deltaVariant = "default";
-      deltaIcon = "minus";
-    }
+    // La flecha sigue al signo; el color, a si el cambio es bueno o malo.
+    // Antes la flecha seguía al color: "↗ -100%" en verde.
+    deltaIcon = delta.value > 0 ? "trending-up" : delta.value < 0 ? "trending-down" : "minus";
+    const good = inverseDelta ? delta.value < 0 : delta.value > 0;
+    const bad = inverseDelta ? delta.value > 0 : delta.value < 0;
+    deltaVariant = neutralDelta ? "default" : good ? "success" : bad ? "error" : "default";
   }
 
   return (
     <View style={[styles.card, style]}>
       <View style={styles.header}>
-        <View style={styles.iconBox}>
-          <MaterialCommunityIcons
-            name={icon}
-            size={16}
-            color={colors.primary}
-          />
-        </View>
-        <Text style={styles.label} numberOfLines={1}>
-          {label.toUpperCase()}
+        <MaterialCommunityIcons name={icon} size={15} color={colors.textMuted} />
+        <Text style={styles.label} numberOfLines={2}>
+          {label}
         </Text>
       </View>
       <Text style={styles.value} numberOfLines={1} adjustsFontSizeToFit>
@@ -162,6 +166,9 @@ export default function KpiCard({
           )}
         </View>
       )}
+      {!delta && caption ? (
+        <Text style={styles.periodText}>{caption}</Text>
+      ) : null}
     </View>
   );
 }

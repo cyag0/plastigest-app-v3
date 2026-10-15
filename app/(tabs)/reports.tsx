@@ -16,6 +16,7 @@
  * (top productos + actividad) + alertas + producción.
  */
 
+import { parseLocalDate } from "@/utils/dates";
 import EmptyState from "@/components/App/EmptyState";
 import SectionHeader from "@/components/App/SectionHeader";
 import KpiCard from "@/components/Dashboard/KpiCard";
@@ -26,6 +27,7 @@ import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import React from "react";
 import {
   Dimensions,
@@ -137,7 +139,7 @@ function formatQuantity(value: number, unit?: string | null) {
 
 function formatDate(dateString?: string | null) {
   if (!dateString) return "-";
-  const dt = new Date(dateString);
+  const dt = parseLocalDate(dateString);
   if (Number.isNaN(dt.getTime())) return "-";
   return dt.toLocaleDateString("es-MX", {
     day: "2-digit",
@@ -148,7 +150,8 @@ function formatDate(dateString?: string | null) {
 function normalizeDayLabel(raw: string) {
   if (!raw) return "";
   if (/^\d{2}:\d{2}$/.test(raw)) return raw;
-  const dt = new Date(raw);
+  // "2026-10-14" con new Date() es medianoche UTC: en México, el día anterior.
+  const dt = parseLocalDate(raw);
   if (Number.isNaN(dt.getTime())) return raw;
   return dt.toLocaleDateString("es-MX", { weekday: "short" });
 }
@@ -246,11 +249,47 @@ function makeReportsStyles(c: ReturnType<typeof useTheme>["colors"]) {
       color: c.textInverse,
       fontWeight: "600",
     },
+    docsBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: tokens.spacing[3],
+      backgroundColor: c.surface,
+      borderRadius: tokens.radius.lg,
+      padding: tokens.spacing[3],
+      marginTop: tokens.spacing[2],
+      marginBottom: tokens.spacing[4],
+      ...tokens.shadow.sm,
+    },
+    docsIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: tokens.radius.md,
+      backgroundColor: c.primarySoft,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    docsTitle: {
+      ...tokens.typography.bodyMd,
+      color: c.text,
+      fontWeight: "600",
+    },
+    docsSubtitle: {
+      ...tokens.typography.caption,
+      color: c.textSecondary,
+    },
     section: {
       marginBottom: tokens.spacing[5],
     },
     kpiRow: {
       flexDirection: "row",
+      gap: tokens.spacing[3],
+      marginBottom: tokens.spacing[3],
+    },
+    // Las 6 KPIs en una sola cuadrícula: 3 por fila en pantallas anchas y 2
+    // en celular (en 3 columnas el valor se cortaba a "$7…").
+    kpiGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
       gap: tokens.spacing[3],
       marginBottom: tokens.spacing[3],
     },
@@ -594,6 +633,7 @@ export default function ReportsScreen() {
   const isWeb = Platform.OS === "web";
   const width = Dimensions.get("window").width;
   const isWide = width >= 1024;
+  const kpiItemStyle = { flexBasis: width < 768 ? "46%" : "30%" } as const;
   const chartWidth = isWide ? Math.min((width - 100) / 2, 530) : width - 56;
 
   const loadAll = React.useCallback(async () => {
@@ -698,7 +738,7 @@ export default function ReportsScreen() {
       list.push({
         id: "notifications",
         icon: "bell-ring",
-        label: `${auth.unreadNotificationsCount} notificacion${
+        label: `${auth.unreadNotificationsCount} notificación${
           (auth.unreadNotificationsCount ?? 0) === 1 ? "" : "es"
         } sin leer`,
         meta: "Revisa las novedades",
@@ -772,6 +812,24 @@ export default function ReportsScreen() {
           ))}
         </View>
 
+        {/* Los mismos números, como documento: PDF para imprimir, Excel para el contador. */}
+        <TouchableOpacity
+          onPress={() => router.push("/(tabs)/home/business-reports" as any)}
+          activeOpacity={0.7}
+          style={styles.docsBanner}
+        >
+          <View style={styles.docsIcon}>
+            <MaterialCommunityIcons name="file-chart-outline" size={20} color={colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.docsTitle}>Reportes en PDF y Excel</Text>
+            <Text style={styles.docsSubtitle}>
+              Ventas del periodo, inventario valorizado, mermas y diferencias de caja
+            </Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textMuted} />
+        </TouchableOpacity>
+
         {loading ? (
           <View style={{ gap: 12 }}>
             <View style={styles.kpiRow}>
@@ -789,29 +847,29 @@ export default function ReportsScreen() {
           </View>
         ) : (
           <>
-            {/* KPIs principales (3) */}
-            <View style={styles.kpiRow}>
+            {/* KPIs principales y secundarios */}
+            <View style={styles.kpiGrid}>
               <KpiCard
+                style={kpiItemStyle}
                 icon="trending-up"
                 label="Ventas"
                 value={formatCurrency(dashboard?.kpis?.sales ?? 0)}
               />
               <KpiCard
+                style={kpiItemStyle}
                 icon="cart-outline"
                 label="Compras"
                 value={formatCurrency(dashboard?.kpis?.purchases ?? 0)}
-                inverseDelta
+                neutralDelta
               />
               <KpiCard
+                style={kpiItemStyle}
                 icon="cash-multiple"
                 label="Ganancia"
                 value={formatCurrency(dashboard?.kpis?.profit ?? 0)}
               />
-            </View>
-
-            {/* KPIs secundarios (3) */}
-            <View style={styles.kpiRow}>
               <KpiCard
+                style={kpiItemStyle}
                 icon="package-variant"
                 label="Inventario"
                 value={formatCurrency(
@@ -819,11 +877,13 @@ export default function ReportsScreen() {
                 )}
               />
               <KpiCard
+                style={kpiItemStyle}
                 icon="swap-vertical"
                 label="Movimientos"
                 value={formatNumber(dashboard?.mini_kpis.movements_count ?? 0)}
               />
               <KpiCard
+                style={kpiItemStyle}
                 icon="alert-circle-outline"
                 label="Stock bajo"
                 value={formatNumber(
@@ -942,16 +1002,12 @@ export default function ReportsScreen() {
                           alert.variant === "info" && styles.alertIconInfo,
                         ]}
                       >
+                        {/* La caja ya va del color de la alerta: el ícono en
+                            blanco (antes iba del mismo color y no se veía). */}
                         <MaterialCommunityIcons
                           name={alert.icon}
                           size={16}
-                          color={
-                            alert.variant === "error"
-                              ? colors.error
-                              : alert.variant === "warning"
-                                ? colors.warning
-                                : colors.info
-                          }
+                          color="#FFFFFF"
                         />
                       </View>
                       <View style={{ flex: 1 }}>

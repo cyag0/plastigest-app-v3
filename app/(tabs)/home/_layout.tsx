@@ -295,6 +295,12 @@ export default function _layout() {
           title: "Detalle de Reporte de Ventas",
         }}
       />
+      <Stack.Screen
+        name="business-reports/index"
+        options={{
+          title: "Reportes del negocio",
+        }}
+      />
     </Stack>
   );
 }

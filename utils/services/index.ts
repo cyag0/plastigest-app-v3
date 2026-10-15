@@ -57,6 +57,27 @@ const Services = {
       return response.data.url;
     },
   },
+  /** Reportes del dueño en PDF o Excel: ventas, inventario valorizado, mermas y caja. */
+  businessReports: {
+    async options(): Promise<App.Entities.BusinessReportOptions> {
+      const response = await axiosClient.get("/auth/admin/business-reports/options");
+      return response.data;
+    },
+    /** URL firmada (30 min) del reporte con el periodo y la sucursal elegidos. */
+    async url(
+      report: App.Entities.BusinessReportKey,
+      params: {
+        format: "pdf" | "xlsx";
+        date_from?: string;
+        date_to?: string;
+        as_of?: string;
+        location_id?: number | "all";
+      },
+    ): Promise<string> {
+      const response = await axiosClient.get(`/auth/admin/business-reports/${report}/url`, { params });
+      return response.data.url;
+    },
+  },
   transfers: {
     ...createCrudService<App.Entities.Company>("/auth/admin/inventory-transfers"),
   },

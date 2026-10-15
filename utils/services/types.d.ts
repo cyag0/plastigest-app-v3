@@ -941,6 +941,23 @@ namespace App {
       notes: string | null;
     }
 
+    type BusinessReportKey = "sales" | "inventory-valuation" | "adjustments" | "cash-differences";
+
+    /** GET /business-reports/options: los reportes del dueño y las sucursales que se pueden elegir. */
+    interface BusinessReportOptions {
+      reports: {
+        key: BusinessReportKey;
+        title: string;
+        description: string;
+        icon: string;
+        /** period: rango de fechas; as_of: fecha de corte. */
+        input: "period" | "as_of";
+      }[];
+      can_choose_location: boolean;
+      current_location: { id: number; name: string } | null;
+      locations: { id: number; name: string }[];
+    }
+
     interface StockMovementsResponse {
       data: StockMovement[];
       meta: {

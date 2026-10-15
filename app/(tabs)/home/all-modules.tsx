@@ -53,6 +53,12 @@ const MODULE_SECTIONS: ModuleSection[] = [
         route: "/(tabs)/reports",
       },
       {
+        label: "Reportes PDF y Excel",
+        description: "Ventas, inventario valorizado, mermas y caja",
+        icon: "file-chart-outline",
+        route: "/(tabs)/home/business-reports",
+      },
+      {
         label: "Ayuda",
         description: "Guías de cada módulo",
         icon: "help-circle-outline",
@@ -180,6 +186,7 @@ const MODULE_SECTIONS: ModuleSection[] = [
 // solo el punto de venta se filtraba y los demás llevaban a "sin permiso").
 const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/(tabs)/reports": "reports_view",
+  "/(tabs)/home/business-reports": "reports_view",
   "/(tabs)/inventory": ["products_list", "inventory_list"],
   "/(tabs)/home/production": "production_orders_list",
   "/(tabs)/home/purchases": "purchases_list",
