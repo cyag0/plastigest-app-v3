@@ -14,6 +14,8 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from "rea
 import { Button } from "react-native-paper";
 import RolePicker from "./RolePicker";
 import UserAvatar from "./UserAvatar";
+import { AdminUser, isProtectedUser } from "./userAccess";
+import { useCompanyRoles } from "./useCompanyRoles";
 import { useUserScope } from "./useUserScope";
 import { UserScope, apiMessage, shortLocationName, userRoutes } from "./userDisplay";
 
@@ -66,8 +68,11 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
   const { user: me, location, selectedCompany, hasPermission } = useAuth();
   const routes = userRoutes(scope);
 
-  const [user, setUser] = useState<App.Entities.User | null>(null);
+  const [user, setUser] = useState<AdminUser | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  // 403/404 al cargarlo: no existe o quien abre no tiene acceso a él.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const { roleIds } = useCompanyRoles();
   const [busy, setBusy] = useState(false);
   const [changingRole, setChangingRole] = useState(false);
   const [newRoleId, setNewRoleId] = useState<number | null>(null);
@@ -83,9 +88,19 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
       const response: any = await Services.admin.users.show(id);
       setUser(response?.data?.data ?? null);
       setLoadFailed(false);
-    } catch (error) {
+      setLoadError(null);
+    } catch (error: any) {
       setLoadFailed(true);
-      alerts.error(apiMessage(error, "No se pudo cargar el usuario"));
+      const status = error?.response?.status;
+      if (status === 403 || status === 404) {
+        setLoadError(
+          status === 404
+            ? "Este usuario no existe o no tienes acceso a él."
+            : apiMessage(error, "No tienes permiso para ver a este usuario."),
+        );
+      } else {
+        alerts.error(apiMessage(error, "No se pudo cargar el usuario"));
+      }
     }
     // alerts es estable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -177,7 +192,15 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
   if (!user) {
     return (
       <View style={[styles.container, styles.center]}>
-        {loadFailed ? (
+        {loadError ? (
+          <View style={styles.loadError}>
+            <MaterialCommunityIcons name="account-question-outline" size={36} color={colors.textMuted} />
+            <Text style={styles.loadErrorText}>{loadError}</Text>
+            <Button mode="outlined" icon="arrow-left" onPress={() => goBack()}>
+              Volver
+            </Button>
+          </View>
+        ) : loadFailed ? (
           <Button mode="outlined" icon="refresh" onPress={load}>
             Reintentar
           </Button>
@@ -190,13 +213,21 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
 
   const access = user.location_roles ?? [];
   const branchAccess = user.location_role;
+  // Administrador del sistema: solo otro administrador del sistema lo
+  // modifica (el backend responde 403 a los demás), así que no se ofrece.
+  const locked = !hasPermission("system_admin") && isProtectedUser(user, roleIds, selectedCompany?.id);
 
   const actions: Omit<ActionRowProps, "first">[] = [];
-  if (canEdit) {
+  if (canEdit && !locked) {
     actions.push({
       icon: "pencil-outline",
       label: "Editar datos",
-      hint: scope === "location" ? "Nombre, correo, contraseña y rol" : "Nombre, correo, contraseña y sucursales",
+      hint:
+        scope !== "location"
+          ? "Nombre, correo, contraseña y sucursales"
+          : isMe
+            ? "Nombre, correo y contraseña"
+            : "Nombre, correo, contraseña y rol",
       onPress: () => router.push(routes.edit(user.id) as any),
     });
   }
@@ -209,7 +240,7 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
         router.push({ pathname: "/(stacks)/activity", params: { user_id: String(user.id), name: user.name } } as any),
     });
   }
-  if (canEdit && !isMe) {
+  if (canEdit && !isMe && !locked) {
     actions.push({
       icon: user.is_active ? "account-cancel-outline" : "account-check-outline",
       label: user.is_active ? "Desactivar usuario" : "Activar usuario",
@@ -217,7 +248,7 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
       onPress: toggleActive,
     });
   }
-  if (scope === "location" && canEdit && !isMe && branchAccess) {
+  if (scope === "location" && canEdit && !isMe && !locked && branchAccess) {
     actions.push({
       icon: "account-remove-outline",
       label: "Quitar de esta sucursal",
@@ -226,7 +257,7 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
       onPress: removeFromBranch,
     });
   }
-  if (scope !== "location" && canDelete && !isMe) {
+  if (scope !== "location" && canDelete && !isMe && !locked) {
     actions.push({ icon: "delete-outline", label: "Eliminar usuario", danger: true, onPress: remove });
   }
 
@@ -266,7 +297,7 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
                     {branchAccess ? (branchAccess.role_name ?? "Sin rol") : "Sin acceso a esta sucursal"}
                   </Text>
                 </View>
-                {canEdit && !isMe && branchAccess && (
+                {canEdit && !isMe && !locked && branchAccess && (
                   <Button
                     compact
                     mode="text"
@@ -319,6 +350,16 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
               )}
             </View>
           </>
+        )}
+
+        {locked && (
+          <View style={styles.lockedNote}>
+            <MaterialCommunityIcons name="shield-lock-outline" size={20} color={colors.info} />
+            <Text style={styles.lockedNoteText}>
+              Es administrador del sistema: entra a todas las sucursales y solo otro administrador del
+              sistema puede cambiar sus datos, su contraseña, su acceso o sus roles.
+            </Text>
+          </View>
         )}
 
         {/* Qué se puede hacer */}
@@ -478,6 +519,31 @@ const makeStyles = (c: ReturnType<typeof useTheme>["colors"]) => ({
     color: c.textMuted,
     textAlign: "center" as const,
     marginTop: tokens.spacing[5],
+  },
+  lockedNote: {
+    flexDirection: "row" as const,
+    alignItems: "flex-start" as const,
+    gap: tokens.spacing[3],
+    marginTop: tokens.spacing[5],
+    padding: tokens.spacing[4],
+    borderRadius: tokens.radius.md,
+    backgroundColor: c.infoSoft,
+  },
+  lockedNoteText: {
+    ...tokens.typography.bodySm,
+    color: c.text,
+    flex: 1,
+  },
+  loadError: {
+    alignItems: "center" as const,
+    gap: tokens.spacing[3],
+    padding: tokens.spacing[6],
+    maxWidth: 420,
+  },
+  loadErrorText: {
+    ...tokens.typography.body,
+    color: c.textSecondary,
+    textAlign: "center" as const,
   },
   overlay: {
     flex: 1,

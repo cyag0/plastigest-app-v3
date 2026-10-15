@@ -18,6 +18,8 @@ import {
 import { Button } from "react-native-paper";
 import RolePicker from "./RolePicker";
 import UserAvatar from "./UserAvatar";
+import { AdminUser, isProtectedUser } from "./userAccess";
+import { useCompanyRoles } from "./useCompanyRoles";
 import { accessSummary, apiMessage, listFrom, shortLocationName } from "./userDisplay";
 
 interface Props {
@@ -36,27 +38,34 @@ export default function AddExistingUserModal({ onClose, onAdded }: Props) {
   const styles = useThemedStyles(makeStyles);
   const { location, selectedCompany } = useAuth();
 
-  const [candidates, setCandidates] = useState<App.Entities.User[] | null>(null);
+  const [companyUsers, setCompanyUsers] = useState<AdminUser[] | null>(null);
   const [search, setSearch] = useState("");
-  const [picked, setPicked] = useState<App.Entities.User | null>(null);
+  const [picked, setPicked] = useState<AdminUser | null>(null);
+  const { roleIds } = useCompanyRoles();
   const [roleId, setRoleId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     Services.admin.users
       .index({ by_company: true } as any)
-      .then((response: any) => {
-        const all = listFrom<App.Entities.User>(response?.data);
-        // Los que aún no tienen acceso a esta sucursal.
-        setCandidates(all.filter((u) => u.is_active && !u.location_role));
-      })
+      .then((response: any) => setCompanyUsers(listFrom<AdminUser>(response?.data)))
       .catch((error) => {
         alerts.error(apiMessage(error, "No se pudieron cargar los usuarios"));
-        setCandidates([]);
+        setCompanyUsers([]);
       });
     // Solo al abrir.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Los que aún no tienen acceso a esta sucursal. Los administradores del
+  // sistema no: ya entran a todas y solo otro administrador los modifica.
+  const candidates = useMemo(
+    () =>
+      companyUsers?.filter(
+        (u) => u.is_active && !u.location_role && !isProtectedUser(u, roleIds, selectedCompany?.id),
+      ) ?? null,
+    [companyUsers, roleIds, selectedCompany?.id],
+  );
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();

@@ -21,7 +21,9 @@ import {
 } from "react-native";
 import AddExistingUserModal from "./AddExistingUserModal";
 import UserAvatar from "./UserAvatar";
-import { useUserScope } from "./useUserScope";
+import { AdminUser, isProtectedUser } from "./userAccess";
+import { useCompanyRoles } from "./useCompanyRoles";
+import { useAllLocationsAccess, useUserScope } from "./useUserScope";
 import {
   UserScope,
   accessSummary,
@@ -51,17 +53,18 @@ export default function UsersListScreen({ scope: requestedScope }: { scope: User
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { user: me, selectedCompany, location, hasPermission } = useAuth();
+  const allLocations = useAllLocationsAccess();
+  const { roleIds } = useCompanyRoles();
   const routes = userRoutes(scope);
 
-  const [users, setUsers] = useState<App.Entities.User[] | null>(null);
+  const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [addingExisting, setAddingExisting] = useState(false);
 
   const canCreate = hasPermission("users_create");
-  // Traer a alguien de otra sucursal: quien administra todas las sucursales.
-  const canAddExisting =
-    scope === "location" && hasPermission("users_update") && hasPermission("locations_list");
+  // Traer a alguien de otra sucursal: quien entra a todas las sucursales.
+  const canAddExisting = scope === "location" && hasPermission("users_update") && allLocations;
 
   const requestId = useRef(0);
   const load = useCallback(
@@ -71,7 +74,7 @@ export default function UsersListScreen({ scope: requestedScope }: { scope: User
       try {
         const response = await Services.admin.users.index(PARAMS[scope] as any);
         if (current !== requestId.current) return;
-        setUsers(listFrom<App.Entities.User>(response?.data));
+        setUsers(listFrom<AdminUser>(response?.data));
       } catch (error) {
         if (current !== requestId.current) return;
         alerts.error(apiMessage(error, "No se pudieron cargar los usuarios"));
@@ -105,9 +108,22 @@ export default function UsersListScreen({ scope: requestedScope }: { scope: User
     }, [load, canCreate]),
   );
 
+  // Administradores del sistema: entran a todas las sucursales y solo otro
+  // administrador del sistema los modifica. En la lista de la sucursal no van
+  // (el Super Admin venía en todas); en la de la empresa se marcan.
+  const isProtected = useCallback(
+    (u: AdminUser) => isProtectedUser(u, roleIds, selectedCompany?.id),
+    [roleIds, selectedCompany?.id],
+  );
+  const listed = useMemo(
+    () => (scope === "location" ? (users ?? []).filter((u) => !isProtected(u)) : (users ?? [])),
+    [users, scope, isProtected],
+  );
+  const hiddenAdmins = (users?.length ?? 0) - listed.length;
+
   const { active, inactive } = useMemo(() => {
     const term = search.trim().toLowerCase();
-    const matches = (users ?? []).filter((u) => {
+    const matches = listed.filter((u) => {
       if (!term) return true;
       const haystack = [
         u.name,
@@ -120,14 +136,14 @@ export default function UsersListScreen({ scope: requestedScope }: { scope: User
         .toLowerCase();
       return haystack.includes(term);
     });
-    const byName = (a: App.Entities.User, b: App.Entities.User) => a.name.localeCompare(b.name, "es");
+    const byName = (a: AdminUser, b: AdminUser) => a.name.localeCompare(b.name, "es");
     return {
       active: matches.filter((u) => u.is_active).sort(byName),
       inactive: matches.filter((u) => !u.is_active).sort(byName),
     };
-  }, [users, search]);
+  }, [listed, search]);
 
-  const total = users?.length ?? 0;
+  const total = listed.length;
   const scopeName =
     scope === "location"
       ? shortLocationName(location?.name ?? "esta sucursal", selectedCompany?.name)
@@ -140,8 +156,9 @@ export default function UsersListScreen({ scope: requestedScope }: { scope: User
         ? `${total} ${total === 1 ? "usuario" : "usuarios"} en ${scopeName ?? "la empresa"}`
         : `${total} ${total === 1 ? "usuario" : "usuarios"} en todas las empresas`;
 
-  const renderRow = (u: App.Entities.User, index: number) => {
+  const renderRow = (u: AdminUser, index: number) => {
     const isMe = me?.id === u.id;
+    const systemAdmin = scope !== "location" && isProtected(u);
     let access: React.ReactNode;
     if (scope === "location") {
       const role = u.location_role?.role_name;
@@ -193,6 +210,11 @@ export default function UsersListScreen({ scope: requestedScope }: { scope: User
             {isMe && (
               <AppChip size="sm" variant="default">
                 Tú
+              </AppChip>
+            )}
+            {systemAdmin && (
+              <AppChip size="sm" variant="info" icon="shield-crown-outline">
+                Admin. del sistema
               </AppChip>
             )}
           </View>
@@ -251,6 +273,12 @@ export default function UsersListScreen({ scope: requestedScope }: { scope: User
             </Pressable>
           )}
         </View>
+
+        {hiddenAdmins > 0 && (
+          <Text style={styles.footnote}>
+            Los administradores del sistema no aparecen aquí: entran a todas las sucursales.
+          </Text>
+        )}
 
         {total === 0 ? (
           <EmptyState
@@ -412,6 +440,12 @@ const makeStyles = (c: ReturnType<typeof useTheme>["colors"]) => ({
   },
   mutedText: {
     color: c.textSecondary,
+  },
+  footnote: {
+    ...tokens.typography.caption,
+    color: c.textMuted,
+    marginBottom: tokens.spacing[2],
+    paddingHorizontal: 2,
   },
   noResults: {
     ...tokens.typography.body,
