@@ -28,7 +28,13 @@ export default function EditProduction() {
         }
         setAllowed(true);
       } catch (e: any) {
-        alerts.error("No se pudo cargar: " + e.message);
+        const data = e?.response?.data;
+        alerts.error(
+          "No se pudo cargar la producción. " +
+            (data?.message ??
+              data?.error ??
+              (e?.response ? "" : "Sin conexión con el servidor.")),
+        );
         goBack();
       }
     })();
