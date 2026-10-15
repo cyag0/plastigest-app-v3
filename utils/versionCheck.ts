@@ -66,18 +66,24 @@ export function extractBundleScripts(html: string): string[] {
 }
 
 /**
- * Identificador del build web: el script de entrada (entry-<hash>.js), que
- * cambia en cada despliegue con cambios. Si no aparece, todos los scripts.
+ * Identificador del build web: todos los scripts del bundle (runtime,
+ * __common e index-<hash>.js), ordenados. Cualquiera que cambie es un
+ * despliegue nuevo.
  */
 export function bundleSignature(scripts: string[]): string | null {
   if (scripts.length === 0) return null;
-  const entry = scripts.find((name) => /^entry-.+\.js$/.test(name));
-  return entry ?? [...scripts].sort().join("|");
+  return [...scripts].sort().join("|");
 }
 
-/** Hash corto del build web para mostrarlo junto a la versión ("fe762bb"). */
+/**
+ * Hash corto del build web para mostrarlo junto a la versión ("fe762bb"): el
+ * del script de entrada (index-<hash>.js en SDK 56, entry-<hash>.js antes),
+ * que cambia con el código de la app; el runtime y __common casi nunca.
+ */
 export function shortBuildId(signature: string | null): string | null {
   if (!signature) return null;
-  const hash = /([0-9a-f]{7,})/i.exec(signature);
+  const hash =
+    /(?:^|\|)(?:entry|index)-([0-9a-f]{7,})/i.exec(signature) ??
+    /([0-9a-f]{7,})/i.exec(signature);
   return hash ? hash[1].slice(0, 7) : null;
 }
