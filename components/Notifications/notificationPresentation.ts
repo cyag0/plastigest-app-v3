@@ -29,7 +29,7 @@ export function getNotificationSeverityConfig(
         color: NOTIFICATION_TYPES.purchase.text,
         icon: NOTIFICATION_TYPES.purchase.icon,
         softBg: NOTIFICATION_TYPES.purchase.bgSoft,
-        label: "Exito",
+        label: "Éxito",
       };
     case "error":
       return {
@@ -80,7 +80,7 @@ export function getNotificationEventConfig(eventType: App.Entities.NotificationE
 // ─── Helpers nuevos para el popover rediseado ──────────────────────────────
 
 /**
- * Traduce un event_type del backend a una de las 5 categorias visuales.
+ * Traduce un event_type del backend a una de las categorias visuales.
  * Esto nos permite que el mismo dato (event_type) pinte una "Compra" o
  * una "Tarea" con la misma paleta en cualquier superficie.
  */
@@ -96,11 +96,15 @@ export function eventTypeToTypeKey(
     case "task_assigned":
     case "task_completed":
       return "task";
+    case "transfer_update":
+    case "inventory_transfer":
+    case "transfer_received":
+      return "transfer";
+    case "reminder":
+      return "reminder";
     case "low_stock":
     case "inventory_adjustment":
     case "inventory_count_discrepancy":
-    case "inventory_transfer":
-    case "transfer_received":
       return "inventory";
     case "system_alert":
     case "alert":
@@ -113,34 +117,105 @@ export function eventTypeToTypeKey(
   }
 }
 
+// ─── Sub-tipos (data.sub_type) ──────────────────────────────────────────────
+const SUB_TYPE_LABELS: Record<string, Record<string, string>> = {
+  task_event: {
+    assigned: "Asignada",
+    completed: "Completada",
+    comment: "Comentario",
+    due_soon: "Por vencer",
+    overdue: "Vencida",
+  },
+  purchase_update: {
+    in_transit: "En tránsito",
+    received: "Recibida",
+  },
+  transfer_update: {
+    approved: "Aprobada",
+    rejected: "Rechazada",
+    shipped: "Enviada",
+    received: "Recibida",
+    cancelled: "Cancelada",
+  },
+};
+
+const SUB_TYPE_ICONS: Record<string, Record<string, string>> = {
+  task_event: {
+    assigned: "clipboard-account-outline",
+    completed: "check-circle-outline",
+    comment: "comment-text-outline",
+    due_soon: "clock-alert-outline",
+    overdue: "calendar-alert",
+  },
+  purchase_update: {
+    in_transit: "truck-delivery-outline",
+    received: "package-variant-closed-check",
+  },
+  transfer_update: {
+    approved: "check-decagram-outline",
+    rejected: "close-octagon-outline",
+    shipped: "truck-fast-outline",
+    received: "package-variant-closed-check",
+    cancelled: "cancel",
+  },
+};
+
+const EVENT_ICONS: Record<string, string> = {
+  low_stock: "package-variant-remove",
+  inventory_adjustment: "tune-variant",
+  inventory_count_discrepancy: "clipboard-alert-outline",
+  reminder: "calendar-clock",
+};
+
+function readSubType(data: unknown): string {
+  const value = (data as Record<string, unknown> | null | undefined)?.sub_type;
+  return typeof value === "string" ? value : "";
+}
+
 /**
- * Devuelve el estado de una notificacion a partir de sus campos semanticos.
- * Prioridad: overdue > pending > new (no leida) > read. Esto permite que
- * el badge refleje la urgencia real sin que el componente padre tenga que
- * calcularla.
+ * Etiqueta del sub-tipo ("Por vencer", "Rechazada"…) o null si el evento no
+ * tiene o es uno que la app aún no conoce.
+ */
+export function getNotificationSubTypeLabel(
+  eventType: App.Entities.NotificationEventType | string,
+  data: unknown,
+): string | null {
+  const subType = readSubType(data);
+  if (!subType) return null;
+  return SUB_TYPE_LABELS[eventType]?.[subType] ?? null;
+}
+
+/**
+ * Icono de la notificación: el del sub-tipo si lo hay (tarea por vencer,
+ * transferencia rechazada…), si no el del evento y por último el de la
+ * categoría visual.
+ */
+export function getNotificationIcon(
+  eventType: App.Entities.NotificationEventType | string,
+  data: unknown,
+): string {
+  const subType = readSubType(data);
+  return (
+    (subType && SUB_TYPE_ICONS[eventType]?.[subType]) ||
+    EVENT_ICONS[eventType] ||
+    NOTIFICATION_TYPES[eventTypeToTypeKey(eventType)].icon
+  );
+}
+
+/**
+ * Estado que muestra el badge de una notificación. Las de tareas por vencer o
+ * vencidas lo indican mientras no se lean; el resto solo distingue nueva /
+ * leída. (Antes cualquier aviso sin leer de más de 7 días salía "Vencida".)
  */
 export function resolveNotificationStatus(
-  notification: Pick<App.Entities.Notification, "is_read" | "data" | "created_at">,
-  now: Date = new Date(),
+  notification: Pick<App.Entities.Notification, "is_read" | "data" | "event_type">,
 ): NotificationStatusKey {
   if (notification.is_read) return "read";
 
-  // Estados que pueden venir en data.{status|state|kind} segun el evento.
-  const data = (notification.data ?? {}) as Record<string, unknown>;
-  const explicit = (
-    data.status ??
-    data.state ??
-    data.kind
-  ) as string | undefined;
-  if (explicit === "overdue" || explicit === "vencida") return "overdue";
-  if (explicit === "pending" || explicit === "pendiente") return "pending";
-
-  // Si no hay estado explicito, calculamos "overdue" por antiguedad (>7d).
-  const created = new Date(notification.created_at);
-  if (!Number.isNaN(created.getTime())) {
-    const diffMs = now.getTime() - created.getTime();
-    const sevenDays = 7 * 24 * 60 * 60 * 1000;
-    if (diffMs > sevenDays) return "overdue";
+  if (notification.event_type === "task_event") {
+    const subType = readSubType(notification.data);
+    if (subType === "overdue") return "overdue";
+    if (subType === "due_soon") return "due_soon";
   }
 
   return "new";
@@ -173,7 +248,9 @@ export const notificationEventOptions: {
     icon: "clipboard-alert-outline",
   },
   { value: "purchase_update", label: "Compras", icon: "truck-delivery-outline" },
+  { value: "transfer_update", label: "Transferencias", icon: "swap-horizontal" },
   { value: "task_event", label: "Tareas", icon: "checkbox-marked-circle-outline" },
+  { value: "reminder", label: "Recordatorios", icon: "calendar-clock" },
 ];
 
 // ─── Formateo de fechas ─────────────────────────────────────────────────────

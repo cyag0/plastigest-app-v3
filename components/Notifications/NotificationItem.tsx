@@ -2,7 +2,9 @@ import AppChip, { type ChipVariant } from "@/components/App/Chip";
 import {
   formatNotificationDate,
   getNotificationEventConfig,
+  getNotificationIcon,
   getNotificationSeverityConfig,
+  getNotificationSubTypeLabel,
 } from "@/components/Notifications/notificationPresentation";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
@@ -73,6 +75,11 @@ export default function NotificationItem({
 
   const eventConfig = getNotificationEventConfig(item.event_type);
   const severityConfig = getNotificationSeverityConfig(item.severity);
+  const icon = getNotificationIcon(item.event_type, item.data);
+  const subTypeLabel = getNotificationSubTypeLabel(item.event_type, item.data);
+  const metaLabel = subTypeLabel
+    ? `${eventConfig.label} · ${subTypeLabel}`
+    : eventConfig.label;
 
   // "info" es ruido en la mayoria de notificaciones; solo destacamos
   // severidades relevantes (aviso, alerta, error, exito) como chip.
@@ -95,7 +102,7 @@ export default function NotificationItem({
         <View style={[styles.row, compact && styles.rowCompact]}>
           <View style={[styles.typeIcon, { backgroundColor: eventConfig.softBg }]}>
             <MaterialCommunityIcons
-              name={eventConfig.icon as any}
+              name={icon as any}
               size={20}
               color={eventConfig.color}
             />
@@ -117,7 +124,7 @@ export default function NotificationItem({
             </View>
 
             <Text style={styles.meta} numberOfLines={1}>
-              {eventConfig.label} · {formatNotificationDate(item.created_at, true)}
+              {metaLabel} · {formatNotificationDate(item.created_at, true)}
             </Text>
 
             <Text style={styles.message} numberOfLines={2}>
@@ -153,7 +160,7 @@ export default function NotificationItem({
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 style={styles.actionBtn}
                 accessibilityLabel={
-                  item.is_read ? "Marcar como no leida" : "Marcar como leida"
+                  item.is_read ? "Marcar como no leída" : "Marcar como leída"
                 }
               >
                 <MaterialCommunityIcons
@@ -170,7 +177,7 @@ export default function NotificationItem({
                 activeOpacity={0.7}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 style={styles.actionBtn}
-                accessibilityLabel="Eliminar notificacion"
+                accessibilityLabel="Eliminar notificación"
               >
                 <MaterialCommunityIcons
                   name="trash-can-outline"

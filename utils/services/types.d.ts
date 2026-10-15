@@ -370,7 +370,9 @@ namespace App {
       | "inventory_adjustment"
       | "inventory_count_discrepancy"
       | "purchase_update"
-      | "task_event";
+      | "task_event"
+      | "transfer_update"
+      | "reminder";
 
     type NotificationSeverity = "info" | "success" | "warning" | "error" | "alert";
 
@@ -400,6 +402,8 @@ namespace App {
       is_active: boolean;
       is_customized: boolean;
       allowed_user_ids: number[] | null;
+      /** De dónde sale la configuración: valores por defecto, la empresa o la sucursal. */
+      source?: "default" | "company" | "location";
     }
 
     interface NotificationEligibleUser {
@@ -419,6 +423,8 @@ namespace App {
       | "adjustment_review"
       | "custom";
 
+    // "overdue" ya no lo escribe el backend (vencida = pendiente/en proceso
+    // con is_overdue); se conserva por registros anteriores.
     type TaskStatus =
       | "pending"
       | "in_progress"
@@ -427,6 +433,14 @@ namespace App {
       | "overdue";
 
     type TaskPriority = "low" | "medium" | "high" | "urgent";
+
+    /** Usuario resumido que el backend incrusta en la tarea. */
+    interface TaskUserRef {
+      id: number;
+      name: string;
+      email?: string;
+      avatar?: string | null;
+    }
 
     interface Task {
       id: number;
@@ -437,10 +451,12 @@ namespace App {
       type: TaskType;
       status: TaskStatus;
       priority: TaskPriority;
-      assigned_to?: number;
+      // Laravel serializa las relaciones assignedTo/assignedBy/completedBy en
+      // estas mismas llaves: con la relación cargada llega el usuario, no el id.
+      assigned_to?: number | TaskUserRef | null;
       assigned_users?: number[];
-      assigned_by?: number;
-      completed_by?: number;
+      assigned_by?: number | TaskUserRef | null;
+      completed_by?: number | TaskUserRef | null;
       due_date?: string;
       started_at?: string;
       completed_at?: string;
@@ -461,6 +477,7 @@ namespace App {
       completedBy?: User;
       location?: Location;
       related?: any;
+      comments?: TaskComment[];
     }
 
     interface Expense {

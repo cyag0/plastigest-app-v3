@@ -13,13 +13,16 @@ import palette from "@/constants/palette";
  */
 
 // ─── Familias de tipo ───────────────────────────────────────────────────────
-// Cada tipo (Compras, Tareas, Inventario, Alertas, Sistema) tiene cuatro
-// tonos: bg-soft para chips, bg-medium para el badge de icono, text para
-// tipografia y accent para la barra vertical lateral de no-leidas.
+// Cada tipo (Compras, Tareas, Inventario, Transferencias, Recordatorios,
+// Alertas, Sistema) tiene cuatro tonos: bg-soft para chips, bg-medium para el
+// badge de icono, text para tipografia y accent para la barra vertical lateral
+// de no-leidas.
 export type NotificationTypeKey =
   | "purchase"
   | "task"
   | "inventory"
+  | "transfer"
+  | "reminder"
   | "alert"
   | "system";
 
@@ -41,18 +44,18 @@ export interface NotificationTypeTokens {
 export const NOTIFICATION_TYPES: Record<NotificationTypeKey, NotificationTypeTokens> = {
   purchase: {
     label: "Compra",
-    bgSoft: "#ECFDF5", // emerald-50
-    bgMedium: "#D1FAE5", // emerald-100
+    bgSoft: "#E4F0DA", // emerald-50
+    bgMedium: "#E4F0DA", // emerald-100
     text: "#047857", // emerald-700
-    accent: "#10B981", // emerald-500
+    accent: "#3F8A3A", // emerald-500
     icon: "truck-delivery-outline",
   },
   task: {
     label: "Tarea",
-    bgSoft: "#EFF6FF", // blue-50
-    bgMedium: "#DBEAFE", // blue-100
-    text: "#1D4ED8", // blue-700
-    accent: "#3B82F6", // blue-500
+    bgSoft: "#DFEDF0", // blue-50
+    bgMedium: "#DFEDF0", // blue-100
+    text: "#265B67", // blue-700
+    accent: "#2F6F7E", // blue-500
     icon: "checkbox-marked-circle-outline",
   },
   inventory: {
@@ -63,12 +66,28 @@ export const NOTIFICATION_TYPES: Record<NotificationTypeKey, NotificationTypeTok
     accent: "#F97316", // orange-500
     icon: "package-variant",
   },
+  transfer: {
+    label: "Transferencia",
+    bgSoft: "#ECFEFF", // cyan-50
+    bgMedium: "#CFFAFE", // cyan-100
+    text: "#0E7490", // cyan-700
+    accent: "#06B6D4", // cyan-500
+    icon: "swap-horizontal",
+  },
+  reminder: {
+    label: "Recordatorio",
+    bgSoft: "#FEFCE8", // yellow-50
+    bgMedium: "#FEF9C3", // yellow-100
+    text: "#A16207", // yellow-700
+    accent: "#EAB308", // yellow-500
+    icon: "calendar-clock",
+  },
   alert: {
     label: "Alerta",
-    bgSoft: "#FEF2F2", // red-50
-    bgMedium: "#FEE2E2", // red-100
-    text: "#B91C1C", // red-700
-    accent: "#EF4444", // red-500
+    bgSoft: "#F8E2DC", // red-50
+    bgMedium: "#F8E2DC", // red-100
+    text: "#9E3624", // red-700
+    accent: "#B9412C", // red-500
     icon: "alert-circle-outline",
   },
   system: {
@@ -84,7 +103,12 @@ export const NOTIFICATION_TYPES: Record<NotificationTypeKey, NotificationTypeTok
 // ─── Estados (badges pequenos) ─────────────────────────────────────────────
 // Los estados se muestran como pills al pie de cada tarjeta. Cada uno tiene
 // su propia combinacion de fondo + texto para que se escaneen rapido.
-export type NotificationStatusKey = "new" | "read" | "pending" | "overdue";
+export type NotificationStatusKey =
+  | "new"
+  | "read"
+  | "pending"
+  | "due_soon"
+  | "overdue";
 
 export interface NotificationStatusTokens {
   label: string;
@@ -101,22 +125,28 @@ export const NOTIFICATION_STATUSES: Record<NotificationStatusKey, NotificationSt
     dotColor: "#4F46E5",
   },
   read: {
-    label: "Leida",
-    bg: "#F3F4F6", // gray-100
-    text: "#6B7280", // gray-500
-    dotColor: "#9CA3AF", // gray-400
+    label: "Leída",
+    bg: "#F0EDE4", // gray-100
+    text: "#6E6B5E", // gray-500
+    dotColor: "#8F8B7D", // gray-400
   },
   pending: {
     label: "Pendiente",
-    bg: "#FEF3C7", // amber-100
-    text: "#B45309", // amber-700
-    dotColor: "#D97706", // amber-600
+    bg: "#FAEED6", // amber-100
+    text: "#9A6210", // amber-700
+    dotColor: "#C47F12", // amber-600
+  },
+  due_soon: {
+    label: "Por vencer",
+    bg: "#FAEED6", // amber-100
+    text: "#9A6210", // amber-700
+    dotColor: "#C47F12", // amber-600
   },
   overdue: {
     label: "Vencida",
-    bg: "#FEE2E2", // red-100
-    text: "#B91C1C", // red-700
-    dotColor: "#DC2626", // red-600
+    bg: "#F8E2DC", // red-100
+    text: "#9E3624", // red-700
+    dotColor: "#B9412C", // red-600
   },
 };
 
@@ -127,14 +157,14 @@ export const NOTIFICATION_STATUSES: Record<NotificationStatusKey, NotificationSt
 export const NOTIFICATION_NEUTRAL = {
   background: "#FFFFFF",
   surface: "#FFFFFF",
-  surfaceMuted: "#F9FAFB", // gray-50 — fondo de hover / no-leida ligera
-  border: "#E5E7EB", // gray-200
-  borderSubtle: "#F3F4F6", // gray-100
-  textPrimary: "#111827", // gray-900
-  textSecondary: "#6B7280", // gray-500
-  textTertiary: "#9CA3AF", // gray-400
-  hover: "#F3F4F6", // gray-100 — fondo de hover en cards
-  unreadBg: "#F8FAFC", // slate-50 — fondo resaltado para no-leidas
+  surfaceMuted: "#F8F6F1", // gray-50 — fondo de hover / no-leida ligera
+  border: "#E6E1D5", // gray-200
+  borderSubtle: "#F0EDE4", // gray-100
+  textPrimary: "#1F241B", // gray-900
+  textSecondary: "#6E6B5E", // gray-500
+  textTertiary: "#8F8B7D", // gray-400
+  hover: "#F0EDE4", // gray-100 — fondo de hover en cards
+  unreadBg: "#F6F4EE", // slate-50 — fondo resaltado para no-leidas
   primary: palette.primary, // hereda el verde matcha de la app
   primaryText: palette.primary,
   onPrimary: "#FFFFFF",
@@ -171,7 +201,7 @@ export const NOTIFICATION_LAYOUT = {
 // amplia y otra mas cerrada que da el efecto de "flotar" sobre la pagina.
 // En iOS se renderiza nativamente; en Android la elevation se aproxima.
 export const NOTIFICATION_SHADOW = {
-  shadowColor: "#0F172A", // slate-900 con tinte frio
+  shadowColor: "#1F241B", // slate-900 con tinte frio
   shadowOffset: { width: 0, height: 12 },
   shadowOpacity: 0.12,
   shadowRadius: 32,

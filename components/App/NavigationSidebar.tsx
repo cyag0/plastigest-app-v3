@@ -450,8 +450,6 @@ export default function NavigationSidebar({
               collapsed={collapsed}
             />
             {section.items.map((item) => {
-              const isHome = item.route === "/(tabs)/home";
-              const showBadge = isHome && unreadNotificationsCount > 0;
               return (
                 <SidebarItem
                   key={item.route}
@@ -459,11 +457,6 @@ export default function NavigationSidebar({
                   label={item.label}
                   active={isActive(item.route)}
                   collapsed={collapsed}
-                  badge={
-                    showBadge
-                      ? { value: unreadNotificationsCount, variant: "error" }
-                      : undefined
-                  }
                   onPress={() => handleNavigation(item.route)}
                 />
               );
@@ -511,6 +504,8 @@ export default function NavigationSidebar({
             <NotificationBell
               iconColor={iconSecondary}
               badgeSize="medium"
+              showBadge={false}
+              popover={false}
             />
             <Text style={styles.footerLabel}>Notificaciones</Text>
             {unreadNotificationsCount > 0 && (

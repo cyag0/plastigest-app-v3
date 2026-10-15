@@ -1,6 +1,7 @@
 import palette from "@/constants/palette";
 
-export type TaskStatusFilter = "all" | App.Entities.TaskStatus;
+// "open" = por hacer (pendientes + en proceso, incluidas las vencidas).
+export type TaskStatusFilter = "all" | "open" | App.Entities.TaskStatus;
 export type TaskPriorityFilter = "all" | App.Entities.TaskPriority;
 export type TaskTypeFilter = "all" | App.Entities.TaskType;
 
@@ -137,7 +138,7 @@ export function getTaskTypeConfig(type: App.Entities.TaskType) {
       };
     case "stock_check":
       return {
-        label: "Verificacion de stock",
+        label: "Verificación de stock",
         shortLabel: "Stock",
         icon: "magnify-scan",
         color: palette.warning,
@@ -163,12 +164,16 @@ export function getTaskTypeConfig(type: App.Entities.TaskType) {
   }
 }
 
+// "Vencidas" no es un status: son las pendientes/en proceso con la fecha
+// límite pasada (is_overdue). El backend ya no cambia el status a "overdue".
 export const taskStatusOptions: { value: TaskStatusFilter; label: string; icon: string }[] = [
-  { value: "all", label: "Todas", icon: "format-list-checks" },
+  { value: "open", label: "Por hacer", icon: "clipboard-text-clock-outline" },
   { value: "pending", label: "Pendientes", icon: "clock-outline" },
   { value: "in_progress", label: "En proceso", icon: "progress-clock" },
   { value: "overdue", label: "Vencidas", icon: "calendar-alert" },
   { value: "completed", label: "Completadas", icon: "check-circle-outline" },
+  { value: "cancelled", label: "Canceladas", icon: "close-circle-outline" },
+  { value: "all", label: "Todas", icon: "format-list-checks" },
 ];
 
 export const taskPriorityOptions: { value: TaskPriorityFilter; label: string; icon: string }[] = [
@@ -215,18 +220,33 @@ export function getTaskDueDateInfo(task: App.Entities.Task) {
     return null;
   }
 
+  // Una tarea cerrada ya no "vence": antes salía "Completada" y a la vez
+  // "Vencida hace 62 días".
+  if (task.status === "completed" || task.status === "cancelled") {
+    return null;
+  }
+
   const dueDate = new Date(task.due_date);
   if (Number.isNaN(dueDate.getTime())) {
     return null;
   }
 
+  // Días de calendario (no bloques de 24 h): antes una tarea que vencía hoy
+  // a las 18:00 salía "Vence mañana".
   const now = new Date();
-  const diffTime = dueDate.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const startOfDay = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diffDays = Math.round(
+    (startOfDay(dueDate) - startOfDay(now)) / (1000 * 60 * 60 * 24),
+  );
 
-  if (task.is_overdue || task.status === "overdue" || diffDays < 0) {
+  if (isTaskOverdue(task, now)) {
+    const daysLate = Math.max(0, -diffDays);
     return {
-      text: `Vencida hace ${Math.abs(diffDays)} dia(s)`,
+      text:
+        daysLate === 0
+          ? "Vencida hoy"
+          : `Vencida hace ${daysLate} ${daysLate === 1 ? "día" : "días"}`,
       color: palette.error,
       softBg: palette.error + "18",
       icon: "calendar-alert",
@@ -244,7 +264,7 @@ export function getTaskDueDateInfo(task: App.Entities.Task) {
 
   if (diffDays === 1) {
     return {
-      text: "Vence manana",
+      text: "Vence mañana",
       color: palette.warning,
       softBg: palette.warning + "24",
       icon: "calendar-clock",
@@ -253,7 +273,7 @@ export function getTaskDueDateInfo(task: App.Entities.Task) {
 
   if (diffDays <= 7) {
     return {
-      text: `Vence en ${diffDays} dias`,
+      text: `Vence en ${diffDays} días`,
       color: palette.blue,
       softBg: palette.blue + "18",
       icon: "calendar-clock",
@@ -270,4 +290,118 @@ export function getTaskDueDateInfo(task: App.Entities.Task) {
 
 export function isTaskActionable(task: App.Entities.Task) {
   return task.status !== "completed" && task.status !== "cancelled";
+}
+
+/** Abierta = pendiente o en proceso (o el status "overdue" anterior). */
+export const isTaskOpen = isTaskActionable;
+
+/**
+ * Vencida: abierta y con la fecha límite pasada. El backend lo manda en
+ * is_overdue; el status "overdue" solo queda en registros anteriores.
+ */
+export function isTaskOverdue(task: App.Entities.Task, now: Date = new Date()) {
+  if (!isTaskOpen(task)) return false;
+  if (task.is_overdue || task.status === "overdue") return true;
+  if (!task.due_date) return false;
+  const due = new Date(task.due_date);
+  return !Number.isNaN(due.getTime()) && due.getTime() < now.getTime();
+}
+
+/** El backend solo deja iniciar tareas en status "pending". */
+export function canStartTask(task: App.Entities.Task) {
+  return task.status === "pending";
+}
+
+/**
+ * Usuario incrustado en la tarea. Laravel serializa las relaciones
+ * assignedTo/assignedBy/completedBy en assigned_to/assigned_by/completed_by
+ * (el objeto reemplaza al id); se acepta también la forma camelCase.
+ */
+export function getTaskUser(
+  task: App.Entities.Task,
+  key: "assigned_to" | "assigned_by" | "completed_by",
+): App.Entities.TaskUserRef | null {
+  const value = task[key];
+  if (value && typeof value === "object" && "name" in value) return value;
+  const camel = {
+    assigned_to: task.assignedTo,
+    assigned_by: task.assignedBy,
+    completed_by: task.completedBy,
+  }[key];
+  return camel ? { id: camel.id, name: camel.name, email: camel.email } : null;
+}
+
+/**
+ * Qué puede hacer el usuario con la tarea (misma regla que el backend,
+ * TaskController::canWorkOn): con tasks_update, todo; quien la tiene asignada
+ * o quien la creó puede iniciarla, completarla y comentarla; cancelarla, solo
+ * tasks_update o quien la creó.
+ */
+export function getTaskPermissions(
+  task: App.Entities.Task,
+  userId: number | null | undefined,
+  hasTasksUpdate: boolean,
+): { canAct: boolean; canCancel: boolean } {
+  if (hasTasksUpdate) return { canAct: true, canCancel: true };
+  const isCreator = !!userId && getTaskUser(task, "assigned_by")?.id === userId;
+  const isAssignee = !!userId && getTaskUser(task, "assigned_to")?.id === userId;
+  return { canAct: isCreator || isAssignee, canCancel: isCreator };
+}
+
+export const TASK_ACTION_MESSAGES: Record<
+  "start" | "complete" | "cancel",
+  { success: string; error: string }
+> = {
+  start: { success: "Tarea iniciada", error: "No se pudo iniciar la tarea" },
+  complete: { success: "Tarea completada", error: "No se pudo completar la tarea" },
+  cancel: { success: "Tarea cancelada", error: "No se pudo cancelar la tarea" },
+};
+
+/** Mensaje del backend (403 sin permiso, 400 estado inválido…) o el genérico. */
+export function getTaskErrorMessage(error: any, fallback: string) {
+  const message = error?.response?.data?.message;
+  return typeof message === "string" && message.trim() ? message : fallback;
+}
+
+/**
+ * Une la tarea que devuelve change-status con la que ya se mostraba: esa
+ * respuesta no trae comentarios ni el registro relacionado, y antes el
+ * detalle se quedaba "Sin comentarios" después de iniciar o completar.
+ */
+export function mergeUpdatedTask(
+  current: App.Entities.Task,
+  updated: Partial<App.Entities.Task> | null | undefined,
+): App.Entities.Task {
+  if (!updated?.id) return current;
+  return {
+    ...current,
+    ...updated,
+    comments: updated.comments ?? current.comments,
+    related: updated.related ?? current.related,
+    location: updated.location ?? current.location,
+  };
+}
+
+/** Registro que originó la tarea (compra, transferencia, conteo…). */
+export function getTaskRelatedLink(
+  task: App.Entities.Task,
+): { route: string; label: string } | null {
+  const id = task.related_id;
+  if (!id || !task.related_type) return null;
+  const model = task.related_type.split("\\").pop();
+  switch (model) {
+    case "PurchaseV2":
+      return { route: `/(tabs)/home/purchases/${id}`, label: "Ver compra" };
+    case "InventoryTransfer":
+      return { route: `/(tabs)/home/transfers/${id}`, label: "Ver transferencia" };
+    case "InventoryCount":
+      return {
+        route: `/(tabs)/inventory/weekly-inventory/${id}`,
+        label: "Ver conteo",
+      };
+    case "InventoryAdjustment":
+      return { route: `/(tabs)/home/adjustment/${id}`, label: "Ver ajuste" };
+    default:
+      return null;
+  }
 }

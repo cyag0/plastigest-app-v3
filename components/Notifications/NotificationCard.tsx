@@ -1,6 +1,8 @@
 import NotificationBadge from "@/components/Notifications/NotificationBadge";
 import {
+  eventTypeToTypeKey,
   formatRelativeShort,
+  getNotificationIcon,
   getStatusTokens,
   getTypeTokens,
   resolveNotificationStatus,
@@ -69,10 +71,11 @@ export default function NotificationCard({
   compact = false,
 }: NotificationCardProps) {
   const resolvedType: NotificationTypeKey =
-    typeKey ?? defaultTypeKey(notification);
+    typeKey ?? eventTypeToTypeKey(notification.event_type);
   const resolvedStatus = status ?? resolveNotificationStatus(notification);
   const typeTokens = getTypeTokens(resolvedType);
   const statusTokens = getStatusTokens(resolvedStatus);
+  const icon = getNotificationIcon(notification.event_type, notification.data);
 
   // Fondo animado: depende de hover (web), press y estado leido/no leido.
   // Usamos un solo valor y lo interpolamos a un color concreto para
@@ -119,7 +122,7 @@ export default function NotificationCard({
       accessibilityRole="button"
       accessibilityLabel={`${typeTokens.label}: ${notification.title}`}
       accessibilityHint={
-        notification.is_read ? "Notificacion leida" : "Notificacion sin leer"
+        notification.is_read ? "Notificación leída" : "Notificación sin leer"
       }
       style={[
         styles.container,
@@ -149,7 +152,7 @@ export default function NotificationCard({
           ]}
         >
           <Icon
-            source={typeTokens.icon}
+            source={icon}
             size={18}
             color={typeTokens.text}
           />
@@ -232,8 +235,8 @@ export default function NotificationCard({
                   ]}
                   accessibilityLabel={
                     notification.is_read
-                      ? "Marcar como no leida"
-                      : "Marcar como leida"
+                      ? "Marcar como no leída"
+                      : "Marcar como leída"
                   }
                 >
                   <Icon
@@ -262,7 +265,7 @@ export default function NotificationCard({
                         : "transparent",
                     },
                   ]}
-                  accessibilityLabel="Eliminar notificacion"
+                  accessibilityLabel="Eliminar notificación"
                 >
                   <Icon
                     source="trash-can-outline"
@@ -277,28 +280,6 @@ export default function NotificationCard({
       </View>
     </AnimatedPressable>
   );
-}
-
-// Fallback por si el padre no pasa typeKey ni tenemos acceso al mapper
-// en linea (imports circulares). Se prefiere la version en presentation.
-function defaultTypeKey(n: App.Entities.Notification): NotificationTypeKey {
-  // El padre suele pasar typeKey ya resuelto. Este fallback solo actua
-  // como red de seguridad para casos en los que se monte la tarjeta
-  // directamente sin pasar por NotificationsPopover. Usamos cast porque
-  // event_type es un union estricto en el backend y queremos que
-  // cualquier valor desconocido caiga en "system".
-  const eventType = n.event_type as string;
-  if (eventType === "purchase_update") return "purchase";
-  if (eventType === "task_event") return "task";
-  if (
-    eventType === "low_stock" ||
-    eventType === "inventory_adjustment" ||
-    eventType === "inventory_count_discrepancy"
-  ) {
-    return "inventory";
-  }
-  if (eventType === "system_alert" || eventType === "alert") return "alert";
-  return "system";
 }
 
 const styles = StyleSheet.create({

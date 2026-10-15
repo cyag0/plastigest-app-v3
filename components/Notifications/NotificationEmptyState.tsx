@@ -21,7 +21,7 @@ export default function NotificationEmptyState() {
         />
       </View>
       <Text variant="titleSmall" style={styles.title}>
-        Estas al dia
+        Estás al día
       </Text>
       <Text variant="bodySmall" style={styles.description}>
         No tienes notificaciones nuevas. Te avisaremos cuando ocurra algo

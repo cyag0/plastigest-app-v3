@@ -26,7 +26,7 @@ export default function NotificationsLayout() {
       />
       <Stack.Screen
         name="[id]"
-        options={{ title: "Detalle de notificacion" }}
+        options={{ title: "Detalle de notificación" }}
       />
     </Stack>
   );

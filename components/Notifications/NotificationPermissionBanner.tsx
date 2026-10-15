@@ -2,8 +2,29 @@ import { useAuth } from "@/contexts/AuthContext";
 import palette from "@/constants/palette";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
-import { Button, Surface, Text } from "react-native-paper";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Button, Text } from "react-native-paper";
+
+// El aviso se puede cerrar; vuelve a salir después de una semana.
+const DISMISS_KEY = "notification_banner_dismissed_at";
+const DISMISS_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+
+function wasDismissedRecently(): boolean {
+  try {
+    const at = Number(globalThis.localStorage?.getItem(DISMISS_KEY));
+    return Number.isFinite(at) && at > 0 && Date.now() - at < DISMISS_FOR_MS;
+  } catch {
+    return false;
+  }
+}
+
+function rememberDismissal() {
+  try {
+    globalThis.localStorage?.setItem(DISMISS_KEY, String(Date.now()));
+  } catch {
+    // Sin almacenamiento (modo privado): sólo se oculta en esta visita.
+  }
+}
 
 /**
  * Banner que se muestra cuando el permiso de notificaciones push aun no ha
@@ -21,11 +42,13 @@ export default function NotificationPermissionBanner() {
     requestNotificationPermission,
   } = useAuth();
   const [requesting, setRequesting] = useState(false);
+  const [dismissed, setDismissed] = useState(wasDismissedRecently);
 
   // Solo mostramos banner en web (en native el sistema operativo se encarga)
   if (Platform.OS !== "web") return null;
   if (notificationPermission === "granted") return null;
   if (notificationPermission === "unsupported") return null;
+  if (dismissed) return null;
 
   const handleRequest = async () => {
     if (requesting) return;
@@ -37,40 +60,46 @@ export default function NotificationPermissionBanner() {
     }
   };
 
+  const handleDismiss = () => {
+    rememberDismissal();
+    setDismissed(true);
+  };
+
   const isDenied = notificationPermission === "denied";
+  const accent = isDenied ? palette.warning : palette.primary;
 
   return (
-    <Surface
+    <View
       style={[
         styles.container,
-        { backgroundColor: isDenied ? palette.error : palette.primary },
+        {
+          backgroundColor: isDenied ? palette.warningSoft : palette.primarySoft,
+          borderColor: accent + "55",
+        },
       ]}
-      elevation={2}
     >
-      <View style={styles.iconContainer}>
-        <MaterialCommunityIcons
-          name={isDenied ? "bell-off-outline" : "bell-ring-outline"}
-          size={24}
-          color="#fff"
-        />
-      </View>
+      <MaterialCommunityIcons
+        name={isDenied ? "bell-off-outline" : "bell-ring-outline"}
+        size={22}
+        color={isDenied ? "#9A6210" : palette.primary}
+      />
 
       <View style={styles.textContainer}>
         <Text variant="titleSmall" style={styles.title}>
-          {isDenied ? "Notificaciones bloqueadas" : "Recibe notificaciones"}
+          {isDenied ? "Notificaciones desactivadas" : "Activa las notificaciones"}
         </Text>
         <Text variant="bodySmall" style={styles.description}>
           {isDenied
-            ? "Tu navegador esta bloqueando las notificaciones. Cambialo desde el icono de candado en la barra de direcciones."
-            : "Te avisaremos al instante sobre tareas, stock bajo, ventas y mas."}
+            ? "Para recibir avisos de tareas y stock bajo, permítelas desde el ícono del candado en la barra de direcciones."
+            : "Te avisaremos al instante de tareas, stock bajo, compras y transferencias."}
         </Text>
       </View>
 
       {!isDenied && (
         <Button
           mode="contained"
-          buttonColor="#fff"
-          textColor={palette.primary}
+          buttonColor={palette.primary}
+          textColor="#fff"
           onPress={handleRequest}
           loading={requesting}
           disabled={requesting}
@@ -79,7 +108,17 @@ export default function NotificationPermissionBanner() {
           Activar
         </Button>
       )}
-    </Surface>
+
+      <Pressable
+        onPress={handleDismiss}
+        accessibilityRole="button"
+        accessibilityLabel="Cerrar aviso"
+        hitSlop={8}
+        style={styles.close}
+      >
+        <MaterialCommunityIcons name="close" size={18} color={palette.textSecondary} />
+      </Pressable>
+    </View>
   );
 }
 
@@ -87,29 +126,29 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
-    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
     gap: 12,
-  },
-  iconContainer: {
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
   },
   textContainer: {
     flex: 1,
+    minWidth: 0,
   },
   title: {
-    color: "#fff",
+    color: palette.text,
     fontWeight: "600",
   },
   description: {
-    color: "#fff",
-    opacity: 0.9,
+    color: palette.textSecondary,
     marginTop: 2,
+  },
+  close: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

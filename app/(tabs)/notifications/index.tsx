@@ -7,8 +7,11 @@ import KpiCard from "@/components/Dashboard/KpiCard";
 import NotificationDetailContent from "@/components/Notifications/NotificationDetailContent";
 import NotificationItem from "@/components/Notifications/NotificationItem";
 import {
+  getNotificationLink,
+  notificationDetailRoute,
+} from "@/components/Notifications/notificationLinks";
+import {
   getNotificationEventConfig,
-  getNotificationSeverityConfig,
   notificationEventOptions,
 } from "@/components/Notifications/notificationPresentation";
 import palette from "@/constants/palette";
@@ -18,8 +21,9 @@ import { useAlerts } from "@/hooks/useAlerts";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import services from "@/utils/services";
 import { useFocusEffect, useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   Platform,
@@ -103,17 +107,33 @@ function FilterChip({
   );
 }
 
+// Página de la bandeja: antes se pedía la bandeja completa (all) en cada
+// foco y después de cada acción.
+const PAGE_SIZE = 30;
+
+function mergeById(
+  current: App.Entities.Notification[],
+  next: App.Entities.Notification[],
+) {
+  const seen = new Set(current.map((item) => item.id));
+  return [...current, ...next.filter((item) => !seen.has(item.id))];
+}
+
 export default function NotificationsScreen() {
   const router = useRouter();
   const alerts = useAlerts();
-  const { loadUnreadNotificationsCount } = useAuth();
-  const { width, height } = useWindowDimensions();
+  const { loadUnreadNotificationsCount, unreadNotificationsCount } = useAuth();
+  const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === "web" && width >= 900;
 
   const [notifications, setNotifications] = useState<
     App.Entities.Notification[]
   >([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [readFilter, setReadFilter] = useState<ReadFilter>("all");
   const [eventFilter, setEventFilter] = useState<EventFilter>("all");
@@ -123,33 +143,79 @@ export default function NotificationsScreen() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
-  const loadNotifications = useCallback(async () => {
-    try {
-      const params: Record<string, string | boolean> = { all: true };
-      if (readFilter === "unread") params.read = "false";
-      if (readFilter === "read") params.read = "true";
-      if (eventFilter !== "all") params.event_type = eventFilter;
+  // Descarta respuestas viejas si cambian los filtros a media carga.
+  const requestIdRef = useRef(0);
+  const focusedRef = useRef(false);
 
-      const response = await services.notifications.index(params);
-      const data = Array.isArray(response.data)
-        ? response.data
-        : response.data?.data || [];
-      setNotifications(data);
-    } catch (error: any) {
-      alerts.error(
-        error.response?.data?.message || "Error al cargar las notificaciones",
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [alerts, eventFilter, readFilter]);
+  const loadNotifications = useCallback(
+    async (pageToLoad = 1) => {
+      const requestId = ++requestIdRef.current;
+      try {
+        if (pageToLoad > 1) setLoadingMore(true);
+        const params: Record<string, string | number> = {
+          per_page: PAGE_SIZE,
+          page: pageToLoad,
+        };
+        if (readFilter === "unread") params.read = "false";
+        if (readFilter === "read") params.read = "true";
+        if (eventFilter !== "all") params.event_type = eventFilter;
+
+        const response = await services.notifications.index(params);
+        if (requestId !== requestIdRef.current) return;
+        const body = response.data as any;
+        const items: App.Entities.Notification[] = Array.isArray(body)
+          ? body
+          : body?.data || [];
+        const meta = body?.meta;
+        const lastPage = Number(meta?.last_page ?? pageToLoad);
+
+        setNotifications((current) =>
+          pageToLoad > 1 ? mergeById(current, items) : items,
+        );
+        setTotal(Number(meta?.total ?? items.length));
+        setPage(pageToLoad);
+        setHasMore(pageToLoad < lastPage);
+      } catch (error: any) {
+        if (requestId !== requestIdRef.current) return;
+        alerts.error(
+          error.response?.data?.message || "Error al cargar las notificaciones",
+        );
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+          setLoadingMore(false);
+        }
+      }
+    },
+    [alerts, eventFilter, readFilter],
+  );
 
   useFocusEffect(
     useCallback(() => {
-      void loadNotifications();
+      focusedRef.current = true;
+      void loadNotifications(1);
+      return () => {
+        focusedRef.current = false;
+      };
     }, [loadNotifications]),
   );
+
+  // Llegó algo nuevo (push recibido o el refresco periódico del contador)
+  // con la bandeja abierta: se recarga la primera página. Los cambios hechos
+  // aquí mismo (marcar como no leída) no recargan.
+  const lastUnreadRef = useRef(unreadNotificationsCount);
+  const ignoreUnreadIncreaseRef = useRef(false);
+  useEffect(() => {
+    const previous = lastUnreadRef.current;
+    lastUnreadRef.current = unreadNotificationsCount;
+    if (unreadNotificationsCount <= previous) return;
+    if (ignoreUnreadIncreaseRef.current) {
+      ignoreUnreadIncreaseRef.current = false;
+      return;
+    }
+    if (focusedRef.current) void loadNotifications(1);
+  }, [unreadNotificationsCount, loadNotifications]);
 
   const visibleNotifications = useMemo(
     () =>
@@ -159,143 +225,168 @@ export default function NotificationsScreen() {
     [notifications, search],
   );
 
-  const totalCount = notifications.length;
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.is_read).length,
-    [notifications],
-  );
-  const readCount = totalCount - unreadCount;
-  const criticalCount = useMemo(
-    () =>
-      notifications.filter((n) => {
-        const cfg = getNotificationSeverityConfig(n.severity);
-        return (
-          cfg.color === palette.error || cfg.color === palette.error
-        );
-      }).length,
-    [notifications],
-  );
+  const hasActiveFilters = readFilter !== "all" || eventFilter !== "all";
 
   const setNotificationReadState = useCallback(
     (id: number, isRead: boolean) => {
       const readAt = isRead ? new Date().toISOString() : null;
+      // Con el filtro "no leídas"/"leídas" la notificación sale de la vista.
+      const leavesView =
+        (readFilter === "unread" && isRead) || (readFilter === "read" && !isRead);
       setNotifications((current) =>
-        current.map((notification) =>
-          notification.id === id
-            ? { ...notification, is_read: isRead, read_at: readAt }
-            : notification,
-        ),
+        leavesView
+          ? current.filter((notification) => notification.id !== id)
+          : current.map((notification) =>
+              notification.id === id
+                ? { ...notification, is_read: isRead, read_at: readAt }
+                : notification,
+            ),
       );
+      if (leavesView) setTotal((value) => Math.max(0, value - 1));
       setSelectedNotification((current) =>
         current?.id === id
           ? { ...current, is_read: isRead, read_at: readAt }
           : current,
       );
     },
-    [],
+    [readFilter],
   );
 
   const markAsReadSilently = useCallback(
     async (notification: App.Entities.Notification) => {
       if (notification.is_read) return;
+      setNotificationReadState(notification.id, true);
       try {
         await services.notifications.markAsRead(notification.id);
-        setNotificationReadState(notification.id, true);
+      } catch (error) {
+        console.warn("No se pudo marcar como leída:", error);
+      } finally {
         loadUnreadNotificationsCount();
-        void loadNotifications();
-      } catch {
-        alerts.error("Error al marcar la notificacion como leida");
       }
     },
-    [
-      alerts,
-      loadNotifications,
-      loadUnreadNotificationsCount,
-      setNotificationReadState,
-    ],
+    [loadUnreadNotificationsCount, setNotificationReadState],
   );
 
   const onRefresh = () => {
     setRefreshing(true);
-    void loadNotifications();
+    void loadNotifications(1);
+    loadUnreadNotificationsCount();
   };
 
+  const loadMore = () => {
+    if (!hasMore || loadingMore || loading) return;
+    void loadNotifications(page + 1);
+  };
+
+  // Abre el registro relacionado (tarea, compra, transferencia…) igual que
+  // la campana y el push; sin id relacionado, el detalle de la notificación.
   const handleOpenNotification = (
     notification: App.Entities.Notification,
   ) => {
+    const target = getNotificationLink(
+      notification.event_type,
+      notification.data,
+    );
+    void markAsReadSilently(notification);
+    if (target) {
+      router.push(target.route as any);
+      return;
+    }
     if (isDesktop) {
       setSelectedNotification(notification);
       setDetailVisible(true);
-      void markAsReadSilently(notification);
       return;
     }
-    router.push(`/(tabs)/notifications/${notification.id}` as any);
+    router.push(notificationDetailRoute(notification.id) as any);
+  };
+
+  const openRelatedFromDetail = (route: string) => {
+    setDetailVisible(false);
+    setSelectedNotification(null);
+    router.push(route as any);
   };
 
   const handleMarkAsRead = async (id: number, isRead: boolean) => {
+    setNotificationReadState(id, !isRead);
     try {
       if (isRead) {
+        ignoreUnreadIncreaseRef.current = true;
         await services.notifications.markAsUnread(id);
-        alerts.success("Marcada como no leida");
-        setNotificationReadState(id, false);
+        alerts.success("Marcada como no leída");
       } else {
         await services.notifications.markAsRead(id);
-        alerts.success("Marcada como leida");
-        setNotificationReadState(id, true);
+        alerts.success("Marcada como leída");
       }
-      loadUnreadNotificationsCount();
-      void loadNotifications();
     } catch {
-      alerts.error("Error al actualizar la notificacion");
+      ignoreUnreadIncreaseRef.current = false;
+      alerts.error("Error al actualizar la notificación");
+      void loadNotifications(1);
+    } finally {
+      loadUnreadNotificationsCount();
     }
   };
 
   const handleMarkAllAsRead = async () => {
     const confirmed = await alerts.confirm(
-      "Marcar todas las notificaciones como leidas?",
+      "¿Marcar todas las notificaciones como leídas?",
       {
         title: "Confirmar",
-        okText: "Si",
+        okText: "Sí",
         cancelText: "Cancelar",
       },
     );
     if (!confirmed) return;
     try {
       await services.notifications.markAllAsRead();
-      alerts.success("Todas las notificaciones marcadas como leidas");
-      loadUnreadNotificationsCount();
-      void loadNotifications();
+      alerts.success("Todas las notificaciones marcadas como leídas");
+      const readAt = new Date().toISOString();
+      if (readFilter === "unread") {
+        setNotifications([]);
+        setTotal(0);
+        setHasMore(false);
+      } else {
+        setNotifications((current) =>
+          current.map((notification) => ({
+            ...notification,
+            is_read: true,
+            read_at: notification.read_at ?? readAt,
+          })),
+        );
+      }
     } catch {
-      alerts.error("Error al marcar todas como leidas");
+      alerts.error("Error al marcar todas como leídas");
+    } finally {
+      loadUnreadNotificationsCount();
     }
   };
 
   const handleDelete = async (id: number) => {
-    const confirmed = await alerts.confirm("Eliminar esta notificacion?", {
-      title: "Confirmar eliminacion",
+    const confirmed = await alerts.confirm("¿Eliminar esta notificación?", {
+      title: "Confirmar eliminación",
       okText: "Eliminar",
       cancelText: "Cancelar",
     });
     if (!confirmed) return;
     try {
       await services.notifications.destroy(id);
-      alerts.success("Notificacion eliminada");
+      alerts.success("Notificación eliminada");
       setNotifications((current) =>
         current.filter((notification) => notification.id !== id),
       );
+      setTotal((value) => Math.max(0, value - 1));
       if (selectedNotification?.id === id) {
         setDetailVisible(false);
         setSelectedNotification(null);
       }
-      loadUnreadNotificationsCount();
-      void loadNotifications();
     } catch {
-      alerts.error("Error al eliminar la notificacion");
+      alerts.error("Error al eliminar la notificación");
+    } finally {
+      loadUnreadNotificationsCount();
     }
   };
 
   const emptyMessage = useMemo(() => {
-    if (search.trim()) return "No hay resultados para esa busqueda.";
+    if (search.trim()) return "No hay resultados para esa búsqueda.";
     if (eventFilter !== "all") {
       const label = getNotificationEventConfig(
         eventFilter,
@@ -303,8 +394,8 @@ export default function NotificationsScreen() {
       return `No hay notificaciones de ${label} con estos filtros.`;
     }
     if (readFilter === "unread") return "No tienes notificaciones sin leer.";
-    if (readFilter === "read") return "No tienes notificaciones leidas.";
-    return "Las notificaciones apareceran aqui cuando el sistema genere eventos.";
+    if (readFilter === "read") return "No tienes notificaciones leídas.";
+    return "Las notificaciones aparecerán aquí cuando el sistema genere eventos.";
   }, [eventFilter, readFilter, search]);
 
   const activeFilterCount =
@@ -337,7 +428,7 @@ export default function NotificationsScreen() {
             Eventos del sistema y alertas operativas.
           </Text>
         </View>
-        {unreadCount > 0 && (
+        {unreadNotificationsCount > 0 && (
           <TouchableOpacity
             onPress={handleMarkAllAsRead}
             style={styles.markAllButton}
@@ -353,32 +444,22 @@ export default function NotificationsScreen() {
         )}
       </View>
 
-      {/* ============== KPI ============== */}
+      {/* ============== KPI ==============
+          "Sin leer" es el mismo número de la campana (toda la bandeja de la
+          empresa); "Total" respeta los filtros. Antes se contaban sobre la
+          lista ya filtrada y "Críticas" siempre daba 0. */}
       <View style={styles.kpiSection}>
         <View style={styles.kpiRow}>
           <KpiCard
-            icon="bell-outline"
-            label="Total"
-            value={String(totalCount)}
-          />
-          <KpiCard
             icon="email-mark-as-unread"
             label="Sin leer"
-            value={String(unreadCount)}
-            inverseDelta={unreadCount > 0}
-          />
-        </View>
-        <View style={styles.kpiRow}>
-          <KpiCard
-            icon="email-open-outline"
-            label="Leidas"
-            value={String(readCount)}
+            value={String(unreadNotificationsCount)}
+            inverseDelta={unreadNotificationsCount > 0}
           />
           <KpiCard
-            icon="alert-decagram-outline"
-            label="Criticas"
-            value={String(criticalCount)}
-            inverseDelta={criticalCount > 0}
+            icon="bell-outline"
+            label={hasActiveFilters ? "Con estos filtros" : "Total"}
+            value={String(total)}
           />
         </View>
       </View>
@@ -394,7 +475,7 @@ export default function NotificationsScreen() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Buscar notificacion..."
+            placeholder="Buscar notificación..."
             placeholderTextColor={palette.textMuted}
             style={styles.searchInput}
           />
@@ -455,7 +536,7 @@ export default function NotificationsScreen() {
               style={styles.activeChip}
             >
               <Text style={styles.activeChipText}>
-                {readFilter === "unread" ? "Solo no leidas" : "Solo leidas"}
+                {readFilter === "unread" ? "Solo no leídas" : "Solo leídas"}
               </Text>
               <MaterialCommunityIcons
                 name="close"
@@ -488,11 +569,13 @@ export default function NotificationsScreen() {
       <View style={styles.sectionHeader}>
         <SectionHeader
           title="Bandeja"
-          badge={`${visibleNotifications.length}`}
+          badge={
+            search.trim() ? `${visibleNotifications.length}` : `${total}`
+          }
           rightSlot={
-            unreadCount > 0 ? (
+            unreadNotificationsCount > 0 ? (
               <AppChip variant="error" size="sm">
-                {unreadCount} sin leer
+                {unreadNotificationsCount} sin leer
               </AppChip>
             ) : undefined
           }
@@ -540,6 +623,25 @@ export default function NotificationsScreen() {
                 colors={[palette.primary]}
               />
             }
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={
+              hasMore ? (
+                <View style={styles.loadMoreRow}>
+                  {loadingMore ? (
+                    <ActivityIndicator color={palette.primary} />
+                  ) : (
+                    <TouchableOpacity
+                      onPress={loadMore}
+                      activeOpacity={0.7}
+                      style={styles.loadMoreButton}
+                    >
+                      <Text style={styles.loadMoreText}>Cargar más</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : null
+            }
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <EmptyState
@@ -570,6 +672,7 @@ export default function NotificationsScreen() {
           notification={selectedNotification}
           onClose={() => setDetailVisible(false)}
           onDelete={() => handleDelete(selectedNotification.id)}
+          onOpenLink={openRelatedFromDetail}
         />
       )}
     </SafeAreaView>
@@ -639,12 +742,12 @@ function FilterModal({
                     },
                     {
                       v: "unread" as const,
-                      label: "No leidas",
+                      label: "No leídas",
                       icon: "email-mark-as-unread",
                     },
                     {
                       v: "read" as const,
-                      label: "Leidas",
+                      label: "Leídas",
                       icon: "email-open-outline",
                     },
                   ]
@@ -710,10 +813,12 @@ function DetailModal({
   notification,
   onClose,
   onDelete,
+  onOpenLink,
 }: {
   notification: App.Entities.Notification;
   onClose: () => void;
   onDelete: () => void;
+  onOpenLink: (route: string) => void;
 }) {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -725,7 +830,7 @@ function DetailModal({
         <TouchableOpacity activeOpacity={1} style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.modalEyebrow}>Detalle de notificacion</Text>
+              <Text style={styles.modalEyebrow}>Detalle de notificación</Text>
               <Text style={styles.modalTitle} numberOfLines={1}>
                 {notification.title}
               </Text>
@@ -747,6 +852,7 @@ function DetailModal({
               notification={notification}
               compact
               onDelete={onDelete}
+              onOpenLink={onOpenLink}
             />
           </View>
         </TouchableOpacity>
@@ -779,6 +885,9 @@ const styles = StyleSheet.create({
   // --- Header card ---
   headerCard: {
     flexDirection: "row",
+    // En pantallas angostas "Marcar todas" baja de renglón en vez de partir
+    // el título ("Notific-aciones").
+    flexWrap: "wrap",
     alignItems: "center",
     backgroundColor: palette.surface,
     marginHorizontal: tokens.spacing[5],
@@ -800,7 +909,7 @@ const styles = StyleSheet.create({
   },
   headerTextBlock: {
     flex: 1,
-    minWidth: 0,
+    minWidth: 190,
     gap: 2,
   },
   eyebrow: {
@@ -928,6 +1037,21 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     paddingTop: tokens.spacing[5],
+  },
+  loadMoreRow: {
+    alignItems: "center",
+    paddingVertical: tokens.spacing[4],
+  },
+  loadMoreButton: {
+    paddingHorizontal: tokens.spacing[4],
+    paddingVertical: tokens.spacing[2],
+    borderRadius: tokens.radius.md,
+    backgroundColor: palette.primarySoft,
+  },
+  loadMoreText: {
+    ...tokens.typography.bodySm,
+    color: palette.primary,
+    fontWeight: "600",
   },
 
   // --- Loading skeleton ---

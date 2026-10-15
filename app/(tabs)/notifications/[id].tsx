@@ -1,3 +1,4 @@
+import { goBack } from "@/utils/navigation";
 import NotificationDetailContent from "@/components/Notifications/NotificationDetailContent";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,7 +29,11 @@ export default function NotificationDetailScreen() {
     try {
       setLoading(true);
       const response = await services.notifications.show(notificationId);
-      const item: App.Entities.Notification = response.data?.data ?? response.data;
+      // El show devuelve la notificación sin envolver y ésta trae su propio
+      // campo `data` (el payload del evento): no confundirlo con un wrapper.
+      const body = response.data as any;
+      const item: App.Entities.Notification =
+        body && body.id !== undefined ? body : body?.data;
       setNotification(item);
 
       if (!item.is_read) {
@@ -36,13 +41,15 @@ export default function NotificationDetailScreen() {
         setNotification({ ...item, is_read: true, read_at: new Date().toISOString() });
         loadUnreadNotificationsCount();
       }
+      // loadUnreadNotificationsCount es estable (useCallback en AuthContext):
+      // refrescar el contador ya no vuelve a disparar esta carga.
     } catch {
-      alerts.error("Error al cargar la notificacion");
-      router.back();
+      alerts.error("Error al cargar la notificación");
+      goBack();
     } finally {
       setLoading(false);
     }
-  }, [alerts, loadUnreadNotificationsCount, notificationId, router]);
+  }, [alerts, loadUnreadNotificationsCount, notificationId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -55,8 +62,8 @@ export default function NotificationDetailScreen() {
       return;
     }
 
-    const confirmed = await alerts.confirm("Eliminar esta notificacion?", {
-      title: "Confirmar eliminacion",
+    const confirmed = await alerts.confirm("¿Eliminar esta notificación?", {
+      title: "Confirmar eliminación",
       okText: "Eliminar",
       cancelText: "Cancelar",
     });
@@ -67,11 +74,11 @@ export default function NotificationDetailScreen() {
 
     try {
       await services.notifications.destroy(notificationId);
-      alerts.success("Notificacion eliminada");
+      alerts.success("Notificación eliminada");
       loadUnreadNotificationsCount();
-      router.back();
+      goBack();
     } catch {
-      alerts.error("Error al eliminar la notificacion");
+      alerts.error("Error al eliminar la notificación");
     }
   };
 
@@ -81,7 +88,7 @@ export default function NotificationDetailScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={palette.primary} />
           <Text variant="bodyMedium" style={styles.loadingText}>
-            Cargando notificacion...
+            Cargando notificación...
           </Text>
         </View>
       </SafeAreaView>
@@ -92,8 +99,9 @@ export default function NotificationDetailScreen() {
     <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
       <NotificationDetailContent
         notification={notification}
-        onBack={() => router.back()}
+        onBack={() => goBack()}
         onDelete={handleDelete}
+        onOpenLink={(route) => router.push(route as any)}
       />
     </SafeAreaView>
   );

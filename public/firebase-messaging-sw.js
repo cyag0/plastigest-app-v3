@@ -39,7 +39,7 @@ messaging.onBackgroundMessage((payload) => {
   const title = data.title || payload.notification?.title || "GCStock";
   const options = {
     body: data.body || payload.notification?.body || "",
-    icon: "/favicon.ico",
+    icon: "/notification-icon.png",
     data: data,
   };
   self.registration.showNotification(title, options);
@@ -62,25 +62,97 @@ self.addEventListener("message", (event) => {
   }
 });
 
+// Id de entidad válido (en FCM los nulos llegan como "").
+function readId(data, key) {
+  const value = data && data[key] != null ? String(data[key]).trim() : "";
+  return /^\d+$/.test(value) && Number(value) > 0 ? value : null;
+}
+
+// URL web a la que lleva cada aviso. Es la misma tabla que
+// components/Notifications/notificationLinks.ts (allá con los grupos
+// "(tabs)" de expo-router, que no aparecen en la URL): mantenerlas iguales.
+function routeForNotification(data) {
+  const type = (data && data.event_type) || "";
+  const id = (key) => readId(data, key);
+  let route = null;
+
+  switch (type) {
+    case "task_event":
+      route = id("task_id") && `/tasks/${id("task_id")}`;
+      break;
+    case "purchase_update":
+      route = id("purchase_id") && `/home/purchases/${id("purchase_id")}`;
+      break;
+    case "low_stock":
+      route = id("product_id") && `/inventory/products/${id("product_id")}`;
+      break;
+    case "inventory_adjustment":
+      route = id("adjustment_id")
+        ? `/home/adjustment/${id("adjustment_id")}`
+        : id("product_id") && `/inventory/products/${id("product_id")}`;
+      break;
+    case "inventory_count_discrepancy":
+      route =
+        id("inventory_count_id") &&
+        `/inventory/weekly-inventory/${id("inventory_count_id")}`;
+      break;
+    case "transfer_update":
+      route = id("transfer_id") && `/home/transfers/${id("transfer_id")}`;
+      break;
+    case "reminder":
+      route = "/home/reminders";
+      break;
+    default:
+      if (id("task_id")) route = `/tasks/${id("task_id")}`;
+      else if (id("transfer_id")) route = `/home/transfers/${id("transfer_id")}`;
+      else if (id("purchase_id")) route = `/home/purchases/${id("purchase_id")}`;
+      else if (id("inventory_count_id"))
+        route = `/inventory/weekly-inventory/${id("inventory_count_id")}`;
+      else if (id("adjustment_id")) route = `/home/adjustment/${id("adjustment_id")}`;
+      else if (id("product_id")) route = `/inventory/products/${id("product_id")}`;
+      else if (id("reminder_id")) route = "/home/reminders";
+  }
+
+  if (route) return route;
+  // Sin registro relacionado: el detalle del aviso o, si no, la bandeja.
+  return id("notification_id")
+    ? `/notifications/${id("notification_id")}`
+    : "/notifications";
+}
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const data = event.notification.data || {};
+  const route = routeForNotification(data);
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      const visibleClient = clients.find((client) => "focus" in client);
+      const windows = clients.filter((client) => "focus" in client);
+      const target =
+        windows.find((client) => client.focused) ||
+        windows.find((client) => client.visibilityState === "visible") ||
+        windows[0];
 
-      if (visibleClient) {
-        visibleClient.postMessage({
+      if (target) {
+        // La pestaña navega sin recargar (NavigationHandler) y marca el aviso
+        // como leído (notification_id).
+        target.postMessage({
           type: "PUSH_NOTIFICATION_OPENED",
           data,
+          url: route,
         });
-        return visibleClient.focus();
+        return target.focus();
       }
 
       if (self.clients.openWindow) {
-        return self.clients.openWindow("/");
+        // Sin pestaña abierta: se abre directo en la pantalla del aviso. La
+        // app lee notification_id de la URL para marcarlo como leído.
+        const notificationId = readId(data, "notification_id");
+        const url = notificationId
+          ? `${route}?notification_id=${notificationId}`
+          : route;
+        return self.clients.openWindow(url);
       }
 
       return undefined;

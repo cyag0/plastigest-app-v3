@@ -1,3 +1,4 @@
+import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
@@ -49,14 +50,7 @@ export default function RemindersIndex() {
     return "Pendiente";
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString + "T00:00:00");
-    return date.toLocaleDateString("es-MX", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
+  
 
   return (
     <PermissionGate permission="reminders_list">

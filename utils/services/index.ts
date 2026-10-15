@@ -568,10 +568,15 @@ const Services = {
       return response.data;
     },
   },
+  /**
+   * Preferencias de notificación de la empresa o, con scope "location", de la
+   * sucursal actual (hereda las de la empresa hasta que se personaliza).
+   */
   notificationPreferences: {
-    async index() {
+    async index(scope?: "location") {
       const response = await axiosClient.get(
         "/auth/admin/notification-preferences",
+        { params: scope ? { scope } : undefined },
       );
       return response.data;
     },
@@ -581,16 +586,30 @@ const Services = {
         Pick<App.Entities.NotificationPreference, "channel_db" | "channel_email" | "channel_push" | "is_active"> &
         { allowed_user_ids: number[] | null }
       >,
+      scope?: "location",
     ) {
+      // JSON, no multipart (el default del cliente): PHP no lee cuerpos
+      // multipart en PATCH, así que el backend recibía la petición vacía y
+      // guardaba los valores por defecto de la tabla en vez del cambio (y
+      // allowed_user_ids null no se puede mandar como form-data).
       const response = await axiosClient.patch(
         `/auth/admin/notification-preferences/${eventType}`,
         data,
+        { headers: { "Content-Type": "application/json" }, params: scope ? { scope } : undefined },
+      );
+      return response.data;
+    },
+    /** Quita la configuración propia del aviso: la sucursal vuelve a la de la empresa. */
+    async restore(eventType: App.Entities.NotificationEventType, scope?: "location") {
+      const response = await axiosClient.delete(
+        `/auth/admin/notification-preferences/${eventType}`,
+        { params: scope ? { scope } : undefined },
       );
       return response.data;
     },
     async eligibleUsers(
       eventType: App.Entities.NotificationEventType,
-      params?: { location_id?: number },
+      params?: { location_id?: number; scope?: "location" },
     ) {
       const response = await axiosClient.get(
         `/auth/admin/notification-preferences/${eventType}/eligible-users`,
@@ -598,9 +617,11 @@ const Services = {
       );
       return response.data;
     },
-    async reset() {
+    async reset(scope?: "location") {
       const response = await axiosClient.post(
         "/auth/admin/notification-preferences/reset",
+        undefined,
+        { params: scope ? { scope } : undefined },
       );
       return response.data;
     },

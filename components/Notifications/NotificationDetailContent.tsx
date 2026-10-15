@@ -1,7 +1,10 @@
 import NotificationBadge from "@/components/Notifications/NotificationBadge";
+import { getNotificationLink } from "@/components/Notifications/notificationLinks";
 import {
   eventTypeToTypeKey,
   formatNotificationDate,
+  getNotificationIcon,
+  getNotificationSubTypeLabel,
   getTypeTokens,
   resolveNotificationStatus,
 } from "@/components/Notifications/notificationPresentation";
@@ -21,39 +24,51 @@ function buildDataRows(
   data: Record<string, any>,
 ): DetailRow[] {
   const rows: DetailRow[] = [];
+  // En el push los nulos llegan como "": tampoco se muestran.
+  const add = (label: string, value: unknown, prefix = "") => {
+    if (value === undefined || value === null || value === "") return;
+    rows.push({ label, value: `${prefix}${value}` });
+  };
+  const subTypeLabel = getNotificationSubTypeLabel(eventType, data);
 
-  if (eventType === "low_stock") {
-    if (data.product) rows.push({ label: "Producto", value: String(data.product) });
-    if (data.location) rows.push({ label: "Sucursal", value: String(data.location) });
-    if (data.current_stock !== undefined) rows.push({ label: "Stock actual", value: String(data.current_stock) });
-    if (data.minimum_stock !== undefined) rows.push({ label: "Stock minimo", value: String(data.minimum_stock) });
-  } else if (eventType === "inventory_adjustment") {
-    if (data.product) rows.push({ label: "Producto", value: String(data.product) });
-    if (data.location) rows.push({ label: "Sucursal", value: String(data.location) });
-    if (data.adjustment_qty !== undefined) rows.push({ label: "Cantidad", value: String(data.adjustment_qty) });
-    if (data.new_stock !== undefined) rows.push({ label: "Nuevo stock", value: String(data.new_stock) });
-    if (data.reason) rows.push({ label: "Razon", value: String(data.reason) });
-    if (data.adjusted_by) rows.push({ label: "Realizado por", value: String(data.adjusted_by) });
-  } else if (eventType === "inventory_count_discrepancy") {
-    if (data.location) rows.push({ label: "Sucursal", value: String(data.location) });
-    if (data.discrepancies_count !== undefined) rows.push({ label: "Diferencias", value: String(data.discrepancies_count) });
-    if (data.inventory_count_id) rows.push({ label: "Conteo", value: `#${data.inventory_count_id}` });
-  } else if (eventType === "purchase_update") {
-    if (data.purchase_id) rows.push({ label: "Compra", value: `#${data.purchase_id}` });
-    if (data.supplier_name) rows.push({ label: "Proveedor", value: String(data.supplier_name) });
-    if (data.sub_type) rows.push({ label: "Estado", value: data.sub_type === "received" ? "Recibida" : "En transito" });
-  } else if (eventType === "task_event") {
-    if (data.task_id) rows.push({ label: "Tarea", value: `#${data.task_id}` });
-    if (data.actor_name) rows.push({ label: "Usuario", value: String(data.actor_name) });
-    if (data.sub_type) {
-      const subLabels: Record<string, string> = {
-        assigned: "Tarea asignada",
-        completed: "Tarea completada",
-        overdue: "Tarea vencida",
-        comment: "Nuevo comentario",
-      };
-      rows.push({ label: "Evento", value: subLabels[data.sub_type] ?? String(data.sub_type) });
-    }
+  switch (eventType) {
+    case "low_stock":
+      add("Producto", data.product);
+      add("Sucursal", data.location);
+      add("Stock actual", data.current_stock);
+      add("Stock mínimo", data.minimum_stock);
+      break;
+    case "inventory_adjustment":
+      add("Ajuste", data.adjustment_id, "#");
+      add("Producto", data.product);
+      add("Sucursal", data.location);
+      add("Cantidad", data.adjustment_qty);
+      add("Nuevo stock", data.new_stock);
+      add("Razón", data.reason);
+      add("Realizado por", data.adjusted_by);
+      break;
+    case "inventory_count_discrepancy":
+      add("Conteo", data.inventory_count_id, "#");
+      add("Sucursal", data.location);
+      add("Diferencias", data.discrepancies_count);
+      break;
+    case "purchase_update":
+      add("Compra", data.purchase_id, "#");
+      add("Proveedor", data.supplier_name);
+      add("Estado", subTypeLabel);
+      break;
+    case "transfer_update":
+      add("Transferencia", data.transfer_id, "#");
+      add("Estado", subTypeLabel);
+      break;
+    case "task_event":
+      add("Tarea", data.task_id, "#");
+      add("Evento", subTypeLabel ?? data.sub_type);
+      add("Usuario", data.actor_name);
+      break;
+    case "reminder":
+      add("Recordatorio", data.reminder_id, "#");
+      break;
   }
 
   return rows;
@@ -64,23 +79,33 @@ function buildDataRows(
  * (tokens neutros, blanco puro, badge de tipo a color y badge de estado)
  * para que la superficie se sienta limpia y consistente. Sin tarjetas
  * crema ni iconos decorativos en los encabezados de seccion.
+ *
+ * `onOpenLink` muestra el botón para abrir el registro relacionado (tarea,
+ * compra, transferencia…) cuando el payload trae su id; el padre navega
+ * (y cierra su modal si lo tiene).
  */
 export default function NotificationDetailContent({
   notification,
   onBack,
   onDelete,
+  onOpenLink,
   compact = false,
 }: {
   notification: App.Entities.Notification;
   onBack?: () => void;
   onDelete?: () => void;
+  onOpenLink?: (route: string) => void;
   compact?: boolean;
 }) {
   const typeTokens = getTypeTokens(eventTypeToTypeKey(notification.event_type));
+  const icon = getNotificationIcon(notification.event_type, notification.data);
   const status = resolveNotificationStatus(notification);
   const dataRows = notification.data
     ? buildDataRows(notification.event_type, notification.data)
     : [];
+  const relatedLink = onOpenLink
+    ? getNotificationLink(notification.event_type, notification.data)
+    : null;
 
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
@@ -94,7 +119,7 @@ export default function NotificationDetailContent({
         {/* Hero: badge de tipo, etiquetas de tipo/estado, titulo y fecha. */}
         <View style={styles.hero}>
           <View style={[styles.iconBadge, { backgroundColor: typeTokens.bgMedium }]}>
-            <Icon source={typeTokens.icon} size={22} color={typeTokens.text} />
+            <Icon source={icon} size={22} color={typeTokens.text} />
           </View>
 
           <View style={styles.heroText}>
@@ -125,7 +150,7 @@ export default function NotificationDetailContent({
             <Pressable
               onPress={onDelete}
               hitSlop={8}
-              accessibilityLabel="Eliminar notificacion"
+              accessibilityLabel="Eliminar notificación"
               style={({ pressed }) => [
                 styles.deleteButton,
                 pressed && styles.deleteButtonPressed,
@@ -147,6 +172,18 @@ export default function NotificationDetailContent({
           <Text style={styles.sectionLabel}>Mensaje</Text>
           <Text style={styles.message}>{notification.message}</Text>
         </View>
+
+        {relatedLink && onOpenLink && (
+          <Button
+            mode="contained"
+            icon="arrow-right-circle-outline"
+            onPress={() => onOpenLink(relatedLink.route)}
+            buttonColor={typeTokens.text}
+            style={styles.openButton}
+          >
+            {relatedLink.label}
+          </Button>
+        )}
 
         {/* Detalles */}
         {dataRows.length > 0 && (
@@ -331,6 +368,10 @@ const styles = StyleSheet.create({
   },
 
   // ── Acciones ──────────────────────────────────────────────────────────
+  openButton: {
+    alignSelf: "flex-start",
+    borderRadius: 10,
+  },
   bottomActions: {
     position: "absolute",
     bottom: 0,

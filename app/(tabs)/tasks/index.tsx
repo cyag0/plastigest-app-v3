@@ -2,28 +2,43 @@ import AppChip from "@/components/App/Chip";
 import EmptyState from "@/components/App/EmptyState";
 import SectionHeader from "@/components/App/SectionHeader";
 import KpiCard from "@/components/Dashboard/KpiCard";
-import TaskDetailContent from "@/components/Tasks/TaskDetailContent";
+import TaskDetailContent, {
+  type TaskAction,
+} from "@/components/Tasks/TaskDetailContent";
 import {
+  fetchMyOpenTasks,
+  fetchMyTasks,
+} from "@/components/Tasks/taskQueries";
+import {
+  canStartTask,
   getTaskDueDateInfo,
+  getTaskErrorMessage,
   getTaskPriorityConfig,
   getTaskStatusConfig,
   getTaskTypeConfig,
+  getTaskUser,
   isTaskActionable,
+  isTaskOverdue,
+  mergeUpdatedTask,
+  TASK_ACTION_MESSAGES,
   TaskPriorityFilter,
   taskPriorityOptions,
   TaskStatusFilter,
   taskStatusOptions,
   TaskTypeFilter,
   taskTypeOptions,
+  getTaskPermissions,
 } from "@/components/Tasks/taskPresentation";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import services from "@/utils/services";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Modal,
   Platform,
   RefreshControl,
@@ -36,8 +51,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
-type TaskAction = "start" | "complete" | "cancel";
 
 function FilterChip({
   selected,
@@ -84,18 +97,26 @@ function TaskRow({
   onPress,
   onStart,
   onComplete,
+  canAct,
+  pendingAction,
 }: {
   task: App.Entities.Task;
   onPress: () => void;
   onStart: () => void;
   onComplete: () => void;
+  canAct: boolean;
+  pendingAction: TaskAction | null;
 }) {
   const typeConfig = getTaskTypeConfig(task.type);
   const statusConfig = getTaskStatusConfig(task.status);
   const priorityConfig = getTaskPriorityConfig(task.priority);
   const dueDateInfo = getTaskDueDateInfo(task);
-  const canStart = task.status === "pending";
-  const canComplete = isTaskActionable(task);
+  const overdue = isTaskOverdue(task);
+  // Misma regla que el backend (getTaskPermissions): sin permiso los
+  // botones respondían 403.
+  const canComplete = canAct && isTaskActionable(task);
+  const canStart = canComplete && canStartTask(task);
+  const busy = pendingAction !== null;
 
   return (
     <TouchableOpacity
@@ -103,7 +124,7 @@ function TaskRow({
       onPress={onPress}
       style={[
         styles.taskRow,
-        task.is_overdue && {
+        overdue && {
           borderLeftWidth: 3,
           borderLeftColor: palette.error,
         },
@@ -151,7 +172,7 @@ function TaskRow({
           </AppChip>
           {dueDateInfo && (
             <AppChip
-              variant="default"
+              variant={overdue ? "error" : "default"}
               size="sm"
               icon={dueDateInfo.icon as any}
             >
@@ -167,14 +188,23 @@ function TaskRow({
                   e.stopPropagation();
                   onStart();
                 }}
+                disabled={busy}
                 activeOpacity={0.7}
-                style={[styles.quickAction, styles.quickActionOutline]}
+                style={[
+                  styles.quickAction,
+                  styles.quickActionOutline,
+                  busy && styles.quickActionDisabled,
+                ]}
               >
-                <MaterialCommunityIcons
-                  name="play-circle-outline"
-                  size={14}
-                  color={palette.info}
-                />
+                {pendingAction === "start" ? (
+                  <ActivityIndicator size="small" color={palette.info} />
+                ) : (
+                  <MaterialCommunityIcons
+                    name="play-circle-outline"
+                    size={14}
+                    color={palette.info}
+                  />
+                )}
                 <Text
                   style={[styles.quickActionText, { color: palette.info }]}
                 >
@@ -187,14 +217,23 @@ function TaskRow({
                 e.stopPropagation();
                 onComplete();
               }}
+              disabled={busy}
               activeOpacity={0.7}
-              style={[styles.quickAction, styles.quickActionPrimary]}
+              style={[
+                styles.quickAction,
+                styles.quickActionPrimary,
+                busy && styles.quickActionDisabled,
+              ]}
             >
-              <MaterialCommunityIcons
-                name="check-circle-outline"
-                size={14}
-                color={palette.textInverse}
-              />
+              {pendingAction === "complete" ? (
+                <ActivityIndicator size="small" color={palette.textInverse} />
+              ) : (
+                <MaterialCommunityIcons
+                  name="check-circle-outline"
+                  size={14}
+                  color={palette.textInverse}
+                />
+              )}
               <Text
                 style={[
                   styles.quickActionText,
@@ -211,17 +250,38 @@ function TaskRow({
   );
 }
 
+// Filtros que se resuelven con su propia consulta al backend; el resto
+// ("Por hacer", "Pendientes", "En proceso", "Vencidas") sale de las tareas
+// abiertas que ya se cargan para los indicadores.
+const SERVER_FILTERS: Partial<
+  Record<TaskStatusFilter, Record<string, string>>
+> = {
+  completed: { status: "completed", sort_by: "completed_at", sort_order: "desc" },
+  cancelled: { status: "cancelled", sort_by: "updated_at", sort_order: "desc" },
+  all: { sort_by: "created_at", sort_order: "desc" },
+};
+
 export default function TasksScreen() {
   const router = useRouter();
   const alerts = useAlerts();
+  const { hasPermission, user } = useAuth();
+  const hasTasksUpdate = hasPermission("tasks_update");
+  const permissionsFor = (task: App.Entities.Task) =>
+    getTaskPermissions(task, user?.id, hasTasksUpdate);
   const { width, height } = useWindowDimensions();
   const isDesktop = Platform.OS === "web" && width >= 900;
 
-  const [tasks, setTasks] = useState<App.Entities.Task[]>([]);
+  const [openTasks, setOpenTasks] = useState<App.Entities.Task[]>([]);
+  const [openTotals, setOpenTotals] = useState({
+    pending: 0,
+    inProgress: 0,
+    overdue: 0,
+  });
+  const [serverTasks, setServerTasks] = useState<App.Entities.Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>("open");
   const [priorityFilter, setPriorityFilter] = useState<TaskPriorityFilter>(
     "all",
   );
@@ -232,35 +292,38 @@ export default function TasksScreen() {
   const [selectedTaskLoading, setSelectedTaskLoading] = useState(false);
   const [detailVisible, setDetailVisible] = useState(false);
   const [filterModalVisible, setFilterModalVisible] = useState(false);
+  const [pending, setPending] = useState<{
+    taskId: number;
+    action: TaskAction;
+  } | null>(null);
+
+  const serverFilter = SERVER_FILTERS[statusFilter];
 
   const loadTasks = useCallback(async () => {
     try {
-      const params: Record<string, string | number> = {
-        assigned_to: "me",
-        sort_by: "due_date",
-        sort_order: "asc",
-        per_page: 100,
-      };
-      if (statusFilter !== "all") params.status = statusFilter;
-      if (priorityFilter !== "all") params.priority = priorityFilter;
-      if (typeFilter !== "all") params.type = typeFilter;
-
-      const response = await services.tasks.index(params);
-      const raw = response.data as any;
-      const data: App.Entities.Task[] = Array.isArray(raw)
-        ? raw
-        : Array.isArray(raw?.data)
-          ? raw.data
-          : [];
-      setTasks(data);
+      // Indicadores y vistas "por hacer" siempre sobre todas las tareas
+      // abiertas del usuario (antes se calculaban sobre la lista ya filtrada
+      // y con "Todas" se veían las 100 más antiguas, casi todas cerradas).
+      const [open, server] = await Promise.all([
+        fetchMyOpenTasks({ includeOverdue: true }),
+        serverFilter ? fetchMyTasks(serverFilter) : Promise.resolve(null),
+      ]);
+      setOpenTasks(open.items);
+      setOpenTotals({
+        pending: open.pendingTotal,
+        inProgress: open.inProgressTotal,
+        overdue:
+          open.overdueTotal ?? open.items.filter((t) => isTaskOverdue(t)).length,
+      });
+      setServerTasks(server?.items ?? []);
     } catch (error) {
       console.error("Error loading tasks:", error);
-      alerts.error("No se pudieron cargar las tareas");
+      alerts.error(getTaskErrorMessage(error, "No se pudieron cargar las tareas"));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [alerts, priorityFilter, statusFilter, typeFilter]);
+  }, [alerts, serverFilter]);
 
   // Recarga al volver del detalle: una tarea completada allá no debe seguir
   // apareciendo como pendiente aquí.
@@ -270,10 +333,28 @@ export default function TasksScreen() {
     }, [loadTasks]),
   );
 
+  const tasks = useMemo(() => {
+    switch (statusFilter) {
+      case "open":
+        return openTasks;
+      case "pending":
+      case "in_progress":
+        return openTasks.filter((task) => task.status === statusFilter);
+      case "overdue":
+        return openTasks.filter((task) => isTaskOverdue(task));
+      default:
+        return serverTasks;
+    }
+  }, [openTasks, serverTasks, statusFilter]);
+
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return tasks;
     return tasks.filter((task) => {
+      if (priorityFilter !== "all" && task.priority !== priorityFilter) {
+        return false;
+      }
+      if (typeFilter !== "all" && task.type !== typeFilter) return false;
+      if (!q) return true;
       const statusConfig = getTaskStatusConfig(task.status);
       const priorityConfig = getTaskPriorityConfig(task.priority);
       const typeConfig = getTaskTypeConfig(task.type);
@@ -284,22 +365,22 @@ export default function TasksScreen() {
         priorityConfig.label,
         typeConfig.label,
         task.location?.name,
-        task.assignedTo?.name,
+        getTaskUser(task, "assigned_by")?.name,
       ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [tasks, search]);
+  }, [tasks, search, priorityFilter, typeFilter]);
 
-  const pendingCount = tasks.filter((t) => t.status === "pending").length;
-  const inProgressCount = tasks.filter((t) => t.status === "in_progress")
-    .length;
-  const overdueCount = tasks.filter(
-    (t) => t.is_overdue || t.status === "overdue",
-  ).length;
-  const urgentCount = tasks.filter((t) => t.priority === "urgent").length;
+  // "Pendientes" = sin iniciar (status pending), como en el backend; las
+  // vencidas se cuentan también en su columna porque siguen pendientes o en
+  // proceso.
+  const pendingCount = openTotals.pending;
+  const inProgressCount = openTotals.inProgress;
+  const overdueCount = openTotals.overdue;
+  const urgentCount = openTasks.filter((t) => t.priority === "urgent").length;
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -315,7 +396,7 @@ export default function TasksScreen() {
       setSelectedTask(data as App.Entities.Task);
     } catch (error) {
       console.error("Error loading task detail:", error);
-      alerts.error("No se pudo abrir la tarea");
+      alerts.error(getTaskErrorMessage(error, "No se pudo abrir la tarea"));
     } finally {
       setSelectedTaskLoading(false);
     }
@@ -338,64 +419,73 @@ export default function TasksScreen() {
     task: App.Entities.Task,
     action: TaskAction,
   ) => {
+    if (pending) return;
+    if (action === "cancel") {
+      const confirmed = await alerts.confirm(
+        "La tarea quedará cancelada y ya no se podrá completar.",
+        { title: "¿Cancelar la tarea?", okText: "Cancelar tarea", cancelText: "Volver" },
+      );
+      if (!confirmed) return;
+    }
+
     try {
+      setPending({ taskId: task.id, action });
       const response = await services.tasks.changeStatus(task.id, action);
-      const raw = response.data as any;
-      const updatedTask = raw?.task ?? raw?.data ?? raw;
-      if (updatedTask?.id) {
-        setTasks((current) =>
-          current.map((item) =>
-            item.id === task.id ? { ...item, ...updatedTask } : item,
-          ),
-        );
-        if (selectedTask?.id === task.id) {
-          setSelectedTask({ ...selectedTask, ...updatedTask });
-        }
-      } else {
-        await loadTasks();
-        if (selectedTask?.id === task.id) {
-          await loadTaskDetail(task.id);
-        }
-      }
-      alerts.success("Tarea actualizada correctamente");
+      const updatedTask = response?.task || response?.data;
+      setSelectedTask((current) =>
+        current?.id === task.id ? mergeUpdatedTask(current, updatedTask) : current,
+      );
+      alerts.success(TASK_ACTION_MESSAGES[action].success);
     } catch (error) {
       console.error("Error changing task status:", error);
-      alerts.error("No se pudo actualizar la tarea");
+      alerts.error(getTaskErrorMessage(error, TASK_ACTION_MESSAGES[action].error));
+      if (selectedTask?.id === task.id) await loadTaskDetail(task.id);
+    } finally {
+      setPending(null);
+      // Los indicadores y la lista se recalculan con el estado real.
+      await loadTasks();
     }
   };
 
   const handleAddComment = async (comment: string) => {
-    if (!selectedTask) return;
+    if (!selectedTask) return false;
     try {
       await services.tasks.addComment(selectedTask.id, comment);
       await loadTaskDetail(selectedTask.id);
       alerts.success("Comentario agregado");
+      return true;
     } catch (error) {
       console.error("Error adding task comment:", error);
-      alerts.error("No se pudo agregar el comentario");
+      alerts.error(getTaskErrorMessage(error, "No se pudo agregar el comentario"));
+      return false;
     }
+  };
+
+  const openRelatedRoute = (route: string) => {
+    setDetailVisible(false);
+    router.push(route as any);
   };
 
   const resetFilters = () => {
     setSearch("");
-    setStatusFilter("all");
+    setStatusFilter("open");
     setPriorityFilter("all");
     setTypeFilter("all");
   };
 
   const hasActiveFilters =
     !!search ||
-    statusFilter !== "all" ||
+    statusFilter !== "open" ||
     priorityFilter !== "all" ||
     typeFilter !== "all";
 
   const activeFilterCount =
-    (statusFilter !== "all" ? 1 : 0) +
+    (statusFilter !== "open" ? 1 : 0) +
     (priorityFilter !== "all" ? 1 : 0) +
     (typeFilter !== "all" ? 1 : 0);
 
   const statusLabel =
-    statusFilter === "all"
+    statusFilter === "open"
       ? null
       : taskStatusOptions.find((o) => o.value === statusFilter)?.label;
   const priorityLabel =
@@ -408,7 +498,7 @@ export default function TasksScreen() {
       : taskTypeOptions.find((o) => o.value === typeFilter)?.label;
 
   const resetTaskFilters = () => {
-    setStatusFilter("all");
+    setStatusFilter("open");
     setPriorityFilter("all");
     setTypeFilter("all");
   };
@@ -627,8 +717,16 @@ export default function TasksScreen() {
               <EmptyState
                 compact
                 icon="clipboard-check-outline"
-                title="No hay tareas para estos filtros"
-                description="Ajusta la busqueda o cambia los filtros para ver mas resultados."
+                title={
+                  hasActiveFilters
+                    ? "No hay tareas para estos filtros"
+                    : "No tienes tareas por hacer"
+                }
+                description={
+                  hasActiveFilters
+                    ? "Ajusta la búsqueda o cambia los filtros para ver más resultados."
+                    : "Aquí aparecerán las tareas que te asignen."
+                }
                 actionLabel={
                   hasActiveFilters ? "Limpiar filtros" : undefined
                 }
@@ -644,6 +742,10 @@ export default function TasksScreen() {
                     onPress={() => handleOpenTask(task)}
                     onStart={() => handleTaskAction(task, "start")}
                     onComplete={() => handleTaskAction(task, "complete")}
+                    canAct={permissionsFor(task).canAct}
+                    pendingAction={
+                      pending?.taskId === task.id ? pending.action : null
+                    }
                   />
                 </View>
               ))}
@@ -671,7 +773,10 @@ export default function TasksScreen() {
           <View
             style={[
               styles.modalCard,
-              { maxHeight: Math.min(height - 80, 760) },
+              // Alto fijo (no solo maxHeight): el detalle usa flex:1 para su
+              // scroll y su barra de acciones; sin alto definido la barra
+              // (Iniciar/Completar) quedaba recortada fuera del modal.
+              { height: Math.min(height - 80, 760) },
             ]}
           >
             <View style={styles.modalHeader}>
@@ -714,6 +819,12 @@ export default function TasksScreen() {
                     handleTaskAction(selectedTask, action)
                   }
                   onAddComment={handleAddComment}
+                  onOpenRoute={openRelatedRoute}
+                  canAct={permissionsFor(selectedTask).canAct}
+                  canCancel={permissionsFor(selectedTask).canCancel}
+                  pendingAction={
+                    pending?.taskId === selectedTask.id ? pending.action : null
+                  }
                 />
               )}
             </View>
@@ -1157,6 +1268,9 @@ const styles = StyleSheet.create({
   quickActionPrimary: {
     backgroundColor: palette.success,
   },
+  quickActionDisabled: {
+    opacity: 0.6,
+  },
   quickActionText: {
     ...tokens.typography.caption,
     fontWeight: "600",
@@ -1245,6 +1359,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modalBody: {
+    flex: 1,
     overflow: "hidden",
   },
   modalLoading: {

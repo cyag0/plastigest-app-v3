@@ -24,40 +24,69 @@ const notificationFlows: {
   title: string;
   trigger: string;
   recipients: string;
+  /** Va a personas concretas (no a todos los que tienen un permiso). */
+  direct?: boolean;
   icon: string;
   color: string;
 }[] = [
   {
     event: "low_stock",
     title: "Stock bajo",
-    trigger: "Cuando un conteo o movimiento deja productos por debajo del minimo.",
-    recipients: "Usuarios operativos de inventario y compras segun preferencias activas.",
+    trigger: "Cuando un movimiento deja un producto por debajo de su stock mínimo en la sucursal.",
+    recipients: "Usuarios con permiso de inventario en esa sucursal (o los elegidos en Preferencias).",
     icon: "package-variant-remove",
     color: palette.error,
+  },
+  {
+    event: "inventory_adjustment",
+    title: "Ajuste de inventario",
+    trigger: "Cuando alguien registra un ajuste de existencias.",
+    recipients: "Usuarios con permiso de inventario en esa sucursal, excepto quien hizo el ajuste.",
+    icon: "tune-variant",
+    color: palette.warning,
   },
   {
     event: "inventory_count_discrepancy",
     title: "Diferencias de inventario",
     trigger: "Cuando un conteo encuentra cantidades distintas al stock esperado.",
-    recipients: "Responsables del conteo y usuarios con acceso al modulo de inventario.",
+    recipients: "Usuarios con permiso de inventario en esa sucursal (o los elegidos en Preferencias).",
     icon: "clipboard-alert-outline",
     color: palette.warning,
   },
   {
     event: "purchase_update",
-    title: "Actualizacion de compra",
-    trigger: "Cuando una compra pasa a transito o queda recibida.",
-    recipients: "Usuarios del flujo de compras y usuarios relacionados con la sucursal.",
+    title: "Actualización de compra",
+    trigger: "Cuando una compra sale en camino (en tránsito) o queda recibida.",
+    recipients: "Usuarios con permiso de compras en esa sucursal (o los elegidos en Preferencias).",
     icon: "truck-delivery-outline",
     color: palette.primary,
   },
   {
+    event: "transfer_update",
+    title: "Transferencias",
+    trigger: "Cuando una transferencia se aprueba, rechaza, envía, recibe o cancela.",
+    recipients: "Quien pidió la transferencia; cuando se recibe, también quien la envió. Quien debe aprobar, enviar o recibir se entera por su tarea.",
+    direct: true,
+    icon: "swap-horizontal",
+    color: palette.blue,
+  },
+  {
     event: "task_event",
-    title: "Evento de tarea",
-    trigger: "Cuando una tarea se asigna, completa, comenta o vence.",
-    recipients: "Usuario asignado, quien la creo o usuarios directamente involucrados.",
+    title: "Tareas",
+    trigger: "Cuando una tarea se asigna, se completa, recibe un comentario, está por vencer (falta menos de un día) o vence.",
+    recipients: "Asignada, por vencer y vencida: a quien la tiene asignada. Completada: a quien la creó. Comentario: al asignado y al creador (no a quien comenta).",
+    direct: true,
     icon: "checkbox-marked-circle-outline",
     color: palette.blue,
+  },
+  {
+    event: "reminder",
+    title: "Recordatorios",
+    trigger: "Los días de anticipación configurados en el recordatorio y el mismo día.",
+    recipients: "El usuario al que está asignado el recordatorio.",
+    direct: true,
+    icon: "calendar-clock",
+    color: palette.warning,
   },
 ];
 
@@ -71,67 +100,75 @@ const taskFlows: {
   {
     title: "Recibir compra",
     type: "receive_purchase",
-    trigger: "Compra V2 marcada como en transito.",
-    owner: "Sucursal de la compra; se asigna automaticamente con la regla simple actual.",
+    trigger: "Una compra se marca en camino (en tránsito). Se completa sola al recibir la compra.",
+    owner: "Quien tenga permiso para actualizar compras en la sucursal de la compra.",
     icon: "package-down",
   },
   {
-    title: "Revisar faltantes de compra",
+    title: "Revisar diferencias de compra",
     type: "stock_check",
-    trigger: "Compra recibida con menos cantidad que la solicitada.",
-    owner: "Responsable operativo de la sucursal donde se recibio la compra.",
+    trigger: "Una compra se recibe con cantidades distintas a las pedidas.",
+    owner: "Quien tenga permiso de inventario en la sucursal donde se recibió.",
     icon: "magnify",
   },
   {
     title: "Aprobar transferencia",
     type: "approve_transfer",
-    trigger: "Transferencia creada en estado pendiente.",
-    owner: "Sucursal origen; el modulo sigue usando los permisos actuales de transferencias.",
+    trigger: "Se crea una solicitud de transferencia. Se completa sola al aprobarla.",
+    owner: "Quien tenga permiso para actualizar transferencias en la sucursal de origen.",
     icon: "check-decagram-outline",
   },
   {
     title: "Enviar transferencia",
     type: "send_transfer",
-    trigger: "Transferencia aprobada.",
-    owner: "Sucursal origen para preparar y registrar lo enviado.",
+    trigger: "La transferencia se aprueba. Se completa sola al registrar el envío.",
+    owner: "Quien tenga permiso para actualizar transferencias en la sucursal de origen.",
     icon: "truck-delivery-outline",
   },
   {
     title: "Recibir transferencia",
     type: "receive_transfer",
-    trigger: "Transferencia enviada y en transito.",
-    owner: "Sucursal destino para confirmar recibido, faltante o danado.",
+    trigger: "La transferencia sale en camino. Se completa sola al registrar lo recibido.",
+    owner: "Quien tenga permiso para actualizar transferencias en la sucursal destino.",
     icon: "package-variant-closed-check",
   },
   {
     title: "Revisar diferencias de transferencia",
     type: "stock_check",
-    trigger: "Recepcion con faltantes, dano o evidencia de diferencia.",
-    owner: "Sucursal destino para corregir e investigar la diferencia.",
+    trigger: "Se recibe una transferencia con faltantes o dañados.",
+    owner: "Quien tenga permiso de inventario en la sucursal destino.",
     icon: "clipboard-search-outline",
+  },
+  {
+    title: "Revisar diferencias de conteo",
+    type: "stock_check",
+    trigger: "Un conteo de inventario termina con diferencias contra el stock esperado.",
+    owner: "Quien tenga permiso de inventario en la sucursal del conteo.",
+    icon: "clipboard-alert-outline",
   },
   {
     title: "Conteo de inventario",
     type: "inventory_count",
     trigger: "Tarea recurrente o conteo planificado por sucursal.",
-    owner: "Usuario asignado para hacer el conteo semanal, diario o mensual.",
+    owner: "El usuario asignado al configurarla.",
     icon: "clipboard-list-outline",
   },
   {
     title: "Reporte de ventas",
     type: "sales_report",
-    trigger: "Tarea recurrente configurada para cierre o revision comercial.",
-    owner: "Responsable de ventas o gerencia.",
+    trigger: "Tarea recurrente configurada para cierre o revisión comercial.",
+    owner: "El usuario asignado al configurarla.",
     icon: "chart-line",
   },
 ];
 
 const lifecycleSteps = [
-  "El sistema detecta un cambio operativo: compra, transferencia, conteo, ajuste o reporte.",
-  "Se crea una tarea con tipo, prioridad, sucursal, vencimiento y relacion al registro original.",
-  "La tarea se asigna con la regla simple actual: sucursal y carga de tareas del usuario.",
-  "Al asignarse, completarse, comentarse o vencerse, se genera una notificacion interna.",
-  "El usuario puede abrir la tarea, iniciarla, completarla o revisar el registro relacionado.",
+  "El sistema detecta un cambio operativo: compra, transferencia, conteo o recepción con diferencias.",
+  "Se crea una tarea con tipo, prioridad, sucursal, fecha límite y el registro que la originó.",
+  "Se asigna a quien tiene el permiso del proceso en esa sucursal (primero el personal de la sucursal) y que tenga menos tareas abiertas; esa persona recibe el aviso de tarea asignada.",
+  "Cuando falta menos de un día para la fecha límite llega un aviso de \"por vencer\"; si la fecha pasa, uno de \"vencida\". La tarea no cambia de estado: sigue Pendiente o En proceso y se marca como Vencida.",
+  "Desde la tarea se abre el registro relacionado. Las tareas de compras y transferencias se completan solas al terminar ese proceso; las de revisión se inician y completan a mano.",
+  "Cada aviso llega por la campana de la app, push y/o correo según las Preferencias de notificaciones de la empresa.",
 ];
 
 function normalizeUsers(response: any): GuideUser[] {
@@ -276,6 +313,12 @@ export default function TaskNotificationGuideScreen() {
   const [usersError, setUsersError] = useState<string | null>(null);
   const [notificationUsers, setNotificationUsers] = useState<UsersByKey>({});
   const [taskUsers, setTaskUsers] = useState<UsersByKey>({});
+  // Eventos que devuelve el backend (null = no se pudo consultar: se
+  // muestran todos los de la guía).
+  const [availableEvents, setAvailableEvents] = useState<string[] | null>(null);
+  const visibleFlows = notificationFlows.filter(
+    (flow) => !availableEvents || availableEvents.includes(flow.event),
+  );
 
   const selectedCompanyId = selectedCompany?.id;
   const selectedLocationId = selectedLocation?.id;
@@ -299,45 +342,71 @@ export default function TaskNotificationGuideScreen() {
         setLoadingUsers(true);
         setUsersError(null);
 
-        const prefsResponse = await services.notificationPreferences.index();
-        const prefsList: App.Entities.NotificationPreference[] =
-          prefsResponse?.data ?? prefsResponse ?? [];
-        const prefsMap = prefsList.reduce<Partial<Record<EventType, App.Entities.NotificationPreference>>>(
-          (acc, pref) => ({ ...acc, [pref.event_type]: pref }),
-          {},
-        );
+        // Cada bloque depende de un permiso distinto (notifications_list,
+        // notifications_manage, tasks_read): si uno falla, el resto se
+        // muestra igual.
+        let prefsMap: Partial<Record<EventType, App.Entities.NotificationPreference>> = {};
+        try {
+          const prefsResponse = await services.notificationPreferences.index();
+          const prefsList: App.Entities.NotificationPreference[] =
+            prefsResponse?.data ?? prefsResponse ?? [];
+          prefsMap = prefsList.reduce<Partial<Record<EventType, App.Entities.NotificationPreference>>>(
+            (acc, pref) => ({ ...acc, [pref.event_type]: pref }),
+            {},
+          );
+          if (!cancelled) setAvailableEvents(prefsList.map((pref) => pref.event_type));
+        } catch {
+          if (!cancelled) setAvailableEvents(null);
+        }
 
-        const notificationEntries = await Promise.all(
-          notificationFlows.map(async (flow) => {
-            const response = await services.notificationPreferences.eligibleUsers(flow.event, {
-              location_id: selectedLocationId,
-            });
-            const pref = prefsMap[flow.event];
-            let usersForEvent = normalizeUsers(response);
+        // Los avisos directos (tareas, transferencias, recordatorios) no
+        // tienen lista de suscritos: van a las personas de cada caso.
+        const canSeeRecipients = hasPermission("notifications_manage");
+        const notificationEntries = canSeeRecipients
+          ? await Promise.all(
+              notificationFlows
+                .filter((flow) => !flow.direct && prefsMap[flow.event])
+                .map(async (flow) => {
+                  try {
+                    const response = await services.notificationPreferences.eligibleUsers(
+                      flow.event,
+                      { location_id: selectedLocationId },
+                    );
+                    const pref = prefsMap[flow.event];
+                    let usersForEvent = normalizeUsers(response);
 
-            if (pref?.is_active === false) {
-              usersForEvent = [];
-            } else if (Array.isArray(pref?.allowed_user_ids)) {
-              usersForEvent = usersForEvent.filter((item) =>
-                pref.allowed_user_ids?.includes(item.id),
-              );
-            }
+                    if (pref?.is_active === false) {
+                      usersForEvent = [];
+                    } else if (Array.isArray(pref?.allowed_user_ids)) {
+                      usersForEvent = usersForEvent.filter((item) =>
+                        pref.allowed_user_ids?.includes(item.id),
+                      );
+                    }
 
-            return [flow.event, usersForEvent] as const;
-          }),
-        );
+                    return [flow.event, usersForEvent] as const;
+                  } catch {
+                    return [flow.event, [] as GuideUser[]] as const;
+                  }
+                }),
+            )
+          : [];
 
         const taskTypes = Array.from(new Set(taskFlows.map((flow) => flow.type)));
-        const taskEntries = await Promise.all(
-          taskTypes.map(async (type) => {
-            const response = await services.tasks.eligibleUsers({
-              location_id: selectedLocationId,
-              type,
-            });
-
-            return [type, normalizeUsers(response)] as const;
-          }),
-        );
+        const taskEntries = hasPermission("tasks_read")
+          ? await Promise.all(
+              taskTypes.map(async (type) => {
+                try {
+                  const response = await services.tasks.eligibleUsers({
+                    location_id: selectedLocationId,
+                    type,
+                  });
+                  return [type, normalizeUsers(response)] as const;
+                } catch {
+                  return [type, [] as GuideUser[]] as const;
+                }
+              }),
+            )
+          : [];
 
         if (cancelled) {
           return;
@@ -363,11 +432,13 @@ export default function TaskNotificationGuideScreen() {
     return () => {
       cancelled = true;
     };
+    // hasPermission cambia de identidad en cada render del provider.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCompanyId, selectedLocationId]);
 
   const handleCreateTestTask = async () => {
     if (!user?.id || !selectedCompany) {
-      alerts.error("Selecciona empresa e inicia sesion antes de probar.");
+      alerts.error("Selecciona empresa e inicia sesión antes de probar.");
       return;
     }
 
@@ -387,7 +458,7 @@ export default function TaskNotificationGuideScreen() {
       const response = await services.tasks.store({
         title: "Prueba de tareas y notificaciones",
         description:
-          "Tarea creada desde la guia para validar asignacion, listado y notificacion interna.",
+          "Tarea creada desde la guía para validar asignación, listado y notificación interna.",
         type: "custom",
         priority: "medium",
         assigned_to: user.id,
@@ -439,7 +510,7 @@ export default function TaskNotificationGuideScreen() {
               Tareas y notificaciones
             </Text>
             <Text variant="bodyMedium" style={styles.heroText}>
-              Guia operativa para saber que se genera, cuando se activa y que
+              Guía operativa para saber qué se genera, cuándo se activa y qué
               usuarios de la sucursal actual reciben cada aviso.
             </Text>
           </View>
@@ -454,22 +525,25 @@ export default function TaskNotificationGuideScreen() {
           <Text variant="bodySmall" style={styles.locationNoticeText}>
             {branchReady
               ? `Mostrando usuarios de ${selectedLocation?.name}`
-              : "Selecciona una sucursal para ver usuarios por notificacion y tarea."}
+              : "Selecciona una sucursal para ver usuarios por notificación y tarea."}
           </Text>
         </View>
 
         <View style={styles.actionsRow}>
-          <Button
-            mode="contained"
-            icon="flask-outline"
-            loading={creatingTest}
-            disabled={creatingTest || !canCreateTestTask}
-            onPress={handleCreateTestTask}
-            style={styles.primaryAction}
-            contentStyle={styles.actionContent}
-          >
-            Crear prueba
-          </Button>
+          {/* Crea una tarea real en la base de datos: solo en desarrollo. */}
+          {__DEV__ && (
+            <Button
+              mode="contained"
+              icon="flask-outline"
+              loading={creatingTest}
+              disabled={creatingTest || !canCreateTestTask}
+              onPress={handleCreateTestTask}
+              style={styles.primaryAction}
+              contentStyle={styles.actionContent}
+            >
+              Crear prueba
+            </Button>
+          )}
           <Button
             mode="outlined"
             icon="checkbox-marked-outline"
@@ -498,7 +572,7 @@ export default function TaskNotificationGuideScreen() {
               color={palette.error}
             />
             <Text variant="bodySmall" style={styles.permissionText}>
-              El boton de prueba requiere empresa, sucursal y permiso tasks_create.
+              El botón de prueba requiere empresa, sucursal y permiso tasks_create.
             </Text>
           </View>
         )}
@@ -525,7 +599,7 @@ export default function TaskNotificationGuideScreen() {
                 color={palette.primary}
               />
               <Text variant="titleMedium" style={styles.sectionTitle}>
-                Como fluye una tarea
+                Cómo fluye una tarea
               </Text>
             </View>
             <View style={styles.stepList}>
@@ -555,7 +629,7 @@ export default function TaskNotificationGuideScreen() {
                 Notificaciones activas
               </Text>
             </View>
-            {notificationFlows.map((item, index) => (
+            {visibleFlows.map((item, index) => (
               <View key={item.event}>
                 <InfoRow
                   icon={item.icon}
@@ -568,18 +642,20 @@ export default function TaskNotificationGuideScreen() {
                     {item.event}
                   </Chip>
                 </View>
-                <View style={styles.usersBlock}>
-                  <Text variant="labelSmall" style={styles.usersTitle}>
-                    Usuarios suscritos en esta sucursal
-                  </Text>
-                  <UsersBlock
-                    users={notificationUsers[item.event] ?? []}
-                    loading={loadingUsers}
-                    branchReady={branchReady}
-                    emptyText="Sin usuarios suscritos para esta sucursal."
-                  />
-                </View>
-                {index < notificationFlows.length - 1 && (
+                {!item.direct && hasPermission("notifications_manage") && (
+                  <View style={styles.usersBlock}>
+                    <Text variant="labelSmall" style={styles.usersTitle}>
+                      Usuarios suscritos en esta sucursal
+                    </Text>
+                    <UsersBlock
+                      users={notificationUsers[item.event] ?? []}
+                      loading={loadingUsers}
+                      branchReady={branchReady}
+                      emptyText="Sin usuarios suscritos para esta sucursal."
+                    />
+                  </View>
+                )}
+                {index < visibleFlows.length - 1 && (
                   <Divider style={styles.divider} />
                 )}
               </View>
@@ -643,16 +719,17 @@ export default function TaskNotificationGuideScreen() {
               </Text>
             </View>
             <Text variant="bodyMedium" style={styles.paragraph}>
-              Por ahora la regla se mantiene simple: las pantallas de cada modulo siguen
-              protegidas con los permisos actuales, como transfers_update,
-              purchases_update, inventory_manage y tasks_list. La asignacion automatica
-              no agrega permisos nuevos; usa la sucursal de la tarea y la carga de trabajo
-              de usuarios activos.
+              Cada quien ve en Tareas las que tiene asignadas. Para iniciar, completar,
+              cancelar o comentar una tarea se necesita el permiso tasks_update
+              (Actualizar tareas); sin él la tarea se puede ver pero no cambiar. La
+              asignación automática usa el permiso de cada proceso (purchases_update,
+              transfers_update, inventory_manage) en la sucursal de la tarea.
             </Text>
             <Text variant="bodyMedium" style={styles.paragraph}>
-              Las notificaciones informan cambios; las tareas son trabajo accionable. Si
-              una tarea se asigna a un usuario, ese usuario vera el registro en Tareas y
-              recibira un aviso tipo task_event.
+              Las notificaciones informan cambios; las tareas son trabajo accionable. Al
+              tocar un aviso (en la bandeja, la campana o el push) se abre la tarea, compra,
+              transferencia, producto, conteo o ajuste relacionado. Una tarea vencida sigue
+              en Pendientes o En proceso con la marca Vencida.
             </Text>
           </Card.Content>
         </Card>

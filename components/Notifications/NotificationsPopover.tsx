@@ -70,7 +70,7 @@ export default function NotificationsPopover({
   onViewAllPress,
   onSettingsPress,
 }: NotificationsPopoverProps) {
-  const { loadUnreadNotificationsCount } = useAuth();
+  const { loadUnreadNotificationsCount, unreadNotificationsCount } = useAuth();
 
   const [notifications, setNotifications] = useState<App.Entities.Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,7 +78,11 @@ export default function NotificationsPopover({
   const loadRecent = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await services.notifications.index({ all: true });
+      // Solo las más recientes: antes se pedía la bandeja completa (all) para
+      // mostrar 8.
+      const response = await services.notifications.index({
+        per_page: POPOVER_LIMIT,
+      });
       const data: App.Entities.Notification[] = Array.isArray(response.data)
         ? response.data
         : (response.data?.data ?? []);
@@ -94,7 +98,11 @@ export default function NotificationsPopover({
     void loadRecent();
   }, [loadRecent]);
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  // Total real de no leídas (el mismo de la campana), no solo las 8 visibles.
+  const unreadCount = Math.max(
+    unreadNotificationsCount,
+    notifications.filter((n) => !n.is_read).length,
+  );
 
   const handleMarkAllAsRead = async () => {
     if (unreadCount === 0) return;
@@ -103,9 +111,9 @@ export default function NotificationsPopover({
       setNotifications((current) =>
         current.map((n) => ({ ...n, is_read: true, read_at: new Date().toISOString() })),
       );
-      loadUnreadNotificationsCount();
+      await loadUnreadNotificationsCount();
     } catch (error) {
-      console.warn("Error al marcar todas como leidas:", error);
+      console.warn("Error al marcar todas como leídas:", error);
     }
   };
 
@@ -142,7 +150,7 @@ export default function NotificationsPopover({
       );
       loadUnreadNotificationsCount();
     } catch (error) {
-      console.warn("Error al actualizar la notificacion:", error);
+      console.warn("Error al actualizar la notificación:", error);
     }
   };
 
@@ -212,7 +220,7 @@ export default function NotificationsPopover({
                 styles.headerAction,
                 pressed && styles.headerActionPressed,
               ]}
-              accessibilityLabel="Marcar todas como leidas"
+              accessibilityLabel="Marcar todas como leídas"
             >
               <Icon
                 source="check-all"
@@ -230,7 +238,7 @@ export default function NotificationsPopover({
                 styles.iconButton,
                 pressed && styles.headerActionPressed,
               ]}
-              accessibilityLabel="Configuracion de notificaciones"
+              accessibilityLabel="Configuración de notificaciones"
             >
               <Icon
                 source="cog-outline"

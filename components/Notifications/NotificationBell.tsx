@@ -1,4 +1,8 @@
 import NotificationDetailContent from "@/components/Notifications/NotificationDetailContent";
+import {
+  getNotificationLink,
+  NOTIFICATIONS_INBOX_ROUTE,
+} from "@/components/Notifications/notificationLinks";
 import NotificationsPopover from "@/components/Notifications/NotificationsPopover";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,7 +26,6 @@ import {
   Text,
 } from "react-native-paper";
 
-const NOTIFICATIONS_ROUTE = "/(tabs)/notifications";
 const DESKTOP_BREAKPOINT = 900;
 
 export interface NotificationBellProps {
@@ -36,12 +39,24 @@ export interface NotificationBellProps {
    * (20px, coincide con el badge actual del sidebar).
    */
   badgeSize?: "small" | "medium";
+  /**
+   * Oculta el contador sobre la campana (p. ej. en el pie del sidebar, que ya
+   * muestra el número a un lado).
+   */
+  showBadge?: boolean;
+  /**
+   * false: la campana siempre lleva a la bandeja, sin popover. Lo usa el pie
+   * del sidebar: ahí el popover se abría pegado al borde inferior y se salía
+   * de la pantalla.
+   */
+  popover?: boolean;
 }
 
 /**
  * Campana de notificaciones. En web con ancho >= 900px abre un popover
- * anclado a la campana con las 5 notificaciones mas recientes; al tocar
- * una fila del popover se abre un modal de detalle con la misma UI que
+ * anclado a la campana con las notificaciones mas recientes; al tocar una
+ * fila se abre la pantalla del registro (tarea, compra, transferencia…) y,
+ * si el aviso no trae a dónde ir, un modal de detalle con la misma UI que
  * usa la pagina completa en desktop. En mobile (o web < 900px) navega a
  * la pantalla completa de notificaciones, donde la propia pagina ya
  * gestiona el modal/desktop o la navegacion/mobile.
@@ -52,13 +67,17 @@ export interface NotificationBellProps {
 export default function NotificationBell({
   iconColor = palette.textSecondary,
   badgeSize = "small",
+  showBadge = true,
+  popover = true,
 }: NotificationBellProps) {
   const router = useRouter();
   const alerts = useAlerts();
-  const { unreadNotificationsCount, loadUnreadNotificationsCount } = useAuth();
+  const { unreadNotificationsCount, loadUnreadNotificationsCount, hasPermission } =
+    useAuth();
   const { width, height } = useWindowDimensions();
 
-  const isDesktop = Platform.OS === "web" && width >= DESKTOP_BREAKPOINT;
+  const isDesktop =
+    popover && Platform.OS === "web" && width >= DESKTOP_BREAKPOINT;
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedNotification, setSelectedNotification] =
     useState<App.Entities.Notification | null>(null);
@@ -68,27 +87,49 @@ export default function NotificationBell({
 
   const navigateToList = useCallback(() => {
     setMenuVisible(false);
-    router.push(NOTIFICATIONS_ROUTE as any);
+    router.push(NOTIFICATIONS_INBOX_ROUTE as any);
+  }, [router]);
+
+  const openSettings = useCallback(() => {
+    setMenuVisible(false);
+    router.push("/(stacks)/notification-preferences" as any);
   }, [router]);
 
   const handleItemPress = useCallback(
     async (notification: App.Entities.Notification) => {
-      // Cerramos el popover y abrimos el modal en lugar de navegar. Asi el
-      // usuario ve el detalle al instante, sin perder el contexto del bell.
       setMenuVisible(false);
-      setSelectedNotification(notification);
-      setDetailVisible(true);
+
+      // Igual que en la bandeja y en el push: se abre el registro
+      // relacionado; si el aviso no trae su id, el detalle en un modal.
+      const target = getNotificationLink(notification.event_type, notification.data);
+      if (target) {
+        router.push(target.route as any);
+      } else {
+        setSelectedNotification(notification);
+        setDetailVisible(true);
+      }
 
       // Marcamos como leida en el backend para que el badge baje; usamos el
       // mismo patron silencioso que la pagina completa (sin toast).
+      if (notification.is_read) return;
       try {
         await services.notifications.markAsRead(notification.id);
-        loadUnreadNotificationsCount();
       } catch (error) {
-        console.warn("No se pudo marcar como leida:", error);
+        console.warn("No se pudo marcar como leída:", error);
+      } finally {
+        loadUnreadNotificationsCount();
       }
     },
-    [loadUnreadNotificationsCount],
+    [loadUnreadNotificationsCount, router],
+  );
+
+  const openRelated = useCallback(
+    (route: string) => {
+      setDetailVisible(false);
+      setSelectedNotification(null);
+      router.push(route as any);
+    },
+    [router],
   );
 
   const closeDetail = useCallback(() => {
@@ -99,8 +140,8 @@ export default function NotificationBell({
   const handleDelete = useCallback(async () => {
     if (!selectedNotification) return;
 
-    const confirmed = await alerts.confirm("Eliminar esta notificacion?", {
-      title: "Confirmar eliminacion",
+    const confirmed = await alerts.confirm("Eliminar esta notificación?", {
+      title: "Confirmar eliminación",
       okText: "Eliminar",
       cancelText: "Cancelar",
     });
@@ -111,7 +152,7 @@ export default function NotificationBell({
       loadUnreadNotificationsCount();
       closeDetail();
     } catch {
-      alerts.error("Error al eliminar la notificacion");
+      alerts.error("Error al eliminar la notificación");
     }
   }, [alerts, closeDetail, loadUnreadNotificationsCount, selectedNotification]);
 
@@ -129,7 +170,9 @@ export default function NotificationBell({
           color={iconColor}
         />
       </TouchableOpacity>
-      {unreadNotificationsCount > 0 && (
+      {showBadge && unreadNotificationsCount > 0 && (
+        // pointerEvents none (en badge): queda encima de la campana y en web
+        // se tragaba el clic (no abría el popover al tocar cerca del número).
         <View
           style={[
             styles.badge,
@@ -161,6 +204,9 @@ export default function NotificationBell({
         <NotificationsPopover
           onItemPress={handleItemPress}
           onViewAllPress={navigateToList}
+          onSettingsPress={
+            hasPermission("notifications_list") ? openSettings : undefined
+          }
         />
       </Menu>
 
@@ -177,10 +223,10 @@ export default function NotificationBell({
           <View style={styles.detailModalHeader}>
             <View>
               <Text variant="titleMedium" style={styles.detailModalTitle}>
-                Detalle de notificacion
+                Detalle de notificación
               </Text>
               <Text variant="bodySmall" style={styles.detailModalSubtitle}>
-                Vista rapida desde el popover
+                Vista rápida desde el popover
               </Text>
             </View>
             <IconButton
@@ -202,6 +248,7 @@ export default function NotificationBell({
                 notification={selectedNotification}
                 compact
                 onDelete={handleDelete}
+                onOpenLink={openRelated}
               />
             </View>
           )}
@@ -223,6 +270,7 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
   },
   badge: {
+    pointerEvents: "none",
     position: "absolute",
     minWidth: 16,
     height: 16,

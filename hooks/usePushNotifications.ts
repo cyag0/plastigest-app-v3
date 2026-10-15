@@ -1,3 +1,4 @@
+import { getNotificationEntityId } from "@/components/Notifications/notificationLinks";
 import axiosClient from "@/utils/axios";
 import {
   notificationOpenedBus,
@@ -19,8 +20,9 @@ type WebPermission = NotificationPermission | "unsupported";
 
 interface UsePushNotificationsOptions {
   enabled?: boolean;
-  // Se llama cada vez que llega un push en foreground (ya con notificación
-  // visible). Útil para incrementar el contador de no leídas en el badge.
+  // Se llama cada vez que llega un push con la app abierta (nativo y web,
+  // ya con la notificación visible). AuthContext refresca ahí el contador
+  // de no leídas de la campana.
   onForegroundMessage?: (message: PushNotification) => void;
 }
 
@@ -30,6 +32,21 @@ interface PushSetupResult {
 }
 
 const WEB_VAPID_KEY = process.env.EXPO_PUBLIC_FIREBASE_VAPID_KEY;
+
+// Marca en `data` de las notificaciones locales que se muestran cuando llega
+// un push con la app abierta (ver addNotificationResponseReceivedListener).
+const FOREGROUND_NOTIFICATION_MARKER = "__plastigest_foreground";
+
+// getInitialNotification() puede devolver el mismo push en cada setup (p. ej.
+// al cerrar sesión y volver a entrar sin cerrar la app): solo se atiende una
+// vez por arranque.
+let initialNotificationHandled = false;
+
+// Trazas del flujo de push solo en desarrollo: en producción no se imprimen
+// tokens FCM ni el contenido de los mensajes.
+const debugLog = (...args: unknown[]) => {
+  if (__DEV__) console.log(...args);
+};
 
 if (Platform.OS !== "web") {
   Notifications.setNotificationHandler({
@@ -80,7 +97,9 @@ export function usePushNotifications({
     if (webSetupStartedRef.current) return;
     webSetupStartedRef.current = true;
     try {
-      const result = await setupWebPushNotifications(setNotification);
+      const result = await setupWebPushNotifications(setNotification, (message) =>
+        onForegroundMessageRef.current?.(message),
+      );
       if (result) {
         webCleanupRef.current = result.cleanup ?? null;
         if (result.token) {
@@ -182,7 +201,7 @@ export function usePushNotifications({
         return "unsupported";
       }
       const result = await Notification.requestPermission();
-      console.log("[web-push] Permiso resultado:", result);
+      debugLog("[web-push] Permiso resultado:", result);
       setPermissionStatus(result);
 
       if (result === "granted") {
@@ -247,7 +266,7 @@ async function setupNativePushNotifications(
     messaging = require("@react-native-firebase/messaging").default;
   } catch {
     console.warn(
-      "Firebase Messaging nativo no esta disponible. Usa un development build, no Expo Go.",
+      "Firebase Messaging nativo no está disponible. Usa un development build, no Expo Go.",
     );
     return undefined;
   }
@@ -271,12 +290,12 @@ async function setupNativePushNotifications(
 
   if (token) {
     await registerTokenInBackend(token);
-    console.log("FCM token nativo registrado:", token);
+    debugLog("FCM token nativo registrado");
   }
 
   const unsubscribeForeground = messagingInstance.onMessage(
     async (remoteMessage) => {
-      console.log("Notificacion FCM en primer plano:", remoteMessage);
+      debugLog("Notificación FCM en primer plano:", remoteMessage.messageId);
       setNotification(remoteMessage);
       onForegroundMessage?.(remoteMessage);
       await showNativeForegroundNotification(remoteMessage);
@@ -285,23 +304,49 @@ async function setupNativePushNotifications(
 
   const unsubscribeOpened = messagingInstance.onNotificationOpenedApp(
     (remoteMessage) => {
-      console.log("Notificacion abrio la app desde background:", remoteMessage);
+      debugLog("Notificación abrio la app desde background:", remoteMessage.messageId);
       handleNotificationAction(remoteMessage);
     },
   );
 
   messagingInstance.getInitialNotification().then((remoteMessage) => {
-    if (remoteMessage) {
-      console.log("App abierta desde notificacion FCM:", remoteMessage);
+    if (remoteMessage && !initialNotificationHandled) {
+      initialNotificationHandled = true;
+      debugLog("App abierta desde notificación FCM:", remoteMessage.messageId);
       handleNotificationAction(remoteMessage);
     }
   });
+
+  // Los pushes que llegan con la app abierta se muestran como notificación
+  // local de expo-notifications (showNativeForegroundNotification). Tocar esa
+  // notificación no pasa por RNFirebase, así que sin este listener no llevaba
+  // a ningún lado. Solo se atienden las marcadas como locales para no navegar
+  // dos veces con las que sí maneja onNotificationOpenedApp.
+  const responseSubscription =
+    Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as
+        | Record<string, unknown>
+        | undefined;
+      if (!data || data[FOREGROUND_NOTIFICATION_MARKER] !== "1") return;
+
+      const normalized: Record<string, string> = {};
+      Object.entries(data).forEach(([key, value]) => {
+        if (value == null || key === FOREGROUND_NOTIFICATION_MARKER) return;
+        normalized[key] = String(value);
+      });
+
+      notificationOpenedBus.emit({
+        eventType: normalized.event_type,
+        entityId: pickEntityId(normalized),
+        rawData: normalized,
+      });
+    });
 
   const unsubscribeTokenRefresh = messagingInstance.onTokenRefresh(
     async (nextToken) => {
       setFcmToken(nextToken);
       await registerTokenInBackend(nextToken);
-      console.log("FCM token actualizado:", nextToken);
+      debugLog("FCM token actualizado");
     },
   );
 
@@ -310,6 +355,7 @@ async function setupNativePushNotifications(
     cleanup: () => {
       unsubscribeForeground();
       unsubscribeOpened();
+      responseSubscription.remove();
       unsubscribeTokenRefresh();
     },
   };
@@ -317,6 +363,7 @@ async function setupNativePushNotifications(
 
 async function setupWebPushNotifications(
   setNotification: (notification: PushNotification) => void,
+  onForegroundMessage?: (message: PushNotification) => void,
 ): Promise<PushSetupResult | undefined> {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     return undefined;
@@ -335,8 +382,8 @@ async function setupWebPushNotifications(
   // El hook se encarga de NO llamarnos si el permiso no esta "granted",
   // pero validamos otra vez por seguridad.
   if (Notification.permission !== "granted") {
-    console.log(
-      "[web-push] Permiso aun no concedido, saltando setup. La UI debe llamar a requestPermission().",
+    debugLog(
+      "[web-push] Permiso aún no concedido, saltando setup. La UI debe llamar a requestPermission().",
     );
     return undefined;
   }
@@ -362,7 +409,7 @@ async function setupWebPushNotifications(
   const isMessagingSupported = await messagingModule.isSupported();
 
   if (!isMessagingSupported) {
-    console.warn("Firebase Messaging no esta soportado en este navegador.");
+    console.warn("Firebase Messaging no está soportado en este navegador.");
     return undefined;
   }
 
@@ -376,11 +423,11 @@ async function setupWebPushNotifications(
     { scope: "/" },
   );
 
-  console.log("[web-push] SW registrado, mandando config...");
+  debugLog("[web-push] SW registrado, mandando config...");
   await sendConfigToServiceWorker(serviceWorkerRegistration, firebaseConfig);
 
   const messaging = messagingModule.getMessaging(app);
-  console.log("[web-push] Pidiendo token FCM...");
+  debugLog("[web-push] Pidiendo token FCM...");
   const token = await messagingModule.getToken(messaging, {
     vapidKey: WEB_VAPID_KEY,
     serviceWorkerRegistration,
@@ -394,13 +441,16 @@ async function setupWebPushNotifications(
   }
 
   await registerTokenInBackend(token);
-  console.log("FCM token web registrado:", token);
+  debugLog("FCM token web registrado");
 
   const unsubscribeForeground = messagingModule.onMessage(
     messaging,
     (payload) => {
-      console.log("Notificacion FCM web en primer plano:", payload);
+      debugLog("Notificación FCM web en primer plano:", payload.messageId);
       setNotification(payload);
+      // Antes solo nativo avisaba: en web la campana no se movía hasta
+      // recargar.
+      onForegroundMessage?.(payload);
       showWebForegroundNotification(payload, serviceWorkerRegistration);
     },
   );
@@ -414,14 +464,10 @@ async function setupWebPushNotifications(
     if (!data) return;
     const payload: NotificationOpenedPayload = {
       eventType: data.event_type,
-      entityId:
-        data.task_id ??
-        data.purchase_id ??
-        data.product_id ??
-        data.inventory_count_id,
+      entityId: pickEntityId(data),
       rawData: data,
     };
-    console.log("SW notifico push abierto:", payload);
+    debugLog("SW notifico push abierto:", payload);
     notificationOpenedBus.emit(payload);
   };
   navigator.serviceWorker.addEventListener("message", onSwMessage);
@@ -450,7 +496,7 @@ async function requestNativePermission(messaging: NativeMessaging) {
       );
 
       if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-        console.log("Permisos de notificacion Android denegados.");
+        debugLog("Permisos de notificación Android denegados.");
         return false;
       }
     }
@@ -491,14 +537,14 @@ async function sendConfigToServiceWorker(
   }
 
   if (!worker) {
-    throw new Error("Service worker no esta activo, no se puede enviar config");
+    throw new Error("Service worker no está activo, no se puede enviar config");
   }
 
   return new Promise<void>((resolve) => {
     const channel = new MessageChannel();
     const timeout = setTimeout(() => {
       console.warn(
-        "[web-push] Timeout esperando confirmacion del SW; continuando de todas formas",
+        "[web-push] Timeout esperando confirmación del SW; continuando de todas formas",
       );
       resolve();
     }, 5000);
@@ -507,7 +553,7 @@ async function sendConfigToServiceWorker(
       if (event.data?.type === "FIREBASE_CONFIG_RECEIVED") {
         clearTimeout(timeout);
         if (event.data.initialized) {
-          console.log("[web-push] SW confirmo config e inicializo Firebase");
+          debugLog("[web-push] SW confirmo config e inicializo Firebase");
         } else {
           console.warn(
             "[web-push] SW recibio config pero NO se inicializo (revisar consola del SW)",
@@ -596,7 +642,9 @@ async function showNativeForegroundNotification(
     content: {
       title: title || "GCStock",
       body,
-      data: remoteMessage.data || {},
+      // La marca permite que el listener de respuestas lleve al detalle al
+      // tocarla (y que no se dupliquen navegaciones con RNFirebase).
+      data: { ...(remoteMessage.data || {}), [FOREGROUND_NOTIFICATION_MARKER]: "1" },
     },
     trigger: null,
   });
@@ -617,7 +665,7 @@ function showWebForegroundNotification(
   const title = data.title || payload.notification?.title || "GCStock";
   const options: NotificationOptions = {
     body: data.body || payload.notification?.body,
-    icon: "/favicon.ico",
+    icon: "/notification-icon.png",
     data,
   };
 
@@ -636,7 +684,7 @@ function showWebForegroundNotification(
         new Notification(title, options);
       } catch (fallbackError) {
         console.error(
-          "[web-push] No se pudo mostrar la notificacion en primer plano:",
+          "[web-push] No se pudo mostrar la notificación en primer plano:",
           fallbackError,
         );
       }
@@ -648,7 +696,7 @@ function showWebForegroundNotification(
     new Notification(title, options);
   } catch (error) {
     console.error(
-      "[web-push] No se pudo mostrar la notificacion en primer plano:",
+      "[web-push] No se pudo mostrar la notificación en primer plano:",
       error,
     );
   }
@@ -658,7 +706,7 @@ function handleNotificationAction(remoteMessage: PushNotification) {
   const data = extractPushData(remoteMessage);
 
   if (!data) {
-    console.log("Notificacion sin data payload, ignorando deep-link");
+    debugLog("Notificación sin data payload, ignorando deep-link");
     return;
   }
 
@@ -668,7 +716,7 @@ function handleNotificationAction(remoteMessage: PushNotification) {
     rawData: data,
   };
 
-  console.log("Emitiendo evento notificationOpened:", payload);
+  debugLog("Emitiendo evento notificationOpened:", payload);
   notificationOpenedBus.emit(payload);
 }
 
@@ -689,11 +737,8 @@ function extractPushData(
 }
 
 function pickEntityId(data: Record<string, string>): string | undefined {
-  // Orden de preferencia segun los templates del backend
-  return (
-    data.task_id ??
-    data.purchase_id ??
-    data.product_id ??
-    data.inventory_count_id
-  );
+  // Según el tipo de evento (un ajuste trae adjustment_id y product_id, y en
+  // FCM los nulos llegan como ""). La ruta la resuelve NavigationHandler con
+  // el mismo helper a partir de rawData.
+  return getNotificationEntityId(data.event_type, data);
 }

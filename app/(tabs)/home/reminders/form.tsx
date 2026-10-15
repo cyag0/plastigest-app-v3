@@ -1,3 +1,5 @@
+import { toLocalDateString } from "@/utils/dates";
+import { goBack } from "@/utils/navigation";
 import AppSelect from "@/components/Form/AppSelect";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
@@ -14,6 +16,7 @@ import {
   Switch,
   Text,
   TextInput,
+  HelperText,
 } from "react-native-paper";
 import { DatePickerInput } from "react-native-paper-dates";
 
@@ -91,7 +94,6 @@ export default function ReminderForm(props: ReminderFormProps) {
   const loadUsers = async () => {
     try {
       const response = await Services.users.index();
-      console.log("Users response:", response);
 
       // La respuesta puede venir en response.data.data o response.data
       const usersData = Array.isArray(response.data)
@@ -118,18 +120,20 @@ export default function ReminderForm(props: ReminderFormProps) {
     try {
       setLoading(true);
       const response = await Services.reminders.show(reminderId);
-      const reminder = response.data;
+      // El backend responde un ReminderResource: { data: { ...recordatorio } }.
+      const body: any = response.data;
+      const reminder: App.Entities.Reminder = body?.data ?? body;
 
-      setTitle(reminder.title);
+      setTitle(reminder.title ?? "");
       setDescription(reminder.description || "");
       setType(reminder.type);
       setReminderDate(new Date(reminder.reminder_date + "T00:00:00"));
       setAmount(reminder.amount?.toString() || "");
-      setIsRecurring(reminder.is_recurring);
+      setIsRecurring(Boolean(reminder.is_recurring));
       setRecurrenceType(reminder.recurrence_type || "monthly");
       setRecurrenceInterval(reminder.recurrence_interval?.toString() || "1");
-      setNotifyEnabled(reminder.notify_enabled);
-      setNotifyDaysBefore(reminder.notify_days_before.toString());
+      setNotifyEnabled(Boolean(reminder.notify_enabled));
+      setNotifyDaysBefore(reminder.notify_days_before?.toString() || "1");
       setAssignedUserId(reminder.user_id?.toString() || "");
     } catch (error) {
       console.error("Error loading reminder:", error);
@@ -156,11 +160,7 @@ export default function ReminderForm(props: ReminderFormProps) {
       const data: any = {
         title,
         type,
-        reminder_date: new Date(
-          reminderDate.getTime() - reminderDate.getTimezoneOffset() * 60000,
-        )
-          .toISOString()
-          .split("T")[0],
+        reminder_date: toLocalDateString(reminderDate),
         is_recurring: isRecurring === true ? 1 : 0,
         notify_enabled: notifyEnabled === true ? 1 : 0,
         notify_days_before: parseInt(notifyDaysBefore) || 1,
@@ -194,7 +194,7 @@ export default function ReminderForm(props: ReminderFormProps) {
         alerts.success("Recordatorio creado correctamente");
       }
 
-      router.back();
+      goBack();
     } catch (error: any) {
       console.error("Error saving reminder:", error);
       console.error("Error response:", error.response?.data);
@@ -235,26 +235,23 @@ export default function ReminderForm(props: ReminderFormProps) {
           <Card.Content>
             {/* Tipo */}
             <View style={styles.input}>
+              <Text variant="labelLarge" style={styles.fieldLabel}>Tipo de Recordatorio</Text>
               <AppSelect
                 value={type}
-                onChange={setType}
+                onChange={(value) => setType(String(value))}
                 data={types}
                 placeholder="Selecciona un tipo"
-                label="Tipo de Recordatorio"
               />
             </View>
 
             {/* Usuario asignado */}
             <View style={styles.input}>
+              <Text variant="labelLarge" style={styles.fieldLabel}>Asignar a</Text>
               <AppSelect
                 value={assignedUserId}
-                onChange={(value) => {
-                  console.log("Usuario seleccionado:", value);
-                  setAssignedUserId(value);
-                }}
+                onChange={(value) => setAssignedUserId(String(value ?? ""))}
                 data={users}
                 placeholder="Selecciona un usuario"
-                label="Asignar a"
               />
               <Text
                 variant="bodySmall"
@@ -343,12 +340,12 @@ export default function ReminderForm(props: ReminderFormProps) {
             {isRecurring && (
               <>
                 <View style={styles.input}>
+                  <Text variant="labelLarge" style={styles.fieldLabel}>Frecuencia</Text>
                   <AppSelect
                     value={recurrenceType}
-                    onChange={setRecurrenceType}
+                    onChange={(value) => setRecurrenceType(String(value))}
                     data={recurrenceTypes}
                     placeholder="Selecciona frecuencia"
-                    label="Frecuencia"
                   />
                 </View>
 
@@ -360,11 +357,13 @@ export default function ReminderForm(props: ReminderFormProps) {
                   mode="outlined"
                   style={styles.input}
                   left={<TextInput.Icon icon="numeric" />}
-                  helperText={`Se repetirá cada ${recurrenceInterval} ${
+                />
+                <HelperText type="info" visible>
+                  {`Se repetirá cada ${recurrenceInterval} ${
                     recurrenceTypes.find((r) => r.value === recurrenceType)
                       ?.label || "período"
                   }`}
-                />
+                </HelperText>
               </>
             )}
           </Card.Content>
@@ -398,16 +397,20 @@ export default function ReminderForm(props: ReminderFormProps) {
             </View>
 
             {notifyEnabled && (
-              <TextInput
-                label="Notificar días antes"
-                value={notifyDaysBefore}
-                onChangeText={setNotifyDaysBefore}
-                keyboardType="number-pad"
-                mode="outlined"
-                style={styles.input}
-                left={<TextInput.Icon icon="calendar-alert" />}
-                helperText={`Recibirás una notificación ${notifyDaysBefore} días antes`}
-              />
+              <>
+                <TextInput
+                  label="Notificar días antes"
+                  value={notifyDaysBefore}
+                  onChangeText={setNotifyDaysBefore}
+                  keyboardType="number-pad"
+                  mode="outlined"
+                  style={styles.input}
+                  left={<TextInput.Icon icon="calendar-alert" />}
+                />
+                <HelperText type="info" visible>
+                  {`Recibirás una notificación ${notifyDaysBefore} días antes`}
+                </HelperText>
+              </>
             )}
           </Card.Content>
         </Card>
@@ -435,7 +438,7 @@ export default function ReminderForm(props: ReminderFormProps) {
         <View style={styles.actions}>
           <Button
             mode="outlined"
-            onPress={() => router.back()}
+            onPress={() => goBack()}
             style={styles.button}
             disabled={saving}
           >
@@ -458,6 +461,10 @@ export default function ReminderForm(props: ReminderFormProps) {
 }
 
 const styles = StyleSheet.create({
+  fieldLabel: {
+    color: palette.textSecondary,
+    marginBottom: 6,
+  },
   container: {
     flex: 1,
     padding: 16,

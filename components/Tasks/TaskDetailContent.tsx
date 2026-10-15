@@ -4,20 +4,24 @@ import { useState } from "react";
 import { ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Button, Card, Chip, Divider, IconButton, Text } from "react-native-paper";
 import {
+  canStartTask,
   formatTaskDate,
   getTaskDueDateInfo,
   getTaskPriorityConfig,
+  getTaskRelatedLink,
   getTaskStatusConfig,
   getTaskTypeConfig,
+  getTaskUser,
   isTaskActionable,
+  isTaskOverdue,
 } from "./taskPresentation";
 
-type TaskAction = "start" | "complete" | "cancel";
+export type TaskAction = "start" | "complete" | "cancel";
 
 type TaskComment = App.Entities.TaskComment;
 
-function getUserName(user?: App.Entities.User | null) {
-  return user?.name || "Sin asignar";
+function getUserName(user?: { name?: string } | null, fallback = "Sin asignar") {
+  return user?.name || fallback;
 }
 
 function DetailRow({
@@ -45,7 +49,7 @@ function CommentsSection({
   onAddComment,
 }: {
   comments: TaskComment[];
-  onAddComment?: (comment: string) => Promise<void>;
+  onAddComment?: (comment: string) => Promise<boolean | void>;
 }) {
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
@@ -58,8 +62,9 @@ function CommentsSection({
 
     try {
       setSending(true);
-      await onAddComment(trimmedComment);
-      setComment("");
+      // Si falla se conserva el texto para reintentar.
+      const saved = await onAddComment(trimmedComment);
+      if (saved !== false) setComment("");
     } finally {
       setSending(false);
     }
@@ -130,26 +135,47 @@ function CommentsSection({
   );
 }
 
+/**
+ * Detalle de una tarea. `canAct` / `canCancel` vienen de getTaskPermissions
+ * (misma regla que el backend: tasks_update, o ser responsable / creador).
+ */
 export default function TaskDetailContent({
   task,
   onBack,
   onChangeStatus,
   onAddComment,
+  onOpenRoute,
+  canAct = true,
+  canCancel,
+  pendingAction = null,
   compact = false,
 }: {
   task: App.Entities.Task;
   onBack?: () => void;
   onChangeStatus?: (action: TaskAction) => Promise<void>;
-  onAddComment?: (comment: string) => Promise<void>;
+  onAddComment?: (comment: string) => Promise<boolean | void>;
+  /** Abre una ruta (registro relacionado); el padre cierra su modal si aplica. */
+  onOpenRoute?: (route: string) => void;
+  canAct?: boolean;
+  /** Cancelar: tasks_update o quien creó la tarea (por defecto, igual que canAct). */
+  canCancel?: boolean;
+  /** Acción en curso: deshabilita los botones para evitar dobles envíos. */
+  pendingAction?: TaskAction | null;
   compact?: boolean;
 }) {
   const typeConfig = getTaskTypeConfig(task.type);
   const statusConfig = getTaskStatusConfig(task.status);
   const priorityConfig = getTaskPriorityConfig(task.priority);
   const dueDateInfo = getTaskDueDateInfo(task);
-  const comments = ((task as any).comments ?? []) as TaskComment[];
-  const canStart = task.status === "pending";
-  const canComplete = isTaskActionable(task);
+  const comments = task.comments ?? [];
+  const isOpen = isTaskActionable(task);
+  const showActions = Boolean(onChangeStatus) && canAct && isOpen;
+  const canStart = showActions && canStartTask(task);
+  const busy = pendingAction !== null;
+  const relatedLink = onOpenRoute ? getTaskRelatedLink(task) : null;
+  const assignedTo = getTaskUser(task, "assigned_to");
+  const assignedBy = getTaskUser(task, "assigned_by");
+  const completedBy = getTaskUser(task, "completed_by");
 
   return (
     <View style={[styles.container, compact && styles.containerCompact]}>
@@ -157,7 +183,7 @@ export default function TaskDetailContent({
         contentContainerStyle={[styles.scrollContent, compact && styles.scrollContentCompact]}
         showsVerticalScrollIndicator={false}
       >
-        <Card style={[styles.heroCard, task.is_overdue && styles.heroCardOverdue]} mode="elevated">
+        <Card style={[styles.heroCard, isTaskOverdue(task) && styles.heroCardOverdue]} mode="elevated">
           <Card.Content style={styles.heroContent}>
             <View style={[styles.heroIcon, { backgroundColor: typeConfig.softBg }]}>
               <MaterialCommunityIcons name={typeConfig.icon as any} size={32} color={typeConfig.color} />
@@ -211,7 +237,7 @@ export default function TaskDetailContent({
               <View style={styles.sectionHeader}>
                 <MaterialCommunityIcons name="text-box-outline" size={21} color={palette.primary} />
                 <Text variant="titleMedium" style={styles.sectionTitle}>
-                  Descripcion
+                  Descripción
                 </Text>
               </View>
               <Divider style={styles.divider} />
@@ -225,16 +251,16 @@ export default function TaskDetailContent({
             <View style={styles.sectionHeader}>
               <MaterialCommunityIcons name="information-outline" size={21} color={palette.primary} />
               <Text variant="titleMedium" style={styles.sectionTitle}>
-                Informacion
+                Información
               </Text>
             </View>
             <Divider style={styles.divider} />
             <View style={styles.detailsList}>
               <DetailRow label="Tipo" value={typeConfig.label} icon="shape-outline" />
-              <DetailRow label="Asignada a" value={getUserName(task.assignedTo)} icon="account-check-outline" />
-              <DetailRow label="Asignada por" value={getUserName(task.assignedBy)} icon="account-arrow-right-outline" />
-              {task.completedBy && (
-                <DetailRow label="Completada por" value={getUserName(task.completedBy)} icon="account-star-outline" />
+              <DetailRow label="Asignada a" value={getUserName(assignedTo)} icon="account-check-outline" />
+              <DetailRow label="Asignada por" value={getUserName(assignedBy, "Sistema")} icon="account-arrow-right-outline" />
+              {completedBy && (
+                <DetailRow label="Completada por" value={getUserName(completedBy)} icon="account-star-outline" />
               )}
               <DetailRow label="Sucursal" value={task.location?.name || "Sin sucursal"} icon="map-marker-outline" />
               <DetailRow label="Vencimiento" value={formatTaskDate(task.due_date, true)} icon="calendar-clock" />
@@ -243,13 +269,53 @@ export default function TaskDetailContent({
                 <DetailRow label="Completada" value={formatTaskDate(task.completed_at, true)} icon="calendar-check" />
               )}
             </View>
+            {relatedLink && onOpenRoute && (
+              <Button
+                mode="outlined"
+                icon="open-in-new"
+                onPress={() => onOpenRoute(relatedLink.route)}
+                style={styles.relatedButton}
+                textColor={palette.primary}
+              >
+                {relatedLink.label}
+              </Button>
+            )}
           </Card.Content>
         </Card>
 
-        <CommentsSection comments={comments} onAddComment={onAddComment} />
+        {!canAct && isOpen && onChangeStatus && (
+          <View style={styles.permissionNote}>
+            <MaterialCommunityIcons name="lock-outline" size={16} color={palette.textSecondary} />
+            <Text style={styles.permissionNoteText}>
+              Solo quien tiene asignada la tarea, quien la creó o un rol con
+              &quot;Actualizar tareas&quot; puede iniciarla, completarla o comentarla. Las
+              tareas del sistema (recibir una compra o una transferencia) se
+              completan solas al terminar ese proceso.
+            </Text>
+          </View>
+        )}
+
+        <CommentsSection
+          comments={comments}
+          onAddComment={canAct ? onAddComment : undefined}
+        />
+
+        {showActions && (canCancel ?? canAct) && (
+          <Button
+            mode="text"
+            icon="close-circle-outline"
+            onPress={() => onChangeStatus?.("cancel")}
+            disabled={busy}
+            loading={pendingAction === "cancel"}
+            textColor={palette.error}
+            style={styles.cancelButton}
+          >
+            Cancelar tarea
+          </Button>
+        )}
       </ScrollView>
 
-      {(onBack || (onChangeStatus && canComplete)) && (
+      {(onBack || showActions) && (
         <View style={styles.bottomActions}>
           {onBack && (
             <IconButton
@@ -265,17 +331,21 @@ export default function TaskDetailContent({
               mode="outlined"
               icon="play-circle-outline"
               onPress={() => onChangeStatus("start")}
+              disabled={busy}
+              loading={pendingAction === "start"}
               style={styles.actionButton}
               textColor={palette.blue}
             >
               Iniciar
             </Button>
           )}
-          {onChangeStatus && canComplete && (
+          {onChangeStatus && showActions && (
             <Button
               mode="contained"
               icon="check-circle-outline"
               onPress={() => onChangeStatus("complete")}
+              disabled={busy}
+              loading={pendingAction === "complete"}
               buttonColor={palette.success}
               style={styles.actionButton}
             >
@@ -408,6 +478,31 @@ const styles = StyleSheet.create({
     color: palette.text,
     fontSize: 14,
     fontWeight: "700",
+  },
+  relatedButton: {
+    alignSelf: "flex-start",
+    marginTop: 12,
+    borderRadius: 8,
+    borderColor: palette.primary,
+  },
+  permissionNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  permissionNoteText: {
+    flex: 1,
+    color: palette.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  cancelButton: {
+    alignSelf: "center",
   },
   emptyComments: {
     alignItems: "center",

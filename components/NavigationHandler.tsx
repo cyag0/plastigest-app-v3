@@ -4,11 +4,16 @@ import LocationSelector from "@/components/LocationSelector";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import {
+  readEntityId,
+  resolvePushRoute,
+} from "@/components/Notifications/notificationLinks";
 import { notificationOpenedBus } from "@/utils/notificationEvents";
+import services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useSegments } from "expo-router";
-import React, { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Platform, StyleSheet, View } from "react-native";
 import { ActivityIndicator, Button, Text } from "react-native-paper";
 import Animated, {
   useAnimatedStyle,
@@ -37,6 +42,7 @@ export default function NavigationHandler({
     logout,
     sessionEndMessage,
     clearSessionEndMessage,
+    loadUnreadNotificationsCount,
   } = useAuth();
   const router = useRouter();
   const segments = useSegments();
@@ -112,25 +118,93 @@ export default function NavigationHandler({
   ]);
 
   // Deep-linking de notificaciones push: cuando el usuario toca un push
-  // (background, quit o web desde service worker), usePushNotifications
-  // emite a este bus. Mapeamos event_type → ruta de la app.
+  // (background, quit, foreground o web desde service worker),
+  // usePushNotifications emite a este bus. El destino (ver
+  // notificationLinks.resolvePushRoute) se guarda y se navega cuando la app
+  // está lista (sesión verificada, empresa y sucursal elegidas): al abrir la
+  // app desde un push el aviso llega mientras todavía se muestra el loader y
+  // el navegador no está montado. Si el push trae notification_id, esa
+  // notificación de la bandeja se marca como leída.
+  const pendingDeepLinkRef = useRef<string | null>(null);
+  const pendingReadIdRef = useRef<string | null>(null);
+  const pendingCompanyIdRef = useRef<string | null>(null);
+  const readIdFromUrlRef = useRef(false);
+  const [deepLinkTick, setDeepLinkTick] = useState(0);
+
   useEffect(() => {
     return notificationOpenedBus.subscribe((payload) => {
-      // Si el usuario no esta autenticado todavia, dejamos que el guard
-      // de arriba lo mande a login y luego la app podra re-navegar
-      // cuando llegue un segundo tap, asi evitamos errores de router.
-      if (!user) {
-        console.log("Push recibido sin sesion activa, se ignora deep-link");
-        return;
-      }
-
-      const target = resolveDeepLink(payload.eventType, payload.entityId);
-      console.log("Deep-link a:", target, "desde evento:", payload.eventType);
-      router.push(target as any);
+      const data: Record<string, unknown> = payload.rawData ?? {};
+      pendingDeepLinkRef.current = resolvePushRoute(payload.eventType, data);
+      pendingReadIdRef.current = readEntityId(data, "notification_id");
+      pendingCompanyIdRef.current = readEntityId(data, "company_id");
+      setDeepLinkTick((tick) => tick + 1);
     });
-    // El router es estable segun expo-router, no es necesario re-suscribir.
+  }, []);
+
+  // Web: si no había pestaña abierta, el service worker abre la app ya en la
+  // ruta del aviso con ?notification_id=… para poder marcarlo como leído. Se
+  // monta mientras la sesión aún carga: el efecto de abajo lo procesa cuando
+  // la app queda lista (cambia isLoading), sin forzar otro render aquí.
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") return;
+    try {
+      const url = new URL(window.location.href);
+      const id = readEntityId(
+        { id: url.searchParams.get("notification_id") },
+        "id",
+      );
+      if (!id) return;
+      pendingReadIdRef.current = id;
+      readIdFromUrlRef.current = true;
+    } catch {
+      // URL inválida: nada que marcar.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!pendingDeepLinkRef.current && !pendingReadIdRef.current) return;
+    if (isLoading || isSwitchingLocation) return; // todavía cargando
+    if (!user) {
+      // Sin sesión: el usuario va a login; el push se descarta.
+      pendingDeepLinkRef.current = null;
+      pendingReadIdRef.current = null;
+      return;
+    }
+    if (!selectedCompany || !location) return; // esperando empresa/sucursal
+
+    const target = pendingDeepLinkRef.current;
+    const readId = pendingReadIdRef.current;
+    const companyId = pendingCompanyIdRef.current;
+    pendingDeepLinkRef.current = null;
+    pendingReadIdRef.current = null;
+    pendingCompanyIdRef.current = null;
+
+    // El aviso es de otra empresa: el registro no se ve desde la actual.
+    if (companyId && Number(companyId) !== Number(selectedCompany.id)) {
+      const name = companies.find((c: any) => Number(c.id) === Number(companyId))?.name;
+      alerts.warning(
+        `Este aviso es de ${name ?? "otra empresa"}. Cámbiate a esa empresa para verlo.`,
+      );
+      return;
+    }
+
+    if (readId) {
+      services.notifications
+        .markAsRead(Number(readId))
+        .catch(() => undefined) // ya borrada u otra empresa: no es un error
+        .finally(() => {
+          loadUnreadNotificationsCount();
+        });
+    }
+    if (readIdFromUrlRef.current) {
+      // Se quita ?notification_id de la URL (ya se marcó como leída).
+      readIdFromUrlRef.current = false;
+      router.setParams({ notification_id: undefined } as any);
+    }
+    if (target) router.push(target as any);
+    // El router y loadUnreadNotificationsCount son estables.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [deepLinkTick, isLoading, isSwitchingLocation, user, selectedCompany, location]);
 
   // Mostrar loading mientras se verifica autenticación
   if (isLoading || isSwitchingLocation) {
@@ -314,28 +388,3 @@ const styles = StyleSheet.create({
   },
 });
 
-// Mapea los event_type emitidos por los templates del backend a rutas de
-// la app. Si no reconocemos el evento o falta el entityId, caemos a la
-// lista de notificaciones para que el usuario tenga contexto.
-function resolveDeepLink(
-  eventType: string | undefined,
-  entityId: string | undefined,
-): string {
-  const fallback = "/(tabs)/notifications";
-
-  if (!eventType || !entityId) return fallback;
-
-  switch (eventType) {
-    case "task_event":
-      return `/(tabs)/tasks/${entityId}`;
-    case "purchase_update":
-      return `/(tabs)/home/purchases/${entityId}`;
-    case "low_stock":
-    case "inventory_adjustment":
-      return `/(tabs)/inventory/products/${entityId}`;
-    case "inventory_count_discrepancy":
-      return `/(tabs)/inventory/weekly-inventory/${entityId}`;
-    default:
-      return fallback;
-  }
-}

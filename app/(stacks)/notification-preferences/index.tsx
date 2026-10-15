@@ -1,9 +1,10 @@
 import palette from "@/constants/palette";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import NotificationPermissionBanner from "@/components/Notifications/NotificationPermissionBanner";
 import Services from "@/utils/services";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
+import { useCallback, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -26,6 +27,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type EventType = App.Entities.NotificationEventType;
+type Preference = App.Entities.NotificationPreference;
+type ChannelKey = "channel_db" | "channel_push" | "channel_email";
 
 interface EligibleUser {
   id: number;
@@ -51,20 +54,9 @@ function AssignUsersModal({
   onClose: () => void;
 }) {
   const [search, setSearch] = useState("");
-  // null→ todos seleccionados al abrir
+  // El modal se monta cada vez que se abre: null → todos seleccionados.
   const [selected, setSelected] = useState<Set<number>>(
     () => new Set(currentIds ?? allUsers.map((u) => u.id))
-  );
-
-
-  console.log(allUsers)
-
-  // Resetear al abrir
-  useFocusEffect(
-    useCallback(() => {
-      setSelected(new Set(currentIds ?? allUsers.map((u) => u.id)));
-      setSearch("");
-    }, [visible])
   );
 
   const filtered = allUsers.filter(
@@ -85,13 +77,16 @@ function AssignUsersModal({
   const selectAll = () => setSelected(new Set(allUsers.map((u) => u.id)));
   const clearAll = () => setSelected(new Set());
 
+  // Solo cuentan los que siguen siendo elegibles (un usuario pudo perder el
+  // permiso desde que se guardó la lista).
+  const selectedEligible = allUsers.filter((u) => selected.has(u.id)).length;
+  const allChecked = selectedEligible === allUsers.length;
+
   const handleSave = () => {
-    const ids = Array.from(selected);
-    // null = todos
+    const ids = allUsers.filter((u) => selected.has(u.id)).map((u) => u.id);
+    // null = todos los que tengan el permiso (incluidos los que se agreguen después)
     onSave(ids.length === allUsers.length ? null : ids);
   };
-
-  const allChecked = selected.size === allUsers.length;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -107,6 +102,10 @@ function AssignUsersModal({
             </TouchableOpacity>
           </View>
 
+          <Text variant="bodySmall" style={modalStyles.hint}>
+            Solo aparecen los usuarios con el permiso que pide este aviso.
+          </Text>
+
           {/* Buscador */}
           <Searchbar
             placeholder="Buscar usuario..."
@@ -119,7 +118,7 @@ function AssignUsersModal({
           {/* Seleccionar / deseleccionar todos */}
           <View style={modalStyles.bulkRow}>
             <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
-              {selected.size} de {allUsers.length} seleccionado{selected.size !== 1 ? "s" : ""}
+              {selectedEligible} de {allUsers.length} seleccionado{selectedEligible !== 1 ? "s" : ""}
             </Text>
             <TouchableOpacity onPress={allChecked ? clearAll : selectAll}>
               <Text variant="labelSmall" style={{ color: palette.primary, fontWeight: "600" }}>
@@ -194,9 +193,10 @@ function AssignUsersModal({
 
 const modalStyles = StyleSheet.create({
   overlay:    { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", paddingHorizontal: 20 },
-  sheet:      { backgroundColor: palette.card, borderRadius: 20, padding: 20, maxHeight: "85%", width: "100%" },
-  header:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  sheet:      { backgroundColor: palette.card, borderRadius: 20, padding: 20, maxHeight: "85%", width: "100%", maxWidth: 520 },
+  header:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
   title:      { color: palette.text, fontWeight: "700" },
+  hint:       { color: palette.textSecondary, marginBottom: 12 },
   closeBtn:   { padding: 4 },
   searchbar:  { backgroundColor: palette.surface, marginBottom: 12, height: 44, elevation: 0 },
   bulkRow:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
@@ -208,86 +208,141 @@ const modalStyles = StyleSheet.create({
   actions:    { flexDirection: "row", gap: 12, marginTop: 14 },
 });
 
+// ─── Catálogo de eventos ────────────────────────────────────────────────────
+// La lista de eventos la manda el backend (uno por cada tipo, con valores por
+// defecto si la empresa no lo ha configurado); aquí solo va cómo mostrarlos.
+// `directRecipients`: avisos que van a personas concretas (sin permiso que
+// filtre), por eso no tienen lista de destinatarios.
+
 const EVENT_CONFIG: Record<
-  EventType,
-  { label: string; description: string; icon: string; hasPermission: boolean }
+  string,
+  { label: string; description: string; icon: string; directRecipients?: string }
 > = {
   low_stock: {
-    label: "Stock Bajo",
-    description: "Usuarios con permiso de inventario que recibirán alertas de stock bajo",
+    label: "Stock bajo",
+    description: "Cuando un producto queda por debajo de su stock mínimo en una sucursal.",
     icon: "package-variant-remove",
-    hasPermission: true,
   },
   inventory_adjustment: {
-    label: "Ajuste de Inventario",
-    description: "Usuarios con permiso de inventario que recibirán notificaciones de ajustes",
+    label: "Ajustes de inventario",
+    description: "Cuando alguien registra un ajuste de existencias (no le llega a quien lo hizo).",
     icon: "tune-variant",
-    hasPermission: true,
   },
   inventory_count_discrepancy: {
-    label: "Discrepancia de Conteo",
-    description: "Usuarios con permiso de inventario que recibirán alertas de discrepancias",
+    label: "Diferencias de conteo",
+    description: "Cuando un conteo encuentra cantidades distintas al stock esperado.",
     icon: "clipboard-alert-outline",
-    hasPermission: true,
   },
   purchase_update: {
-    label: "Actualización de Compra",
-    description: "Usuarios con permiso de compras que recibirán actualizaciones de órdenes",
+    label: "Compras",
+    description: "Cuando una compra sale en camino o se recibe.",
     icon: "truck-delivery-outline",
-    hasPermission: true,
+  },
+  transfer_update: {
+    label: "Transferencias",
+    description: "Cuando una transferencia se aprueba, rechaza, envía, recibe o cancela.",
+    icon: "swap-horizontal",
+    directRecipients:
+      "Llega a quien pidió la transferencia y, cuando se recibe, también a quien la envió.",
   },
   task_event: {
-    label: "Evento de Tarea",
-    description: "Las notificaciones de tareas van al usuario asignado directamente",
+    label: "Tareas",
+    description: "Tarea asignada, completada, comentada, por vencer (menos de un día) y vencida.",
     icon: "clipboard-check-outline",
-    hasPermission: false,
+    directRecipients:
+      "Llega a las personas de cada tarea: a quien se le asigna (asignación, por vencer, vencida, comentarios) y a quien la creó (cuando se completa o la comentan).",
+  },
+  reminder: {
+    label: "Recordatorios",
+    description: "Cuando se acerca la fecha de un recordatorio con aviso activado y el mismo día.",
+    icon: "calendar-clock",
+    directRecipients: "Llega al usuario al que está asignado el recordatorio.",
   },
 };
 
-const EVENT_TYPES: EventType[] = [
+const EVENT_ORDER: string[] = [
   "low_stock",
   "inventory_adjustment",
   "inventory_count_discrepancy",
   "purchase_update",
+  "transfer_update",
   "task_event",
+  "reminder",
 ];
 
-interface PrefData {
-  is_active: boolean;
-  channel_db: boolean;
-  channel_email: boolean;
-  channel_push: boolean;
-  allowed_user_ids: number[] | null;
+function getEventConfig(eventType: string) {
+  return (
+    EVENT_CONFIG[eventType] ?? {
+      label: eventType.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()),
+      description: "Tipo de aviso nuevo.",
+      icon: "bell-outline",
+    }
+  );
+}
+
+function sortPreferences(list: Preference[]) {
+  const rank = (eventType: string) => {
+    const index = EVENT_ORDER.indexOf(eventType);
+    return index === -1 ? EVENT_ORDER.length : index;
+  };
+  return [...list].sort((a, b) => rank(a.event_type) - rank(b.event_type));
+}
+
+const CHANNELS: { key: ChannelKey; label: string; icon: string }[] = [
+  { key: "channel_db", label: "Campana", icon: "bell-outline" },
+  { key: "channel_push", label: "Push", icon: "cellphone-message" },
+  { key: "channel_email", label: "Correo", icon: "email-outline" },
+];
+
+function normalizeUsers(response: any): EligibleUser[] {
+  const payload = response?.data ?? response;
+  if (!Array.isArray(payload)) return [];
+  return payload
+    .filter((u: any) => u?.id)
+    .map((u: any) => ({ id: u.id, name: u.name ?? "Usuario", email: u.email ?? "" }));
+}
+
+function errorMessage(error: any, fallback: string) {
+  const message = error?.response?.data?.message;
+  return typeof message === "string" && message.trim() ? message : fallback;
 }
 
 // ─── Tarjeta de evento ──────────────────────────────────────────────────────
 
 function EventPreferenceCard({
-  eventType,
   pref,
-  allUsers,
+  eligibleUsers,
   loadingUsers,
-  onToggleActive,
-  onOpenModal,
+  canManage,
   saving,
+  onChange,
+  onOpenModal,
+  onRestore,
 }: {
-  eventType: EventType;
-  pref: PrefData | undefined;
-  allUsers: EligibleUser[];
+  pref: Preference;
+  /** null = no se pudo saber (sin permiso para consultarlo). */
+  eligibleUsers: EligibleUser[] | null;
   loadingUsers: boolean;
-  onToggleActive: (value: boolean) => void;
-  onOpenModal: () => void;
+  canManage: boolean;
   saving: boolean;
+  onChange: (patch: Partial<Preference>) => void;
+  onOpenModal: () => void;
+  /** Solo en la sucursal: volver a la configuración de la empresa. */
+  onRestore?: () => void;
 }) {
-  const config = EVENT_CONFIG[eventType];
-  const isActive = pref?.is_active ?? true;
-  const allowedIds = pref?.allowed_user_ids ?? null;
+  const config = getEventConfig(pref.event_type);
+  const isActive = pref.is_active;
+  const allowedIds = pref.allowed_user_ids;
+  const hasPermissionFilter = Boolean(pref.permission_name);
+  const noChannels = !pref.channel_db && !pref.channel_push && !pref.channel_email;
+  const disabled = !canManage || saving;
 
-  // Usuarios asignados actualmente
   const assignedUsers =
-    allowedIds === null
-      ? allUsers
-      : allUsers.filter((u) => allowedIds.includes(u.id));
+    eligibleUsers === null
+      ? []
+      : allowedIds === null
+        ? eligibleUsers
+        : eligibleUsers.filter((u) => allowedIds.includes(u.id));
 
   return (
     <Card style={[styles.card, !isActive && styles.cardInactive]}>
@@ -313,28 +368,89 @@ function EventPreferenceCard({
             >
               {config.label}
             </Text>
-            <Text variant="bodySmall" style={styles.eventDescription} numberOfLines={2}>
+            <Text variant="bodySmall" style={styles.eventDescription}>
               {config.description}
             </Text>
           </View>
           <Switch
             value={isActive}
-            onValueChange={onToggleActive}
-            disabled={saving}
+            onValueChange={(value) => onChange({ is_active: value })}
+            disabled={disabled}
             color={palette.primary}
           />
         </View>
 
-        {/* Sección de destinatarios */}
+        {/* En la sucursal: si el aviso sigue a la empresa o se personalizó. */}
+        {onRestore && (
+          <View style={styles.scopeRow}>
+            <Icon
+              source={pref.is_customized ? "store-edit-outline" : "link-variant"}
+              size={14}
+              color={pref.is_customized ? palette.primary : palette.textMuted}
+            />
+            <Text
+              variant="bodySmall"
+              style={[styles.scopeText, pref.is_customized && { color: palette.primary }]}
+            >
+              {pref.is_customized ? "Personalizado en esta sucursal" : "Igual que en la empresa"}
+            </Text>
+            {pref.is_customized && canManage && (
+              <TouchableOpacity onPress={onRestore} disabled={saving} hitSlop={8}>
+                <Text variant="labelSmall" style={styles.scopeLink}>
+                  Usar el de la empresa
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
         {isActive && (
           <>
             <Divider style={styles.divider} />
 
-            {!config.hasPermission ? (
+            {/* Canales */}
+            <Text variant="labelSmall" style={styles.usersLabel}>
+              CANALES
+            </Text>
+            <View style={styles.channelsRow}>
+              {CHANNELS.map((channel) => {
+                const on = pref[channel.key];
+                return (
+                  <Chip
+                    key={channel.key}
+                    icon={on ? "check" : channel.icon}
+                    selected={on}
+                    showSelectedCheck={false}
+                    onPress={() => onChange({ [channel.key]: !on } as Partial<Preference>)}
+                    disabled={disabled}
+                    style={[styles.channelChip, on && styles.channelChipOn]}
+                    textStyle={[styles.channelChipText, on && styles.channelChipTextOn]}
+                    compact
+                    accessibilityLabel={`${channel.label}: ${on ? "activado" : "desactivado"}`}
+                  >
+                    {channel.label}
+                  </Chip>
+                );
+              })}
+            </View>
+            {noChannels && (
+              <View style={styles.infoRow}>
+                <Icon source="bell-off-outline" size={16} color={palette.error} />
+                <Text variant="bodySmall" style={[styles.infoText, { color: palette.error }]}>
+                  Sin canales: este aviso no le llegará a nadie.
+                </Text>
+              </View>
+            )}
+
+            <Divider style={styles.divider} />
+
+            {/* Destinatarios */}
+            {!hasPermissionFilter ? (
               <View style={styles.infoRow}>
                 <Icon source="information-outline" size={16} color={palette.textSecondary} />
                 <Text variant="bodySmall" style={styles.infoText}>
-                  Las notificaciones de tareas se envían automáticamente al usuario asignado y/o al creador.
+                  {config.directRecipients ??
+                    "Este aviso se envía directamente a las personas involucradas."}
                 </Text>
               </View>
             ) : (
@@ -343,15 +459,23 @@ function EventPreferenceCard({
                   <Text variant="labelSmall" style={styles.usersLabel}>
                     DESTINATARIOS
                   </Text>
-                  <TouchableOpacity onPress={onOpenModal} disabled={loadingUsers || saving}>
-                    <Text variant="labelSmall" style={{ color: palette.primary, fontWeight: "600" }}>
-                      Gestionar
-                    </Text>
-                  </TouchableOpacity>
+                  {canManage && eligibleUsers !== null && (
+                    <TouchableOpacity onPress={onOpenModal} disabled={loadingUsers || saving}>
+                      <Text variant="labelSmall" style={{ color: palette.primary, fontWeight: "600" }}>
+                        Gestionar
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 {loadingUsers ? (
                   <ActivityIndicator size="small" color={palette.primary} style={{ marginVertical: 8 }} />
+                ) : eligibleUsers === null ? (
+                  <Text variant="bodySmall" style={styles.infoText}>
+                    {allowedIds === null
+                      ? "Todos los usuarios con permiso."
+                      : `${allowedIds.length} usuario${allowedIds.length === 1 ? "" : "s"} elegido${allowedIds.length === 1 ? "" : "s"}.`}
+                  </Text>
                 ) : assignedUsers.length === 0 ? (
                   <View style={styles.infoRow}>
                     <Icon source="bell-off-outline" size={16} color={palette.error} />
@@ -368,7 +492,7 @@ function EventPreferenceCard({
                         textStyle={styles.chipText}
                         compact
                       >
-                        Todos ({allUsers.length})
+                        Todos con permiso ({eligibleUsers.length})
                       </Chip>
                     ) : (
                       assignedUsers.map((u) => (
@@ -395,91 +519,130 @@ function EventPreferenceCard({
 
 export default function NotificationPreferencesScreen() {
   const alerts = useAlerts();
+  const { hasPermission, location } = useAuth();
+  const navigation = useNavigation();
+  // ?scope=location: los avisos de la sucursal actual (Administración › Esta
+  // sucursal). Cada aviso usa el de la empresa hasta que se cambia aquí.
+  const { scope } = useLocalSearchParams<{ scope?: string }>();
+  const branchScope = scope === "location" ? ("location" as const) : undefined;
 
-  const [prefs, setPrefs] = useState<Partial<Record<EventType, PrefData>>>({});
-  const [companyUsers, setCompanyUsers] = useState<EligibleUser[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: branchScope ? `Notificaciones · ${location?.name ?? "sucursal"}` : "Preferencias de Notificaciones",
+    });
+  }, [navigation, branchScope, location?.name]);
+  // GET pide notifications_list; cambiar algo (y ver los usuarios elegibles)
+  // pide notifications_manage.
+  const canManage = hasPermission("notifications_manage");
+
+  const [prefs, setPrefs] = useState<Preference[]>([]);
+  // Usuarios elegibles por permiso (varios eventos comparten permiso).
+  const [eligibleByPermission, setEligibleByPermission] = useState<
+    Record<string, EligibleUser[]>
+  >({});
+  const [loadingUsers, setLoadingUsers] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState<EventType | null>(null);
 
   // Modal state
   const [modalEvent, setModalEvent] = useState<EventType | null>(null);
   const [modalSaving, setModalSaving] = useState(false);
 
-  const loadAll = async () => {
+  const loadAll = useCallback(async () => {
     try {
-      setLoading(true);
+      setLoadError(null);
+      const prefsRes = await Services.notificationPreferences.index(branchScope);
+      const list: Preference[] = Array.isArray(prefsRes?.data)
+        ? prefsRes.data
+        : Array.isArray(prefsRes)
+          ? prefsRes
+          : [];
+      setPrefs(sortPreferences(list));
+      setLoading(false);
 
-      // Cargar preferencias y usuarios de la empresa en paralelo
-      const [prefsRes, usersRes] = await Promise.all([
-        Services.notificationPreferences.index(),
-        Services.admin.users.index({ by_company: true } as any),
-      ]);
+      if (!canManage) return;
 
-      // Mapear preferencias
-      const prefsList: App.Entities.NotificationPreference[] = prefsRes.data ?? prefsRes;
-      const prefsMap: Partial<Record<EventType, PrefData>> = {};
-      for (const p of prefsList) {
-        prefsMap[p.event_type] = {
-          is_active:        p.is_active,
-          channel_db:       p.channel_db,
-          channel_email:    p.channel_email,
-          channel_push:     p.channel_push,
-          allowed_user_ids: p.allowed_user_ids,
-        };
-      }
-      setPrefs(prefsMap);
-
-      // Mapear usuarios de la empresa
-      const rawUsers = (usersRes.data || []).data ?? usersRes;
-
-      console.log("rawUsers", rawUsers)
-      const userList: EligibleUser[] = (Array.isArray(rawUsers) ? rawUsers : []).map(
-        (u: any) => ({ id: u.id, name: u.name, email: u.email })
+      // Una consulta por permiso (inventory_manage, purchases_manage…), no
+      // por evento. Antes se listaban todos los usuarios de la empresa,
+      // aunque sin el permiso nunca reciben el aviso.
+      const permissions = Array.from(
+        new Set(list.map((p) => p.permission_name).filter(Boolean)),
       );
-      setCompanyUsers(userList);
-    } catch {
-      alerts.error("Error al cargar las preferencias");
+      setLoadingUsers(true);
+      const entries = await Promise.all(
+        permissions.map(async (permission) => {
+          const pref = list.find((p) => p.permission_name === permission)!;
+          try {
+            const response = await Services.notificationPreferences.eligibleUsers(
+              pref.event_type,
+              branchScope ? { scope: branchScope } : undefined,
+            );
+            return [permission, normalizeUsers(response)] as const;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      setEligibleByPermission(
+        Object.fromEntries(
+          entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null),
+        ),
+      );
+    } catch (error: any) {
+      setLoadError(
+        error?.response?.status === 403
+          ? "No tienes permiso para ver las preferencias de notificaciones."
+          : errorMessage(error, "No se pudieron cargar las preferencias."),
+      );
     } finally {
       setLoading(false);
       setLoadingUsers(false);
     }
-  };
+  }, [canManage, branchScope]);
 
-  useFocusEffect(useCallback(() => { loadAll(); }, []));
+  useFocusEffect(
+    useCallback(() => {
+      loadAll();
+    }, [loadAll]),
+  );
 
-  const savePref = async (eventType: EventType, patch: Partial<PrefData>) => {
-    setPrefs((prev) => ({
-      ...prev,
-      [eventType]: { ...(prev[eventType] as PrefData), ...patch },
-    }));
+  const savePref = async (eventType: EventType, patch: Partial<Preference>) => {
+    const previous = prefs;
+    // En la sucursal, cambiar algo la deja con su propia configuración.
+    const customized = branchScope ? { is_customized: true } : {};
+    setPrefs((current) =>
+      current.map((p) => (p.event_type === eventType ? { ...p, ...patch, ...customized } : p)),
+    );
     setSaving(eventType);
     try {
-      await Services.notificationPreferences.update(eventType, patch);
-    } catch {
-      alerts.error("Error al guardar la preferencia");
+      await Services.notificationPreferences.update(eventType, patch, branchScope);
+    } catch (error) {
+      // Se regresa al valor anterior: el switch no debe quedar mintiendo.
+      setPrefs(previous);
+      alerts.error(errorMessage(error, "Error al guardar la preferencia"));
     } finally {
       setSaving(null);
     }
   };
-
-  const handleToggleActive = (eventType: EventType, value: boolean) =>
-    savePref(eventType, { is_active: value });
 
   // Guardar asignación de usuarios desde el modal
   const handleSaveUsers = async (ids: number[] | null) => {
     if (!modalEvent) return;
     setModalSaving(true);
     try {
-      await Services.notificationPreferences.update(modalEvent, { allowed_user_ids: ids });
-      setPrefs((prev) => ({
-        ...prev,
-        [modalEvent]: { ...(prev[modalEvent] as PrefData), allowed_user_ids: ids },
-      }));
+      await Services.notificationPreferences.update(modalEvent, { allowed_user_ids: ids }, branchScope);
+      setPrefs((current) =>
+        current.map((p) =>
+          p.event_type === modalEvent
+            ? { ...p, allowed_user_ids: ids, ...(branchScope ? { is_customized: true } : {}) }
+            : p,
+        ),
+      );
       alerts.success("Destinatarios guardados");
       setModalEvent(null);
-    } catch {
-      alerts.error("Error al guardar los destinatarios");
+    } catch (error) {
+      alerts.error(errorMessage(error, "Error al guardar los destinatarios"));
     } finally {
       setModalSaving(false);
     }
@@ -487,22 +650,39 @@ export default function NotificationPreferencesScreen() {
 
   const handleReset = async () => {
     const confirmed = await alerts.confirm(
-      "¿Restablecer todas las preferencias a los valores predeterminados?",
+      branchScope
+        ? "¿Usar en todos los avisos de esta sucursal la configuración de la empresa?"
+        : "¿Restablecer todas las preferencias a los valores predeterminados?",
       {
-        title: "Restablecer preferencias",
-        okText: "Restablecer",
+        title: branchScope ? "Usar la configuración de la empresa" : "Restablecer preferencias",
+        okText: branchScope ? "Usar la de la empresa" : "Restablecer",
         cancelText: "Cancelar",
       }
     );
     if (!confirmed) return;
     try {
-      await Services.notificationPreferences.reset();
-      alerts.success("Preferencias restablecidas");
+      await Services.notificationPreferences.reset(branchScope);
+      alerts.success(branchScope ? "La sucursal usa la configuración de la empresa" : "Preferencias restablecidas");
       loadAll();
-    } catch {
-      alerts.error("Error al restablecer las preferencias");
+    } catch (error) {
+      alerts.error(errorMessage(error, "Error al restablecer las preferencias"));
     }
   };
+
+  // Un aviso de la sucursal vuelve a la configuración de la empresa.
+  const handleRestore = async (eventType: EventType) => {
+    setSaving(eventType);
+    try {
+      await Services.notificationPreferences.restore(eventType, branchScope);
+      await loadAll();
+    } catch (error) {
+      alerts.error(errorMessage(error, "No se pudo volver a la configuración de la empresa"));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const anyCustomized = prefs.some((p) => p.is_customized);
 
   if (loading) {
     return (
@@ -517,46 +697,92 @@ export default function NotificationPreferencesScreen() {
     );
   }
 
-  console.log("all users",companyUsers);
+  const modalPref = modalEvent ? prefs.find((p) => p.event_type === modalEvent) : undefined;
+  const modalUsers = modalPref ? eligibleByPermission[modalPref.permission_name] : undefined;
 
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         <NotificationPermissionBanner />
-        <Text variant="bodyMedium" style={styles.intro}>
-          Activa o desactiva cada tipo de notificación y selecciona qué usuarios deben recibirla.
-        </Text>
 
-        {EVENT_TYPES.map((eventType) => (
-          <EventPreferenceCard
-            key={eventType}
-            eventType={eventType}
-            pref={prefs[eventType]}
-            allUsers={companyUsers}
-            loadingUsers={loadingUsers}
-            saving={saving === eventType}
-            onToggleActive={(v) => handleToggleActive(eventType, v)}
-            onOpenModal={() => setModalEvent(eventType)}
-          />
-        ))}
+        {loadError ? (
+          <View style={styles.errorBox}>
+            <Icon source="lock-outline" size={20} color={palette.textSecondary} />
+            <Text variant="bodyMedium" style={styles.errorText}>
+              {loadError}
+            </Text>
+            <Button mode="outlined" icon="refresh" onPress={loadAll}>
+              Reintentar
+            </Button>
+          </View>
+        ) : (
+          <>
+            {branchScope ? (
+              <Text variant="bodyMedium" style={styles.intro}>
+                Avisos de lo que pasa en {location?.name ?? "esta sucursal"}. Cada aviso
+                funciona como en la empresa hasta que lo cambias aquí; los destinatarios
+                son las personas de esta sucursal.
+              </Text>
+            ) : (
+              <Text variant="bodyMedium" style={styles.intro}>
+                Activa o desactiva cada aviso de la empresa, elige por dónde llega (campana
+                de la app, push al celular/navegador o correo) y, en los avisos por permiso,
+                quién lo recibe. Cada sucursal puede cambiarlos en Administración › Esta
+                sucursal.
+              </Text>
+            )}
 
-        <Button
-          mode="outlined"
-          onPress={handleReset}
-          style={styles.resetButton}
-          icon="refresh"
-          textColor={palette.error}
-        >
-          Restablecer valores predeterminados
-        </Button>
+            {!canManage && (
+              <View style={styles.readOnlyNote}>
+                <Icon source="lock-outline" size={16} color={palette.textSecondary} />
+                <Text variant="bodySmall" style={styles.infoText}>
+                  Solo lectura: cambiar estas preferencias requiere el permiso
+                  &quot;Gestionar notificaciones&quot;.
+                </Text>
+              </View>
+            )}
+
+            {prefs.map((pref) => (
+              <EventPreferenceCard
+                key={pref.event_type}
+                pref={pref}
+                eligibleUsers={
+                  pref.permission_name
+                    ? eligibleByPermission[pref.permission_name] ?? null
+                    : null
+                }
+                loadingUsers={loadingUsers}
+                canManage={canManage}
+                saving={saving === pref.event_type}
+                onChange={(patch) => savePref(pref.event_type, patch)}
+                onOpenModal={() => setModalEvent(pref.event_type)}
+                onRestore={branchScope ? () => handleRestore(pref.event_type) : undefined}
+              />
+            ))}
+
+            {canManage && (!branchScope || anyCustomized) && (
+              <Button
+                mode="outlined"
+                onPress={handleReset}
+                style={styles.resetButton}
+                icon="refresh"
+                textColor={palette.error}
+              >
+                {branchScope
+                  ? "Usar la configuración de la empresa en todo"
+                  : "Restablecer valores predeterminados"}
+              </Button>
+            )}
+          </>
+        )}
       </ScrollView>
 
       {/* Modal de selección de usuarios */}
-      {modalEvent !== null && (
+      {modalEvent !== null && modalUsers && (
         <AssignUsersModal
           visible={modalEvent !== null}
-          allUsers={companyUsers}
-          currentIds={prefs[modalEvent]?.allowed_user_ids ?? null}
+          allUsers={modalUsers}
+          currentIds={modalPref?.allowed_user_ids ?? null}
           saving={modalSaving}
           onSave={handleSaveUsers}
           onClose={() => setModalEvent(null)}
@@ -570,7 +796,10 @@ const styles = StyleSheet.create({
   container:        { flex: 1, backgroundColor: palette.background },
   scrollContent:    { padding: 16, paddingBottom: 40 },
   centered:         { flex: 1, justifyContent: "center", alignItems: "center" },
-  intro:            { color: palette.textSecondary, marginBottom: 20, lineHeight: 20 },
+  intro:            { color: palette.textSecondary, marginTop: 12, marginBottom: 16, lineHeight: 20 },
+  readOnlyNote:     { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 12, backgroundColor: palette.surface, marginBottom: 16 },
+  errorBox:         { alignItems: "center", gap: 12, padding: 24, marginTop: 12 },
+  errorText:        { color: palette.textSecondary, textAlign: "center" },
 
   card:             { marginBottom: 16, backgroundColor: palette.card, borderRadius: 16, elevation: 0 },
   cardInactive:     { opacity: 0.65 },
@@ -581,6 +810,12 @@ const styles = StyleSheet.create({
 
   divider:          { marginVertical: 12, backgroundColor: palette.border },
 
+  channelsRow:      { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
+  channelChip:      { backgroundColor: palette.surface },
+  channelChipOn:    { backgroundColor: palette.primary + "22" },
+  channelChipText:  { color: palette.textSecondary, fontSize: 12 },
+  channelChipTextOn:{ color: palette.primary, fontWeight: "600" },
+
   assignedHeader:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   usersLabel:       { color: palette.textSecondary, fontSize: 10, fontWeight: "700", letterSpacing: 1 },
 
@@ -589,6 +824,9 @@ const styles = StyleSheet.create({
   chipText:         { color: palette.primary, fontSize: 12 },
 
   infoRow:          { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 4 },
+  scopeRow:         { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 10 },
+  scopeText:        { color: palette.textMuted, fontSize: 12 },
+  scopeLink:        { color: palette.primary, fontWeight: "600", marginLeft: 4 },
   infoText:         { color: palette.textSecondary, flex: 1, lineHeight: 18 },
 
   resetButton:      { marginTop: 8, borderColor: palette.error },
