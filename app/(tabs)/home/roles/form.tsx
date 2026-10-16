@@ -321,7 +321,7 @@ export default function CreateRoleScreen(props: RoleProps) {
 
   return (
     <AppForm
-      deletePermission="roles_delete"
+      permissionPrefix="roles"
       readonly={props.readonly}
       id={props.id}
       api={Services.admin.roles}

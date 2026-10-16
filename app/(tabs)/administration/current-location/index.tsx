@@ -63,6 +63,7 @@ export default function CurrentLocationScreen() {
       ref={formRef}
       api={Services.admin.locations}
       id={location.id}
+      permissionPrefix="locations"
       onSuccess={() => goBack()}
       initialValues={{
         name: "",

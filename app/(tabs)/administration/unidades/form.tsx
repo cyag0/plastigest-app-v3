@@ -1,4 +1,5 @@
 import { goBack } from "@/utils/navigation";
+import FormValueWatcher from "@/components/Administration/FormValueWatcher";
 import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppDependency from "@/components/Form/AppDependency";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
@@ -11,7 +12,7 @@ import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
 import { router } from "expo-router";
 import { useFormikContext } from "formik";
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { View } from "react-native";
 import { Text } from "react-native-paper";
 import * as Yup from "yup";
@@ -70,6 +71,10 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
   const formRef = useRef<AppFormRef<UnidadFormData>>(null);
   const { company } = useSelectedCompany();
   const alerts = useAlerts();
+  // Empresa de la unidad cargada: las globales (company_id null) solo las
+  // modifica un administrador del sistema (el backend responde 403).
+  const [unitCompanyId, setUnitCompanyId] = useState<unknown>(undefined);
+  const isGlobalUnit = !!id && unitCompanyId === null;
 
   console.log("Selected Location:");
 
@@ -84,7 +89,9 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
 
   return (
     <AppForm
-      deletePermission="units_delete"
+      permissionPrefix="units"
+      submitPermission={isGlobalUnit ? "system_admin" : undefined}
+      deletePermission={isGlobalUnit ? "system_admin" : undefined}
       ref={formRef}
       api={Services.home.unidades}
       validationSchema={validationSchema}
@@ -103,6 +110,7 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
         goBack();
       }}
     >
+      <FormValueWatcher name="company_id" onChange={setUnitCompanyId} />
 
       <View style={{ backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 } }}>
 

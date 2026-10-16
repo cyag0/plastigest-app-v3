@@ -2,7 +2,9 @@ import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import palette from "@/constants/palette";
+import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAlerts } from "@/hooks/useAlerts";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import { generateCrudMenu } from "@/utils/routes";
 import Services from "@/utils/services";
@@ -14,16 +16,29 @@ import { Avatar } from "react-native-paper";
 export default function LocationsIndexScreen() {
   const navigation = useRouter();
   const { company } = useSelectedCompany();
-  const { hasPermission } = useAuth();
-  // Sin el permiso el backend responde 403: la acción no se ofrece. Quien no
-  // tiene acceso a todas las sucursales (locations_all) solo ve las suyas.
+  const { location } = useAuth();
+  const alerts = useAlerts();
+  // Las acciones sin permiso no se ofrecen (permissionPrefix en la lista).
+  // Quien no tiene acceso a todas las sucursales (system_admin o
+  // locations_all) ve las suyas, pero solo abre, edita o elimina la actual:
+  // con las demás el backend responde 404.
+  const allLocations = useAllLocationsAccess();
+  const isReachable = (item: { id: number | string }) =>
+    allLocations || Number(item.id) === location?.id;
   const crudMenu = generateCrudMenu("/(tabs)/administration/locations" as any, {
-    showEdit: hasPermission("locations_update"),
-    showDelete: hasPermission("locations_delete"),
+    showView: isReachable,
+    showEdit: isReachable,
+    showDelete: isReachable,
   });
   const menu = {
     ...crudMenu,
-    onCreate: hasPermission("locations_create") ? crudMenu.onCreate : undefined,
+    onShow: (item: { id: number | string }) => {
+      if (isReachable(item)) {
+        crudMenu.onShow(item);
+      } else {
+        alerts.info("Para ver los datos de otra sucursal, cámbiate a ella.");
+      }
+    },
   };
 
   const columns: AppListColumn<any>[] = [
@@ -66,6 +81,7 @@ export default function LocationsIndexScreen() {
     <AppList
       title="Sucursales"
       service={Services.admin.locations}
+      permissionPrefix="locations"
       defaultFilters={{ company_id: company?.id }}
       columns={columns}
       renderCard={({ item }) => ({

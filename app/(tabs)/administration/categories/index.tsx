@@ -28,6 +28,7 @@ export default function CategoriesIndex() {
       <AppList
         title="Categorías"
         service={Services.categories}
+        permissionPrefix="categories"
         columns={columns}
         renderCard={({ item }: { item: any }) => ({
           title: item.name,

@@ -90,7 +90,7 @@ export default function ClientsForm(props: ClientsFormProps) {
 
   return (
     <AppForm
-      deletePermission="customers_delete"
+      permissionPrefix="customers"
       ref={formRef}
       api={Services.customers}
       id={clientId}

@@ -39,7 +39,7 @@ export default function CashRegisterFormScreen(props: Props) {
 
   return (
     <AppForm
-      deletePermission="cash_registers_delete"
+      permissionPrefix="cash_registers"
       api={Services.cashRegisters}
       id={id}
       readonly={props.readonly}
