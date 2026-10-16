@@ -121,7 +121,7 @@ export function usePosKioskOrders(cart: PosCart, catalogItems: Item[]) {
       : unavailable?.id === linkedId
         ? unavailable.message
         : loaded && !orders.some((o) => o.id === linkedId)
-          ? "Ese pedido ya no está pendiente: se cobró, se canceló o venció."
+          ? "Ese pedido ya no está pendiente: se cobró, se canceló o venció. Si ya lo cobraron en otra caja, no lo cobres otra vez; si no, desliga para cobrarlo como venta normal."
           : null;
 
   const charge = (order: KioskOrder): string | null => {
@@ -183,13 +183,20 @@ export function usePosKioskOrders(cart: PosCart, catalogItems: Item[]) {
    * de otra sucursal o ya no existe). Como error de la pantalla: así no sale
    * encima el aviso global del mismo rechazo, sin la indicación.
    */
-  const markLinkedUnavailable = (message: string) => {
+  const markLinkedUnavailable = (message: string, reason?: string) => {
+    // Si ya se cobró (en otra caja) no se sugiere cobrarlo como venta normal:
+    // sería cobrarle dos veces al cliente.
+    const hint =
+      reason === "charged"
+        ? "Ya se cobró en otra caja: no lo cobres otra vez. Vacía el carrito."
+        : "Desliga el carrito para cobrar estos productos como una venta normal.";
+    const text = `${message} ${hint}`;
     const link = cart.getKioskOrder();
     if (link) {
-      setUnavailable({ id: link.id, message });
+      setUnavailable({ id: link.id, message: text });
       drop(link.id);
     }
-    alerts.error(`${message} Desliga el carrito para cobrar estos productos como una venta normal.`);
+    alerts.error(text);
   };
 
   /** Venta registrada: su pedido del kiosko ya no está pendiente. Llamar antes de vaciar el carrito. */

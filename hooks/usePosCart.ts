@@ -297,6 +297,13 @@ export function usePosCart(storageKey?: string | null, carryFromKey?: string | n
     const next = updater(linesRef.current);
     linesRef.current = next;
     setLinesState(next);
+    // Sin renglones el carrito ya no es el pedido del kiosko (los quitaron a
+    // mano o los sacó el catálogo): si siguiera ligado, la siguiente venta,
+    // de otro cliente, cerraría ese pedido como cobrado.
+    if (next.length === 0 && draftRef.current.kioskOrder) {
+      draftRef.current.kioskOrder = null;
+      setKioskOrderState(null);
+    }
   }, []);
 
   const setCustomer = useCallback((value: PosCustomer | null) => {

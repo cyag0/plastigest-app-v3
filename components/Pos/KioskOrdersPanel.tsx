@@ -359,7 +359,7 @@ export function KioskLinkTag({
           {title}
         </Text>
         {!!staleMessage && (
-          <Text style={styles.tagWarning}>{`${staleMessage} Desliga para cobrarlo como venta normal.`}</Text>
+          <Text style={styles.tagWarning}>{staleMessage}</Text>
         )}
       </View>
       <Button testID="pos-kiosk-unlink" mode="text" compact icon="link-variant-off" textColor={colors.primary} onPress={onUnlink}>

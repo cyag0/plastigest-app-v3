@@ -385,7 +385,10 @@ function PosRegister({
       // El pedido del kiosko ligado ya se cobró o se canceló: la etiqueta del
       // carrito lo marca y ofrece desligarlo para cobrar como venta normal.
       setCheckoutOpen(false);
-      kiosk.markLinkedUnavailable(apiErrorMessage(error, "Ese pedido ya se cobró o se canceló."));
+      kiosk.markLinkedUnavailable(
+        apiErrorMessage(error, "Ese pedido ya se cobró o se canceló."),
+        (error as any)?.response?.data?.details?.reason,
+      );
       return null;
     }
     if (code === SALE_ERROR_CODES.noOpenSession || code === SALE_ERROR_CODES.sessionOtherLocation) {
