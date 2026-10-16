@@ -14,6 +14,7 @@ import NavigationSidebar from "@/components/App/NavigationSidebar";
 import { routeGuardLayout } from "@/components/App/RoutePermissionGuard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useCan } from "@/hooks/useCan";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 
@@ -190,6 +191,15 @@ function WebTabLayout() {
 }
 
 function NativeTabLayout() {
+  // Pestañas que el usuario no puede abrir (regla de su pantalla en el mapa
+  // central): se oculta el botón; si llega por un enlace, el guard muestra
+  // "No tienes permiso…". En web lo mismo lo hace el menú lateral.
+  const { canAccessRoute } = useCan();
+  // En SDK 56 `href: null` solo oculta el botón (la ruta se sigue abriendo
+  // por enlace), como en notificaciones, tareas y preferencias.
+  const hiddenUnless = (route: string) =>
+    canAccessRoute(route) ? {} : { href: null };
+
   return (
     <Tabs
       screenLayout={screenLayout}
@@ -223,6 +233,7 @@ function NativeTabLayout() {
       <Tabs.Screen
         name="inventory"
         options={{
+          ...hiddenUnless("/(tabs)/inventory"),
           title: "Inventario",
           tabBarIcon: ({ color, focused }) => (
             <Appbar.Action icon="archive" iconColor={color} size={24} />
@@ -233,6 +244,7 @@ function NativeTabLayout() {
       <Tabs.Screen
         name="reports"
         options={{
+          ...hiddenUnless("/(tabs)/reports"),
           title: "Dashboard",
           headerShown: true,
           header: ({ options, route }) => (
@@ -253,6 +265,7 @@ function NativeTabLayout() {
       <Tabs.Screen
         name="administration"
         options={{
+          ...hiddenUnless("/(tabs)/administration"),
           title: "Administración",
           // En la barra inferior no cabe completo (5 pestañas en un teléfono).
           tabBarLabel: "Admin",
