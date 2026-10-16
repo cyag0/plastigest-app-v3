@@ -231,7 +231,9 @@ export const ROUTE_PERMISSIONS: Readonly<Record<string, RouteRule>> = {
   "(tabs)/inventory/weekly-inventory/index": "inventory_list",
   "(tabs)/inventory/weekly-inventory/form": "inventory_create",
   "(tabs)/inventory/weekly-inventory/[id]/index": "inventory_read",
-  "(tabs)/inventory/weekly-inventory/[id]/edit": "inventory_update",
+  // Capturar renglones pide inventory_create (InventoryCountDetailController)
+  // y completar o cancelar el conteo, inventory_update.
+  "(tabs)/inventory/weekly-inventory/[id]/edit": { all: ["inventory_create", "inventory_update"] },
   "(tabs)/inventory/weekly-inventory/types": "inventory_list",
 
   // ── (tabs)/notifications ──────────────────────────────────────────────
