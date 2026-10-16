@@ -1,7 +1,7 @@
 import type { UploadedFile } from "@/components/Form/AppUpload";
 import { default as apiClient, default as axiosClient } from "@/utils/axios";
 import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
-import { createCrudService, LaravelResponse } from "./crudService";
+import { createCrudService, LaravelResponse, type RequestOptions } from "./crudService";
 
 // Interfaces para Transferencias
 export interface Location {
@@ -364,8 +364,9 @@ const transferService = {
   },
 
   // Obtener por ID (adaptado para devolver solo data)
-  async getTransfer(id: number): Promise<InventoryTransfer> {
-    const response = await baseService.show(id);
+  /** `silent`: el detalle explica la falla (no existe, sin permiso, red). */
+  async getTransfer(id: number, options?: RequestOptions): Promise<InventoryTransfer> {
+    const response = await baseService.show(id, undefined, options);
     return response.data.data;
   },
 

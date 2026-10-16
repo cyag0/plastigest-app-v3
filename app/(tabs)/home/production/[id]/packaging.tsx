@@ -1,3 +1,7 @@
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
 import { goBack } from "@/utils/navigation";
 import AppInput from "@/components/Form/AppInput";
 import { tokens } from "@/constants/tokens";
@@ -5,9 +9,10 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { errorMessageOf } from "@/utils/errorNotice";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, ScrollView, View } from "react-native";
 import { Button, Icon, Text } from "react-native-paper";
 
@@ -36,12 +41,23 @@ export default function ProductionPackaging() {
   /** Cantidad capturada por producto terminado, como texto del input. */
   const [quantities, setQuantities] = useState<Record<number, string>>({});
 
+  // No se pudo cargar (404, 5xx, red): se explica en lugar de "no se
+  // encontró"; si ya se veía (recarga tras empacar), se avisa y se queda.
+  const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
+  const loadedRef = useRef(false);
+
   const loadPlan = useCallback(async () => {
     try {
       const r: any = await Services.productionOrders.getPackagingPlan(orderId);
       setPlan(r?.data ?? null);
+      setLoadProblem(null);
+      loadedRef.current = true;
     } catch (e: any) {
-      alerts.error("No se pudo cargar el empaque: " + e.message);
+      if (loadedRef.current) {
+        alerts.error(errorMessageOf(e, "No se pudo actualizar el empaque."));
+      } else {
+        setLoadProblem(recordLoadProblem(e, "No se pudo cargar el empaque. Inténtalo de nuevo."));
+      }
     } finally {
       setLoading(false);
     }
@@ -141,6 +157,20 @@ export default function ProductionPackaging() {
         <ActivityIndicator color={colors.primary} />
         <Text style={styles.muted}>Cargando empaque…</Text>
       </View>
+    );
+  }
+
+  if (!plan && loadProblem) {
+    return (
+      <RecordLoadError
+        problem={loadProblem}
+        notFoundTitle="No se encontró el empaque de esta orden"
+        errorTitle="No se pudo cargar el empaque"
+        onRetry={() => {
+          setLoading(true);
+          loadPlan();
+        }}
+      />
     );
   }
 

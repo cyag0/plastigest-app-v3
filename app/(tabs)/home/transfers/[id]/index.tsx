@@ -9,6 +9,10 @@ import {
   TransferStepThreeReceive,
   TransferStepTwoShip,
 } from "@/components/Views/transfers";
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useHelpSection } from "@/help";
@@ -52,6 +56,8 @@ export default function TransferDetailWizardScreen() {
 
   const [transfer, setTransfer] = useState<InventoryTransfer | null>(null);
   const [loading, setLoading] = useState(true);
+  // No se pudo cargar: 404 (borrada o de otra sucursal) o falla del servidor.
+  const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
   const [selectedStep, setSelectedStep] = useState(1);
   // Candado de aprobar/rechazar: un doble toque no manda la acción dos veces.
   const { submitting, run } = useSubmitGuard();
@@ -76,7 +82,9 @@ export default function TransferDetailWizardScreen() {
   const loadTransfer = async () => {
     try {
       setLoading(true);
-      const data = await transferService.getTransfer(transferId);
+      setLoadProblem(null);
+      // silent: la falla se explica en la pantalla (con «Reintentar»).
+      const data = await transferService.getTransfer(transferId, { silent: true });
       setTransfer(data);
       setSelectedStep(getInitialStepForActor(data));
 
@@ -86,8 +94,10 @@ export default function TransferDetailWizardScreen() {
       });
       setEditableQuantities(initialQuantities);
     } catch (error) {
-      console.error("Error loading transfer detail wizard:", error);
       setTransfer(null);
+      setLoadProblem(
+        recordLoadProblem(error, "No se pudo cargar la transferencia. Inténtalo de nuevo."),
+      );
     } finally {
       setLoading(false);
     }
@@ -104,9 +114,16 @@ export default function TransferDetailWizardScreen() {
   }
 
   if (!transfer) {
-    return (
+    return loadProblem ? (
+      <RecordLoadError
+        problem={loadProblem}
+        notFoundTitle="No se encontró la transferencia"
+        errorTitle="No se pudo cargar la transferencia"
+        onRetry={loadTransfer}
+      />
+    ) : (
       <View style={styles.centered}>
-        <Text>No se encontro la transferencia</Text>
+        <Text>No se encontró la transferencia</Text>
       </View>
     );
   }

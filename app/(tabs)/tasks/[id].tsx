@@ -1,4 +1,5 @@
 import EmptyState from "@/components/App/EmptyState";
+import NoPermissionView from "@/components/App/NoPermissionView";
 import TaskDetailContent, {
   type TaskAction,
 } from "@/components/Tasks/TaskDetailContent";
@@ -13,6 +14,7 @@ import { fetchTask, isTaskNotFound } from "@/components/Tasks/taskQueries";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { errorMessageOf } from "@/utils/errorNotice";
 import services from "@/utils/services";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
@@ -29,8 +31,9 @@ export default function TaskDetailScreen() {
   const { open: openLinkedRecord } = useLinkedRecordOpener();
   const [task, setTask] = useState<App.Entities.Task | null>(null);
   const [loading, setLoading] = useState(true);
-  // No se pudo cargar (sin conexión, error del servidor): se ofrece reintentar.
-  const [loadFailed, setLoadFailed] = useState(false);
+  // No se pudo cargar: el motivo (sin conexión, error del servidor…) y se
+  // ofrece reintentar; un 403 muestra la vista «sin permiso».
+  const [loadError, setLoadError] = useState<{ forbidden: boolean; message: string } | null>(null);
   const [pendingAction, setPendingAction] = useState<TaskAction | null>(null);
   const loadedOnceRef = useRef(false);
 
@@ -47,14 +50,17 @@ export default function TaskDetailScreen() {
       // de recibir la compra relacionada) se refresca sin parpadeo.
       if (!loadedOnceRef.current) setLoading(true);
       setTask(await fetchTask(taskId));
-      setLoadFailed(false);
+      setLoadError(null);
       loadedOnceRef.current = true;
     } catch (error) {
       // Ya no existe: se muestra el estado vacío en lugar de un error.
       if (isTaskNotFound(error)) {
         setTask(null);
       } else if (!loadedOnceRef.current) {
-        setLoadFailed(true);
+        setLoadError({
+          forbidden: (error as any)?.response?.status === 403,
+          message: errorMessageOf(error, "Revisa tu conexión e intenta de nuevo."),
+        });
       }
       // Al volver a la pantalla sin conexión se queda la que ya se veía.
     } finally {
@@ -126,14 +132,18 @@ export default function TaskDetailScreen() {
     );
   }
 
+  if (!task && loadError?.forbidden) {
+    return <NoPermissionView />;
+  }
+
   if (!task) {
     return (
       <View style={styles.centerContainer}>
-        {loadFailed ? (
+        {loadError ? (
           <EmptyState
             icon="cloud-off-outline"
             title="No se pudo cargar la tarea"
-            description="Revisa tu conexión e intenta de nuevo."
+            description={loadError.message}
             actionLabel="Reintentar"
             onAction={loadTask}
           />

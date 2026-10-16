@@ -1,4 +1,5 @@
 import EmptyState from "@/components/App/EmptyState";
+import NoPermissionView from "@/components/App/NoPermissionView";
 import NotificationDetailContent from "@/components/Notifications/NotificationDetailContent";
 import {
   fetchNotification,
@@ -8,6 +9,7 @@ import { useLinkedRecordOpener } from "@/components/Notifications/useLinkedRecor
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { errorMessageOf } from "@/utils/errorNotice";
 import { goBack } from "@/utils/navigation";
 import services from "@/utils/services";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -26,8 +28,10 @@ export default function NotificationDetailScreen() {
 
   const [notification, setNotification] = useState<App.Entities.Notification | null>(null);
   const [loading, setLoading] = useState(true);
-  // "missing" = ya no existe (se borró); "error" = no se pudo cargar.
-  const [problem, setProblem] = useState<"missing" | "error" | null>(null);
+  // "missing" = ya no existe (se borró); "forbidden" = 403; "error" = no se
+  // pudo cargar (con el motivo en errorMessage).
+  const [problem, setProblem] = useState<"missing" | "forbidden" | "error" | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
   const loadedOnceRef = useRef(false);
 
   // Push tocado (?open=1): el registro del aviso se abre solo al cargar. Una
@@ -71,7 +75,9 @@ export default function NotificationDetailScreen() {
       // refrescar el contador ya no vuelve a disparar esta carga.
     } catch (error: any) {
       if (loadedOnceRef.current) return; // ya se muestra: se queda como estaba
-      setProblem(error?.response?.status === 404 ? "missing" : "error");
+      const status = error?.response?.status;
+      setErrorMessage(errorMessageOf(error, "Revisa tu conexión e intenta de nuevo."));
+      setProblem(status === 404 ? "missing" : status === 403 ? "forbidden" : "error");
     } finally {
       setLoading(false);
     }
@@ -118,6 +124,10 @@ export default function NotificationDetailScreen() {
     );
   }
 
+  if (problem === "forbidden") {
+    return <NoPermissionView />;
+  }
+
   if (!notification || problem) {
     return (
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
@@ -126,7 +136,7 @@ export default function NotificationDetailScreen() {
             <EmptyState
               icon="cloud-off-outline"
               title="No se pudo cargar la notificación"
-              description="Revisa tu conexión e intenta de nuevo."
+              description={errorMessage || "Revisa tu conexión e intenta de nuevo."}
               actionLabel="Reintentar"
               onAction={loadNotification}
             />

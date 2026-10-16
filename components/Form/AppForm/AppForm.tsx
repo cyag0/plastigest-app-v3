@@ -1,3 +1,7 @@
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -128,6 +132,9 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   const [loading, setLoading] = useState(props.loading || false);
   const formRef = useRef<AppFormRef<T>>(null);
   const [readonly, setReadonly] = useState(!!props.readonly);
+  // El registro (id + api) no se pudo cargar: en lugar del formulario vacío
+  // (con "Actualizar" activo o los datos en blanco) se explica por qué.
+  const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
 
   const alerts = useAlerts();
   const { colors } = useTheme();
@@ -273,8 +280,11 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   }
 
   async function loadInitialValues() {
+    // ¿La carga es del registro por id? Su falla se muestra en la pantalla.
+    const loadsRecord = Boolean(props.id && props.api) && typeof props.initialValues !== "function";
     try {
       setLoading(true);
+      setLoadProblem(null);
 
       if (props.initialValues) {
         // Si initialValues es una función
@@ -290,8 +300,9 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
 
           // Si hay ID y API, hacer petición automática
           if (checkIdAndApi) {
+            // silent: si falla, RecordLoadError lo explica en la pantalla.
             //@ts-ignore
-            const response = await props.api.show(props.id);
+            const response = await props.api.show(props.id, undefined, { silent: true });
             const data = { ...props.initialValues, ...response.data.data };
 
             applyValues(data);
@@ -304,7 +315,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       }
       // Si no hay initialValues pero hay ID y API
       else if (props.id && props.api) {
-        const response = await props.api.show(props.id);
+        const response = await props.api.show(props.id, undefined, { silent: true });
         applyValues(response.data.data as T);
 
         return;
@@ -316,7 +327,11 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       }
     } catch (error) {
       logCaughtError("Error loading initial values:", error);
-      notifyError(error, "No se pudieron cargar los datos del formulario.");
+      if (loadsRecord) {
+        setLoadProblem(recordLoadProblem(error, "No se pudieron cargar los datos del formulario."));
+      } else {
+        notifyError(error, "No se pudieron cargar los datos del formulario.");
+      }
       props.onError?.(error, {} as T);
       formInstance.setValues({} as T);
     } finally {
@@ -430,9 +445,11 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     return false;
   }
 
-  // Context value
+  // Context value. Sin permiso para guardar (submitPermission /
+  // permissionPrefix) los campos también quedan en solo lectura: antes se
+  // podía escribir en un formulario marcado «Solo lectura».
   const contextValue: AppFormContextType<T> = {
-    readonly: readonly || false,
+    readonly: readonly || !canSubmit,
     formRef: { current: ref as any },
   };
 
@@ -607,6 +624,10 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       </KeyboardAvoidingView>
     );
   };
+
+  if (loadProblem) {
+    return <RecordLoadError problem={loadProblem} onRetry={loadInitialValues} />;
+  }
 
   return (
     <AppFormContext.Provider value={contextValue}>

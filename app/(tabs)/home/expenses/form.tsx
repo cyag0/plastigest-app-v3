@@ -1,4 +1,8 @@
 import { goBack } from "@/utils/navigation";
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
 import AmountPreview from "@/components/Pos/AmountPreview";
 import { apiErrorCode, apiErrorMessage, SALE_ERROR_CODES } from "@/components/Pos/saleErrors";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -45,12 +49,18 @@ export default function ExpenseForm(props: ExpenseFormProps) {
   const canSave = can(expenseId ? "expenses_update" : "expenses_create");
 
   const [loading, setLoading] = useState(false);
+  // El gasto no se pudo cargar (404 de otra sucursal o borrado, red…): en
+  // lugar del formulario vacío con "Actualizar" se explica por qué.
+  const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
   // Candado del guardado: un doble toque no crea dos gastos.
   const { submitting: saving, run } = useSubmitGuard();
   // El gasto ya entró en un turno de caja cerrado: monto, método, fecha y
   // "pagado con caja" no se pueden cambiar (el corte ya se firmó).
   const [moneyLocked, setMoneyLocked] = useState(false);
   const [lockMessage, setLockMessage] = useState<string | null>(null);
+  // Sin permiso para guardar, los campos se ven pero no se pueden cambiar
+  // (antes se escribía en un gasto marcado «Solo lectura»).
+  const readOnly = !canSave;
   // Lo cargado del gasto, para devolver los campos de dinero al bloquearlos.
   const loadedRef = useRef<{ amount: string; paymentMethod: string; paidFromCash: boolean; expenseDate: Date } | null>(null);
 
@@ -96,7 +106,9 @@ export default function ExpenseForm(props: ExpenseFormProps) {
 
     try {
       setLoading(true);
-      const response = await Services.expenses.show(expenseId);
+      setLoadProblem(null);
+      // silent: si falla, la pantalla lo explica en lugar del formulario.
+      const response = await Services.expenses.show(expenseId, undefined, { silent: true });
       // El backend responde un ExpenseResource: { data: { ...gasto } }.
       const body: any = response.data;
       const expense: App.Entities.Expense & { paid_from_cash?: boolean } =
@@ -116,8 +128,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
       setDescription(expense.description ?? "");
       setExpenseDate(loaded.expenseDate);
     } catch (error) {
-      console.error("Error loading expense:", error);
-      alerts.error("Error al cargar el gasto");
+      setLoadProblem(recordLoadProblem(error, "No se pudo cargar el gasto. Inténtalo de nuevo."));
     } finally {
       setLoading(false);
     }
@@ -215,6 +226,17 @@ export default function ExpenseForm(props: ExpenseFormProps) {
     );
   }
 
+  if (loadProblem) {
+    return (
+      <RecordLoadError
+        problem={loadProblem}
+        notFoundTitle="No se encontró el gasto"
+        errorTitle="No se pudo cargar el gasto"
+        onRetry={loadExpense}
+      />
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: "transparent" as any }}>
       <ScrollView style={styles.container}>
@@ -236,6 +258,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
                 onChange={(value) => setCategory(String(value))}
                 data={categories}
                 placeholder="Selecciona una categoría"
+                disabled={readOnly}
               />
             </View>
 
@@ -249,7 +272,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
               style={[styles.input, { marginBottom: 0 }]}
               left={<TextInput.Icon icon="currency-usd" />}
               error={!!amount.trim() && (parsedAmount === null || parsedAmount <= 0)}
-              disabled={moneyLocked}
+              disabled={moneyLocked || readOnly}
             />
             <View style={styles.amountPreview}>
               <AmountPreview value={amount} label="Se registrará" />
@@ -265,7 +288,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
                   key={method.value}
                   mode={paymentMethod === method.value ? "contained" : "outlined"}
                   onPress={() => setPaymentMethod(method.value)}
-                  disabled={moneyLocked}
+                  disabled={moneyLocked || readOnly}
                   icon={method.icon}
                   style={styles.paymentButton}
                   buttonColor={
@@ -291,7 +314,11 @@ export default function ExpenseForm(props: ExpenseFormProps) {
                       : "No afecta el corte (lo pagó el dueño u otra fuente)."}
                   </Text>
                 </View>
-                <Switch value={paidFromCash} onValueChange={setPaidFromCash} disabled={moneyLocked} />
+                <Switch
+                  value={paidFromCash}
+                  onValueChange={setPaidFromCash}
+                  disabled={moneyLocked || readOnly}
+                />
               </View>
             )}
 
@@ -304,7 +331,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
               inputMode="start"
               mode="outlined"
               style={styles.input}
-              disabled={moneyLocked}
+              disabled={moneyLocked || readOnly}
             />
 
             {/* Descripción */}
@@ -317,6 +344,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
               mode="outlined"
               style={styles.input}
               placeholder="Describe el gasto..."
+              disabled={readOnly}
             />
 
             {location && (

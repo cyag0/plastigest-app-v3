@@ -1,3 +1,7 @@
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
 import { goBack } from "@/utils/navigation";
 import ProductionStatusBadge from "@/components/Production/ProductionStatusBadge";
 import palette from "@/constants/palette";
@@ -37,6 +41,8 @@ export default function ProductionDetail() {
   const [cancelling, setCancelling] = useState(false);
   const [printing, setPrinting] = useState(false);
   const loadedRef = useRef(false);
+  // La primera carga falló: 404 (borrada u otra sucursal) o 5xx/red.
+  const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
 
   const loadOrder = useCallback(async () => {
     // Spinner solo en la primera carga; al volver de editar o empacar se
@@ -44,9 +50,13 @@ export default function ProductionDetail() {
     const firstLoad = !loadedRef.current;
     try {
       if (firstLoad) setLoading(true);
-      const r: any = await Services.productionOrders.show(parseInt(params.id, 10));
+      // silent: la falla de la primera carga se explica en la pantalla.
+      const r: any = await Services.productionOrders.show(parseInt(params.id, 10), undefined, {
+        silent: true,
+      });
       const loaded = r?.data?.data ?? r?.data;
       setOrder(loaded);
+      setLoadProblem(null);
       loadedRef.current = true;
       if (loaded?.formula_id) {
         try {
@@ -57,7 +67,11 @@ export default function ProductionDetail() {
         }
       }
     } catch (e: any) {
-      alerts.error(apiMessage(e, "No se pudo cargar la producción"));
+      if (firstLoad) {
+        setLoadProblem(recordLoadProblem(e, "No se pudo cargar la producción. Inténtalo de nuevo."));
+      } else {
+        alerts.error(apiMessage(e, "No se pudo cargar la producción"));
+      }
     } finally {
       setLoading(false);
     }
@@ -138,6 +152,17 @@ export default function ProductionDetail() {
           Cargando producción…
         </Text>
       </View>
+    );
+  }
+
+  if (!order && loadProblem) {
+    return (
+      <RecordLoadError
+        problem={loadProblem}
+        notFoundTitle="No se encontró la producción"
+        errorTitle="No se pudo cargar la producción"
+        onRetry={loadOrder}
+      />
     );
   }
 
