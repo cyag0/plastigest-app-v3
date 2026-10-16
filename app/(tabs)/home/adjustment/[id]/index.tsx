@@ -1,7 +1,8 @@
 import { formatQuantity } from "@/utils/format";
 import { formatDate } from "@/utils/dates";
 import palette from "@/constants/palette";
-import Services from "@/utils/services";
+import axios from "@/utils/axios";
+import { errorMessageOf } from "@/utils/errorNotice";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
@@ -60,6 +61,7 @@ export default function AdjustmentDetailScreen() {
 
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<InventoryAdjustmentDetail | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -70,11 +72,16 @@ export default function AdjustmentDetailScreen() {
 
       try {
         setLoading(true);
-        const response = await Services.inventoryAdjustments.show(id);
+        setLoadError(null);
+        // silent: el error se muestra aquí mismo, no también en el aviso global.
+        const response = await axios.get(`/auth/admin/inventory-adjustments/${id}`, {
+          silent: true,
+        });
         setDetail(response.data?.data || null);
       } catch (error) {
         console.error("Error loading adjustment detail:", error);
         setDetail(null);
+        setLoadError(errorMessageOf(error, "No se pudo cargar el detalle del ajuste."));
       } finally {
         setLoading(false);
       }
@@ -94,7 +101,9 @@ export default function AdjustmentDetailScreen() {
   if (!detail) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24 }}>
-        <Text>No se pudo cargar el detalle del ajuste.</Text>
+        <Text style={{ textAlign: "center" }}>
+          {loadError ?? "No se pudo cargar el detalle del ajuste."}
+        </Text>
       </View>
     );
   }
