@@ -121,7 +121,7 @@ export default function KioskOptionSheet({ product, initial, onConfirm, onClose 
                     name={`${product.name}, ${option.label}`}
                     onIncrement={() => change(option.key, 1)}
                     onDecrement={() => change(option.key, -1)}
-                    testIDPrefix="kiosk-option"
+                    testIDPrefix="kiosk-option-qty"
                     testIDKey={testKey}
                   />
                 )}
