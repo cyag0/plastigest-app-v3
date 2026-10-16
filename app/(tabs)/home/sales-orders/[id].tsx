@@ -17,6 +17,7 @@ import { parseMoney } from "@/utils/format";
 import { amountToCents, centsToAmount } from "@/utils/money";
 import { newClientRequestId } from "@/utils/requestId";
 import services from "@/utils/services";
+import { kioskOrderLabel } from "@/utils/services/kioskOrders";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -301,6 +302,9 @@ export default function SalesOrderDetail() {
   const statusColor = statusCfg.color;
   const statusIcon  = statusCfg.icon;
   const statusLabel = order.status_label || statusCfg.label;
+  // "Pedido del kiosko 7": el número que el cliente dijo en caja.
+  const kioskTicket =
+    order.channel === "kiosk" && order.ticket_number != null ? kioskOrderLabel(order.ticket_number) : null;
 
   const flowSteps       = (isDelivery ? FLOW_DELIVERY : FLOW_COUNTER) as readonly string[];
   const activeStepIndex = flowSteps.indexOf(status);
@@ -332,7 +336,7 @@ export default function SalesOrderDetail() {
                 />
                 <Text style={styles.headerMeta}>
                   {order.service_mode_label ?? serviceMode}
-                  {order.channel_label ? ` · ${order.channel_label}` : ""}
+                  {kioskTicket ? ` · ${kioskTicket}` : order.channel_label ? ` · ${order.channel_label}` : ""}
                 </Text>
               </View>
               <View style={styles.row}>

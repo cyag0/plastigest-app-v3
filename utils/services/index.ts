@@ -358,12 +358,6 @@ const Services = {
   },
   salesOrders: {
     ...createCrudService<any>("/auth/admin/sales-orders"),
-    async getInitialData() {
-      const response = await axiosClient.get(
-        "/auth/admin/sales-orders/initial-data",
-      );
-      return response.data;
-    },
     async prepare(id: number) {
       const response = await axiosClient.post(
         `/auth/admin/sales-orders/${id}/prepare`,
