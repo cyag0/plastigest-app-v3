@@ -6,24 +6,15 @@ import EmptyState from "@/components/App/EmptyState";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCan } from "@/hooks/useCan";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 export default function AdministrationScreen() {
-  const { selectedCompany, user, location, hasPermission: authHasPermission } =
-    useAuth();
+  const { selectedCompany, location } = useAuth();
+  const { can, canAccessRoute } = useCan();
   const allLocations = useAllLocationsAccess();
-
-  // Helper para verificar si el usuario tiene un permiso
-  const hasPermission = (permission: string) => {
-    if (!permission) return true;
-    return (
-      authHasPermission(permission) ||
-      user?.permissions?.includes(permission as any) ||
-      false
-    );
-  };
 
   const adminOptions: AdminOption[] = [
     // === CONFIGURACION DEL SISTEMA (Solo Super Admins) ===
@@ -35,7 +26,8 @@ export default function AdministrationScreen() {
       route: "/(tabs)/administration/companies",
       color: palette.primary,
       category: "system",
-      requiredPermission: "companies_manage",
+      // Pide companies_list (regla de la ruta), lo que revisa el backend.
+      // companies_manage no lo revisa ningún endpoint.
     },
     {
       id: "system-users",
@@ -61,7 +53,6 @@ export default function AdministrationScreen() {
         : "/(tabs)/administration/companies",
       color: palette.primary,
       category: "company",
-      requiredPermission: "companies_update",
     },
     {
       id: "company-users",
@@ -71,7 +62,6 @@ export default function AdministrationScreen() {
       route: "/(tabs)/administration/company-users",
       color: palette.textSecondary,
       category: "company",
-      requiredPermission: "users_list",
     },
     {
       id: "company-locations",
@@ -81,7 +71,6 @@ export default function AdministrationScreen() {
       route: "/(tabs)/administration/locations",
       color: palette.info,
       category: "company",
-      requiredPermission: "locations_list",
     },
     {
       id: "cash-registers",
@@ -91,7 +80,6 @@ export default function AdministrationScreen() {
       route: "/(tabs)/administration/cash-registers",
       color: palette.success,
       category: "company",
-      requiredPermission: "cash_registers_list",
     },
     {
       id: "activity-log",
@@ -101,7 +89,6 @@ export default function AdministrationScreen() {
       route: "/(stacks)/activity?user_id=all",
       color: palette.textSecondary,
       category: "company",
-      requiredPermission: "users_read",
     },
     {
       id: "roles",
@@ -111,7 +98,6 @@ export default function AdministrationScreen() {
       route: "/(tabs)/home/roles",
       color: palette.primary,
       category: "company",
-      requiredPermission: "roles_list",
     },
     {
       id: "notification-preferences",
@@ -121,7 +107,8 @@ export default function AdministrationScreen() {
       route: "/(stacks)/notification-preferences",
       color: palette.warning,
       category: "company",
-      requiredPermission: "companies_update",
+      // notifications_list para verlas (regla de la ruta), como el backend;
+      // cambiarlas pide notifications_manage dentro de la pantalla.
     },
 
     // === ESTA SUCURSAL ===
@@ -135,7 +122,6 @@ export default function AdministrationScreen() {
       route: `/(tabs)/administration/locations/${location?.id}/edit`,
       color: palette.success,
       category: "location",
-      requiredPermission: "locations_update",
     },
     {
       id: "location-users",
@@ -145,7 +131,6 @@ export default function AdministrationScreen() {
       route: "/(tabs)/administration/current-location/users",
       color: palette.textSecondary,
       category: "location",
-      requiredPermission: "users_list",
     },
     {
       id: "location-cash-registers",
@@ -155,7 +140,6 @@ export default function AdministrationScreen() {
       route: "/(tabs)/administration/cash-registers?scope=location",
       color: palette.success,
       category: "location",
-      requiredPermission: "cash_registers_list",
     },
     {
       id: "location-notifications",
@@ -165,7 +149,6 @@ export default function AdministrationScreen() {
       route: "/(stacks)/notification-preferences?scope=location",
       color: palette.warning,
       category: "location",
-      requiredPermission: "notifications_list",
     },
     {
       id: "location-activity",
@@ -175,7 +158,6 @@ export default function AdministrationScreen() {
       route: "/(stacks)/activity?user_id=all&scope=location",
       color: palette.textSecondary,
       category: "location",
-      requiredPermission: "users_read",
     },
 
     // === CATALOGOS ===
@@ -187,7 +169,6 @@ export default function AdministrationScreen() {
       route: "/(tabs)/administration/categories",
       color: palette.primary,
       category: "catalog",
-      requiredPermission: "categories_list",
     },
     {
       id: "units",
@@ -197,7 +178,6 @@ export default function AdministrationScreen() {
       route: "/(tabs)/administration/unidades",
       color: palette.warning,
       category: "catalog",
-      requiredPermission: "units_list",
     },
     {
       id: "packages",
@@ -207,9 +187,8 @@ export default function AdministrationScreen() {
       route: "/(tabs)/administration/packages",
       color: palette.warning,
       category: "catalog",
-      // Los paquetes son parte del catálogo de productos (no existe un
-      // permiso packages_list: la opción no se le mostraba a nadie).
-      requiredPermission: "products_list",
+      // Los paquetes son parte del catálogo de productos: la ruta pide
+      // products_list (no existe un permiso packages_list).
     },
     {
       id: "suppliers",
@@ -219,7 +198,6 @@ export default function AdministrationScreen() {
       route: "/(tabs)/administration/suppliers",
       color: palette.info,
       category: "catalog",
-      requiredPermission: "suppliers_list",
     },
     {
       id: "clients",
@@ -229,13 +207,12 @@ export default function AdministrationScreen() {
       route: "/(tabs)/administration/clientes",
       color: palette.success,
       category: "catalog",
-      requiredPermission: "customers_list",
     },
   ];
 
-  // Filtrar opciones segun permisos:
-  // - Si la opcion no requiere permiso, se muestra.
-  // - Si requiere, debe estar en user.permissions (cargado por AuthContext).
+  // Solo las opciones que el usuario puede abrir: la regla de cada pantalla
+  // sale del mapa central (utils/permissions/routePermissions.ts);
+  // requiredPermission es solo para lo que la ruta no alcanza a decir.
   const visibleOptions = adminOptions.filter((option) => {
     // Sin sucursal seleccionada no hay "esta sucursal".
     if (option.category === "location" && !location) return false;
@@ -246,8 +223,8 @@ export default function AdministrationScreen() {
     // las sucursales (el servidor responde company_scope_forbidden); los
     // demás tienen las de su sucursal en "Esta sucursal".
     if (option.id === "notification-preferences" && !allLocations) return false;
-    if (!option.requiredPermission) return true;
-    return hasPermission(option.requiredPermission);
+    if (option.requiredPermission && !can(option.requiredPermission)) return false;
+    return canAccessRoute(option.route);
   });
 
   const categories = [
