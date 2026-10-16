@@ -1,4 +1,4 @@
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, TouchableOpacity, View } from "react-native";
@@ -38,6 +38,8 @@ interface FilterButtonProps {
 }
 
 function FilterButton({ label, value, onPress, active }: FilterButtonProps) {
+  // Colores del tema: con la paleta fija el texto no se leía en modo oscuro.
+  const { colors } = useTheme();
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -51,7 +53,7 @@ function FilterButton({ label, value, onPress, active }: FilterButtonProps) {
     >
       <Text
         style={{
-          color: palette.textSecondary,
+          color: colors.textSecondary,
           fontSize: 11,
           fontWeight: "400",
           opacity: 0.7,
@@ -61,7 +63,7 @@ function FilterButton({ label, value, onPress, active }: FilterButtonProps) {
       </Text>
       <Text
         style={{
-          color: palette.textSecondary,
+          color: colors.textSecondary,
           fontWeight: "500",
           fontSize: 11,
           opacity: 0.8,
@@ -71,7 +73,7 @@ function FilterButton({ label, value, onPress, active }: FilterButtonProps) {
       </Text>
       <Text
         style={{
-          color: palette.textSecondary,
+          color: colors.textSecondary,
           fontSize: 11,
           marginLeft: 4,
           marginRight: 8,
@@ -99,6 +101,7 @@ function FilterPopover({
   value,
   onApply,
 }: FilterPopoverProps) {
+  const { colors } = useTheme();
   const [tempValue, setTempValue] = useState(value);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerField, setDatePickerField] = useState<
@@ -156,17 +159,17 @@ function FilterPopover({
       <Modal
         visible={visible}
         onDismiss={onDismiss}
-        contentContainerStyle={styles.popoverContainer}
+        contentContainerStyle={[styles.popoverContainer, { backgroundColor: colors.background }]}
       >
         <View style={styles.popoverHeader}>
-          <Text variant="titleMedium" style={styles.popoverTitle}>
+          <Text variant="titleMedium" style={[styles.popoverTitle, { color: colors.text }]}>
             {filter.label}
           </Text>
           <IconButton
             icon="close"
             size={20}
             onPress={onDismiss}
-            iconColor={palette.text}
+            iconColor={colors.text}
           />
         </View>
 
@@ -183,8 +186,8 @@ function FilterPopover({
                   key={option.value}
                   label={option.label}
                   value={option.value.toString()}
-                  labelStyle={{ color: palette.text }}
-                  color={palette.primary}
+                  labelStyle={{ color: colors.text }}
+                  color={colors.primary}
                 />
               ))}
             </RadioButton.Group>
@@ -209,8 +212,8 @@ function FilterPopover({
                         : [...selectedValues, option.value];
                       setTempValue(newValues);
                     }}
-                    labelStyle={{ color: palette.text }}
-                    color={palette.primary}
+                    labelStyle={{ color: colors.text }}
+                    color={colors.primary}
                   />
                 );
               })}
@@ -236,7 +239,7 @@ function FilterPopover({
               <View>
                 <Text
                   variant="bodySmall"
-                  style={{ marginBottom: 8, color: palette.textSecondary }}
+                  style={{ marginBottom: 8, color: colors.textSecondary }}
                 >
                   Fecha desde
                 </Text>
@@ -255,7 +258,7 @@ function FilterPopover({
               <View>
                 <Text
                   variant="bodySmall"
-                  style={{ marginBottom: 8, color: palette.textSecondary }}
+                  style={{ marginBottom: 8, color: colors.textSecondary }}
                 >
                   Fecha hasta
                 </Text>
@@ -281,7 +284,7 @@ function FilterPopover({
             mode="outlined"
             onPress={handleClear}
             style={{ flex: 1 }}
-            textColor={palette.textSecondary}
+            textColor={colors.textSecondary}
           >
             Limpiar
           </Button>
@@ -480,7 +483,6 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   popoverContainer: {
-    backgroundColor: palette.background,
     margin: 20,
     borderRadius: 12,
     maxHeight: "70%",
@@ -498,7 +500,6 @@ const styles = StyleSheet.create({
   },
   popoverTitle: {
     fontWeight: "bold",
-    color: palette.text,
   },
   popoverContent: {
     padding: 8,

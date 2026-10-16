@@ -132,6 +132,8 @@ function ThemedApp() {
     colors: {
       ...base.colors,
       primary: colors.primary,
+      // Texto de los botones llenos: el de Paper en oscuro es morado.
+      onPrimary: colors.primaryForeground,
       secondary: colors.secondary,
       surface: colors.surface,
       background: colors.background,

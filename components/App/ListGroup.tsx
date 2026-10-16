@@ -213,17 +213,11 @@ export function ListRow({
         <Text style={[styles.title, strong && styles.titleStrong]} numberOfLines={titleLines}>
           {title}
         </Text>
-        {typeof subtitle === "string" ? (
-          !!subtitle && (
-            <Text style={styles.subtitle} numberOfLines={subtitleLines}>
-              {subtitle}
-            </Text>
-          )
-        ) : subtitle ? (
+        {!!subtitle && (
           <Text style={styles.subtitle} numberOfLines={subtitleLines}>
             {subtitle}
           </Text>
-        ) : null}
+        )}
         {!!warning && <Text style={[styles.subtitle, { color: colors.warning }]}>{warning}</Text>}
         {!!meta && (
           <Text style={styles.meta} numberOfLines={1}>
@@ -241,8 +235,8 @@ export function ListRow({
 
   if (!trailing) return pressable;
 
-  // Las acciones van junto a la fila y no dentro de ella: un botón dentro de
-  // otro no es válido en web (y el toque del menú abría también la fila).
+  // Las acciones van junto a la fila y no dentro de ella: en web un botón
+  // dentro de otro no es válido (React lo marca como error).
   return (
     <View style={[styles.rowOuter, alignTop && styles.rowTop, highlight]}>
       {pressable}
