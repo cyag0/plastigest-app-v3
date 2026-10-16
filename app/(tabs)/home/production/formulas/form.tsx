@@ -1,3 +1,7 @@
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
 import { goBack } from "@/utils/navigation";
 import { FormSwitch } from "@/components/Form/AppSwitch";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
@@ -36,8 +40,16 @@ const INGREDIENT_COLUMNS: EditableTableColumn[] = [
     width: 240,
     required: true,
     productFetchParams: { is_consumable: 1 },
+    labelKey: "product_name",
   },
-  { key: "unit_id", label: "Unidad", type: "unit", width: 110, required: true },
+  {
+    key: "unit_id",
+    label: "Unidad",
+    type: "unit",
+    width: 110,
+    required: true,
+    labelKey: "unit_name",
+  },
   {
     key: "expected_quantity",
     label: "Cantidad",
@@ -57,8 +69,16 @@ const OUTPUT_COLUMNS: EditableTableColumn[] = [
     width: 240,
     required: true,
     productFetchParams: { is_producible: 1 },
+    labelKey: "product_name",
   },
-  { key: "unit_id", label: "Unidad", type: "unit", width: 110, required: true },
+  {
+    key: "unit_id",
+    label: "Unidad",
+    type: "unit",
+    width: 110,
+    required: true,
+    labelKey: "unit_name",
+  },
   {
     key: "expected_quantity",
     label: "Cantidad",
@@ -96,9 +116,13 @@ export default function FormulaForm() {
   const savePermission = params.id ? "formulas_update" : "formulas_create";
   const canSave = useCan().can(savePermission);
   const [initialValues, setInitialValues] = useState<any | null>(null);
+  // La fórmula no se pudo cargar: se explica (antes la pantalla quedaba en blanco).
+  const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     (async () => {
+      setLoadProblem(null);
       if (!params.id) {
         setInitialValues({
           name: "",
@@ -112,18 +136,25 @@ export default function FormulaForm() {
       }
 
       try {
-        const r: any = await Services.formulas.show(parseInt(params.id, 10));
+        // silent: la falla se explica en la pantalla.
+        const r: any = await Services.formulas.show(parseInt(params.id, 10), undefined, {
+          silent: true,
+        });
         const f: App.Entities.Formula = r?.data?.data ?? r?.data;
 
         // Las fórmulas creadas antes del rediseño no traen `outputs`; el
         // backend sigue exponiendo la salida principal suelta, así que la
         // convertimos en la primera fila para no perderla al guardar.
+        // product_name / unit_name: los nombres que trae la fórmula, para
+        // verlos aunque el usuario no pueda listar productos o unidades.
         const outputs = f.outputs?.length
           ? f.outputs.map((o) => ({
               product_id: o.product_id,
               unit_id: o.unit_id,
               expected_quantity: Number(o.expected_quantity) || 0,
               notes: o.notes ?? "",
+              product_name: o.product_name ?? undefined,
+              unit_name: o.unit_name ?? undefined,
               _key: newKey("init-o"),
             }))
           : f.product_id
@@ -133,6 +164,7 @@ export default function FormulaForm() {
                   unit_id: f.product?.unit_id ?? 0,
                   expected_quantity: Number(f.expected_output_quantity) || 0,
                   notes: "",
+                  product_name: f.product_name ?? f.product?.name ?? undefined,
                   _key: newKey("legacy-o"),
                 },
               ]
@@ -148,15 +180,28 @@ export default function FormulaForm() {
             unit_id: it.unit_id,
             expected_quantity: Number(it.expected_quantity) || 0,
             notes: it.notes ?? "",
+            product_name: it.product_name ?? undefined,
+            unit_name: it.unit_name ?? undefined,
             _key: newKey("init-i"),
           })),
           outputs,
         });
       } catch (e: any) {
-        alerts.error("No se pudo cargar la fórmula: " + e.message);
+        setLoadProblem(recordLoadProblem(e, "No se pudo cargar la fórmula. Inténtalo de nuevo."));
       }
     })();
-  }, [params.id, alerts]);
+  }, [params.id, reloadKey]);
+
+  if (loadProblem) {
+    return (
+      <RecordLoadError
+        problem={loadProblem}
+        notFoundTitle="No se encontró la fórmula"
+        errorTitle="No se pudo cargar la fórmula"
+        onRetry={() => setReloadKey((key) => key + 1)}
+      />
+    );
+  }
 
   if (!initialValues) return null;
 

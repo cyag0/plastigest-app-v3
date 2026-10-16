@@ -1,5 +1,8 @@
 import { formatDateTime } from "@/utils/dates";
-import NoPermissionView from "@/components/App/NoPermissionView";
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
 import CloseShiftModal from "@/components/Pos/CloseShiftModal";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,22 +28,21 @@ export default function CashSessionDetail() {
   const [summary, setSummary] = useState<App.Entities.CashRegisterSessionSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
-  // El turno de otro cajero sin cash_register_sessions_read: el backend
-  // responde 403 y se muestra la vista «sin permiso» en lugar de cargar.
-  const [forbidden, setForbidden] = useState(false);
+  // No se pudo cargar. El turno de otro cajero (sin
+  // cash_register_sessions_read) o de otra sucursal: el backend responde 404
+  // «Turno no encontrado.»; antes el spinner seguía sin fin.
+  const [problem, setProblem] = useState<RecordLoadProblem | null>(null);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
+      setProblem(null);
+      // show va con silent: el error se explica aquí.
       const res = await Services.cashRegisterSessions.show(Number(id));
       setSession(res.data);
       setSummary(res.summary);
     } catch (e: any) {
-      if (e?.response?.status === 403) {
-        setForbidden(true);
-        return;
-      }
-      alerts.error(e?.response?.data?.message ?? "No se pudo cargar el turno");
+      setProblem(recordLoadProblem(e, "No se pudo cargar el turno. Inténtalo de nuevo."));
     } finally {
       setLoading(false);
     }
@@ -50,8 +52,20 @@ export default function CashSessionDetail() {
     load();
   }, [load]);
 
-  if (forbidden) {
-    return <NoPermissionView />;
+  if (problem && !loading) {
+    return (
+      <RecordLoadError
+        problem={problem}
+        notFoundTitle="No encontramos este turno"
+        notFoundDescription={
+          can("cash_register_sessions_read")
+            ? "Puede que no exista o que sea de otra sucursal."
+            : "Puede que no exista o que sea de otro cajero: solo puedes ver tus propios turnos."
+        }
+        errorTitle="No se pudo cargar el turno"
+        onRetry={load}
+      />
+    );
   }
 
   if (loading || !session) {

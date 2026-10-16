@@ -1,3 +1,7 @@
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
 import { goBack } from "@/utils/navigation";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
@@ -34,6 +38,9 @@ export default function LocationDetailScreen() {
   >(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  // 404 (otra sucursal u otra empresa) o falla: se explica aquí; antes se
+  // regresaba a Inicio con un aviso.
+  const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
   const loadedRef = useRef(false);
 
   const loadLocationData = async () => {
@@ -42,16 +49,18 @@ export default function LocationDetailScreen() {
     const firstLoad = !loadedRef.current;
     try {
       if (firstLoad) setLoading(true);
-      const response = await Services.admin.locations.show(locationId);
+      // silent: la falla se explica en la pantalla.
+      const response = await Services.admin.locations.show(locationId, undefined, { silent: true });
       setLocation(response.data.data);
+      setLoadProblem(null);
       loadedRef.current = true;
     } catch (error: any) {
-      console.error("Error loading location:", error);
-      // 403/404: sucursal de otra empresa o a la que no se tiene acceso.
-      alerts.error(
-        error?.response?.data?.message || "No se pudo cargar la información de la sucursal",
-      );
-      if (firstLoad) goBack();
+      // Al volver a una que ya se veía, se queda como estaba.
+      if (firstLoad) {
+        setLoadProblem(
+          recordLoadProblem(error, "No se pudo cargar la información de la sucursal."),
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -98,6 +107,17 @@ export default function LocationDetailScreen() {
       setDeleting(false);
     }
   };
+
+  if (loadProblem && !location) {
+    return (
+      <RecordLoadError
+        problem={loadProblem}
+        notFoundTitle="No se encontró la sucursal"
+        errorTitle="No se pudo cargar la sucursal"
+        onRetry={loadLocationData}
+      />
+    );
+  }
 
   if (loading) {
     return (

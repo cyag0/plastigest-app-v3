@@ -1,4 +1,8 @@
 import { formatDate, formatDateTime } from "@/utils/dates";
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
 import { goBack } from "@/utils/navigation";
 import AmountPreview from "@/components/Pos/AmountPreview";
 import OpenShiftModal from "@/components/Pos/OpenShiftModal";
@@ -17,6 +21,7 @@ import { parseMoney } from "@/utils/format";
 import { amountToCents, centsToAmount } from "@/utils/money";
 import { printSaleTicket } from "@/utils/printDocument";
 import { newClientRequestId } from "@/utils/requestId";
+import { errorMessageOf } from "@/utils/errorNotice";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams, useNavigation } from "expo-router";
@@ -109,6 +114,8 @@ export default function SaleDetail() {
   }, [navigation]);
   const id = params.id as string;
   const [sale, setSale] = React.useState<any>(null);
+  // La venta no se pudo cargar: 404 (otra sucursal o no existe) o 5xx/red.
+  const [loadProblem, setLoadProblem] = React.useState<RecordLoadProblem | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -149,14 +156,16 @@ export default function SaleDetail() {
   const loadSale = async () => {
     try {
       setLoading(true);
-      const response = await Services.sales.show(id);
+      // silent: si no se ve todavía, la falla se explica en la pantalla.
+      const response = await Services.sales.show(id, undefined, { silent: true });
       setSale(response.data.data);
+      setLoadProblem(null);
     } catch (error: any) {
-      alerts.error(
-        error.response?.data?.message ||
-          error.message ||
-          "Error al cargar la venta",
-      );
+      if (sale) {
+        alerts.error(errorMessageOf(error, "Error al cargar la venta"));
+      } else {
+        setLoadProblem(recordLoadProblem(error, "No se pudo cargar la venta. Inténtalo de nuevo."));
+      }
     } finally {
       setLoading(false);
     }
@@ -186,7 +195,9 @@ export default function SaleDetail() {
   const pendingPaymentWentThrough = async (): Promise<any | null> => {
     const attempt = paymentAttemptRef.current;
     if (!attempt) return null;
-    const response = await Services.sales.show(id);
+    // silent: quien verifica explica el resultado (el aviso global decía
+    // "inténtalo de nuevo" a media verificación).
+    const response = await Services.sales.show(id, undefined, { silent: true });
     const fresh = response.data.data;
     setSale(fresh);
     return amountToCents(toNum(fresh?.paid_amount)) - attempt.paidBeforeCents >= attempt.amountCents ? fresh : null;
@@ -342,6 +353,17 @@ export default function SaleDetail() {
       <View style={styles.center}>
         <Text>Cargando...</Text>
       </View>
+    );
+  }
+
+  if (!sale && loadProblem) {
+    return (
+      <RecordLoadError
+        problem={loadProblem}
+        notFoundTitle="No se encontró la venta"
+        errorTitle="No se pudo cargar la venta"
+        onRetry={loadSale}
+      />
     );
   }
 
