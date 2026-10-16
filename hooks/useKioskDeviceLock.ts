@@ -36,14 +36,18 @@ export function useKioskDeviceLock(active: boolean, onBack?: () => void) {
       document.addEventListener("visibilitychange", onVisible);
     }
 
-    // Atrás de Android: nunca sale del kiosko.
-    const back = BackHandler.addEventListener("hardwareBackPress", () => {
-      onBackRef.current?.();
-      return true;
-    });
+    // Atrás de Android: nunca sale del kiosko. (En web BackHandler no existe
+    // y solo ensucia la consola.)
+    const back =
+      Platform.OS === "android"
+        ? BackHandler.addEventListener("hardwareBackPress", () => {
+            onBackRef.current?.();
+            return true;
+          })
+        : null;
 
     return () => {
-      back.remove();
+      back?.remove();
       if (onVisible) document.removeEventListener("visibilitychange", onVisible);
       deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => undefined);
     };

@@ -6,7 +6,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Platform, Pressable, Text, TextInput, View } from "react-native";
 import KioskButton from "./KioskButton";
 
 /** Presión larga para salir del kiosko (solo personal). */
@@ -73,9 +73,9 @@ export function KioskSearchBox({
       fontSize: 18,
       color: c.text,
       paddingVertical: 0,
-      // Sin el contorno azul del navegador: el borde del cuadro ya marca el campo.
-      outlineStyle: "none",
-    } as any,
+      // Web: sin el contorno del navegador (el borde del cuadro ya marca el campo).
+      ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null),
+    },
     clear: { width: 56, height: 54, alignItems: "center", justifyContent: "center" },
   }));
   return (
