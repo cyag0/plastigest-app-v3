@@ -29,7 +29,7 @@ export default function KioskWelcome({ locationName, onStart, onExitRequest }: P
     },
     subtitle: { fontSize: 20, lineHeight: 28, color: c.textSecondary, textAlign: "center" },
     steps: { fontSize: 18, lineHeight: 26, color: c.text, textAlign: "center", marginTop: 8 },
-    stepNumber: { fontWeight: "800", color: c.primary },
+    stepNumber: { fontWeight: "800", color: c.text },
     button: { marginTop: 24, minWidth: 320 },
   }));
 

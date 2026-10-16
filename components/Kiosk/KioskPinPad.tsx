@@ -56,13 +56,18 @@ export default function KioskPinPad({ value, onChange, disabled, onSubmit, testI
     onSubmitRef.current = onSubmit;
   }, [value, onChange, onSubmit]);
 
+  // El ref se actualiza en el acto: dos toques seguidos no pierden un dígito.
+  const emit = (next: string) => {
+    valueRef.current = next;
+    onChangeRef.current(next);
+  };
   const press = (digit: string) => {
     if (disabled || valueRef.current.length >= KIOSK_PIN_MAX_LENGTH) return;
-    onChangeRef.current(valueRef.current + digit);
+    emit(valueRef.current + digit);
   };
   const backspace = () => {
     if (disabled) return;
-    onChangeRef.current(valueRef.current.slice(0, -1));
+    emit(valueRef.current.slice(0, -1));
   };
 
   // Teclado físico en web.
@@ -74,10 +79,14 @@ export default function KioskPinPad({ value, onChange, disabled, onSubmit, testI
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
       if (/^\d$/.test(event.key)) {
         event.preventDefault();
-        if (valueRef.current.length < KIOSK_PIN_MAX_LENGTH) onChangeRef.current(valueRef.current + event.key);
+        if (valueRef.current.length < KIOSK_PIN_MAX_LENGTH) {
+          valueRef.current += event.key;
+          onChangeRef.current(valueRef.current);
+        }
       } else if (event.key === "Backspace") {
         event.preventDefault();
-        onChangeRef.current(valueRef.current.slice(0, -1));
+        valueRef.current = valueRef.current.slice(0, -1);
+        onChangeRef.current(valueRef.current);
       } else if (event.key === "Enter") {
         event.preventDefault();
         onSubmitRef.current?.();

@@ -63,11 +63,14 @@ const ICONS: Record<KioskToastTone, keyof typeof MaterialCommunityIcons.glyphMap
 export default function KioskToast({
   toast,
   bottom,
+  right = 0,
   onHide,
 }: {
   toast: KioskToastMessage | null;
   /** Distancia desde abajo (encima de la barra del pedido). */
   bottom: number;
+  /** Espacio a la derecha (panel "Tu pedido" en pantallas anchas). */
+  right?: number;
   onHide: () => void;
 }) {
   const { colors } = useTheme();
@@ -105,7 +108,7 @@ export default function KioskToast({
   const tone = { success: colors.success, info: colors.info, warning: colors.warning }[toast.tone];
 
   return (
-    <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.wrap, { paddingBottom: bottom }]}>
+    <View pointerEvents="box-none" style={[StyleSheet.absoluteFill, styles.wrap, { paddingBottom: bottom, right }]}>
       <View style={styles.toast} testID="kiosk-toast" role="status" accessibilityLiveRegion="polite">
         <MaterialCommunityIcons name={ICONS[toast.tone]} size={26} color={tone} />
         <Text style={styles.text}>{toast.text}</Text>

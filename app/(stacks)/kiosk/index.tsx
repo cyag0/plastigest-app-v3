@@ -613,15 +613,21 @@ function KioskApp({ onExited, backRef, disablePrevention }: AppProps) {
         />
       ) : null}
 
-      <KioskToast toast={inShop ? toast.toast : null} bottom={toastBottom} onHide={hideToast} />
-
-      <KioskIdleDialog seconds={idle.warning} onStay={bump} onRestart={resetSession} />
+      <KioskToast
+        toast={inShop ? toast.toast : null}
+        bottom={toastBottom}
+        right={wide && phase === "catalog" ? KIOSK_PANEL_WIDTH : 0}
+        onHide={hideToast}
+      />
 
       <KioskRestartDialog
         visible={restartOpen}
         onCancel={() => setRestartOpen(false)}
         onConfirm={resetSession}
       />
+
+      {/* Encima de todo lo del cliente (también de "¿Empezar de nuevo?"). */}
+      <KioskIdleDialog seconds={idle.warning} onStay={bump} onRestart={resetSession} />
 
       {exitOpen ? <KioskExitDialog onCancel={() => setExitOpen(false)} onSuccess={onExited} /> : null}
     </View>

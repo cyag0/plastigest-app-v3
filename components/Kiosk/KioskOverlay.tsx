@@ -48,10 +48,13 @@ export function KioskDialog({
       borderRadius: 20,
       borderWidth: 1,
       borderColor: c.border,
-      padding: 24,
-      gap: 16,
       maxHeight: "100%",
+      overflow: "hidden",
     },
+    // En pantallas bajas (teléfono acostado) el contenido se desplaza en vez
+    // de dejar los botones fuera.
+    scroll: { flexGrow: 0 },
+    content: { padding: 24, gap: 16 },
   }));
   if (!visible) return null;
   return (
@@ -64,7 +67,14 @@ export function KioskDialog({
         aria-modal
         accessibilityLabel={accessibilityLabel}
       >
-        {children}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          bounces={false}
+        >
+          {children}
+        </ScrollView>
       </View>
     </View>
   );

@@ -10,7 +10,7 @@
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import type { KioskProduct } from "@/utils/services/kiosk";
 import { lineTotalCents, sumCents } from "@/utils/money";
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import KioskButton from "./KioskButton";
 import { KioskSheet } from "./KioskOverlay";
@@ -52,6 +52,7 @@ export default function KioskOptionSheet({ product, initial, onConfirm, onClose 
 
   const options = useMemo(() => productOptions(product), [product]);
   const [draft, setDraft] = useState<Record<string, number>>(() => ({ ...initial }));
+  const draftRef = useRef(draft);
   const [limit, setLimit] = useState<{ key: string; max: number } | null>(null);
 
   const inCart = Object.values(initial).some((q) => q > 0);
@@ -63,17 +64,20 @@ export default function KioskOptionSheet({ product, initial, onConfirm, onClose 
   const change = (key: string, delta: number) => {
     const option = options.find((o) => o.key === key);
     if (!option) return;
-    const current = draft[key] ?? 0;
-    const next = Math.max(0, current + delta);
+    // Del borrador ya actualizado: dos toques seguidos suman dos.
+    const prev = draftRef.current;
+    const next = Math.max(0, (prev[key] ?? 0) + delta);
     if (delta > 0) {
-      const max = maxForOption(product, option, draft, options);
+      const max = maxForOption(product, option, prev, options);
       if (next > max) {
         setLimit({ key, max });
         return;
       }
     }
     setLimit(null);
-    setDraft((prev) => ({ ...prev, [key]: next }));
+    const updated = { ...prev, [key]: next };
+    draftRef.current = updated;
+    setDraft(updated);
   };
 
   return (
@@ -142,7 +146,7 @@ export default function KioskOptionSheet({ product, initial, onConfirm, onClose 
           <KioskButton
             label={inCart ? "Listo" : "Agregar"}
             icon={inCart ? "check" : "plus"}
-            onPress={() => onConfirm(draft)}
+            onPress={() => onConfirm(draftRef.current)}
             disabled={!inCart && draftCount === 0}
             testID="kiosk-option-confirm"
           />
