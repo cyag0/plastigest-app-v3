@@ -218,6 +218,9 @@ type ProductCardProps = {
   onAdd: (product: Product, pkg: Package | null) => void;
 };
 
+/** Hueco invisible que completa la última fila de la cuadrícula. */
+type GridSpacer = { spacer: true; key: string };
+
 const ProductCard = memo(function ProductCard({
   product,
   onAdd,
@@ -468,6 +471,17 @@ export default function KioskScreen() {
         (p.code ?? "").toLowerCase().includes(q),
     );
   }, [products, query]);
+
+  // La última fila se completa con huecos invisibles del mismo ancho: con
+  // flex: 1, una fila incompleta (p. ej. un solo resultado de la búsqueda)
+  // estiraba sus tarjetas a todo el ancho.
+  const columns = wide ? 3 : 2;
+  const gridItems = useMemo<(Product | GridSpacer)[]>(() => {
+    const rest = filteredProducts.length % columns;
+    if (rest === 0) return filteredProducts;
+    const spacers = Array.from({ length: columns - rest }, (_, i): GridSpacer => ({ spacer: true, key: `spacer-${i}` }));
+    return [...filteredProducts, ...spacers];
+  }, [filteredProducts, columns]);
 
   // En centavos, como lo calcula el servidor.
   const totals = useMemo(() => {
@@ -948,13 +962,17 @@ export default function KioskScreen() {
       </View>
 
       <FlatList
-        data={filteredProducts}
-        keyExtractor={(p) => String(p.id)}
-        numColumns={wide ? 3 : 2}
+        data={gridItems}
+        keyExtractor={(p) => ("spacer" in p ? p.key : String(p.id))}
+        numColumns={columns}
         key={wide ? "w3" : "m2"}
-        renderItem={({ item }) => (
-          <ProductCard product={item} onAdd={handleAddFromCard} />
-        )}
+        renderItem={({ item }) =>
+          "spacer" in item ? (
+            <View style={styles.productCard} pointerEvents="none" />
+          ) : (
+            <ProductCard product={item} onAdd={handleAddFromCard} />
+          )
+        }
         columnWrapperStyle={{ gap: 10, paddingHorizontal: 12 }}
         contentContainerStyle={{ gap: 10, paddingVertical: 12 }}
         ListEmptyComponent={
