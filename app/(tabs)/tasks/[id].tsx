@@ -1,4 +1,4 @@
-import { goBack } from "@/utils/navigation";
+import EmptyState from "@/components/App/EmptyState";
 import TaskDetailContent, {
   type TaskAction,
 } from "@/components/Tasks/TaskDetailContent";
@@ -8,19 +8,20 @@ import {
   TASK_ACTION_MESSAGES,
   getTaskPermissions,
 } from "@/components/Tasks/taskPresentation";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import services from "@/utils/services";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { ActivityIndicator, Text } from "react-native-paper";
+import { ActivityIndicator } from "react-native-paper";
 
 export default function TaskDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const alerts = useAlerts();
+  const { colors } = useTheme();
   const { hasPermission, user } = useAuth();
   const hasTasksUpdate = hasPermission("tasks_update");
   const [task, setTask] = useState<App.Entities.Task | null>(null);
@@ -111,8 +112,7 @@ export default function TaskDetailScreen() {
   if (loading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={palette.primary} />
-        <Text style={styles.loadingText}>Cargando tarea...</Text>
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
@@ -120,21 +120,25 @@ export default function TaskDetailScreen() {
   if (!task) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.emptyTitle}>Tarea no encontrada</Text>
-        <Text style={styles.emptyText}>La tarea pudo haber sido eliminada o no tienes acceso.</Text>
+        <EmptyState
+          icon="clipboard-remove-outline"
+          title="Tarea no encontrada"
+          description="Pudo haberse eliminado o no tienes acceso a ella."
+        />
       </View>
     );
   }
 
+  const permissions = getTaskPermissions(task, user?.id, hasTasksUpdate);
+
   return (
     <TaskDetailContent
       task={task}
-      onBack={() => goBack()}
       onChangeStatus={handleChangeStatus}
       onAddComment={handleAddComment}
       onOpenRoute={(route) => router.push(route as any)}
-      canAct={getTaskPermissions(task, user?.id, hasTasksUpdate).canAct}
-      canCancel={getTaskPermissions(task, user?.id, hasTasksUpdate).canCancel}
+      canAct={permissions.canAct}
+      canCancel={permissions.canCancel}
       pendingAction={pendingAction}
     />
   );
@@ -146,21 +150,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "transparent" as any,
-  },
-  loadingText: {
-    marginTop: 12,
-    color: palette.textSecondary,
-    fontWeight: "700",
-  },
-  emptyTitle: {
-    color: palette.text,
-    fontSize: 20,
-    fontWeight: "900",
-    marginBottom: 8,
-  },
-  emptyText: {
-    color: palette.textSecondary,
-    textAlign: "center",
   },
 });

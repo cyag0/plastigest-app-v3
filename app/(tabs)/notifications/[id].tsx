@@ -1,19 +1,20 @@
 import { goBack } from "@/utils/navigation";
 import NotificationDetailContent from "@/components/Notifications/NotificationDetailContent";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import services from "@/utils/services";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { View } from "react-native";
-import { ActivityIndicator, Text } from "react-native-paper";
+import { ActivityIndicator } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function NotificationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const alerts = useAlerts();
+  const { colors } = useTheme();
   const { loadUnreadNotificationsCount } = useAuth();
 
   const [notification, setNotification] = useState<App.Entities.Notification | null>(null);
@@ -86,10 +87,7 @@ export default function NotificationDetailScreen() {
     return (
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator color={palette.primary} />
-          <Text variant="bodyMedium" style={styles.loadingText}>
-            Cargando notificación...
-          </Text>
+          <ActivityIndicator color={colors.primary} />
         </View>
       </SafeAreaView>
     );
@@ -99,7 +97,6 @@ export default function NotificationDetailScreen() {
     <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
       <NotificationDetailContent
         notification={notification}
-        onBack={() => goBack()}
         onDelete={handleDelete}
         onOpenLink={(route) => router.push(route as any)}
       />
@@ -110,16 +107,10 @@ export default function NotificationDetailScreen() {
 const styles = {
   safeArea: {
     flex: 1,
-    backgroundColor: "transparent" as any,
   },
   loadingContainer: {
     flex: 1,
     alignItems: "center" as const,
     justifyContent: "center" as const,
-    gap: 10,
-    backgroundColor: "transparent" as any,
-  },
-  loadingText: {
-    color: palette.textSecondary,
   },
 };
