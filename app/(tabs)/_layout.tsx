@@ -11,6 +11,7 @@ import { Appbar } from "react-native-paper";
 
 import AppBar from "@/components/App/AppBar";
 import NavigationSidebar from "@/components/App/NavigationSidebar";
+import { routeGuardLayout } from "@/components/App/RoutePermissionGuard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -20,6 +21,11 @@ import { useThemedStyles } from "@/hooks/useThemedStyles";
 // reportes, preferencias): se reemplaza esta área y el error se reporta.
 export { RouteErrorBoundary as ErrorBoundary } from "@/components/ErrorBoundary";
 
+// Revisa el permiso de cada pantalla con el mapa central (ver
+// RoutePermissionGuard): sin permiso muestra "No tienes permiso…". Las
+// secciones con su propio layout (home, inventory…) se revisan ahí.
+const screenLayout = routeGuardLayout("(tabs)");
+
 /**
  * Pantallas para la versión web. Se reutiliza tanto cuando el
  * sidebar es inline (desktop/tablet) como cuando es overlay (móvil),
@@ -28,6 +34,7 @@ export { RouteErrorBoundary as ErrorBoundary } from "@/components/ErrorBoundary"
 function WebTabs() {
   return (
     <Tabs
+      screenLayout={screenLayout}
       screenOptions={{
         tabBarStyle: { display: "none" },
         headerShown: false,
@@ -185,6 +192,7 @@ function WebTabLayout() {
 function NativeTabLayout() {
   return (
     <Tabs
+      screenLayout={screenLayout}
       screenOptions={{
         tabBarActiveTintColor: palette.primary,
         tabBarInactiveTintColor: palette.textSecondary,

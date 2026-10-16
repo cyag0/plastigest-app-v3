@@ -1,4 +1,5 @@
 import AppBar from "@/components/App/AppBar";
+import { routeGuardLayout } from "@/components/App/RoutePermissionGuard";
 import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
 import { notificationPreferencesRoute } from "@/components/Notifications/notificationLinks";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,6 +12,10 @@ import { Appbar } from "react-native-paper";
 export { RouteErrorBoundary as ErrorBoundary } from "@/components/ErrorBoundary";
 
 /** Engrane de la bandeja: abre las preferencias (como en la campana). */
+// Revisa el permiso de cada pantalla con el mapa central (ver
+// RoutePermissionGuard): sin permiso muestra "No tienes permiso…".
+const screenLayout = routeGuardLayout("(tabs)/notifications");
+
 function PreferencesAction() {
   const router = useRouter();
   const { hasPermission, location } = useAuth();
@@ -31,6 +36,7 @@ function PreferencesAction() {
 export default function NotificationsLayout() {
   return (
     <Stack
+      screenLayout={screenLayout}
       screenOptions={{
         header: ({ options, route }) => {
           const isIndex = route.name === "index";
