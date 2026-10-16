@@ -46,7 +46,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { ActivityIndicator, IconButton } from "react-native-paper";
+import { ActivityIndicator, IconButton, Modal, Portal } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // Filtros con el mismo aspecto que los listados ("Estado: Por hacer •").
@@ -295,18 +295,8 @@ export default function TasksScreen() {
     filters: { marginTop: 8, marginLeft: -16, marginRight: -16 },
     sections: { gap: 22, marginTop: 8 },
 
-    modalOverlay: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: c.overlay,
-      justifyContent: "center",
-      alignItems: "center",
-      padding: 20,
-    },
     modalCard: {
+      alignSelf: "center",
       width: "100%",
       maxWidth: 720,
       backgroundColor: c.background,
@@ -405,10 +395,12 @@ export default function TasksScreen() {
       </ScrollView>
 
       {/* Detalle en escritorio: se abre sobre la lista. */}
-      {isDesktop && detailVisible && selectedTask && (
-        <View style={styles.modalOverlay}>
-          <View
-            style={[
+      {isDesktop && (
+        <Portal>
+          <Modal
+            visible={detailVisible && !!selectedTask}
+            onDismiss={() => setDetailVisible(false)}
+            contentContainerStyle={[
               styles.modalCard,
               // Alto fijo (no solo maxHeight): el detalle usa flex:1 para su
               // scroll y su barra de acciones; sin alto definido la barra
@@ -427,7 +419,7 @@ export default function TasksScreen() {
               />
             </View>
             <View style={styles.modalBody}>
-              {selectedTaskLoading ? (
+              {selectedTaskLoading || !selectedTask ? (
                 <View style={styles.modalLoading}>
                   <ActivityIndicator color={colors.primary} />
                 </View>
@@ -445,8 +437,8 @@ export default function TasksScreen() {
                 />
               )}
             </View>
-          </View>
-        </View>
+          </Modal>
+        </Portal>
       )}
     </SafeAreaView>
   );
