@@ -6,6 +6,7 @@ import SaleStats from "@/components/Dashboard/SaleStats";
 import palette from "@/constants/palette";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -19,10 +20,19 @@ export default function SalesIndex() {
   const layout = useWindowDimensions();
   const alerts = useAlerts();
   const [index, setIndex] = useState(0);
-  const [routes] = useState([
-    { key: "list", title: "Ventas" },
-    { key: "stats", title: "Estadísticas" },
-  ]);
+  const { can } = useCan();
+  // Las estadísticas y el PDF piden sales_read (la lista, sales_list).
+  const canReadSales = can("sales_read");
+  const routes = useMemo(
+    () =>
+      canReadSales
+        ? [
+            { key: "list", title: "Ventas" },
+            { key: "stats", title: "Estadísticas" },
+          ]
+        : [{ key: "list", title: "Ventas" }],
+    [canReadSales],
+  );
 
   const { downloadPdfFromApi, isDownloading } = usePdfDownload({
     onError: (error) => alerts.error(error.message || "Error al descargar el PDF"),
@@ -257,6 +267,7 @@ export default function SalesIndex() {
         title="Ventas"
         service={Services.sales}
         showAppBar={false}
+        permissionPrefix="sales"
         onItemPress={(entity) => {
           navigation.push(`/(tabs)/home/sales/${entity.id}` as any);
         }}
@@ -374,7 +385,7 @@ export default function SalesIndex() {
               title: isDownloading ? "Descargando..." : "Imprimir PDF",
               icon: "file-pdf-box",
               color: palette.primary,
-              show: () => true,
+              show: () => canReadSales,
               onPress: handleDownloadPdf,
             },
           ],
@@ -383,7 +394,7 @@ export default function SalesIndex() {
         columns={columns}
       />
     ),
-    [navigation, columns],
+    [navigation, columns, canReadSales],
   );
 
   const renderStatsRoute = useMemo(() => () => <SaleStats />, []);
@@ -400,29 +411,31 @@ export default function SalesIndex() {
   return (
     <PermissionGate permission="sales_list">
       <View style={styles.container}>
-      {/* Tabs Header */}
-      <View style={styles.tabsContainer}>
-        <Pressable
-          style={[styles.tab, index === 0 && styles.tabActive]}
-          onPress={() => setIndex(0)}
-        >
-          <Text style={[styles.tabText, index === 0 && styles.tabTextActive]}>
-            Ventas
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.tab, index === 1 && styles.tabActive]}
-          onPress={() => setIndex(1)}
-        >
-          <Text style={[styles.tabText, index === 1 && styles.tabTextActive]}>
-            Estadísticas
-          </Text>
-        </Pressable>
-      </View>
+      {/* Tabs Header (sin sales_read solo queda la lista) */}
+      {canReadSales && (
+        <View style={styles.tabsContainer}>
+          <Pressable
+            style={[styles.tab, index === 0 && styles.tabActive]}
+            onPress={() => setIndex(0)}
+          >
+            <Text style={[styles.tabText, index === 0 && styles.tabTextActive]}>
+              Ventas
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.tab, index === 1 && styles.tabActive]}
+            onPress={() => setIndex(1)}
+          >
+            <Text style={[styles.tabText, index === 1 && styles.tabTextActive]}>
+              Estadísticas
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Tab View */}
       <TabView
-        navigationState={{ index, routes }}
+        navigationState={{ index: Math.min(index, routes.length - 1), routes }}
         renderScene={renderScene}
         onIndexChange={setIndex}
         initialLayout={{ width: layout.width }}

@@ -11,6 +11,7 @@ import {
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { parseMoney } from "@/utils/format";
 import { amountToCents, centsToAmount } from "@/utils/money";
@@ -131,6 +132,9 @@ export default function SaleDetail() {
   const [paymentInDoubt, setPaymentInDoubt] = useState<{ amountCents: number; method: string } | null>(null);
   const alerts = useAlerts();
   const { hasPermission } = useAuth();
+  const { can } = useCan();
+  // Registrar pago y cancelar la venta piden sales_update.
+  const canUpdateSale = can("sales_update");
 
   // Con el abono en envío no se sale de la pantalla: su llave se perdería y
   // un reintento desde cero podría registrarlo dos veces.
@@ -416,7 +420,7 @@ export default function SaleDetail() {
             <View style={[styles.progressFill, { width: `${paidPct}%` as any, backgroundColor: palette.primary }]} />
           </View>
         )}
-        {sale.payment_status !== "paid" && !cancelled && (
+        {canUpdateSale && sale.payment_status !== "paid" && !cancelled && (
           <Button
             mode="contained"
             onPress={() => {
@@ -544,7 +548,7 @@ export default function SaleDetail() {
         >
           Reimprimir ticket
         </Button>
-        {sale.can_cancel && (
+        {canUpdateSale && sale.can_cancel && (
           <Button mode="text" onPress={handleCancel} icon="close-circle-outline" textColor={palette.error}>
             Cancelar venta
           </Button>

@@ -1,3 +1,4 @@
+import NoPermissionView from "@/components/App/NoPermissionView";
 import CartTable, { CartTableRef } from "@/components/Pos/CartTable";
 import CheckoutModal from "@/components/Pos/CheckoutModal";
 import CloseShiftModal from "@/components/Pos/CloseShiftModal";
@@ -142,13 +143,10 @@ export default function PosScreen() {
     }
   };
 
+  // El guard de rutas ya lo cubre; esto queda por si la pantalla se monta
+  // por otro camino. Misma vista «sin permiso» que el resto de la app.
   if (!hasPermission("sales_pos")) {
-    return (
-      <Centered>
-        <Text>No tienes permiso para usar el punto de venta.</Text>
-        <Button onPress={exit}>Volver</Button>
-      </Centered>
-    );
+    return <NoPermissionView title="No tienes permiso para usar el punto de venta" requiredPermissions="sales_pos" />;
   }
 
   if (loadingSession) {
