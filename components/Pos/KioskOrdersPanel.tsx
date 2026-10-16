@@ -331,16 +331,16 @@ export function KioskOrdersButton({ count, compact, onPress }: { count: number; 
 
 /**
  * "Pedido del kiosko 7 · Juan" sobre el carrito que se trajo de un pedido,
- * con «Desligar» para cobrarlo como venta normal. `stale`: el pedido ya no
- * está pendiente (se cobró en otra caja, se canceló o venció).
+ * con «Desligar» para cobrarlo como venta normal. `staleMessage`: por qué el
+ * pedido ya no se puede cobrar (se cobró en otra caja, se canceló, venció…).
  */
 export function KioskLinkTag({
   link,
-  stale,
+  staleMessage,
   onUnlink,
 }: {
   link: PosKioskLink | null;
-  stale: boolean;
+  staleMessage: string | null;
   onUnlink: () => void;
 }) {
   const { colors } = useTheme();
@@ -350,16 +350,16 @@ export function KioskLinkTag({
   return (
     <View testID="pos-kiosk-link-tag" style={styles.tag}>
       <MaterialCommunityIcons
-        name={stale ? "alert-circle-outline" : "link-variant"}
+        name={staleMessage ? "alert-circle-outline" : "link-variant"}
         size={18}
-        color={stale ? colors.warning : colors.primary}
+        color={staleMessage ? colors.warning : colors.primary}
       />
       <View style={styles.tagBody}>
         <Text style={styles.tagTitle} numberOfLines={1}>
           {title}
         </Text>
-        {stale && (
-          <Text style={styles.tagWarning}>Ese pedido ya se cobró o se canceló. Desliga para cobrarlo como venta normal.</Text>
+        {!!staleMessage && (
+          <Text style={styles.tagWarning}>{`${staleMessage} Desliga para cobrarlo como venta normal.`}</Text>
         )}
       </View>
       <Button testID="pos-kiosk-unlink" mode="text" compact icon="link-variant-off" textColor={colors.primary} onPress={onUnlink}>

@@ -33,8 +33,11 @@ export function usePosKioskOrders(cart: PosCart, catalogItems: Item[]) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  /** Pedido ligado que el servidor rechazó al cobrar (ya se cobró o se canceló). */
-  const [unavailableId, setUnavailableId] = useState<number | null>(null);
+  /**
+   * Pedido ligado que el servidor rechazó al cobrar (kiosk_order_unavailable),
+   * con su mensaje: ya se cobró o se canceló, es de otra sucursal o ya no existe.
+   */
+  const [unavailable, setUnavailable] = useState<{ id: number; message: string } | null>(null);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -109,10 +112,17 @@ export function usePosKioskOrders(cart: PosCart, catalogItems: Item[]) {
   }, [reload]);
 
   const linkedId = cart.kioskOrder?.id ?? null;
-  // El pedido ligado ya no está entre los pendientes: lo cobraron en otra
-  // caja, lo cancelaron o venció. Cobrar con él daría kiosk_order_unavailable.
-  const linkStale =
-    linkedId !== null && (unavailableId === linkedId || (loaded && !orders.some((o) => o.id === linkedId)));
+  // El pedido ligado ya no se puede cobrar: el servidor lo rechazó (con su
+  // mensaje) o ya no está entre los pendientes (lo cobraron en otra caja, lo
+  // cancelaron o venció). Cobrar con él daría kiosk_order_unavailable.
+  const staleMessage =
+    linkedId === null
+      ? null
+      : unavailable?.id === linkedId
+        ? unavailable.message
+        : loaded && !orders.some((o) => o.id === linkedId)
+          ? "Ese pedido ya no está pendiente: se cobró, se canceló o venció."
+          : null;
 
   const charge = (order: KioskOrder): string | null => {
     if (cart.requestUnknown) return "Hay un cobro sin confirmar: verifícalo antes de traer un pedido.";
@@ -122,7 +132,7 @@ export function usePosKioskOrders(cart: PosCart, catalogItems: Item[]) {
       return "Ninguno de sus productos se vende ya en esta sucursal: no hay nada que cobrar.";
     }
     cart.loadKioskOrder(plan.link, plan.entries);
-    setUnavailableId(null);
+    setUnavailable(null);
     setPanelOpen(false);
 
     const notes: string[] = [];
@@ -143,8 +153,9 @@ export function usePosKioskOrders(cart: PosCart, catalogItems: Item[]) {
   const cancel = async (order: KioskOrder): Promise<string | null> => {
     try {
       await kioskOrdersApi.cancel(order.id);
-    } catch (e) {
-      if (apiErrorCode(e) === SALE_ERROR_CODES.kioskOrderUnavailable) {
+    } catch (e: any) {
+      // Ya no está pendiente (o ya no existe): sale de la lista con el aviso.
+      if (apiErrorCode(e) === SALE_ERROR_CODES.kioskOrderUnavailable || e?.response?.status === 404) {
         drop(order.id);
         return apiErrorMessage(e, "Ese pedido ya se cobró o se canceló.");
       }
@@ -161,22 +172,24 @@ export function usePosKioskOrders(cart: PosCart, catalogItems: Item[]) {
     const link = cart.getKioskOrder();
     if (!link) return;
     cart.unlinkKioskOrder();
-    if (!linkStale) {
+    if (!staleMessage) {
       alerts.info(`Se desligó el ${kioskOrderLabel(link.ticketNumber).toLowerCase()}: sigue pendiente en «Kiosko».`);
     }
   };
 
   /**
    * El cobro se rechazó con kiosk_order_unavailable: la etiqueta lo marca y
-   * ofrece desligar. `message`: el del servidor.
+   * ofrece desligar. `message`: el del servidor (ya se cobró o se canceló, es
+   * de otra sucursal o ya no existe). Como error de la pantalla: así no sale
+   * encima el aviso global del mismo rechazo, sin la indicación.
    */
   const markLinkedUnavailable = (message: string) => {
     const link = cart.getKioskOrder();
     if (link) {
-      setUnavailableId(link.id);
+      setUnavailable({ id: link.id, message });
       drop(link.id);
     }
-    alerts.warning(`${message} Desliga el carrito para cobrar estos productos como una venta normal.`);
+    alerts.error(`${message} Desliga el carrito para cobrar estos productos como una venta normal.`);
   };
 
   /** Venta registrada: su pedido del kiosko ya no está pendiente. Llamar antes de vaciar el carrito. */
@@ -209,6 +222,6 @@ export function usePosKioskOrders(cart: PosCart, catalogItems: Item[]) {
     markLinkedUnavailable,
     saleCharged,
     panelProps,
-    tagProps: { link: cart.kioskOrder, stale: linkStale, onUnlink: unlink },
+    tagProps: { link: cart.kioskOrder, staleMessage, onUnlink: unlink },
   };
 }
