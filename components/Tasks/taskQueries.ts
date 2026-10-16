@@ -41,6 +41,18 @@ export async function fetchTask(taskId: number): Promise<App.Entities.Task> {
 /** La tarea ya no existe (se borró): el backend responde 404. */
 export const isTaskNotFound = (error: any) => error?.response?.status === 404;
 
+/**
+ * Crea una tarea de seguimiento sin el aviso global de error (POST /tasks).
+ * Para tareas que acompañan otra acción (p. ej. "Preparar pedido" al marcar
+ * un pedido como preparando): si no se pudo crear, la acción principal ya se
+ * hizo y no hay nada que avisar. Quien llama revisa antes tasks_create.
+ */
+export async function createFollowUpTask(
+  payload: Partial<App.Entities.Task> & Record<string, unknown>,
+): Promise<void> {
+  await axiosClient.post("/auth/admin/tasks", payload, { silent: true });
+}
+
 function dueTime(task: App.Entities.Task) {
   const time = task.due_date ? new Date(task.due_date).getTime() : NaN;
   return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;

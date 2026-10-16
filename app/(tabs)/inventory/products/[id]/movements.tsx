@@ -8,6 +8,7 @@ import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, View } from "react-native";
 import { Button, Chip, Icon, Text } from "react-native-paper";
+import { errorMessageOf } from "@/utils/errorNotice";
 
 type Movement = App.Entities.StockMovement;
 type Response = App.Entities.StockMovementsResponse;
@@ -61,7 +62,7 @@ export default function ProductMovements() {
         await load(1, reason);
       } catch (e: any) {
         if (!cancelled) {
-          alerts.error("No se pudo cargar el historial: " + e.message);
+          alerts.error(errorMessageOf(e, "No se pudo cargar el historial."));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -77,7 +78,7 @@ export default function ProductMovements() {
     try {
       await load(1, reason);
     } catch (e: any) {
-      alerts.error("No se pudo actualizar: " + e.message);
+      alerts.error(errorMessageOf(e, "No se pudo actualizar el historial."));
     } finally {
       setRefreshing(false);
     }
@@ -91,7 +92,7 @@ export default function ProductMovements() {
     try {
       await load(page + 1, reason);
     } catch (e: any) {
-      alerts.error("No se pudieron cargar más movimientos: " + e.message);
+      alerts.error(errorMessageOf(e, "No se pudieron cargar más movimientos."));
     } finally {
       setLoadingMore(false);
     }

@@ -16,6 +16,7 @@ import { Href, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { Image, View } from "react-native";
 import { Text } from "react-native-paper";
+import { errorMessageOf } from "@/utils/errorNotice";
 
 /**
  * Listado de productos de un tipo de inventario.
@@ -73,7 +74,7 @@ export default function ProductsByTypeIndex() {
       setSelectedProduct(null);
     },
     onError: (error) => {
-      alerts.error("Error al descargar el PDF: " + error.message);
+      alerts.error(errorMessageOf(error, "No se pudo descargar el PDF. Inténtalo de nuevo."));
     },
   });
 

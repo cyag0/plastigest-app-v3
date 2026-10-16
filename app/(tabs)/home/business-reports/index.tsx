@@ -17,6 +17,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { downloadFile } from "@/utils/downloadFile";
+import { errorMessageOf } from "@/utils/errorNotice";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import dayjs, { Dayjs } from "dayjs";
@@ -116,7 +117,7 @@ export default function BusinessReportsScreen() {
         setLoadError(
           e?.response?.status === 403
             ? "No tienes permiso para ver los reportes del negocio."
-            : e?.response?.data?.message || "No se pudieron cargar los reportes.",
+            : errorMessageOf(e, "No se pudieron cargar los reportes."),
         ),
       );
   }, []);

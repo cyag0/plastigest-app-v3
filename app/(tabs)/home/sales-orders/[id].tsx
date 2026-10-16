@@ -1,6 +1,7 @@
 import { formatDate } from "@/utils/dates";
 import AmountPreview from "@/components/Pos/AmountPreview";
 import OpenShiftModal from "@/components/Pos/OpenShiftModal";
+import { createFollowUpTask } from "@/components/Tasks/taskQueries";
 import {
   apiErrorCode,
   apiErrorMessage,
@@ -247,8 +248,11 @@ export default function SalesOrderDetail() {
       try {
         const res = await services.salesOrders.prepare(Number(id));
         alerts.success((res as any)?.message || "Preparando aplicado");
-        services.tasks
-          .store({
+        // La tarea "Preparar pedido" acompaña el cambio: solo con
+        // tasks_create (sin él el backend responde 403 y salía "No tienes
+        // permiso…" justo después de marcarlo) y sin aviso si falla.
+        if (can("tasks_create")) {
+          createFollowUpTask({
             title: `Preparar pedido #${order.order_number}`,
             description: `Preparar productos del pedido ${order.order_number} para despacho o entrega.`,
             type: "custom",
@@ -257,8 +261,8 @@ export default function SalesOrderDetail() {
             due_date: order.promised_at ?? undefined,
             related_type: "sales_order",
             related_id: order.id,
-          })
-          .catch(() => {});
+          }).catch(() => undefined);
+        }
         await load();
       } catch (e: any) {
         alerts.error(apiErrorMessage(e, "No se pudo marcar como preparando"));
