@@ -1,4 +1,4 @@
-import { AxiosResponse } from "axios";
+import { AxiosRequestConfig, AxiosResponse } from "axios";
 import axiosClient, { describeError } from "../axios";
 import { errorMessageOf } from "../errorNotice";
 import { logHandledError } from "../silenceLogs";
@@ -44,9 +44,16 @@ export interface IndexParams {
   [key: string]: any; // Permitir parámetros adicionales
 }
 
+/**
+ * Opciones de una consulta: `silent` cuando la pantalla muestra su propio
+ * error (en el lugar del registro, debajo de un select…) y no debe salir
+ * además el aviso global.
+ */
+export type RequestOptions = Pick<AxiosRequestConfig, "silent">;
+
 // Interfaz para el servicio CRUD
 export interface CrudService<T> {
-  index: (params?: IndexParams) => Promise<
+  index: (params?: IndexParams, options?: RequestOptions) => Promise<
     AxiosResponse<
       | LaravelPaginatedResponse<T>
       | T[]
@@ -55,7 +62,11 @@ export interface CrudService<T> {
         }
     >
   >;
-  show: (id: number | string) => Promise<AxiosResponse<LaravelResponse<T>>>;
+  show: (
+    id: number | string,
+    params?: Record<string, any>,
+    options?: RequestOptions
+  ) => Promise<AxiosResponse<LaravelResponse<T>>>;
   store: (data: Partial<T>) => Promise<AxiosResponse<LaravelResponse<T>>>;
   update: (
     id: number | string,
@@ -106,10 +117,11 @@ export function createCrudService<T = any>(endpoint: string): CrudService<T> {
      * Obtener lista de recursos con filtros opcionales
      * @param params - Parámetros de filtro y paginación
      */
-    index: (params?: IndexParams) => {
+    index: (params?: IndexParams, options?: RequestOptions) => {
       logRequest("index", baseUrl, params);
       return axiosClient
         .get<LaravelPaginatedResponse<T> | T[]>(baseUrl, {
+          ...options,
           params,
         })
         .then((response) => {
@@ -126,11 +138,11 @@ export function createCrudService<T = any>(endpoint: string): CrudService<T> {
      * Obtener un recurso específico por ID
      * @param id - ID del recurso
      */
-    show: (id: number | string, data: any) => {
+    show: (id: number | string, data?: Record<string, any>, options?: RequestOptions) => {
       const url = `${baseUrl}/${id}`;
       logRequest("show", url);
       return axiosClient
-        .get<LaravelResponse<T>>(url, { params: data })
+        .get<LaravelResponse<T>>(url, { ...options, params: data })
         .then((response) => {
           logResponse("show", response);
           return response;

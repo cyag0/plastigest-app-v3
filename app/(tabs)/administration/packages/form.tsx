@@ -118,6 +118,7 @@ export default function PackagesForm(props: PackagesFormProps) {
         model="products"
         placeholder="Seleccione un producto"
         required
+        selectedLabelField="product.name"
         fetchParams={{
           company_id: company.id,
         }}
@@ -179,7 +180,7 @@ export default function PackagesForm(props: PackagesFormProps) {
         label="Unidad de Medida"
         model="home.unidades"
         placeholder="Seleccione una unidad"
-        
+        selectedLabelField="unit.name"
       />
 
       {/* Precios */}

@@ -1,4 +1,7 @@
+import { useCan } from "@/hooks/useCan";
+import { errorMessageOf } from "@/utils/errorNotice";
 import Services from "@/utils/services";
+import { logCaughtError } from "@/utils/silenceLogs";
 import React from "react";
 
 type InventoryType = App.Entities.InventoryType;
@@ -27,8 +30,17 @@ export function useInventoryTypes(options: UseInventoryTypesOptions = {}) {
   const [types, setTypes] = React.useState<InventoryType[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  // El backend deja listar los tipos con inventory_types_list o con
+  // products_list (InventoryTypeController::canIndex): sin ninguno no se
+  // piden (respondería 403).
+  const canList = useCan().can(["inventory_types_list", "products_list"]);
 
   const load = React.useCallback(async () => {
+    if (!canList) {
+      setTypes([]);
+      setLoading(false);
+      return;
+    }
     try {
       setError(null);
 
@@ -43,12 +55,12 @@ export function useInventoryTypes(options: UseInventoryTypesOptions = {}) {
 
       setTypes(data || []);
     } catch (e: any) {
-      console.error("Error cargando tipos de inventario:", e);
-      setError(e?.message || "No se pudieron cargar los tipos de inventario");
+      logCaughtError("Error cargando tipos de inventario:", e);
+      setError(errorMessageOf(e, "No se pudieron cargar los tipos de inventario"));
     } finally {
       setLoading(false);
     }
-  }, [withCounts, includeInactive]);
+  }, [withCounts, includeInactive, canList]);
 
   React.useEffect(() => {
     load();
