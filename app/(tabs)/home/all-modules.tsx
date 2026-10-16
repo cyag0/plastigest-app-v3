@@ -131,7 +131,7 @@ const MODULE_SECTIONS: ModuleSection[] = [
       }, */
       {
         label: "Caja",
-        description: "Cierre y movimientos",
+        description: "Turnos, cortes y movimientos",
         icon: "cash-multiple",
         route: "/(tabs)/home/cash",
       },
@@ -146,12 +146,6 @@ const MODULE_SECTIONS: ModuleSection[] = [
         description: "Cobros pendientes",
         icon: "bell-ring-outline",
         route: "/(tabs)/home/reminders",
-      },
-      {
-        label: "Reportes de ventas",
-        description: "Análisis detallado",
-        icon: "chart-line",
-        route: "/(tabs)/home/sales-reports",
       },
     ],
   },
@@ -204,7 +198,6 @@ const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
   "/(tabs)/home/cash": "cash_movements_list",
   "/(tabs)/home/expenses": "expenses_list",
   "/(tabs)/home/reminders": "reminders_list",
-  "/(tabs)/home/sales-reports": "reports_list",
   "/(tabs)/home/companies": "companies_list",
   "/(tabs)/administration/company-users": "users_list",
   "/(tabs)/home/roles": "roles_list",

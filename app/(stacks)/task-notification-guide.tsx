@@ -153,13 +153,6 @@ const taskFlows: {
     owner: "El usuario asignado al configurarla.",
     icon: "clipboard-list-outline",
   },
-  {
-    title: "Reporte de ventas",
-    type: "sales_report",
-    trigger: "Tarea recurrente configurada para cierre o revisión comercial.",
-    owner: "El usuario asignado al configurarla.",
-    icon: "chart-line",
-  },
 ];
 
 const lifecycleSteps = [

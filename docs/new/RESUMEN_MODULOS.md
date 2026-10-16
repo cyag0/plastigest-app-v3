@@ -230,20 +230,7 @@ Dashboard principal con acceso rápido a todas las operaciones del negocio.
   - Registro de motivo del ajuste
   - Incremento o decremento de stock
 
-#### 6. Reportes de Ventas
-- **Rutas**:
-  - `/(tabs)/home/sales-reports` - Lista de reportes
-  - `/(tabs)/home/sales-reports/form` - Nuevo reporte
-  - `/(tabs)/home/sales-reports/[id]` - Ver reporte
-- **Propósito**: Generación y análisis de reportes de ventas
-- **Funcionalidad**:
-  - Reportes por período
-  - Análisis de ventas por producto
-  - Análisis de ventas por cliente
-  - Comparativas de períodos
-  - Exportación de datos
-
-#### 7. Otras Funcionalidades
+#### 6. Otras Funcionalidades
 - **Upload Test**: `/(tabs)/home/upload-test` - Página de prueba de carga de archivos
 
 ---

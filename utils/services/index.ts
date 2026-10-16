@@ -333,24 +333,12 @@ const Services = {
       });
       return response.data;
     },
-    async cashRegister(params: { date: string; location_id?: number }) {
-      const response = await axiosClient.get(
-        "/auth/admin/sales/cash-register",
-        {
-          params,
-        },
-      );
-      return response.data;
-    },
     async pdfUrl(id: number) {
       const response = await axiosClient.get(
         `/auth/admin/sales/${id}/pdf-url`,
       );
       return response.data as { url: string; expires_at: string };
     },
-  },
-  salesReports: {
-    ...createCrudService<any>("/auth/admin/sales-reports"),
   },
   salesOrders: {
     ...createCrudService<any>("/auth/admin/sales-orders"),
