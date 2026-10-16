@@ -5,6 +5,7 @@ import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { formatMoney } from "@/utils/format";
 import { shortLocationName } from "@/utils/locations";
@@ -39,6 +40,7 @@ const formatCurrency = (value: number | string) => {
 export default function CashClosingIndex() {
   const alerts = useAlerts();
   const { selectedCompany } = useAuth();
+  const { can, canAccessRoute } = useCan();
   const { downloadPdfFromApi } = usePdfDownload({
     onError: (error) => alerts.error("Error al descargar el PDF: " + error.message),
   });
@@ -64,14 +66,19 @@ export default function CashClosingIndex() {
         <Text style={styles.noteText}>
           El corte ahora se hace al cerrar cada turno de caja. Aquí quedan los cierres diarios de antes.
         </Text>
-        <Pressable onPress={() => router.push("/(tabs)/home/cash/sessions" as any)} hitSlop={8}>
-          <Text style={styles.noteLink}>Ver turnos</Text>
-        </Pressable>
+        {canAccessRoute("/(tabs)/home/cash/sessions") && (
+          <Pressable onPress={() => router.push("/(tabs)/home/cash/sessions" as any)} hitSlop={8}>
+            <Text style={styles.noteLink}>Ver turnos</Text>
+          </Pressable>
+        )}
       </View>
     <AppList
       title="Cierres anteriores"
       emptyMessage="No hay cierres diarios anteriores."
       service={Services.cashClosings}
+      // CashClosingController usa el prefijo cash_movements: abrir el cierre
+      // pide cash_movements_read.
+      permissionPrefix="cash_movements"
       columns={[
         {
           key: "closing_date",
@@ -124,6 +131,7 @@ export default function CashClosingIndex() {
             title: "Descargar PDF",
             icon: "file-pdf-box",
             onPress: handleDownloadPdf,
+            show: () => can("cash_movements_read"),
           },
         ],
       }),

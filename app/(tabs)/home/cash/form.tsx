@@ -105,6 +105,9 @@ export default function CashMovementForm() {
     <AppForm
       api={Services.cashMovements}
       id={movementId}
+      // Guardar pide cash_movements_update con ?id= y cash_movements_create sin él
+      // (sin el permiso se ve «Solo lectura» en lugar del botón).
+      permissionPrefix="cash_movements"
       initialValues={{
         type: "income",
         concept: "",

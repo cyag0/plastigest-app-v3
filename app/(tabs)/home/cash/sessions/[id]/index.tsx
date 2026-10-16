@@ -1,8 +1,10 @@
 import { formatDateTime } from "@/utils/dates";
+import NoPermissionView from "@/components/App/NoPermissionView";
 import CloseShiftModal from "@/components/Pos/CloseShiftModal";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { formatMoney } from "@/hooks/usePosCart";
 import { printShiftTicket } from "@/utils/printDocument";
 import Services from "@/utils/services";
@@ -17,11 +19,15 @@ const METHOD_LABELS: Record<string, string> = { cash: "Efectivo", card: "Tarjeta
 export default function CashSessionDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const alerts = useAlerts();
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
+  const { can } = useCan();
   const [session, setSession] = useState<App.Entities.CashRegisterSession | null>(null);
   const [summary, setSummary] = useState<App.Entities.CashRegisterSessionSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
+  // El turno de otro cajero sin cash_register_sessions_read: el backend
+  // responde 403 y se muestra la vista «sin permiso» en lugar de cargar.
+  const [forbidden, setForbidden] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -30,6 +36,10 @@ export default function CashSessionDetail() {
       setSession(res.data);
       setSummary(res.summary);
     } catch (e: any) {
+      if (e?.response?.status === 403) {
+        setForbidden(true);
+        return;
+      }
       alerts.error(e?.response?.data?.message ?? "No se pudo cargar el turno");
     } finally {
       setLoading(false);
@@ -40,6 +50,10 @@ export default function CashSessionDetail() {
     load();
   }, [load]);
 
+  if (forbidden) {
+    return <NoPermissionView />;
+  }
+
   if (loading || !session) {
     return (
       <View style={styles.centered}>
@@ -49,7 +63,9 @@ export default function CashSessionDetail() {
   }
 
   const isOpen = session.status === "open";
-  const canClose = isOpen && (session.user_id === user?.id || hasPermission("cash_registers_update"));
+  // Como el backend: el propio con sales_pos; el de otro cajero, con cash_registers_update.
+  const canClose =
+    isOpen && ((session.user_id === user?.id && can("sales_pos")) || can("cash_registers_update"));
   const diff = session.difference;
   const diffColor = diff == null || diff === 0 ? palette.success : diff > 0 ? palette.blue : palette.error;
 

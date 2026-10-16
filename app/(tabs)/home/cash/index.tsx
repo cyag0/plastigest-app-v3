@@ -5,6 +5,7 @@ import AppChip, { ChipVariant } from "@/components/App/Chip";
 import PermissionGate from "@/components/App/PermissionGate";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useCan } from "@/hooks/useCan";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { formatMoney } from "@/utils/format";
 import Services from "@/utils/services";
@@ -73,6 +74,10 @@ function CashSummary() {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [stats, setStats] = useState<CashStats | null>(null);
+  // Cada acceso solo si el usuario puede abrir esa pantalla (mapa central).
+  const { canAccessRoute } = useCan();
+  const showSessions = canAccessRoute("/(tabs)/home/cash/sessions");
+  const showClosings = canAccessRoute("/(tabs)/home/cash/closing");
 
   // Se recarga al volver (p. ej. después de registrar un movimiento).
   useFocusEffect(
@@ -136,28 +141,34 @@ function CashSummary() {
       </View>
 
       {/* Dos botones del mismo ancho: no se encimen ni se envuelvan raro. */}
-      <View style={styles.linksRow}>
-        <Pressable
-          onPress={() => router.push("/(tabs)/home/cash/sessions" as any)}
-          style={({ pressed }) => [styles.link, pressed && { opacity: 0.7 }]}
-        >
-          <MaterialCommunityIcons name="cash-register" size={18} color={colors.primary} />
-          <Text style={styles.linkText} numberOfLines={1}>
-            Turnos de caja
-          </Text>
-          <MaterialCommunityIcons name="chevron-right" size={18} color={colors.primary} />
-        </Pressable>
-        <Pressable
-          onPress={() => router.push("/(tabs)/home/cash/closing" as any)}
-          style={({ pressed }) => [styles.link, pressed && { opacity: 0.7 }]}
-        >
-          <MaterialCommunityIcons name="history" size={18} color={colors.primary} />
-          <Text style={styles.linkText} numberOfLines={1}>
-            Cierres anteriores
-          </Text>
-          <MaterialCommunityIcons name="chevron-right" size={18} color={colors.primary} />
-        </Pressable>
-      </View>
+      {(showSessions || showClosings) && (
+        <View style={styles.linksRow}>
+          {showSessions && (
+            <Pressable
+              onPress={() => router.push("/(tabs)/home/cash/sessions" as any)}
+              style={({ pressed }) => [styles.link, pressed && { opacity: 0.7 }]}
+            >
+              <MaterialCommunityIcons name="cash-register" size={18} color={colors.primary} />
+              <Text style={styles.linkText} numberOfLines={1}>
+                Turnos de caja
+              </Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={colors.primary} />
+            </Pressable>
+          )}
+          {showClosings && (
+            <Pressable
+              onPress={() => router.push("/(tabs)/home/cash/closing" as any)}
+              style={({ pressed }) => [styles.link, pressed && { opacity: 0.7 }]}
+            >
+              <MaterialCommunityIcons name="history" size={18} color={colors.primary} />
+              <Text style={styles.linkText} numberOfLines={1}>
+                Cierres anteriores
+              </Text>
+              <MaterialCommunityIcons name="chevron-right" size={18} color={colors.primary} />
+            </Pressable>
+          )}
+        </View>
+      )}
     </View>
   );
 }
@@ -170,6 +181,7 @@ const FORM = "/(tabs)/home/cash/form";
 
 export default function CashMovementsIndex() {
   const { colors } = useTheme();
+  const { can, canAccessRoute } = useCan();
 
   const columns: AppListColumn<any>[] = [
     {
@@ -215,9 +227,12 @@ export default function CashMovementsIndex() {
   // Tocar un movimiento abre lo que lo originó (la venta, la compra, el
   // gasto); uno capturado a mano se abre para editarlo. Antes ambos llevaban
   // a una pantalla inexistente ("Página no encontrada").
+  // Sin permiso para la pantalla destino (la venta, la compra, el gasto o el
+  // movimiento) el renglón no abre nada.
   const open = (item: any) => {
-    const route = sourceRoute(item);
-    router.push((route ?? `${FORM}?id=${item.id}`) as any);
+    const route = sourceRoute(item) ?? `${FORM}?id=${item.id}`;
+    if (!canAccessRoute(route)) return;
+    router.push(route as any);
   };
 
   return (
@@ -227,6 +242,10 @@ export default function CashMovementsIndex() {
         title="Caja"
         service={Services.cashMovements}
         columns={columns}
+        // "+", "Editar" y "Eliminar" piden cash_movements_create/update/delete.
+        // Abrir el renglón depende de la pantalla destino (ver `open`).
+        permissionPrefix="cash_movements"
+        permissions={{ read: [] }}
         filters={[
           {
             type: "simple",
@@ -287,9 +306,13 @@ export default function CashMovementsIndex() {
         // devoluciones) no se editan ni se borran a mano: descuadrarían el corte.
         menu={{
           onShow: open,
-          showView: (item: any) => !!sourceRoute(item),
+          showView: (item: any) => {
+            const route = sourceRoute(item);
+            return !!route && canAccessRoute(route);
+          },
           onEdit: (item: any) => router.push(`${FORM}?id=${item.id}` as any),
-          showEdit: (item: any) => !item.source_type,
+          // El formulario carga el movimiento con cash_movements_read.
+          showEdit: (item: any) => !item.source_type && can("cash_movements_read"),
           showDelete: (item: any) => !item.source_type,
         }}
       />

@@ -3,6 +3,8 @@ import AmountPreview from "@/components/Pos/AmountPreview";
 import { apiErrorCode, apiErrorMessage, SALE_ERROR_CODES } from "@/components/Pos/saleErrors";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { parseMoney } from "@/utils/format";
 import { roundMoney } from "@/utils/money";
@@ -36,6 +38,11 @@ export default function ExpenseForm(props: ExpenseFormProps) {
   const alerts = useAlerts();
 
   const { location, selectedCompany } = useAuth();
+  const { colors } = useTheme();
+  const { can } = useCan();
+  // Guardar cambios pide expenses_update (crear, expenses_create): sin él el
+  // gasto se ve en «Solo lectura» en lugar de responder 403 al guardar.
+  const canSave = can(expenseId ? "expenses_update" : "expenses_create");
 
   const [loading, setLoading] = useState(false);
   // Candado del guardado: un doble toque no crea dos gastos.
@@ -337,18 +344,27 @@ export default function ExpenseForm(props: ExpenseFormProps) {
             style={styles.button}
             disabled={saving}
           >
-            Cancelar
+            {canSave ? "Cancelar" : "Volver"}
           </Button>
-          <Button
-            mode="contained"
-            onPress={handleSubmit}
-            style={styles.button}
-            loading={saving}
-            disabled={saving}
-            buttonColor={palette.primary}
-          >
-            {expenseId ? "Actualizar" : "Guardar"}
-          </Button>
+          {canSave ? (
+            <Button
+              mode="contained"
+              onPress={handleSubmit}
+              style={styles.button}
+              loading={saving}
+              disabled={saving}
+              buttonColor={palette.primary}
+            >
+              {expenseId ? "Actualizar" : "Guardar"}
+            </Button>
+          ) : (
+            <View style={[styles.button, styles.readOnlyHint]}>
+              <MaterialCommunityIcons name="lock-outline" size={16} color={colors.textMuted} />
+              <Text variant="bodySmall" style={{ color: colors.textMuted }}>
+                Solo lectura
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -431,5 +447,11 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
+  },
+  readOnlyHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
   },
 });
