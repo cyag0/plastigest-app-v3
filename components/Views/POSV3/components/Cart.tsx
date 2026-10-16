@@ -54,11 +54,21 @@ interface CartProps {
    * cantidades ni los botones.
    */
   scrollAll?: boolean;
+  /**
+   * ¿Se pueden cambiar cantidad y unidad de los renglones? Sin permiso (p. ej.
+   * una compra sin purchases_update) no se muestran +/−, el campo de cantidad
+   * ni el selector de unidad. Por defecto sí.
+   */
+  canEditItems?: boolean;
+  /** ¿Se pueden quitar renglones? Sin permiso no se muestra el bote. Por defecto sí. */
+  canRemoveItems?: boolean;
   children?: React.ReactNode;
 }
 
 interface CartItemComponentProps {
   item: CartItemData;
+  canEdit: boolean;
+  canRemove: boolean;
   onRemove: (itemId: number | string) => void;
   onItemChange: (
     itemId: number | string,
@@ -84,6 +94,8 @@ const formatQuantity = (n: number) => String(Math.round(n * 1000) / 1000);
 
 function CartItemComponent({
   item,
+  canEdit,
+  canRemove,
   onRemove,
   onItemChange,
 }: CartItemComponentProps) {
@@ -161,7 +173,7 @@ function CartItemComponent({
             </View>
 
             {/* Selector de unidad */}
-            {item.available_units && item.available_units.length > 1 && (
+            {canEdit && item.available_units && item.available_units.length > 1 && (
               <Menu
                 visible={unitMenuVisible}
                 onDismiss={() => setUnitMenuVisible(false)}
@@ -222,59 +234,71 @@ function CartItemComponent({
 
       {/* Controles de cantidad */}
       <View style={styles.quantityRow}>
-        <View style={styles.quantityControls}>
-          <TouchableOpacity
-            style={styles.qtyButton}
-            onPress={() => handleQuantityChange(-1)}
-            activeOpacity={0.7}
-          >
-            <MaterialCommunityIcons
-              name="minus"
-              size={14}
-              color={palette.textSecondary}
+        {canEdit ? (
+          <View style={styles.quantityControls}>
+            {/* Bajar de 1 quita el renglón: sin permiso para quitar no se ofrece. */}
+            {(canRemove || item.quantity > 1) && (
+              <TouchableOpacity
+                style={styles.qtyButton}
+                onPress={() => handleQuantityChange(-1)}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons
+                  name="minus"
+                  size={14}
+                  color={palette.textSecondary}
+                />
+              </TouchableOpacity>
+            )}
+            <TextInput
+              style={styles.quantityInput}
+              value={focused ? qtyText : formatQuantity(item.quantity)}
+              onChangeText={setQtyText}
+              onFocus={() => {
+                committedRef.current = null;
+                setQtyText(formatQuantity(item.quantity));
+                setFocused(true);
+              }}
+              onEndEditing={commitQuantity}
+              onBlur={() => {
+                commitQuantity();
+                setFocused(false);
+              }}
+              keyboardType={allowDecimal ? "decimal-pad" : "number-pad"}
+              selectTextOnFocus
+              maxLength={allowDecimal ? 9 : 6}
+              returnKeyType="done"
             />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.quantityInput}
-            value={focused ? qtyText : formatQuantity(item.quantity)}
-            onChangeText={setQtyText}
-            onFocus={() => {
-              committedRef.current = null;
-              setQtyText(formatQuantity(item.quantity));
-              setFocused(true);
-            }}
-            onEndEditing={commitQuantity}
-            onBlur={() => {
-              commitQuantity();
-              setFocused(false);
-            }}
-            keyboardType={allowDecimal ? "decimal-pad" : "number-pad"}
-            selectTextOnFocus
-            maxLength={allowDecimal ? 9 : 6}
-            returnKeyType="done"
-          />
-          <TouchableOpacity
-            style={[styles.qtyButton, styles.qtyButtonPrimary]}
-            onPress={() => handleQuantityChange(1)}
-            activeOpacity={0.7}
-          >
-            <MaterialCommunityIcons name="plus" size={14} color="#fff" />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.qtyButton, styles.qtyButtonPrimary]}
+              onPress={() => handleQuantityChange(1)}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons name="plus" size={14} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <Text style={styles.quantityReadOnly}>
+            {formatQuantity(item.quantity)}
+            {item.unit_abbreviation ? ` ${item.unit_abbreviation}` : ""}
+          </Text>
+        )}
 
         <View style={styles.itemRight}>
           <Text style={styles.itemTotal}>${item.total.toFixed(2)}</Text>
-          <TouchableOpacity
-            style={styles.removeButton}
-            onPress={() => onRemove(item.id)}
-            activeOpacity={0.7}
-          >
-            <MaterialCommunityIcons
-              name="trash-can-outline"
-              size={16}
-              color={palette.error}
-            />
-          </TouchableOpacity>
+          {canRemove && (
+            <TouchableOpacity
+              style={styles.removeButton}
+              onPress={() => onRemove(item.id)}
+              activeOpacity={0.7}
+            >
+              <MaterialCommunityIcons
+                name="trash-can-outline"
+                size={16}
+                color={palette.error}
+              />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </View>
@@ -290,6 +314,8 @@ export default function Cart({
   isScreen = false,
   showFooter = true,
   scrollAll = false,
+  canEditItems = true,
+  canRemoveItems = true,
   children,
 }: CartProps) {
   const cartTotal = items.reduce((sum, item) => sum + item.total, 0);
@@ -310,6 +336,8 @@ export default function Cart({
         <View key={item.id}>
           <CartItemComponent
             item={item}
+            canEdit={canEditItems}
+            canRemove={canRemoveItems}
             onRemove={onRemoveItem}
             onItemChange={onItemChange}
           />
@@ -614,6 +642,12 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     backgroundColor: palette.surface,
     borderRadius: tokens.radius.sm,
+  },
+  quantityReadOnly: {
+    ...tokens.typography.bodyMd,
+    fontWeight: "700",
+    color: palette.text,
+    fontVariant: ["tabular-nums"],
   },
   itemRight: {
     flexDirection: "row",

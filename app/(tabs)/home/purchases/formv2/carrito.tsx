@@ -5,7 +5,8 @@ import { Button } from "react-native-paper";
 import { usePurchase } from "./PurchaseContext";
 
 export default function CarritoScreen() {
-  const { cartItems, handleRemoveProduct, handleItemChange } = usePurchase();
+  const { cartItems, handleRemoveProduct, handleItemChange, canEditLines, canRemoveLines } =
+    usePurchase();
 
   return (
     <View style={{ flex: 1 }}>
@@ -13,6 +14,8 @@ export default function CarritoScreen() {
         items={cartItems}
         onRemoveItem={handleRemoveProduct}
         onItemChange={handleItemChange}
+        canEditItems={canEditLines}
+        canRemoveItems={canRemoveLines}
         isScreen
       >
         <View style={{ padding: 16 }}>

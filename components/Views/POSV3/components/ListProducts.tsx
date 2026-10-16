@@ -51,6 +51,10 @@ interface ProductCardProps {
   item: ProductListItem;
   selectedProduct?: SelectedProduct;
   compact?: boolean;
+  /** ¿Puede cambiar cantidad/unidad de lo que ya está en el carrito? */
+  canEdit?: boolean;
+  /** ¿Puede quitarlo? (bajar de 1 lo quita) */
+  canRemove?: boolean;
   onAddProduct: (product: ProductListItem, unitId: number) => void;
   onRemoveProduct: (productId: number | string) => void;
   onItemChange: (
@@ -65,6 +69,8 @@ const ProductCard = React.memo(
     item,
     selectedProduct,
     compact = false,
+    canEdit = true,
+    canRemove = true,
     onAddProduct,
     onRemoveProduct,
     onItemChange,
@@ -143,7 +149,9 @@ const ProductCard = React.memo(
       baseUnit?.abbreviation ? ` ${baseUnit.abbreviation}` : ""
     }`;
 
+    // Ya en el carrito y sin permiso para cambiarlo: sin selector de unidad.
     const unitSelector =
+      (!selectedProduct || canEdit) &&
       !item.is_package &&
       item.available_units &&
       item.available_units.length > 0 && (
@@ -195,31 +203,37 @@ const ProductCard = React.memo(
 
     const quantityActions = selectedProduct ? (
       <View style={styles.quantityControls}>
-        <TouchableOpacity
-          style={styles.quantityButton}
-          onPress={(event) => {
-            event.stopPropagation();
-            onItemChange(item.id, "decrement");
-          }}
-          activeOpacity={0.7}
-        >
-          <MaterialCommunityIcons
-            name="minus"
-            size={16}
-            color={palette.textSecondary}
-          />
-        </TouchableOpacity>
+        {/* Sin permiso para cambiar el renglón solo se ve la cantidad; bajar
+            de 1 lo quita, así que sin permiso para quitar no se ofrece. */}
+        {canEdit && (canRemove || selectedProduct.quantity > 1) && (
+          <TouchableOpacity
+            style={styles.quantityButton}
+            onPress={(event) => {
+              event.stopPropagation();
+              onItemChange(item.id, "decrement");
+            }}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons
+              name="minus"
+              size={16}
+              color={palette.textSecondary}
+            />
+          </TouchableOpacity>
+        )}
         <Text style={styles.quantityText}>{selectedProduct.quantity}</Text>
-        <TouchableOpacity
-          style={[styles.quantityButton, styles.quantityButtonPrimary]}
-          onPress={(event) => {
-            event.stopPropagation();
-            onItemChange(item.id, "increment");
-          }}
-          activeOpacity={0.7}
-        >
-          <MaterialCommunityIcons name="plus" size={16} color="#fff" />
-        </TouchableOpacity>
+        {canEdit && (
+          <TouchableOpacity
+            style={[styles.quantityButton, styles.quantityButtonPrimary]}
+            onPress={(event) => {
+              event.stopPropagation();
+              onItemChange(item.id, "increment");
+            }}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name="plus" size={16} color="#fff" />
+          </TouchableOpacity>
+        )}
       </View>
     ) : (
       <TouchableOpacity
@@ -359,6 +373,8 @@ const ProductCard = React.memo(
     // Solo re-renderizar si cambia el producto o su estado de selección
     return (
       prevProps.item.id === nextProps.item.id &&
+      prevProps.canEdit === nextProps.canEdit &&
+      prevProps.canRemove === nextProps.canRemove &&
       prevProps.selectedProduct?.quantity ===
         nextProps.selectedProduct?.quantity &&
       prevProps.selectedProduct?.unit_id ===
@@ -418,6 +434,13 @@ interface ListProductsProps {
   showOutOfStockFilter?: boolean;
   numColumns?: number;
   autoAdjustColumns?: boolean;
+  /**
+   * ¿Se puede cambiar cantidad/unidad de lo que ya está en el carrito? Sin
+   * permiso solo se ve la cantidad. Por defecto sí.
+   */
+  canEditItems?: boolean;
+  /** ¿Se puede quitar del carrito (bajar de 1)? Por defecto sí. */
+  canRemoveItems?: boolean;
 }
 
 type StockFilter = "available" | "out_of_stock" | "all";
@@ -437,6 +460,8 @@ export default function ListProducts({
   showOutOfStockFilter = false,
   numColumns: initialNumColumns = 2,
   autoAdjustColumns = true,
+  canEditItems = true,
+  canRemoveItems = true,
 }: ListProductsProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
@@ -591,6 +616,8 @@ export default function ListProducts({
           item={item}
           selectedProduct={selectedProducts[item.id]}
           compact={isCompactMode}
+          canEdit={canEditItems}
+          canRemove={canRemoveItems}
           onAddProduct={handleAddProduct}
           onRemoveProduct={handleRemoveProduct}
           onItemChange={handleItemChange}

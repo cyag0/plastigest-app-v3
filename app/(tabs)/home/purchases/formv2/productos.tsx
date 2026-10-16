@@ -50,6 +50,8 @@ export default function ProductosScreen() {
     handleItemChange,
     loadData,
     supplierId,
+    canEditLines,
+    canRemoveLines,
   } = usePurchase();
   const router = useRouter();
   const navigation = useNavigation();
@@ -115,6 +117,8 @@ export default function ProductosScreen() {
         onAddProduct={handleAddProduct}
         onRemoveProduct={handleRemoveProduct}
         onItemChange={handleItemChange}
+        canEditItems={canEditLines}
+        canRemoveItems={canRemoveLines}
       />
 
       {/* Carrito lateral — solo desktop */}
@@ -124,6 +128,8 @@ export default function ProductosScreen() {
             items={cartItems}
             onRemoveItem={handleRemoveProduct}
             onItemChange={handleItemChange}
+            canEditItems={canEditLines}
+            canRemoveItems={canRemoveLines}
             isScreen
           >
             <View style={{ padding: 16 }}>
