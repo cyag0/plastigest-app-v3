@@ -4,6 +4,8 @@ import SearchInput from "@/components/App/SearchInput";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useDebounce } from "@/hooks/useDebounce";
+import { formatUnitPrice } from "@/utils/format";
+import { unitDisplayPrice, unitRatio } from "@/utils/saleUnits";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, {
   useCallback,
@@ -109,27 +111,23 @@ const ProductCard = React.memo(
       (u) => u.id === selectedUnitId,
     );
 
-    // Calcular precio según la unidad seleccionada
+    // Precio en la unidad elegida: el del producto (por su unidad) × factor de
+    // la elegida ÷ factor de la del producto, como el inventario y el servidor
+    // (utils/saleUnits). Antes era precio × factor de la elegida, que solo
+    // sirve si la unidad del producto es la base de su tipo (no con Gramo o
+    // Docena). Un paquete tiene su propio precio.
     const calculatePrice = useCallback(() => {
       const basePrice =
         typeof item.price === "string" ? parseFloat(item.price) : item.price;
+      if (item.is_package || !selectedUnit) return basePrice;
 
-      if (!selectedUnit || selectedUnit.is_base_unit) {
-        return basePrice;
-      }
-
-      // Si la unidad tiene un factor de conversión, multiplicar el precio base.
-      // El factor viene como string en la API (e.g. "10.000000"), se parsea
-      // de forma segura con fallback a 1.
-      const rawFactor = selectedUnit.factor_to_base;
-      const factor =
-        rawFactor === undefined || rawFactor === null
-          ? 1
-          : typeof rawFactor === "string"
-            ? parseFloat(rawFactor) || 1
-            : rawFactor || 1;
-      return basePrice * factor;
-    }, [item.price, selectedUnit]);
+      const productUnit = item.available_units?.find((u) => u.id === item.unit_id) ?? {
+        id: item.unit_id,
+        factor_to_base: 1,
+      };
+      const ratio = unitRatio(selectedUnit, productUnit);
+      return Number.isFinite(ratio) ? unitDisplayPrice(basePrice, ratio) : basePrice;
+    }, [item.price, item.is_package, item.unit_id, item.available_units, selectedUnit]);
 
     const displayPrice = calculatePrice();
 
@@ -276,7 +274,7 @@ const ProductCard = React.memo(
                 {item.name}
               </Text>
               <View style={styles.compactMetaRow}>
-                <Text style={styles.price}>${displayPrice.toFixed(2)}</Text>
+                <Text style={styles.price}>{formatUnitPrice(displayPrice)}</Text>
                 <View
                   style={[
                     styles.stockDot,
@@ -344,7 +342,7 @@ const ProductCard = React.memo(
             <Text style={styles.name} numberOfLines={2}>
               {item.name}
             </Text>
-            <Text style={styles.price}>${displayPrice.toFixed(2)}</Text>
+            <Text style={styles.price}>{formatUnitPrice(displayPrice)}</Text>
           </View>
 
           {/* Selector de unidades (solo para productos, no paquetes) */}

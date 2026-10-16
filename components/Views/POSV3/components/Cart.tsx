@@ -1,7 +1,7 @@
 import EmptyState from "@/components/App/EmptyState";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
-import { parseQuantity } from "@/utils/format";
+import { formatUnitPrice, parseQuantity } from "@/utils/format";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useRef, useState } from "react";
 import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -207,7 +207,8 @@ function CartItemComponent({
 
           <View style={styles.priceRow}>
             <Text style={styles.itemPrice}>
-              ${item.price.toFixed(2)}
+              {/* Con 4 decimales debajo de $1: $0.025/g se veía "$0.03 /g". */}
+              {formatUnitPrice(item.price)}
               {item.unit_abbreviation && (
                 <Text style={styles.unitLabel}>
                   {" "}

@@ -22,6 +22,22 @@ export function formatMoney(value: NumberInput): string {
   return n.toLocaleString(LOCALE, { style: "currency", currency: "MXN" });
 }
 
+/**
+ * Precio por unidad para mostrar: como formatMoney, pero debajo de $1 y sin
+ * ser un centavo exacto, con hasta 4 decimales ($25/kg vendido por gramo es
+ * $0.025, no "$0.03"). El importe se sigue calculando en centavos.
+ */
+export function formatUnitPrice(value: NumberInput): string {
+  const n = toNumber(value) ?? 0;
+  if (Math.abs(n) >= 1 || Math.abs(n * 100 - Math.round(n * 100)) < 1e-6) return formatMoney(n);
+  return n.toLocaleString(LOCALE, {
+    style: "currency",
+    currency: "MXN",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+}
+
 /** 70 · 2.5 · 1,250.125 — con unidad opcional: "70 pz". */
 export function formatQuantity(value: NumberInput, unit?: string | null): string {
   const n = toNumber(value) ?? 0;
