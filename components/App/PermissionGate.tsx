@@ -1,81 +1,52 @@
 /**
- * PermissionGate — muestra una pantalla de "Sin acceso" si el usuario
- * no tiene el permiso requerido. De lo contrario renderiza los children.
+ * PermissionGate — muestra la vista "sin permiso" si el usuario no tiene el
+ * permiso requerido; si lo tiene, renderiza los children.
+ *
+ *   <PermissionGate permission="sales_list">…</PermissionGate>
+ *   <PermissionGate permission={["sales_read", "sales_pos"]}>…</PermissionGate>   // basta uno
+ *   <PermissionGate permission={["a", "b"]} all>…</PermissionGate>                // todos
+ *   <PermissionGate permission="reports_view" fallback={null}>…</PermissionGate>  // nada si no
+ *
+ * Para pantallas completas ya no hace falta: el guard de rutas lo hace con el
+ * mapa central (utils/permissions/routePermissions.ts). Sirve para secciones
+ * dentro de una pantalla (una pestaña, un bloque) que piden otro permiso.
  */
-import { goBack } from "@/utils/navigation";
+import NoPermissionView from "@/components/App/NoPermissionView";
 import { useAuth } from "@/contexts/AuthContext";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useCan } from "@/hooks/useCan";
+import type { PermissionRule } from "@/utils/permissions/permissions";
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Button, Text } from "react-native-paper";
-import palette from "@/constants/palette";
 
 interface PermissionGateProps {
-  permission: string;
+  /** Permiso o permisos (basta uno; con `all`, todos). */
+  permission: PermissionRule;
+  /** Exigir todos los permisos de la lista. */
+  all?: boolean;
+  /**
+   * Qué mostrar sin permiso. Por defecto, la vista "sin permiso" con "Volver"
+   * e "Ir al inicio"; `null` para no mostrar nada.
+   */
+  fallback?: React.ReactNode;
   children: React.ReactNode;
 }
 
 export default function PermissionGate({
   permission,
+  all,
+  fallback,
   children,
 }: PermissionGateProps) {
-  const { hasPermission, isLoading } = useAuth();
-  const router = useRouter();
+  const { isLoading } = useAuth();
+  const { can } = useCan();
 
+  // Mientras se cargan sesión y permisos no se decide (sin parpadeo).
   if (isLoading) return null;
 
-  if (!hasPermission(permission)) {
-    return (
-      <View style={styles.container}>
-        <MaterialCommunityIcons
-          name="lock-outline"
-          size={72}
-          color={palette.textSecondary}
-        />
-        <Text variant="titleLarge" style={styles.title}>
-          Acceso restringido
-        </Text>
-        <Text variant="bodyMedium" style={styles.subtitle}>
-          No tienes permiso para ver esta sección.{"\n"}Contacta a tu
-          administrador.
-        </Text>
-        <Button
-          mode="outlined"
-          onPress={() => goBack()}
-          style={styles.button}
-          textColor={palette.primary}
-        >
-          Volver
-        </Button>
-      </View>
-    );
+  if (!can(permission, { all })) {
+    if (fallback !== undefined) return <>{fallback}</>;
+    const list = typeof permission === "string" ? [permission] : permission;
+    return <NoPermissionView requiredPermissions={list.join(all ? " y " : " o ")} />;
   }
 
   return <>{children}</>;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 32,
-    gap: 16,
-    backgroundColor: palette.background,
-  },
-  title: {
-    fontWeight: "bold",
-    color: palette.text,
-    textAlign: "center",
-  },
-  subtitle: {
-    color: palette.textSecondary,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  button: {
-    marginTop: 8,
-    borderColor: palette.primary,
-  },
-});
