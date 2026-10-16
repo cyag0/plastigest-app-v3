@@ -5,6 +5,7 @@ import { tokens } from "@/constants/tokens";
 import { useResponsive } from "@/hooks/useResponsive";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import PermissionGate from "@/components/App/PermissionGate";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -40,7 +41,16 @@ interface PurchaseStatsData {
   }>;
 }
 
+/** GET /purchases-v2/stats pide purchases_list: sin él no se consulta y se ve «sin permiso». */
 export default function PurchaseStats() {
+  return (
+    <PermissionGate permission="purchases_list">
+      <PurchaseStatsContent />
+    </PermissionGate>
+  );
+}
+
+function PurchaseStatsContent() {
   const { isMobile } = useResponsive();
   const { width: screenWidth } = useWindowDimensions();
   const [loading, setLoading] = useState(true);
