@@ -1,4 +1,4 @@
-import services from "@/utils/services";
+import axiosClient from "@/utils/axios";
 
 type TaskListParams = Record<string, string | number>;
 
@@ -8,12 +8,15 @@ export interface TaskPage {
   total: number;
 }
 
-/** Tareas asignadas al usuario (GET /tasks?assigned_to=me&…). */
+/**
+ * Tareas asignadas al usuario (GET /tasks?assigned_to=me&…). Sin aviso
+ * global de error: Inicio las refresca en segundo plano y la lista de tareas
+ * muestra su propio error.
+ */
 export async function fetchMyTasks(params: TaskListParams): Promise<TaskPage> {
-  const response = await services.tasks.index({
-    assigned_to: "me",
-    per_page: 100,
-    ...params,
+  const response = await axiosClient.get("/auth/admin/tasks", {
+    params: { assigned_to: "me", per_page: 100, ...params },
+    silent: true,
   });
   const raw = response.data as any;
   const items: App.Entities.Task[] = Array.isArray(raw)
@@ -24,6 +27,19 @@ export async function fetchMyTasks(params: TaskListParams): Promise<TaskPage> {
   const total = Number(raw?.total ?? raw?.meta?.total ?? items.length);
   return { items, total: Number.isFinite(total) ? total : items.length };
 }
+
+/**
+ * Detalle de una tarea (GET /tasks/{id}) sin el aviso global de error: quien
+ * la abre explica el 404 ("ya no existe") con su propio estado.
+ */
+export async function fetchTask(taskId: number): Promise<App.Entities.Task> {
+  const response = await axiosClient.get(`/auth/admin/tasks/${taskId}`, { silent: true });
+  const raw = response.data as any;
+  return (raw?.data ?? raw) as App.Entities.Task;
+}
+
+/** La tarea ya no existe (se borró): el backend responde 404. */
+export const isTaskNotFound = (error: any) => error?.response?.status === 404;
 
 function dueTime(task: App.Entities.Task) {
   const time = task.due_date ? new Date(task.due_date).getTime() : NaN;

@@ -3,22 +3,27 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { Text, useWindowDimensions, View } from "react-native";
 import { IconButton, Modal, Portal } from "react-native-paper";
+import type { NotificationLink } from "./notificationLinks";
+import type { LinkedRecordNote, LinkedRecordOutcome } from "./useLinkedRecordOpener";
 
 /**
  * Detalle de una notificación en un modal (escritorio). Lo abren la bandeja
- * y la campana cuando el aviso no lleva a otra pantalla.
+ * y la campana cuando el aviso no lleva a otra pantalla o su registro no se
+ * pudo abrir (`linkNote`: ya no existe, otra sucursal, sin permiso).
  */
 export default function NotificationDetailModal({
   notification,
   onDismiss,
   onDelete,
   onOpenLink,
+  linkNote = null,
 }: {
   /** null = cerrado. */
   notification: App.Entities.Notification | null;
   onDismiss: () => void;
   onDelete?: () => void;
-  onOpenLink?: (route: string) => void;
+  onOpenLink?: (link: NotificationLink) => Promise<LinkedRecordOutcome>;
+  linkNote?: LinkedRecordNote | null;
 }) {
   const { colors } = useTheme();
   const { height } = useWindowDimensions();
@@ -68,6 +73,7 @@ export default function NotificationDetailModal({
             inModal
             onDelete={onDelete}
             onOpenLink={onOpenLink}
+            linkNote={linkNote}
           />
         )}
       </Modal>

@@ -8,15 +8,23 @@ import {
 import ListSearchbar from "@/components/App/ListSearchbar";
 import NotificationDetailModal from "@/components/Notifications/NotificationDetailModal";
 import NotificationRow from "@/components/Notifications/NotificationRow";
+import { markNotificationReadQuietly } from "@/components/Notifications/notificationRequests";
 import {
   getNotificationLink,
   notificationDetailRoute,
+  notificationOpenRoute,
+  type NotificationLink,
 } from "@/components/Notifications/notificationLinks";
 import {
   getNotificationCategoryLabel,
   groupNotifications,
   notificationEventOptions,
 } from "@/components/Notifications/notificationPresentation";
+import {
+  isLinkedRecordNote,
+  type LinkedRecordNote,
+  useLinkedRecordOpener,
+} from "@/components/Notifications/useLinkedRecordOpener";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -107,6 +115,11 @@ export default function NotificationsScreen() {
   const [search, setSearch] = useState("");
   const [selectedNotification, setSelectedNotification] =
     useState<App.Entities.Notification | null>(null);
+  // Por qué no se abrió el registro del aviso seleccionado (modal).
+  const [selectedLinkNote, setSelectedLinkNote] = useState<LinkedRecordNote | null>(null);
+  const { open: openLinkedRecord } = useLinkedRecordOpener();
+  // Evita abrir dos veces con un doble toque mientras se revisa el registro.
+  const openingRef = useRef(false);
 
   // Descarta respuestas viejas si cambian los filtros a media carga.
   const requestIdRef = useRef(0);
@@ -215,7 +228,7 @@ export default function NotificationsScreen() {
       if (notification.is_read) return;
       setNotificationReadState(notification.id, true);
       try {
-        await services.notifications.markAsRead(notification.id);
+        await markNotificationReadQuietly(notification.id);
       } catch (error) {
         console.warn("No se pudo marcar como leída:", error);
       } finally {
@@ -236,9 +249,29 @@ export default function NotificationsScreen() {
     void loadNotifications(page + 1);
   };
 
+  // Detalle del aviso: modal en escritorio, pantalla en el teléfono. Con
+  // `note` (el registro no se pudo abrir) el detalle explica por qué; en el
+  // teléfono la pantalla lo vuelve a revisar al cargar (?open=1).
+  const showNotificationDetail = (
+    notification: App.Entities.Notification,
+    note: LinkedRecordNote | null,
+  ) => {
+    if (isDesktop) {
+      setSelectedNotification({ ...notification, is_read: true });
+      setSelectedLinkNote(note);
+      return;
+    }
+    router.push(
+      (note ? notificationOpenRoute(notification.id) : notificationDetailRoute(notification.id)) as any,
+    );
+  };
+
   // Abre el registro relacionado (tarea, compra, transferencia…) igual que
   // la campana y el push; sin id relacionado, el detalle de la notificación.
-  const handleOpenNotification = (
+  // Si el registro ya no existe, es de una sucursal a la que no entra o no
+  // tiene permiso, se abre el detalle con el motivo (no una pantalla con
+  // error); de otra sucursal a la que sí entra, se ofrece cambiarse.
+  const handleOpenNotification = async (
     notification: App.Entities.Notification,
   ) => {
     const target = getNotificationLink(
@@ -246,21 +279,33 @@ export default function NotificationsScreen() {
       notification.data,
     );
     void markAsReadSilently(notification);
-    if (target) {
-      router.push(target.route as any);
+    if (!target) {
+      showNotificationDetail(notification, null);
       return;
     }
-    if (isDesktop) {
-      setSelectedNotification({ ...notification, is_read: true });
-      return;
+    if (openingRef.current) return;
+    openingRef.current = true;
+    try {
+      const outcome = await openLinkedRecord(target);
+      if (isLinkedRecordNote(outcome)) showNotificationDetail(notification, outcome);
+    } finally {
+      openingRef.current = false;
     }
-    router.push(notificationDetailRoute(notification.id) as any);
   };
 
-  const openRelatedFromDetail = (route: string) => {
+  const closeDetail = () => {
     setSelectedNotification(null);
-    router.push(route as any);
+    setSelectedLinkNote(null);
   };
+
+  // Botón del modal: mismas revisiones; al navegar se cierra el modal.
+  const openRelatedFromDetail = (link: NotificationLink) =>
+    openLinkedRecord(link, {
+      navigate: (route) => {
+        closeDetail();
+        router.push(route as any);
+      },
+    });
 
   const handleToggleRead = async (notification: App.Entities.Notification) => {
     const { id, is_read: isRead } = notification;
@@ -318,7 +363,7 @@ export default function NotificationsScreen() {
       setNotifications((current) =>
         current.filter((notification) => notification.id !== id),
       );
-      if (selectedNotification?.id === id) setSelectedNotification(null);
+      if (selectedNotification?.id === id) closeDetail();
     } catch {
       alerts.error("Error al eliminar la notificación");
     } finally {
@@ -452,17 +497,18 @@ export default function NotificationsScreen() {
         }
       />
 
-      {/* Detalle en escritorio, para avisos que no llevan a otra pantalla. */}
+      {/* Detalle en escritorio: avisos sin registro relacionado o cuyo registro no se pudo abrir. */}
       {isDesktop && (
         <NotificationDetailModal
           notification={selectedNotification}
-          onDismiss={() => setSelectedNotification(null)}
+          onDismiss={closeDetail}
           onDelete={
             selectedNotification
               ? () => handleDelete(selectedNotification.id)
               : undefined
           }
           onOpenLink={openRelatedFromDetail}
+          linkNote={selectedLinkNote}
         />
       )}
     </SafeAreaView>
