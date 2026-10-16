@@ -7,6 +7,7 @@ import "react-native-reanimated";
 import AppUpdateGate from "@/components/App/AppUpdateGate";
 import ConfigErrorScreen from "@/components/App/ConfigErrorScreen";
 import { SelectDataProvider } from "@/components/Form/AppProSelect";
+import KioskModeGate from "@/components/Kiosk/KioskModeGate";
 import NavigationHandler from "@/components/NavigationHandler";
 import { ThemeProvider, useTheme } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
@@ -222,6 +223,8 @@ function ThemedApp() {
                   <Stack.Screen name="+not-found" />
                 </Stack>
               </View>
+              {/* Equipo en modo kiosko: siempre de vuelta a /kiosk. */}
+              <KioskModeGate />
               {__DEV__ && <PermissionsOverlay />}
             </NavigationHandler>
             {/* Renderizar los dialogs (ConfirmDialog, AlertSnackbar) al
