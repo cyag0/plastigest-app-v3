@@ -346,17 +346,23 @@ export default function TaskNotificationGuideScreen() {
         // notifications_manage, tasks_read): si uno falla, el resto se
         // muestra igual.
         let prefsMap: Partial<Record<EventType, App.Entities.NotificationPreference>> = {};
-        try {
-          const prefsResponse = await services.notificationPreferences.index();
-          const prefsList: App.Entities.NotificationPreference[] =
-            prefsResponse?.data ?? prefsResponse ?? [];
-          prefsMap = prefsList.reduce<Partial<Record<EventType, App.Entities.NotificationPreference>>>(
-            (acc, pref) => ({ ...acc, [pref.event_type]: pref }),
-            {},
-          );
-          if (!cancelled) setAvailableEvents(prefsList.map((pref) => pref.event_type));
-        } catch {
-          if (!cancelled) setAvailableEvents(null);
+        // Sin notifications_list el backend responde 403: no se pide y se
+        // muestran todos los eventos de la guía.
+        if (hasPermission("notifications_list")) {
+          try {
+            const prefsResponse = await services.notificationPreferences.index();
+            const prefsList: App.Entities.NotificationPreference[] =
+              prefsResponse?.data ?? prefsResponse ?? [];
+            prefsMap = prefsList.reduce<Partial<Record<EventType, App.Entities.NotificationPreference>>>(
+              (acc, pref) => ({ ...acc, [pref.event_type]: pref }),
+              {},
+            );
+            if (!cancelled) setAvailableEvents(prefsList.map((pref) => pref.event_type));
+          } catch {
+            if (!cancelled) setAvailableEvents(null);
+          }
+        } else if (!cancelled) {
+          setAvailableEvents(null);
         }
 
         // Los avisos directos (tareas, transferencias, recordatorios) no
@@ -530,8 +536,9 @@ export default function TaskNotificationGuideScreen() {
         </View>
 
         <View style={styles.actionsRow}>
-          {/* Crea una tarea real en la base de datos: solo en desarrollo. */}
-          {__DEV__ && (
+          {/* Crea una tarea real en la base de datos: solo en desarrollo y
+              con permiso para crear tareas. */}
+          {__DEV__ && hasPermission("tasks_create") && (
             <Button
               mode="contained"
               icon="flask-outline"
@@ -564,15 +571,15 @@ export default function TaskNotificationGuideScreen() {
           </Button>
         </View>
 
-        {!canCreateTestTask && (
+        {__DEV__ && hasPermission("tasks_create") && !canCreateTestTask && (
           <View style={styles.permissionNotice}>
             <MaterialCommunityIcons
-              name="lock-alert-outline"
+              name="map-marker-alert-outline"
               size={18}
-              color={palette.error}
+              color={palette.warning}
             />
             <Text variant="bodySmall" style={styles.permissionText}>
-              El botón de prueba requiere empresa, sucursal y permiso tasks_create.
+              Para crear la prueba elige empresa y sucursal.
             </Text>
           </View>
         )}

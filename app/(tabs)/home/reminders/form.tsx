@@ -4,7 +4,9 @@ import { goBack } from "@/utils/navigation";
 import AppSelect from "@/components/Form/AppSelect";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -32,6 +34,11 @@ export default function ReminderForm(props: ReminderFormProps) {
   const alerts = useAlerts();
 
   const { location, user: me } = useAuth();
+  // Abrir uno existente pide reminders_read (guard de rutas); guardarlo,
+  // reminders_update. Sin él el formulario queda de solo lectura.
+  const { canUpdate } = useCan();
+  const readOnly = !!reminderId && !canUpdate("reminders");
+  const { colors } = useTheme();
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -246,6 +253,7 @@ export default function ReminderForm(props: ReminderFormProps) {
               <AppSelect
                 value={type}
                 onChange={(value) => setType(String(value))}
+                readonly={readOnly}
                 data={types}
                 placeholder="Selecciona un tipo"
               />
@@ -257,6 +265,7 @@ export default function ReminderForm(props: ReminderFormProps) {
               <AppSelect
                 value={assignedUserId}
                 onChange={(value) => setAssignedUserId(String(value ?? ""))}
+                readonly={readOnly}
                 data={
                   // Quien lo tenía asignado aunque ya no venga en la lista
                   // (desactivado o fuera de la empresa): que se vea su nombre.
@@ -281,6 +290,7 @@ export default function ReminderForm(props: ReminderFormProps) {
               label="Título"
               value={title}
               onChangeText={setTitle}
+              editable={!readOnly}
               mode="outlined"
               style={styles.input}
               left={<TextInput.Icon icon="text" />}
@@ -292,6 +302,7 @@ export default function ReminderForm(props: ReminderFormProps) {
               label="Descripción (Opcional)"
               value={description}
               onChangeText={setDescription}
+              editable={!readOnly}
               multiline
               numberOfLines={3}
               mode="outlined"
@@ -305,6 +316,7 @@ export default function ReminderForm(props: ReminderFormProps) {
               label="Fecha del Recordatorio"
               value={reminderDate}
               onChange={(date) => date && setReminderDate(date)}
+              disabled={readOnly}
               inputMode="start"
               mode="outlined"
               style={styles.input}
@@ -316,6 +328,7 @@ export default function ReminderForm(props: ReminderFormProps) {
                 label="Monto (Opcional)"
                 value={amount}
                 onChangeText={setAmount}
+                editable={!readOnly}
                 keyboardType="decimal-pad"
                 mode="outlined"
                 style={styles.input}
@@ -349,7 +362,7 @@ export default function ReminderForm(props: ReminderFormProps) {
                   Se creará automáticamente el siguiente
                 </Text>
               </View>
-              <Switch value={isRecurring} onValueChange={setIsRecurring} />
+              <Switch value={isRecurring} onValueChange={setIsRecurring} disabled={readOnly} />
             </View>
 
             {isRecurring && (
@@ -359,6 +372,7 @@ export default function ReminderForm(props: ReminderFormProps) {
                   <AppSelect
                     value={recurrenceType}
                     onChange={(value) => setRecurrenceType(String(value))}
+                    readonly={readOnly}
                     data={recurrenceTypes}
                     placeholder="Selecciona frecuencia"
                   />
@@ -368,6 +382,7 @@ export default function ReminderForm(props: ReminderFormProps) {
                   label="Cada cuántos"
                   value={recurrenceInterval}
                   onChangeText={setRecurrenceInterval}
+                  editable={!readOnly}
                   keyboardType="number-pad"
                   mode="outlined"
                   style={styles.input}
@@ -408,7 +423,7 @@ export default function ReminderForm(props: ReminderFormProps) {
                   Recibe alertas antes de la fecha
                 </Text>
               </View>
-              <Switch value={notifyEnabled} onValueChange={setNotifyEnabled} />
+              <Switch value={notifyEnabled} onValueChange={setNotifyEnabled} disabled={readOnly} />
             </View>
 
             {notifyEnabled && (
@@ -417,6 +432,7 @@ export default function ReminderForm(props: ReminderFormProps) {
                   label="Notificar días antes"
                   value={notifyDaysBefore}
                   onChangeText={setNotifyDaysBefore}
+                  editable={!readOnly}
                   keyboardType="number-pad"
                   mode="outlined"
                   style={styles.input}
@@ -450,6 +466,17 @@ export default function ReminderForm(props: ReminderFormProps) {
           </Card>
         )}
 
+        {readOnly && (
+          <View
+            style={[styles.readOnlyNote, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
+            <MaterialCommunityIcons name="lock-outline" size={16} color={colors.textMuted} />
+            <Text variant="bodySmall" style={[styles.readOnlyText, { color: colors.textSecondary }]}>
+              Solo lectura: no tienes permiso para editar recordatorios.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.actions}>
           <Button
             mode="outlined"
@@ -457,18 +484,20 @@ export default function ReminderForm(props: ReminderFormProps) {
             style={styles.button}
             disabled={saving}
           >
-            Cancelar
+            {readOnly ? "Volver" : "Cancelar"}
           </Button>
-          <Button
-            mode="contained"
-            onPress={handleSubmit}
-            style={styles.button}
-            loading={saving}
-            disabled={saving}
-            buttonColor={palette.primary}
-          >
-            {reminderId ? "Actualizar" : "Guardar"}
-          </Button>
+          {!readOnly && (
+            <Button
+              mode="contained"
+              onPress={handleSubmit}
+              style={styles.button}
+              loading={saving}
+              disabled={saving}
+              buttonColor={palette.primary}
+            >
+              {reminderId ? "Actualizar" : "Guardar"}
+            </Button>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -526,6 +555,16 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 32,
   },
+  readOnlyNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 16,
+  },
+  readOnlyText: { flex: 1, lineHeight: 18 },
   button: {
     flex: 1,
   },
