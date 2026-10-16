@@ -16,9 +16,15 @@ interface Props {
   quantity: number;
   width: number;
   onPress: (product: KioskProduct) => void;
+  /**
+   * false: ningún producto de la vista tiene foto y el mosaico es solo texto
+   * (nombre grande y precio). Con la inicial gigante en cada uno, un catálogo
+   * sin fotos se veía repetido y cabían pocos productos por pantalla.
+   */
+  showMedia?: boolean;
 }
 
-function KioskProductTile({ product, quantity, width, onPress }: Props) {
+function KioskProductTile({ product, quantity, width, onPress, showMedia = true }: Props) {
   const styles = useThemedStyles((c) => ({
     tile: {
       backgroundColor: c.surface,
@@ -57,6 +63,10 @@ function KioskProductTile({ product, quantity, width, onPress }: Props) {
     price: { fontSize: 20, lineHeight: 26, fontWeight: "700", color: c.text, fontVariant: ["tabular-nums"] },
     from: { fontSize: 16, fontWeight: "400", color: c.textSecondary },
     soldOutText: { fontSize: 16, lineHeight: 26, color: c.textSecondary },
+    textTile: { minHeight: 136, padding: 16, justifyContent: "space-between" },
+    textName: { fontSize: 20, lineHeight: 26, minHeight: 0 },
+    nameBesideBadge: { paddingRight: 48 },
+    textBadge: { top: 12, right: 12 },
   }));
 
   // Si la foto no carga se muestra la inicial (y se reintenta si cambia la URL).
@@ -75,38 +85,54 @@ function KioskProductTile({ product, quantity, width, onPress }: Props) {
     .filter(Boolean)
     .join(", ");
 
+  const badge =
+    quantity > 0 ? (
+      <View style={[styles.badge, !showMedia && styles.textBadge]} testID={`kiosk-product-qty-${product.id}`}>
+        <Text style={styles.badgeText}>{quantity}</Text>
+      </View>
+    ) : null;
+
   return (
     <Pressable
       onPress={soldOut ? undefined : () => onPress(product)}
       disabled={soldOut}
-      style={({ pressed }) => [styles.tile, { width }, pressed && !soldOut && styles.pressed, soldOut && styles.soldOut]}
+      style={({ pressed }) => [
+        styles.tile,
+        !showMedia && styles.textTile,
+        { width },
+        pressed && !soldOut && styles.pressed,
+        soldOut && styles.soldOut,
+      ]}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: soldOut }}
       testID={`kiosk-product-${product.id}`}
     >
-      <View style={styles.media}>
-        {showImage ? (
-          <Image
-            source={{ uri: product.image_url as string }}
-            style={StyleSheet.absoluteFill}
-            contentFit="contain"
-            cachePolicy="memory-disk"
-            recyclingKey={String(product.id)}
-            transition={120}
-            onError={() => setFailedUrl(product.image_url)}
-            accessible={false}
-          />
-        ) : (
-          <Text style={styles.initial}>{initial}</Text>
-        )}
-        {quantity > 0 ? (
-          <View style={styles.badge} testID={`kiosk-product-qty-${product.id}`}>
-            <Text style={styles.badgeText}>{quantity}</Text>
-          </View>
-        ) : null}
-      </View>
-      <Text style={styles.name} numberOfLines={2}>
+      {showMedia ? (
+        <View style={styles.media}>
+          {showImage ? (
+            <Image
+              source={{ uri: product.image_url as string }}
+              style={StyleSheet.absoluteFill}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              recyclingKey={String(product.id)}
+              transition={120}
+              onError={() => setFailedUrl(product.image_url)}
+              accessible={false}
+            />
+          ) : (
+            <Text style={styles.initial}>{initial}</Text>
+          )}
+          {badge}
+        </View>
+      ) : (
+        badge
+      )}
+      <Text
+        style={[styles.name, !showMedia && styles.textName, !showMedia && quantity > 0 && styles.nameBesideBadge]}
+        numberOfLines={showMedia ? 2 : 3}
+      >
         {product.name}
       </Text>
       {soldOut ? (

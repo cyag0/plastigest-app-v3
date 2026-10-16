@@ -44,6 +44,10 @@ export default function KioskCartLineRow({ entry, onIncrement, onDecrement, onRe
   }));
 
   const name = entry.product.name;
+  // La opción ("Por litro", "Paquete de 6") solo dice algo si hay de dónde
+  // elegir; con una sola, "Por mililitro" en un frasco de 180 ml confundía.
+  const hasChoices = entry.product.packages.length > 0;
+  const optionName = hasChoices ? `${name}, ${entry.option.label}` : name;
   return (
     <View style={styles.row} testID={`${testIDPrefix}-line-${entry.key}`}>
       <View style={styles.top}>
@@ -52,7 +56,9 @@ export default function KioskCartLineRow({ entry, onIncrement, onDecrement, onRe
             {name}
           </Text>
           <Text style={styles.option}>
-            {entry.option.label} · {formatCents(entry.option.priceCents)}
+            {hasChoices
+              ? `${entry.option.label} · ${formatCents(entry.option.priceCents)}`
+              : `${formatCents(entry.option.priceCents)} c/u`}
           </Text>
         </View>
         <Text style={styles.amount} testID={`${testIDPrefix}-amount-${entry.key}`}>
@@ -62,7 +68,7 @@ export default function KioskCartLineRow({ entry, onIncrement, onDecrement, onRe
       <View style={styles.bottom}>
         <KioskQuantityStepper
           value={entry.quantity}
-          name={`${name}, ${entry.option.label}`}
+          name={optionName}
           canDecrement={entry.quantity > 1}
           onIncrement={() => onIncrement(entry)}
           onDecrement={() => onDecrement(entry)}
@@ -73,7 +79,7 @@ export default function KioskCartLineRow({ entry, onIncrement, onDecrement, onRe
           onPress={() => onRemove(entry)}
           style={({ pressed }) => [styles.remove, pressed && styles.removePressed]}
           accessibilityRole="button"
-          accessibilityLabel={`Quitar ${name}, ${entry.option.label}`}
+          accessibilityLabel={`Quitar ${optionName}`}
           testID={`${testIDPrefix}-remove-${entry.key}`}
         >
           <MaterialCommunityIcons name="trash-can-outline" size={24} color={colors.error} />

@@ -3,7 +3,7 @@
  * en pantallas anchas. El ancho de cada mosaico sale del ancho disponible.
  */
 import type { KioskProduct } from "@/utils/services/kiosk";
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { FlatList, Platform } from "react-native";
 import KioskProductTile from "./KioskProductTile";
 
@@ -33,6 +33,9 @@ export default function KioskProductGrid({
   bottomInset = 0,
 }: Props) {
   const tileWidth = Math.max(120, Math.floor((width - PADDING * 2 - GAP * (columns - 1)) / columns));
+  // Sin ninguna foto en la vista, mosaicos de solo texto: todos de la misma
+  // altura (una foto suelta haría crecer su fila) y caben más productos.
+  const showMedia = useMemo(() => products.some((product) => !!product.image_url), [products]);
 
   const renderItem = useCallback(
     ({ item }: { item: KioskProduct }) => (
@@ -41,9 +44,10 @@ export default function KioskProductGrid({
         quantity={quantityByProduct.get(item.id) ?? 0}
         width={tileWidth}
         onPress={onPressProduct}
+        showMedia={showMedia}
       />
     ),
-    [quantityByProduct, tileWidth, onPressProduct],
+    [quantityByProduct, tileWidth, onPressProduct, showMedia],
   );
 
   return (
