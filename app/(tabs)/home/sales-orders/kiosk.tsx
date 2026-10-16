@@ -12,6 +12,7 @@ import {
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { parseMoney } from "@/utils/format";
 import {
@@ -369,6 +370,12 @@ export default function KioskScreen() {
   const { hasPermission, user, location } = useAuth();
   // Solo quien puede usar el punto de venta puede buscar una venta por su llave.
   const canVerify = hasPermission("sales_pos");
+  const { can } = useCan();
+  // Buscar un código en el servidor (GET /product-packages) pide products_list;
+  // sin él solo se busca en el catálogo ya cargado.
+  const canSearchPackages = can("products_list");
+  // Abrir el pedido recién cobrado pide sales_orders_read.
+  const canOpenOrder = can("sales_orders_read");
   const pendingStorageKey = user?.id && location?.id ? pendingStorageKeyFor(user.id, location.id) : null;
   const screenWidth = Dimensions.get("window").width;
   const wide = screenWidth >= 900;
@@ -631,6 +638,10 @@ export default function KioskScreen() {
       }
 
       // 2) Si no, buscar el paquete en el servidor.
+      if (!canSearchPackages) {
+        alerts.error("Código no encontrado");
+        return;
+      }
       try {
         const res = await Services.productPackages.searchByBarcode(code);
         const pkg = res?.data?.data ?? res?.data ?? res;
@@ -658,7 +669,7 @@ export default function KioskScreen() {
         alerts.error(apiErrorMessage(e, "No se pudo buscar el código"));
       }
     },
-    [products, handleAddFromCard, alerts],
+    [products, handleAddFromCard, alerts, canSearchPackages],
   );
 
   // ---------- Cobro sin confirmar guardado ----------
@@ -862,7 +873,7 @@ export default function KioskScreen() {
         setCustomerId(null);
         setPaidAmount("");
         alerts.success(order?.order_number ? `Venta registrada (${order.order_number})` : "Venta registrada");
-        if (order?.id) setChargedOrderId(Number(order.id));
+        if (order?.id && canOpenOrder) setChargedOrderId(Number(order.id));
       } catch (e: any) {
         if (isOutcomeUnknown(e)) {
           // Sin respuesta: el pedido pudo quedar cobrado. Reintentar con la

@@ -2,6 +2,7 @@ import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
+import { useCan } from "@/hooks/useCan";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -17,6 +18,9 @@ interface StatusOption {
 
 export default function SalesOrdersIndex() {
   const navigation = router;
+  const { can } = useCan();
+  // El kiosco (nuevo pedido) cobra al momento: pide crear y actualizar.
+  const canUseKiosk = can(["sales_orders_create", "sales_orders_update"], { all: true });
 
   const [statuses, setStatuses] = useState<StatusOption[]>([]);
 
@@ -66,7 +70,8 @@ export default function SalesOrdersIndex() {
             placeholder: "Seleccionar fechas",
           },
         ]}
-        onPressCreate={() => navigation.push("/home/sales-orders/kiosk")}
+        permissionPrefix="sales_orders"
+        onPressCreate={canUseKiosk ? () => navigation.push("/home/sales-orders/kiosk") : undefined}
         onItemPress={(entity) => {
           navigation.push(`/home/sales-orders/${entity.id}`);
         }}

@@ -10,6 +10,7 @@ import {
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { parseMoney } from "@/utils/format";
 import { amountToCents, centsToAmount } from "@/utils/money";
@@ -75,6 +76,9 @@ export default function SalesOrderDetail() {
   const id = params.id as string;
   const alerts = useAlerts();
   const { hasPermission } = useAuth();
+  const { can, canAccessRoute } = useCan();
+  // Preparar, enviar, entregar, cobrar y cancelar piden sales_orders_update.
+  const canUpdateOrder = can("sales_orders_update");
 
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -279,12 +283,12 @@ export default function SalesOrderDetail() {
   const isCounter = serviceMode === "counter";
   const isDelivery = serviceMode === "delivery";
 
-  const canPrepare = isDelivery && isPending;
-  const canShip = isDelivery && isPreparing;
-  const canDeliver = isDelivery && isInTransit && !!order.sale_id;
-  const canCancel = !isDelivered && !isCancelled && !order.sale_id;
+  const canPrepare = canUpdateOrder && isDelivery && isPending;
+  const canShip = canUpdateOrder && isDelivery && isPreparing;
+  const canDeliver = canUpdateOrder && isDelivery && isInTransit && !!order.sale_id;
+  const canCancel = canUpdateOrder && !isDelivered && !isCancelled && !order.sale_id;
   const canCheckout =
-    !isCancelled && !order.sale_id &&
+    canUpdateOrder && !isCancelled && !order.sale_id &&
     ((isCounter && isPending) || (isDelivery && (isPreparing || isInTransit)));
 
   const hasAnyAction = canPrepare || canShip || canDeliver || canCancel || canCheckout;
@@ -532,9 +536,11 @@ export default function SalesOrderDetail() {
                   {order.sale.status}
                 </Text>
               </View>
-              <Button mode="text" compact onPress={() => router.push(`/home/sales/${order.sale.id}`)}>
-                Ver
-              </Button>
+              {canAccessRoute(`/home/sales/${order.sale.id}`) && (
+                <Button mode="text" compact onPress={() => router.push(`/home/sales/${order.sale.id}`)}>
+                  Ver
+                </Button>
+              )}
             </View>
           </Surface>
         )}
