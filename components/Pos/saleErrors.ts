@@ -20,6 +20,8 @@ export const SALE_ERROR_CODES = {
    * llevar una llave NUEVA, o el servidor lo vuelve a rechazar.
    */
   clientRequestConflict: "client_request_conflict",
+  /** El pedido del kiosko que se quería cobrar o cancelar ya se cobró o se canceló. */
+  kioskOrderUnavailable: "kiosk_order_unavailable",
 } as const;
 
 /** `code` de la respuesta de error, si el backend lo mandó. */

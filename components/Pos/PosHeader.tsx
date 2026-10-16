@@ -1,4 +1,5 @@
 import palette from "@/constants/palette";
+import { KioskOrdersButton } from "@/components/Pos/KioskOrdersPanel";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -19,10 +20,14 @@ interface Props {
   onToggleTicketWidth?: () => void;
   /** Vuelve a descargar precios y existencias. */
   onRefreshCatalog?: () => void;
+  /** Pedidos del kiosko por cobrar (el número del botón «Kiosko»). */
+  kioskPending?: number;
+  /** Abre los pedidos del kiosko; sin él (sin turno abierto) no hay botón. */
+  onKioskOrders?: () => void;
 }
 
 /** Encabezado del POS: sucursal · caja · cajero · hora. */
-export default function PosHeader({ locationName, registerName, cashierName, compact, onCloseShift, onExit, onPrintShift, ticketWidth, onToggleTicketWidth, onRefreshCatalog }: Props) {
+export default function PosHeader({ locationName, registerName, cashierName, compact, onCloseShift, onExit, onPrintShift, ticketWidth, onToggleTicketWidth, onRefreshCatalog, kioskPending, onKioskOrders }: Props) {
   const [now, setNow] = useState(new Date());
   const [menu, setMenu] = useState(false);
 
@@ -61,6 +66,7 @@ export default function PosHeader({ locationName, registerName, cashierName, com
           <Item icon="account" text={cashierName} />
         </View>
       )}
+      {onKioskOrders && <KioskOrdersButton count={kioskPending ?? 0} compact={compact} onPress={onKioskOrders} />}
       <Text style={styles.time}>{time}</Text>
       <Menu
         visible={menu}

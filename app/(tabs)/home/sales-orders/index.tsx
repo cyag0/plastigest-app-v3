@@ -1,51 +1,44 @@
 import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
-import palette from "@/constants/palette";
-import { useCan } from "@/hooks/useCan";
+import type { Palette } from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import Services from "@/utils/services";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { kioskOrderLabel } from "@/utils/services/kioskOrders";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { Chip, Text } from "react-native-paper";
 
-interface StatusOption {
-  value: string;
-  label: string;
-  color: string;
+/**
+ * Estados del pedido (SalesOrderStatus del backend) con su color del tema.
+ * Antes la lista los pedía a sales-orders/initial-data, que además bajaba
+ * todo el catálogo y los clientes, y ahora pide permiso de crear pedidos.
+ */
+const STATUSES: { value: string; label: string; color: (c: Palette) => string }[] = [
+  { value: "pending", label: "Pendiente", color: (c) => c.textSecondary },
+  { value: "preparing", label: "Preparando", color: (c) => c.warning },
+  { value: "in_transit", label: "En tránsito", color: (c) => c.info },
+  { value: "delivered", label: "Entregado", color: (c) => c.success },
+  { value: "cancelled", label: "Cancelado", color: (c) => c.error },
+];
+
+/** "Pedido del kiosko 7 · Juan", "Juan" o null. */
+function orderCustomer(order: any): string | null {
+  const kiosk =
+    order.channel === "kiosk" && order.ticket_number != null ? kioskOrderLabel(order.ticket_number) : null;
+  const name = order.customer_name || order.customer?.name || null;
+  return [kiosk, name].filter(Boolean).join(" · ") || null;
 }
 
 export default function SalesOrdersIndex() {
   const navigation = router;
-  const { can } = useCan();
-  // El kiosco (nuevo pedido) cobra al momento: pide crear y actualizar.
-  const canUseKiosk = can(["sales_orders_create", "sales_orders_update"], { all: true });
-
-  const [statuses, setStatuses] = useState<StatusOption[]>([]);
-
-  useEffect(() => {
-    let mounted = true;
-    Services.salesOrders
-      .getInitialData()
-      .then((res) => {
-        if (!mounted) return;
-        const data = res?.data ?? res;
-        setStatuses(data?.statuses ?? []);
-      })
-      .catch(() => {
-        // initial-data is optional for the index; silent fallback
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const { colors } = useTheme();
 
   const statusColor = (value?: string) =>
-    statuses.find((s) => s.value === value)?.color ?? palette.textSecondary;
-  const statusLabel = (value?: string) =>
-    statuses.find((s) => s.value === value)?.label ?? value ?? "—";
-  
+    STATUSES.find((s) => s.value === value)?.color(colors) ?? colors.textSecondary;
+  const statusLabel = (order: any) =>
+    order?.status_label || STATUSES.find((s) => s.value === order?.status)?.label || order?.status || "—";
+
   return (
     <PermissionGate permission="sales_orders_list">
       <AppList
@@ -58,7 +51,7 @@ export default function SalesOrdersIndex() {
             label: "Estado",
             options: [
               { label: "Todos", value: "" },
-              ...statuses.map((s) => ({ label: s.label, value: s.value })),
+              ...STATUSES.map((s) => ({ label: s.label, value: s.value })),
             ],
           },
           {
@@ -71,7 +64,8 @@ export default function SalesOrdersIndex() {
           },
         ]}
         permissionPrefix="sales_orders"
-        onPressCreate={canUseKiosk ? () => navigation.push("/home/sales-orders/kiosk") : undefined}
+        // Sin «+»: el alta de pedidos era el kiosko viejo. Los pedidos del
+        // kiosko de autoservicio llegan solos y se cobran en el punto de venta.
         onItemPress={(entity) => {
           navigation.push(`/home/sales-orders/${entity.id}`);
         }}
@@ -94,7 +88,7 @@ export default function SalesOrdersIndex() {
                 }}
                 textStyle={{ color: statusColor(order.status), fontSize: 12 }}
               >
-                {statusLabel(order.status)}
+                {statusLabel(order)}
               </Chip>
             </View>
           ),
@@ -102,12 +96,10 @@ export default function SalesOrdersIndex() {
             <View style={{ gap: 4, marginTop: 4 }}>
               <Text
                 variant="bodyMedium"
-                style={{ color: palette.text }}
+                style={{ color: colors.text }}
                 numberOfLines={1}
               >
-                {order.customer_name_snapshot ||
-                  order.customer?.name ||
-                  "Cliente sin nombre"}
+                {orderCustomer(order) || "Cliente sin nombre"}
               </Text>
               <View
                 style={{
@@ -120,7 +112,7 @@ export default function SalesOrdersIndex() {
                 {order.order_date && (
                   <Text
                     variant="bodySmall"
-                    style={{ color: palette.textSecondary }}
+                    style={{ color: colors.textSecondary }}
                   >
                     {formatDate(order.order_date)}
                   </Text>
@@ -133,7 +125,7 @@ export default function SalesOrdersIndex() {
               <Text
                 variant="titleMedium"
                 style={{
-                  color: palette.primary,
+                  color: colors.primary,
                   fontWeight: "bold",
                 }}
               >
@@ -145,7 +137,7 @@ export default function SalesOrdersIndex() {
               {order.sale_id && (
                 <Text
                   variant="bodySmall"
-                  style={{ color: palette.success }}
+                  style={{ color: colors.success }}
                 >
                   Cobrado
                 </Text>
@@ -173,13 +165,13 @@ export default function SalesOrdersIndex() {
             dataIndex: "status",
             key: "status",
             width: 130,
-            render: (value: string) => (
+            render: (value: string, order: any) => (
               <Chip
                 compact
                 style={{ backgroundColor: statusColor(value) + "22" }}
                 textStyle={{ color: statusColor(value), fontSize: 12 }}
               >
-                {statusLabel(value)}
+                {statusLabel(order)}
               </Chip>
             ),
           },
@@ -187,10 +179,7 @@ export default function SalesOrdersIndex() {
             title: "Cliente",
             key: "customer",
             width: 180,
-            render: (_: any, order: any) =>
-              order.customer_name_snapshot ||
-              order.customer?.name ||
-              "—",
+            render: (_: any, order: any) => orderCustomer(order) || "—",
           },
           {
             title: "Fecha",

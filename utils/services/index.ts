@@ -1,4 +1,4 @@
-import { default as api, default as axiosClient, LONG_REQUEST_TIMEOUT } from "../axios";
+import { default as api, default as axiosClient } from "../axios";
 import admin from "./admin/admin";
 import { createCrudService } from "./crudService";
 
@@ -346,12 +346,6 @@ const Services = {
   },
   salesOrders: {
     ...createCrudService<any>("/auth/admin/sales-orders"),
-    async getInitialData() {
-      const response = await axiosClient.get(
-        "/auth/admin/sales-orders/initial-data",
-      );
-      return response.data;
-    },
     async prepare(id: number) {
       const response = await axiosClient.post(
         `/auth/admin/sales-orders/${id}/prepare`,
@@ -391,37 +385,6 @@ const Services = {
         `/auth/admin/sales-orders/${id}/checkout`,
         data ?? {},
         { silent: true },
-      );
-      return response.data;
-    },
-    /**
-     * Kiosko: crea el pedido y lo cobra en una sola transacción. Con la misma
-     * client_request_id, un reintento devuelve el pedido ya cobrado en lugar
-     * de crear otro (antes eran dos llamadas: si fallaba el cobro quedaba un
-     * pedido pendiente y el reintento creaba uno nuevo).
-     */
-    async quickCheckout(payload: {
-      channel: "kiosk";
-      service_mode: "counter";
-      customer_id?: number | null;
-      details: {
-        product_id: number;
-        package_id?: number | null;
-        unit_id: number;
-        requested_quantity: number;
-        unit_price: number;
-      }[];
-      payment_method: "cash" | "card" | "transfer";
-      paid_amount: number;
-      notes?: string;
-      client_request_id: string;
-    }) {
-      // silent: el kiosko muestra cada resultado del cobro (y la duda de un
-      // cobro sin respuesta); el aviso global decía "inténtalo de nuevo".
-      const response = await axiosClient.post(
-        "/auth/admin/sales-orders/quick-checkout",
-        payload,
-        { timeout: LONG_REQUEST_TIMEOUT, silent: true },
       );
       return response.data;
     },

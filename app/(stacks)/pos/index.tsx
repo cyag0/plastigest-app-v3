@@ -4,6 +4,7 @@ import CheckoutModal from "@/components/Pos/CheckoutModal";
 import CloseShiftModal from "@/components/Pos/CloseShiftModal";
 import CmdkPalette from "@/components/Pos/CmdkPalette";
 import CustomerPicker from "@/components/Pos/CustomerPicker";
+import KioskOrdersPanel, { KioskLinkTag } from "@/components/Pos/KioskOrdersPanel";
 import OpenShiftView from "@/components/Pos/OpenShiftView";
 import OtherLocationShift from "@/components/Pos/OtherLocationShift";
 import { returnAfterLocationSwitch } from "@/components/NavigationHandler";
@@ -18,6 +19,7 @@ import { useAlerts } from "@/hooks/useAlerts";
 import { CheckoutMethod, formatMoney, PosCatalogChange, posCartStorageKey, usePosCart } from "@/hooks/usePosCart";
 import { usePosCatalog } from "@/hooks/usePosCatalog";
 import { usePosHotkeys } from "@/hooks/usePosHotkeys";
+import { usePosKioskOrders } from "@/hooks/usePosKioskOrders";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { formatQuantity } from "@/utils/format";
@@ -249,6 +251,8 @@ function PosRegister({
   const catalog = usePosCatalog();
   // Un carrito guardado por cajero, sucursal y turno.
   const cart = usePosCart(userId ? posCartStorageKey(userId, session.location_id, session.id) : null, carryFromKey);
+  // Pedidos del kiosko: el botón «Kiosko», su ventana y el carrito ligado a uno.
+  const kiosk = usePosKioskOrders(cart, catalog.items);
   const table = useRef<CartTableRef>(null);
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -262,7 +266,7 @@ function PosRegister({
   // verificar en qué quedó.
   const checkoutVisible = checkoutOpen || cart.requestUnknown;
 
-  const anyModal = searchOpen || customerOpen || checkoutVisible || closeOpen;
+  const anyModal = searchOpen || customerOpen || checkoutVisible || closeOpen || kiosk.panelOpen;
   // Con un cobro o un corte abiertos no se refresca el catálogo en segundo
   // plano, y uno que ya venía en camino espera a que se cierre la ventana.
   const busy = checkoutVisible || closeOpen;
@@ -377,6 +381,16 @@ function PosRegister({
       return null;
     }
     cart.markNotCharged();
+    if (code === SALE_ERROR_CODES.kioskOrderUnavailable) {
+      // El pedido del kiosko ligado ya se cobró o se canceló: la etiqueta del
+      // carrito lo marca y ofrece desligarlo para cobrar como venta normal.
+      setCheckoutOpen(false);
+      kiosk.markLinkedUnavailable(
+        apiErrorMessage(error, "Ese pedido ya se cobró o se canceló."),
+        (error as any)?.response?.data?.details?.reason,
+      );
+      return null;
+    }
     if (code === SALE_ERROR_CODES.noOpenSession || code === SALE_ERROR_CODES.sessionOtherLocation) {
       setCheckoutOpen(false);
       onSessionLost(apiErrorMessage(error, "Tu turno de caja ya no está abierto."));
@@ -482,6 +496,8 @@ function PosRegister({
         setTicketWidth(next);
         alerts.success(`Los tickets se imprimirán en ${next} mm`);
       }}
+      kioskPending={kiosk.orders.length}
+      onKioskOrders={kiosk.openPanel}
     />
   );
 
@@ -528,6 +544,7 @@ function PosRegister({
             <MaterialCommunityIcons name="account-outline" size={16} color={palette.textSecondary} />
             <Text style={{ color: palette.textSecondary }}>Cliente: {customer?.name ?? "Público en general"}</Text>
           </Pressable>
+          <KioskLinkTag {...kiosk.tagProps} />
           {cartTable}
           <View style={styles.bottomBar}>
             <View style={{ flex: 1 }}>
@@ -550,6 +567,7 @@ function PosRegister({
         <View style={styles.desktop}>
           <View style={styles.main}>
             <View style={styles.desktopSearch}>{searchBar}</View>
+            <KioskLinkTag {...kiosk.tagProps} />
             {cartTable}
           </View>
           <SummaryPanel
@@ -594,6 +612,8 @@ function PosRegister({
         }}
       />
 
+      <KioskOrdersPanel {...kiosk.panelProps} />
+
       <CheckoutModal
         visible={checkoutVisible}
         total={cart.totals.total}
@@ -609,6 +629,8 @@ function PosRegister({
             payments,
             customer_id: customer?.id ?? null,
             client_request_id: clientRequestId,
+            // Carrito traído de un pedido del kiosko: la venta lo cobra y lo liga.
+            kiosk_order_id: cart.getKioskOrder()?.id,
           });
           return res.data;
         }}
@@ -626,7 +648,8 @@ function PosRegister({
         onRejected={handleRejected}
         // Registrada: el carrito (y su llave) se vacían de inmediato y la
         // pantalla de "Venta registrada" sigue abierta hasta "Nueva venta".
-        onCharged={() => {
+        onCharged={(sale) => {
+          kiosk.saleCharged(sale);
           cart.clear();
           setCheckoutOpen(true);
         }}

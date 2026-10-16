@@ -121,6 +121,12 @@ const MODULE_SECTIONS: ModuleSection[] = [
         icon: "cash-register",
         route: "/(tabs)/home/sales",
       },
+      {
+        label: "Kiosko",
+        description: "Autoservicio: el cliente pide y paga en caja",
+        icon: "tablet-dashboard",
+        route: "/(stacks)/kiosk/setup",
+      },
 /*       {
         label: "Pedidos",
         description: "Órdenes de venta",

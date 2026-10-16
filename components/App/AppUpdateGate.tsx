@@ -1,5 +1,6 @@
 import { tokens } from "@/constants/tokens";
 import { useColors } from "@/contexts/ThemeContext";
+import { useKioskModeActive } from "@/hooks/useKioskMode";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { API_BASE_URL } from "@/utils/appConfig";
 import {
@@ -96,6 +97,8 @@ function NativeVersionGate({ children }: { children: React.ReactNode }) {
   const [checking, setChecking] = useState(false);
   const [latestDismissed, setLatestDismissed] = useState(false);
   const lastCheckRef = useRef(0);
+  // Modo kiosko: el aviso de versión nueva no se le muestra al cliente.
+  const kiosk = useKioskModeActive();
 
   // Un fallo (null) conserva lo último que se supo: ni bloquea ni desbloquea.
   const runCheck = useCallback(() => {
@@ -152,6 +155,7 @@ function NativeVersionGate({ children }: { children: React.ReactNode }) {
 
   const showLatest =
     !latestDismissed &&
+    !kiosk &&
     !!info &&
     !!GATE_VERSION &&
     isVersionBelow(GATE_VERSION, info.latest_native_version);
@@ -255,6 +259,9 @@ function WebNewVersionBanner() {
   // Un pedazo del bundle ya no existe (despliegue nuevo con la pestaña
   // abierta): el escáner o las notificaciones no cargan hasta recargar.
   const [chunkFailed, setChunkFailed] = useState(false);
+  // Modo kiosko: sin aviso para el cliente; el kiosko recarga solo en la
+  // bienvenida (hooks/useKioskWebUpdate).
+  const kiosk = useKioskModeActive();
 
   useEffect(
     () =>
@@ -304,7 +311,7 @@ function WebNewVersionBanner() {
     return () => clearTimeout(timer);
   }, [snoozed]);
 
-  if (!available || snoozed) return null;
+  if (!available || snoozed || kiosk) return null;
 
   return (
     <UpdateBanner

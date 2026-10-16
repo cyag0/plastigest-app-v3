@@ -90,6 +90,13 @@ export const ROUTE_PERMISSIONS: Readonly<Record<string, RouteRule>> = {
   "(stacks)/change-password": AUTHENTICATED,
   "(stacks)/help/[topic]": AUTHENTICATED,
   "(stacks)/help/index": AUTHENTICATED,
+  // Kiosko de autoservicio: la pantalla del cliente y la que inicia el modo kiosko.
+  // La del cliente revisa sales_kiosk por su cuenta: si se lo quitan a la
+  // cuenta, muestra "no disponible" con salida por PIN. Con el guardia de
+  // aquí salía "Sin permiso" con "Ir al inicio" y el cliente quedaba dentro
+  // del sistema.
+  "(stacks)/kiosk/index": AUTHENTICATED,
+  "(stacks)/kiosk/setup": "sales_kiosk",
   "(stacks)/notification-preferences/index": "notifications_list",
   "(stacks)/pos/index": "sales_pos",
   "(stacks)/selectCompany": AUTHENTICATED,
@@ -193,7 +200,6 @@ export const ROUTE_PERMISSIONS: Readonly<Record<string, RouteRule>> = {
   "(tabs)/home/roles/[id]/edit": "roles_update",
   "(tabs)/home/sales-orders/index": "sales_orders_list",
   "(tabs)/home/sales-orders/[id]": "sales_orders_read",
-  "(tabs)/home/sales-orders/kiosk": { all: ["sales_orders_create", "sales_orders_update"] },
   "(tabs)/home/sales/index": "sales_list",
   "(tabs)/home/sales/[id]": "sales_read",
   "(tabs)/home/sales/formv2/index": "sales_create",

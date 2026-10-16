@@ -203,12 +203,6 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
-        name="sales-orders/kiosk"
-        options={{
-          title: "Modo Quiosco",
-        }}
-      />
-      <Stack.Screen
         name="sales/form"
         options={{
           title: "Nueva Venta",

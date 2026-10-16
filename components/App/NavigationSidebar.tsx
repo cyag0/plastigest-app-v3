@@ -98,6 +98,12 @@ const NAV_SECTIONS: NavSection[] = [
         route: "/(tabs)/home/sales-orders",
       },
       {
+        // Inicia el modo kiosko de autoservicio en este equipo.
+        label: "Kiosko",
+        icon: "tablet-dashboard",
+        route: "/(stacks)/kiosk/setup",
+      },
+      {
         label: "Caja",
         icon: "cash-multiple",
         route: "/(tabs)/home/cash",

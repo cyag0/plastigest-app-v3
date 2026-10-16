@@ -2,6 +2,7 @@ import { getNotificationEntityId } from "@/components/Notifications/notification
 import { APP_VERSION, notifyChunkLoadError } from "@/utils/appVersion";
 import axiosClient, { describeError } from "@/utils/axios";
 import { reportClientError } from "@/utils/errorReporting";
+import { getCachedKioskMode, isKioskModeActive } from "@/utils/kioskMode";
 import {
   notificationOpenedBus,
   type NotificationOpenedPayload,
@@ -177,6 +178,11 @@ export function usePushNotifications({
       }
       return;
     }
+
+    // Equipo en modo kiosko: sin avisos push. Ni el permiso de Android ni el
+    // registro del token, cuyo error salía como aviso del personal frente al
+    // cliente. (El modo se lee del equipo al importar utils/kioskMode.)
+    if (getCachedKioskMode()?.enabled) return;
 
     // WEB: solo auto-corremos el setup si el permiso ya estaba concedido al
     // cargar (sesion previa). Si esta en "default"/"denied", la UI muestra el
@@ -693,6 +699,8 @@ async function showNativeForegroundNotification(
   if (!title && !body) {
     return;
   }
+  // Modo kiosko: los clientes no ven avisos del personal.
+  if (isKioskModeActive()) return;
 
   await Notifications.scheduleNotificationAsync({
     content: {
@@ -713,6 +721,8 @@ function showWebForegroundNotification(
   if (Notification.permission !== "granted") {
     return;
   }
+  // Modo kiosko: los clientes no ven avisos del personal.
+  if (isKioskModeActive()) return;
 
   // En web los mensajes llegan data-only (sin `notification` payload, para
   // evitar duplicados en segundo plano), asi que tomamos titulo/cuerpo de
@@ -759,6 +769,8 @@ function showWebForegroundNotification(
 }
 
 function handleNotificationAction(remoteMessage: PushNotification) {
+  // Modo kiosko: tocar un aviso no abre pantallas del personal.
+  if (isKioskModeActive()) return;
   const data = extractPushData(remoteMessage);
 
   if (!data) {

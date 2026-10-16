@@ -34,6 +34,21 @@ export default function _layout() {
           headerShown: false,
         }}
       />
+      {/* Kiosko de autoservicio: pantalla completa, sin gesto de regreso. */}
+      <Stack.Screen
+        name="kiosk/index"
+        options={{
+          title: "Kiosko",
+          headerShown: false,
+          gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="kiosk/setup"
+        options={{
+          title: "Modo kiosko",
+        }}
+      />
       <Stack.Screen
         name="selectCompany"
         options={{
