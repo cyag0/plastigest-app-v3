@@ -139,6 +139,7 @@ export default function ProductsForm(props: ProductsFormProps) {
 
   return (
     <AppForm
+      permissionPrefix="products"
       deletePermission="products_delete"
       ref={formRef}
       api={Services.products}

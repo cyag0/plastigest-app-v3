@@ -4,6 +4,7 @@ import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PrintLabelsModal from "@/components/Products/PrintLabelsModal";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import useInventoryTypes, {
   ALL_INVENTORY_TYPES,
 } from "@/hooks/useInventoryTypes";
@@ -27,6 +28,11 @@ export default function ProductsByTypeIndex() {
   const params = useLocalSearchParams();
   const alerts = useAlerts();
   const { bySlug } = useInventoryTypes();
+  const { can } = useCan();
+  // El filtro de categoría pide categories_list; sin él no se consulta.
+  const canFilterCategories = can("categories_list");
+  // Movimientos de un producto: GET /products/{id}/movements (inventory_list).
+  const canSeeMovements = can("inventory_list");
 
   const typeSlug = String(params.slug || ALL_INVENTORY_TYPES);
   const inventoryType = bySlug[typeSlug];
@@ -43,6 +49,7 @@ export default function ProductsByTypeIndex() {
 
   // Cargamos las categorías para poblar las opciones del filtro "Categoría".
   useEffect(() => {
+    if (!canFilterCategories) return;
     let cancelled = false;
     (async () => {
       try {
@@ -58,7 +65,7 @@ export default function ProductsByTypeIndex() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canFilterCategories]);
 
   const { downloadPdfFromApi, isDownloading } = usePdfDownload({
     onSuccess: (uri) => {
@@ -260,6 +267,9 @@ export default function ProductsByTypeIndex() {
         actionColumnWidth={180}
         title={title}
         service={Services.products}
+        // El detalle acepta products_read o products_list (ProductController::show).
+        permissionPrefix="products"
+        permissions={{ read: ["products_read", "products_list"] }}
         defaultFilters={getDefaultFilters()}
         filters={[
           {
@@ -272,18 +282,22 @@ export default function ProductsByTypeIndex() {
               { label: "Inactivos", value: "0" },
             ],
           },
-          {
-            type: "simple",
-            name: "category_id",
-            label: "Categoría",
-            options: [
-              { label: "Todas", value: "" },
-              ...categories.map((c) => ({
-                label: c.name,
-                value: String(c.id),
-              })),
-            ],
-          },
+          ...(canFilterCategories
+            ? [
+                {
+                  type: "simple" as const,
+                  name: "category_id",
+                  label: "Categoría",
+                  options: [
+                    { label: "Todas", value: "" },
+                    ...categories.map((c) => ({
+                      label: c.name,
+                      value: String(c.id),
+                    })),
+                  ],
+                },
+              ]
+            : []),
           {
             type: "simple",
             name: "for_sale",
@@ -426,6 +440,7 @@ export default function ProductsByTypeIndex() {
             {
               title: "Movimientos de Inventario",
               icon: "history",
+              show: () => canSeeMovements,
               onPress: (item) => {
                 router.push(`${route}/${item.id}/movements` as any);
               },

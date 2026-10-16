@@ -5,6 +5,7 @@ import QuickAccessCard from "@/components/Dashboard/QuickAccessCard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCan } from "@/hooks/useCan";
 import { useResponsive } from "@/hooks/useResponsive";
 import Services from "@/utils/services";
 import { Href, useRouter } from "expo-router";
@@ -33,6 +34,8 @@ interface InventoryStats {
     out: number;
   };
 }
+
+const ALL_PRODUCTS_ROUTE = "/(tabs)/inventory/products/type/all";
 
 const INVENTORY_ACTIONS = [
   {
@@ -89,6 +92,10 @@ export default function InventoryScreen() {
   // tarjetas mostraban 0 productos y $0 como si el almacén estuviera vacío.
   const { hasPermission } = useAuth();
   const canSeeSummary = hasPermission("reports_view");
+  // Accesos y enlaces: solo a donde el usuario puede entrar (mapa central).
+  const { canAccessRoute } = useCan();
+  const canSeeProducts = canAccessRoute(ALL_PRODUCTS_ROUTE);
+  const actions = INVENTORY_ACTIONS.filter((item) => canAccessRoute(item.route));
 
   const loadData = async () => {
     if (!canSeeSummary) {
@@ -221,7 +228,7 @@ export default function InventoryScreen() {
         {/* Accesos compactos (como en Inicio): sin tarjeta, cuadro de ícono
             ni descripción por cada uno. */}
         <View style={styles.pills}>
-          {INVENTORY_ACTIONS.map((item) => (
+          {actions.map((item) => (
             <TouchableOpacity
               key={item.key}
               style={styles.pill}
@@ -241,9 +248,11 @@ export default function InventoryScreen() {
           <SectionHeader
             title="Salud del stock"
             badge={`${totalProducts}`}
-            actionLabel="Detalles"
-            onAction={() =>
-              router.push("/(tabs)/inventory/products/type/all" as any)
+            actionLabel={canSeeProducts ? "Detalles" : undefined}
+            onAction={
+              canSeeProducts
+                ? () => router.push(ALL_PRODUCTS_ROUTE as any)
+                : undefined
             }
           />
           <View style={styles.card}>
@@ -305,7 +314,7 @@ export default function InventoryScreen() {
                 {idx < Math.min(categoryEntries.length, 6) - 1 && <Divider />}
               </React.Fragment>
             ))}
-            {categoryEntries.length > 6 && (
+            {categoryEntries.length > 6 && canSeeProducts && (
               <TouchableOpacity
                 style={styles.seeMore}
                 onPress={() =>
@@ -331,6 +340,7 @@ export default function InventoryScreen() {
           <TouchableOpacity
             activeOpacity={0.7}
             style={[styles.alertCard, { borderLeftColor: palette.error }]}
+            disabled={!canSeeProducts}
             onPress={() =>
               router.push(
                 "/(tabs)/inventory/products/type/all?filter=low_stock" as any,
@@ -362,11 +372,13 @@ export default function InventoryScreen() {
                 urgente. Revisa el inventario para evitar desabastecimiento.
               </Text>
             </View>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={18}
-              color={palette.textMuted}
-            />
+            {canSeeProducts && (
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={18}
+                color={palette.textMuted}
+              />
+            )}
           </TouchableOpacity>
         </View>
       )}

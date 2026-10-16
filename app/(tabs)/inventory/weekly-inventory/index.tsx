@@ -6,6 +6,7 @@ import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
 import { AlertsDialogs, AlertsProvider } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import axios from "@/utils/axios";
@@ -117,6 +118,12 @@ export default function InventoryIndex() {
   const { selectedLocation } = useSelectedLocation();
   const modalRef = useRef<AppModalRef>(null);
   const formRef = useRef<AppFormRef<any>>(null);
+  const { can } = useCan();
+  // Capturar renglones pide inventory_create (POST inventory-counts-details)
+  // y completar o cancelar pide inventory_update: el conteo abierto se
+  // ofrece solo con los dos.
+  const canCapture = can(["inventory_create", "inventory_update"], { all: true });
+  const canDownloadPdf = can(["inventory_read", "inventory_list"]);
   const { downloadPdfFromApi, isDownloading } = usePdfDownload({
     onSuccess: (uri) => console.log("PDF abierto exitosamente:", uri),
     onError: (error) => console.error("Error al descargar PDF:", error),
@@ -129,10 +136,11 @@ export default function InventoryIndex() {
       modalRef.current?.hide();
       formRef.current?.resetForm();
 
-      // Navegar al detalle del inventario creado
+      // Navegar a la captura del inventario creado (o a su detalle si el
+      // usuario no puede capturar).
       if (response.data?.data.id) {
         router.push(
-          `/inventory/weekly-inventory/${response.data.data.id}/edit` as any
+          `/inventory/weekly-inventory/${response.data.data.id}${canCapture ? "/edit" : ""}` as any
         );
       }
 
@@ -148,6 +156,8 @@ export default function InventoryIndex() {
       <AppList
         title="Inventario Semanal"
         service={Services.inventoryCounts}
+        // InventoryCountController usa el prefijo inventory.
+        permissionPrefix="inventory"
         filters={inventoryFilters}
         onPressCreate={() =>
           modalRef.current?.show({
@@ -238,7 +248,9 @@ export default function InventoryIndex() {
         menu={{
           showView: true,
           showEdit: (item: App.Entities.InventoryCount.InventoryCount) =>
-            item.status !== "completed" && item.status !== "cancelled",
+            canCapture &&
+            item.status !== "completed" &&
+            item.status !== "cancelled",
           showDelete: (item: App.Entities.InventoryCount.InventoryCount) =>
             item.status !== "completed" && item.status !== "cancelled",
           onEdit(item) {
@@ -250,7 +262,7 @@ export default function InventoryIndex() {
               icon: "file-pdf-box",
               color: palette.primary,
               show: (item: App.Entities.InventoryCount.InventoryCount) =>
-                item.status === "completed",
+                canDownloadPdf && item.status === "completed",
               onPress: async (
                 item: App.Entities.InventoryCount.InventoryCount
               ) => {
