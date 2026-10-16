@@ -1251,49 +1251,51 @@ export default function KioskScreen() {
                   )}
                 </>
               )}
-
-              {payMessage && (
-                <View style={styles.payMessage}>
-                  <Text
-                    variant="bodyMedium"
-                    style={{
-                      color:
-                        payMessage.tone === "error"
-                          ? palette.error
-                          : payMessage.tone === "warning"
-                            ? palette.warning
-                            : palette.text,
-                    }}
-                  >
-                    {payMessage.text}
-                  </Text>
-                  {payMessage.openShift && (
-                    <Button
-                      mode="outlined"
-                      icon="cash-register"
-                      compact
-                      onPress={() => setOpenShiftVisible(true)}
-                      style={{ alignSelf: "flex-start" }}
-                    >
-                      Abrir turno
-                    </Button>
-                  )}
-                  {payMessage.verify && pendingUnknown && (
-                    <Button
-                      mode="outlined"
-                      icon="magnify"
-                      compact
-                      onPress={() => run(verifyPending)}
-                      disabled={submitting}
-                      style={{ alignSelf: "flex-start" }}
-                    >
-                      Verificar
-                    </Button>
-                  )}
-                </View>
-              )}
             </ScrollView>
           </Dialog.ScrollArea>
+          {/* El aviso del cobro (p. ej. sin turno, con «Abrir turno», o sin
+              respuesta, con «Verificar») va fuera del desplazamiento, junto a
+              los botones: al final del contenido quedaba bajo el pliegue. */}
+          {payMessage && (
+            <View style={[styles.payMessage, styles.payMessageDocked]}>
+              <Text
+                variant="bodyMedium"
+                style={{
+                  color:
+                    payMessage.tone === "error"
+                      ? palette.error
+                      : payMessage.tone === "warning"
+                        ? palette.warning
+                        : palette.text,
+                }}
+              >
+                {payMessage.text}
+              </Text>
+              {payMessage.openShift && (
+                <Button
+                  mode="outlined"
+                  icon="cash-register"
+                  compact
+                  onPress={() => setOpenShiftVisible(true)}
+                  style={{ alignSelf: "flex-start" }}
+                >
+                  Abrir turno
+                </Button>
+              )}
+              {payMessage.verify && pendingUnknown && (
+                <Button
+                  mode="outlined"
+                  icon="magnify"
+                  compact
+                  onPress={() => run(verifyPending)}
+                  disabled={submitting}
+                  style={{ alignSelf: "flex-start" }}
+                >
+                  Verificar
+                </Button>
+              )}
+            </View>
+          )}
           <Dialog.Actions>
             <Button onPress={() => setPayDialog(false)} disabled={submitting}>
               Cancelar
@@ -1425,5 +1427,9 @@ const styles = StyleSheet.create({
   payMessage: {
     marginTop: 14,
     gap: 8,
+  },
+  payMessageDocked: {
+    marginTop: 12,
+    marginHorizontal: 24,
   },
 });
