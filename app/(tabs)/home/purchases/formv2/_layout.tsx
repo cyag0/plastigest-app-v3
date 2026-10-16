@@ -1,9 +1,14 @@
 import { goBack } from "@/utils/navigation";
 import AppBar from "@/components/App/AppBar";
+import { routeGuardLayout } from "@/components/App/RoutePermissionGuard";
 import { Stack, usePathname, useRouter } from "expo-router";
 import React from "react";
 import { View } from "react-native";
 import { PurchaseProvider } from "./PurchaseContext";
+
+// Revisa el permiso de cada pantalla con el mapa central (ver
+// RoutePermissionGuard): sin permiso muestra "No tienes permiso…".
+const screenLayout = routeGuardLayout("(tabs)/home/purchases/formv2");
 
 function StackContent() {
   const router = useRouter();
@@ -19,6 +24,7 @@ function StackContent() {
 
   return (
     <Stack
+      screenLayout={screenLayout}
       screenOptions={{
         headerShown: true,
         header: (props) => {

@@ -11,6 +11,7 @@ import { Appbar } from "react-native-paper";
 
 import AppBar from "@/components/App/AppBar";
 import NavigationSidebar from "@/components/App/NavigationSidebar";
+import { routeGuardLayout } from "@/components/App/RoutePermissionGuard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -22,6 +23,11 @@ export { RouteErrorBoundary as ErrorBoundary } from "@/components/ErrorBoundary"
 
 // Pestaña inicial (SDK 58 quitó la prop initialRouteName de los navegadores).
 export const unstable_settings = { anchor: "home" };
+
+// Revisa el permiso de cada pantalla con el mapa central (ver
+// RoutePermissionGuard): sin permiso muestra "No tienes permiso…". Las
+// secciones con su propio layout (home, inventory…) se revisan ahí.
+const screenLayout = routeGuardLayout("(tabs)");
 
 /**
  * Pantallas sin botón en la barra (notificaciones, tareas, preferencias).
@@ -41,6 +47,7 @@ const HIDDEN_TAB_OPTIONS = {
 function WebTabs() {
   return (
     <Tabs
+      screenLayout={screenLayout}
       screenOptions={{
         tabBarStyle: { display: "none" },
         headerShown: false,
@@ -197,6 +204,7 @@ function WebTabLayout() {
 function NativeTabLayout() {
   return (
     <Tabs
+      screenLayout={screenLayout}
       screenOptions={{
         tabBarActiveTintColor: palette.primary,
         tabBarInactiveTintColor: palette.textSecondary,

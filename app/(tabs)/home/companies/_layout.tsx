@@ -1,9 +1,15 @@
 import AppBar from "@/components/App/AppBar";
+import { routeGuardLayout } from "@/components/App/RoutePermissionGuard";
 import { Stack } from "expo-router";
+
+// Revisa el permiso de cada pantalla con el mapa central (ver
+// RoutePermissionGuard): sin permiso muestra "No tienes permiso…".
+const screenLayout = routeGuardLayout("(tabs)/home/companies");
 
 export default function CompaniesLayout() {
   return (
     <Stack
+      screenLayout={screenLayout}
       screenOptions={{
         headerShown: true,
         header: ({ options, route }) => (
