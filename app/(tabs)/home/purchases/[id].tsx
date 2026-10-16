@@ -1,6 +1,7 @@
 import { formatDate } from "@/utils/dates";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { formatQuantity, parseQuantity } from "@/utils/format";
 import { centsToAmount, lineTotalCents, sumCents } from "@/utils/money";
@@ -74,6 +75,8 @@ const PAYMENT_METHOD_CONFIG: Record<string, { icon: string; label: string }> = {
 export default function PurchaseDetailScreen() {
   const { id } = useLocalSearchParams();
   const alerts = useAlerts();
+  // Confirmar, marcar en tránsito, recibir y cancelar piden purchases_update.
+  const canUpdate = useCan().can("purchases_update");
   const [purchase, setPurchase] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   // Candado de las acciones (confirmar, en tránsito, recibir, cancelar): un
@@ -108,7 +111,8 @@ export default function PurchaseDetailScreen() {
     }
   };
 
-  const receiving = purchase?.status === "in_transit";
+  // Captura de lo recibido: solo para quien puede recibir.
+  const receiving = purchase?.status === "in_transit" && canUpdate;
 
   // Cada renglón con lo que llegó: entre 0 y lo pedido (los paquetes, enteros).
   const receiveRows = useMemo<ReceiveRow[]>(
@@ -748,63 +752,65 @@ export default function PurchaseDetailScreen() {
       )}
 
       {/* ── Acciones ── */}
-      <View style={{ gap: 10 }}>
-        {purchase.status === "draft" && (
-          <Button
-            mode="contained"
-            onPress={handleConfirmOrder}
-            loading={busy}
-            disabled={busy}
-            icon="cart-check"
-            buttonColor="#2F6F7E"
-            style={styles.actionBtn}
-          >
-            Confirmar Pedido
-          </Button>
-        )}
+      {canUpdate && (
+        <View style={{ gap: 10 }}>
+          {purchase.status === "draft" && (
+            <Button
+              mode="contained"
+              onPress={handleConfirmOrder}
+              loading={busy}
+              disabled={busy}
+              icon="cart-check"
+              buttonColor="#2F6F7E"
+              style={styles.actionBtn}
+            >
+              Confirmar Pedido
+            </Button>
+          )}
 
-        {purchase.status === "ordered" && (
-          <Button
-            mode="contained"
-            onPress={handleMarkInTransit}
-            loading={busy}
-            disabled={busy}
-            icon="truck-delivery"
-            buttonColor="#7A6A8C"
-            style={styles.actionBtn}
-          >
-            Marcar en Tránsito
-          </Button>
-        )}
+          {purchase.status === "ordered" && (
+            <Button
+              mode="contained"
+              onPress={handleMarkInTransit}
+              loading={busy}
+              disabled={busy}
+              icon="truck-delivery"
+              buttonColor="#7A6A8C"
+              style={styles.actionBtn}
+            >
+              Marcar en Tránsito
+            </Button>
+          )}
 
-        {purchase.status === "in_transit" && (
-          <Button
-            mode="contained"
-            onPress={handleReceivePurchase}
-            loading={busy}
-            disabled={busy}
-            icon="package-variant-closed-check"
-            buttonColor="#3F8A3A"
-            style={styles.actionBtn}
-          >
-            Confirmar Recepción
-          </Button>
-        )}
+          {purchase.status === "in_transit" && (
+            <Button
+              mode="contained"
+              onPress={handleReceivePurchase}
+              loading={busy}
+              disabled={busy}
+              icon="package-variant-closed-check"
+              buttonColor="#3F8A3A"
+              style={styles.actionBtn}
+            >
+              Confirmar Recepción
+            </Button>
+          )}
 
-        {purchase.status !== "received" && purchase.status !== "cancelled" && (
-          <Button
-            mode="outlined"
-            onPress={handleCancelPurchase}
-            loading={busy}
-            disabled={busy}
-            icon="close-circle-outline"
-            textColor="#B9412C"
-            style={[styles.actionBtn, { borderColor: "#B9412C" }]}
-          >
-            Cancelar Compra
-          </Button>
-        )}
-      </View>
+          {purchase.status !== "received" && purchase.status !== "cancelled" && (
+            <Button
+              mode="outlined"
+              onPress={handleCancelPurchase}
+              loading={busy}
+              disabled={busy}
+              icon="close-circle-outline"
+              textColor="#B9412C"
+              style={[styles.actionBtn, { borderColor: "#B9412C" }]}
+            >
+              Cancelar Compra
+            </Button>
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 }

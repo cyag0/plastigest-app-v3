@@ -9,6 +9,7 @@ import CreatePurchaseModal, {
 import palette from "@/constants/palette";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import Services from "@/utils/services";
 import {
   CrudService,
@@ -109,6 +110,7 @@ export default function PurchasesIndex() {
   const router = useRouter();
   const layout = useWindowDimensions();
   const alerts = useAlerts();
+  const { can } = useCan();
   const [index, setIndex] = useState(0);
   const [routes] = useState([
     { key: "list", title: "Lista de Compras" },
@@ -223,6 +225,14 @@ export default function PurchasesIndex() {
         key={listKey}
         title="Compras"
         service={purchasesListService}
+        // Editar un borrador lo guarda con upsert-draft (purchases_create);
+        // eliminarlo pide purchases_delete y abrir la compra, purchases_read.
+        permissions={{
+          create: "purchases_create",
+          read: "purchases_read",
+          update: "purchases_create",
+          delete: "purchases_delete",
+        }}
         searchPlaceholder="Buscar compras..."
         filters={[
           {
@@ -306,7 +316,7 @@ export default function PurchasesIndex() {
               title: isDownloading ? "Descargando..." : "Imprimir PDF",
               icon: "file-pdf-box",
               color: palette.primary,
-              show: () => true,
+              show: () => can("purchases_read"),
               onPress: handleDownloadPdf,
             },
           ],
@@ -318,7 +328,7 @@ export default function PurchasesIndex() {
         columns={columns}
       />
     ),
-    [router, columns, listKey],
+    [router, columns, listKey, can],
   );
 
   const renderStatsRoute = useMemo(() => () => <PurchaseStats />, []);

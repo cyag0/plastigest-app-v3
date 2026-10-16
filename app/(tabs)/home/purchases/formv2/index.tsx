@@ -8,6 +8,7 @@ import { FormSwitch } from "@/components/Form/AppSwitch";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -62,6 +63,9 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
 
   const purchaseContext = usePurchase();
   const { selectedLocation } = useSelectedLocation();
+  // Los productos se guardan en el borrador al agregarlos; confirmar la
+  // compra (POST purchases-v2/{id}/confirm) pide purchases_update.
+  const canConfirm = useCan().can("purchases_update");
 
   const cartItemCount = purchaseContext.cartItems?.length ?? 0;
 
@@ -162,6 +166,7 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
       // tenía productos pero el proveedor quedaba vacío.
       ref={purchaseContext.formRef}
       submitButtonText="Confirmar Compra"
+      showSubmitButton={canConfirm}
       initialValues={initialFormValues}
       onSubmit={async (values: any) => {
         const res = await alerts.confirm("¿Deseas confirmar esta compra?", {
@@ -196,6 +201,12 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
           {selectedLocation?.name ? (
             <Text variant="bodyMedium" style={styles.subtitle}>
               Se recibe en {selectedLocation.name}
+            </Text>
+          ) : null}
+          {!canConfirm ? (
+            <Text variant="bodySmall" style={styles.subtitle}>
+              La compra queda guardada como borrador. Confirmarla requiere
+              permiso para actualizar compras.
             </Text>
           ) : null}
         </View>

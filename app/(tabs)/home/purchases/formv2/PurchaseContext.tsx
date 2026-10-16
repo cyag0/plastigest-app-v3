@@ -5,6 +5,7 @@ import {
 } from "@/components/Views/POSV3/components";
 import { Unit } from "@/components/Views/POSV3/components/ListProducts";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import Services from "@/utils/services";
 import { parseQuantity } from "@/utils/format";
 import { useGlobalSearchParams } from "expo-router";
@@ -80,6 +81,14 @@ interface PurchaseContextType {
   confirmPurchase: (data?: ConfirmPurchaseData) => Promise<boolean>;
   /** Ref del formulario de la compra: el contexto lo llena con el borrador. */
   formRef: React.RefObject<AppFormRef<{}> | null>;
+  /**
+   * ¿Puede cambiar cantidad o unidad de un renglón guardado? (PUT
+   * purchases-v2/details/{id} pide purchases_update; agregar pide
+   * purchases_create).
+   */
+  canEditLines: boolean;
+  /** ¿Puede quitar renglones? (DELETE purchases-v2/details/{id}: purchases_delete). */
+  canRemoveLines: boolean;
   /**
    * Encabezado del borrador ya cargado (proveedor, fecha, forma de pago), o
    * null. Si el borrador cargó antes de montar el formulario (se entró por
@@ -736,6 +745,9 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
   );
   const [supplierId, setSupplierId] = useState<number | null>(null);
   const alerts = useAlerts();
+  const { can } = useCan();
+  const canEditLines = can("purchases_update");
+  const canRemoveLines = can("purchases_delete");
 
   // La compra que se abrió desde la lista ("Editar" → formv2?id=…). Se lee
   // una vez: al pasar a productos o al carrito la ruta ya no trae el id.
@@ -933,14 +945,32 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
       currentPurchaseId,
       supplierId,
       loadData,
-      handleAddProduct: cart.addProduct,
-      handleRemoveProduct: cart.removeProduct,
-      handleItemChange: cart.changeItem,
+      // Sin permiso no se manda la petición que el backend rechazaría: un
+      // producto que ya está (escáner, doble toque) sumaría uno al renglón.
+      handleAddProduct: (product: ProductListItem, unitId: number) => {
+        if (!canEditLines && cart.getLines()[String(product.id)]) {
+          alerts.info("Este producto ya está en la compra.");
+          return;
+        }
+        void cart.addProduct(product, unitId);
+      },
+      handleRemoveProduct: (productId: number | string) => {
+        if (canRemoveLines) void cart.removeProduct(productId);
+      },
+      handleItemChange: (productId: number | string, action: ItemAction, data?: any) => {
+        if (!canEditLines) return;
+        // Bajar de 1 quita el renglón.
+        const line = cart.getLines()[String(productId)];
+        if (action === "decrement" && !canRemoveLines && (line?.quantity ?? 0) <= 1) return;
+        cart.changeItem(productId, action, data);
+      },
       clearCart: cart.clear,
       setSupplier: cart.setSupplier,
       confirmPurchase: cart.confirm,
       formRef,
       getDraftHeader: cart.getDraftHeader,
+      canEditLines,
+      canRemoveLines,
     }),
     [
       products,
@@ -952,6 +982,10 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
       cartItems,
       currentPurchaseId,
       supplierId,
+      canEditLines,
+      canRemoveLines,
+      alerts,
+      cart,
     ],
   );
 
