@@ -64,6 +64,9 @@ export default function RemindersIndex() {
       key={refreshKey}
       title="Recordatorios"
       service={Services.reminders}
+      // "+" pide reminders_create, abrir uno reminders_read (el formulario),
+      // editar reminders_update y eliminar reminders_delete.
+      permissionPrefix="reminders"
       filters={[
         {
           type: "simple",

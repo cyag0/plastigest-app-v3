@@ -6,6 +6,7 @@ import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme, ThemePreference } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { getAppVersionLabel } from "@/utils/appVersion";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -84,6 +85,10 @@ export default function PreferencesScreen() {
   const { location } = useAuth();
   // Quien no entra a todas las sucursales abre las de su sucursal.
   const allLocations = useAllLocationsAccess();
+  // Preferencias de notificaciones: pide notifications_list (mapa central).
+  const { canAccessRoute } = useCan();
+  const notificationPrefsRoute = notificationPreferencesRoute(allLocations, !!location);
+  const showNotificationPrefs = canAccessRoute(notificationPrefsRoute);
   const alerts = useAlerts();
   const { preference, mode, colors, setPreference } = useTheme();
 
@@ -297,47 +302,47 @@ export default function PreferencesScreen() {
         </View>
 
         {/* ============== NOTIFICACIONES ============== */}
-        <View style={styles.section}>
-          <SectionHeader title="Notificaciones" />
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() =>
-              router.push(notificationPreferencesRoute(allLocations, !!location) as any)
-            }
-            style={[styles.linkCard, { backgroundColor: colors.surface }]}
-          >
-            <View
-              style={[
-                styles.optionIconBox,
-                { backgroundColor: colors.warningSoft },
-              ]}
+        {showNotificationPrefs && (
+          <View style={styles.section}>
+            <SectionHeader title="Notificaciones" />
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push(notificationPrefsRoute as any)}
+              style={[styles.linkCard, { backgroundColor: colors.surface }]}
             >
-              <MaterialCommunityIcons
-                name="bell-cog-outline"
-                size={18}
-                color={colors.warning}
-              />
-            </View>
-            <View style={styles.optionBody}>
-              <Text style={[styles.optionTitle, { color: colors.text }]}>
-                Preferencias de notificaciones
-              </Text>
-              <Text
+              <View
                 style={[
-                  styles.optionDescription,
-                  { color: colors.textSecondary },
+                  styles.optionIconBox,
+                  { backgroundColor: colors.warningSoft },
                 ]}
               >
-                Configura qué eventos generan alertas y a quién
-              </Text>
-            </View>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={18}
-              color={colors.textMuted}
-            />
-          </TouchableOpacity>
-        </View>
+                <MaterialCommunityIcons
+                  name="bell-cog-outline"
+                  size={18}
+                  color={colors.warning}
+                />
+              </View>
+              <View style={styles.optionBody}>
+                <Text style={[styles.optionTitle, { color: colors.text }]}>
+                  Preferencias de notificaciones
+                </Text>
+                <Text
+                  style={[
+                    styles.optionDescription,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  Configura qué eventos generan alertas y a quién
+                </Text>
+              </View>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={18}
+                color={colors.textMuted}
+              />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* ============== ACERCA DE ============== */}
         <View style={styles.section}>
