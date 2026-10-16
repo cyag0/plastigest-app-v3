@@ -1,4 +1,5 @@
 import { formatDate } from "@/utils/dates";
+import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
 import AppList from "@/components/App/AppList/AppList";
 import type { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import type { VariantMatchMap } from "@/components/App/StatusBadge";
@@ -36,11 +37,15 @@ function DirectionBadge({ isSent }: { isSent: boolean }) {
   );
 }
 
+/** Estados que el backend deja cancelar (TransferStatus::canCancel). */
+const CANCELLABLE_STATUSES = ["pending", "approved", "in_transit"];
+
 export default function PendingTransfersScreen() {
   const router = useRouter();
   const auth = useAuth();
   const alerts = useAlerts();
   const { can } = useCan();
+  const allLocations = useAllLocationsAccess();
   const [refreshKey, setRefreshKey] = useState(0);
 
   const company = auth.selectedCompany;
@@ -327,12 +332,15 @@ export default function PendingTransfersScreen() {
               title: "Cancelar solicitud",
               icon: "close-circle-outline",
               color: palette.error,
-              // Cancelar pide transfers_delete; solo quien la pidió o la
-              // sucursal de origen.
+              // Como el backend (destroy): transfers_delete, desde la sucursal
+              // de origen o la de destino (o con acceso a todas), y mientras
+              // esté pendiente, aprobada o en tránsito.
               show: (item: InventoryTransfer) =>
                 can("transfers_delete") &&
-                ((item.requested_by_user_id ?? item.requested_by) === auth.user?.id ||
-                  item.from_location_id === location.id),
+                CANCELLABLE_STATUSES.includes(String(item.status)) &&
+                (allLocations ||
+                  Number(item.from_location_id) === Number(location.id) ||
+                  Number(item.to_location_id) === Number(location.id)),
               onPress: handleCancel,
             },
           ],

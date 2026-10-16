@@ -1,6 +1,7 @@
 import palette from "@/constants/palette";
+import { useCan } from "@/hooks/useCan";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router, usePathname } from "expo-router";
+import { router, useGlobalSearchParams, usePathname } from "expo-router";
 import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
 
@@ -8,6 +9,8 @@ type BreadcrumbItem = {
   label: string;
   href: string;
   current: boolean;
+  /** El usuario puede abrir esa pantalla (si no, la miga es solo texto). */
+  accessible?: boolean;
 };
 
 const segmentLabels: Record<string, string> = {
@@ -116,7 +119,10 @@ function getSegmentLabel(segment: string, href: string, nextSegment?: string) {
   return segmentLabels[segment] || segment.replace(/-/g, " ").replace(/^./, (value) => value.toUpperCase());
 }
 
-function buildBreadcrumbs(pathname: string): BreadcrumbItem[] {
+// Formularios que con ?id= muestran un registro existente: "Detalle", no "Nuevo".
+const formSegments = new Set(["form", "formv2"]);
+
+function buildBreadcrumbs(pathname: string, hasRecordId = false): BreadcrumbItem[] {
   const cleanPath = pathname.split("?")[0].split("#")[0];
   const rawSegments = cleanPath.split("/").filter((segment) => !hiddenSegments.has(segment));
 
@@ -135,7 +141,11 @@ function buildBreadcrumbs(pathname: string): BreadcrumbItem[] {
     hrefSegments.push(segment);
     const href = `/${hrefSegments.join("/")}`;
     const nextSegment = rawSegments[index + 1];
-    const label = getSegmentLabel(segment, href, nextSegment);
+    const isLast = index === rawSegments.length - 1;
+    const label =
+      isLast && hasRecordId && formSegments.has(segment)
+        ? "Detalle"
+        : getSegmentLabel(segment, href, nextSegment);
 
     if (!label || skippedSegments.has(segment)) {
       return;
@@ -168,12 +178,20 @@ export default function WebBreadcrumb({
   compact?: boolean;
 }) {
   const pathname = usePathname();
+  const { id } = useGlobalSearchParams<{ id?: string | string[] }>();
+  const { canAccessRoute } = useCan();
 
   if (Platform.OS !== "web") {
     return null;
   }
 
-  const items = buildBreadcrumbs(pathname);
+  const hasRecordId = (Array.isArray(id) ? id[0] : id) !== undefined && String(id).trim() !== "";
+  // Las migas a pantallas que el usuario no puede abrir quedan como texto
+  // (antes llevaban a "No tienes permiso…").
+  const items = buildBreadcrumbs(pathname, hasRecordId).map((item) => ({
+    ...item,
+    accessible: canAccessRoute(item.href),
+  }));
 
   if (items.length === 0 || (items.length <= 1 && !showSingleItem)) {
     return null;
@@ -182,6 +200,13 @@ export default function WebBreadcrumb({
   if (compact) {
     const current = items[items.length - 1];
     const parent = items.length > 1 ? items[items.length - 2] : null;
+    // La flecha lleva al nivel anterior que el usuario puede abrir (si no
+    // puede abrir ninguno, a Inicio).
+    const backTarget =
+      items
+        .slice(0, -1)
+        .reverse()
+        .find((item) => item.accessible) ?? (parent ? { label: "Inicio", href: "/home" } : null);
     // "Nuevo" o "Detalle" solos no dicen dónde estás: se agrega la sección.
     const title =
       parent && GENERIC_LABELS.has(current.label)
@@ -190,12 +215,12 @@ export default function WebBreadcrumb({
 
     return (
       <View style={[styles.wrapper, embedded && styles.embeddedWrapper, styles.compactContent]}>
-        {parent && (
+        {backTarget && (
           <Pressable
-            onPress={() => router.push(parent.href as any)}
+            onPress={() => router.push(backTarget.href as any)}
             style={({ pressed }) => [styles.compactBack, pressed && styles.pressedItem]}
             accessibilityRole="link"
-            accessibilityLabel={`Volver a ${parent.label}`}
+            accessibilityLabel={`Volver a ${backTarget.label}`}
             hitSlop={8}
           >
             <MaterialCommunityIcons name="chevron-left" size={24} color={palette.text} />
@@ -220,10 +245,10 @@ export default function WebBreadcrumb({
           <View key={`${item.href}-${index}`} style={styles.itemGroup}>
             {index > 0 && <MaterialCommunityIcons name="chevron-right" size={16} color={palette.textSecondary} />}
             <Pressable
-              disabled={item.current}
+              disabled={item.current || !item.accessible}
               onPress={() => router.push(item.href as any)}
               style={({ pressed }) => [styles.item, item.current && styles.currentItem, pressed && styles.pressedItem]}
-              accessibilityRole="link"
+              accessibilityRole={item.current || !item.accessible ? "text" : "link"}
               accessibilityLabel={item.label}
             >
               {index === 0 && <MaterialCommunityIcons name="home-outline" size={16} color={item.current ? palette.primary : palette.textSecondary} />}

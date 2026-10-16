@@ -223,6 +223,12 @@ export default function AdministrationScreen() {
     // las sucursales (el servidor responde company_scope_forbidden); los
     // demás tienen las de su sucursal en "Esta sucursal".
     if (option.id === "notification-preferences" && !allLocations) return false;
+    // Igual con las cajas y la bitácora: sin locations_all el backend solo
+    // devuelve las de su sucursal, que ya están en "Esta sucursal" (salían
+    // dos veces con los mismos datos).
+    if ((option.id === "cash-registers" || option.id === "activity-log") && !allLocations) {
+      return false;
+    }
     if (option.requiredPermission && !can(option.requiredPermission)) return false;
     return canAccessRoute(option.route);
   });

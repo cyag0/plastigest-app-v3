@@ -9,6 +9,12 @@ export interface RoleOption {
   description?: string | null;
   permissions_count?: number;
   is_active?: boolean;
+  /**
+   * ¿El usuario actual puede asignarlo? (la regla de UserController::
+   * guardRoles: un rol con permisos que él no tiene responde 403). Si el
+   * backend no lo manda, se ofrece y el backend decide.
+   */
+  assignable?: boolean;
 }
 
 // La lista, el detalle, el formulario y el selector de rol piden los roles al
