@@ -3,6 +3,10 @@ import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import NotificationPermissionBanner from "@/components/Notifications/NotificationPermissionBanner";
+import {
+  fetchEligibleUsersQuietly,
+  fetchNotificationPreferences,
+} from "@/components/Notifications/notificationRequests";
 import Services from "@/utils/services";
 import { useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import { useCallback, useLayoutEffect, useState } from "react";
@@ -557,7 +561,8 @@ export default function NotificationPreferencesScreen() {
   const loadAll = useCallback(async () => {
     try {
       setLoadError(null);
-      const prefsRes = await Services.notificationPreferences.index(branchScope);
+      // El error se muestra en la pantalla (loadError): sin aviso global.
+      const prefsRes = await fetchNotificationPreferences(branchScope);
       const list: Preference[] = Array.isArray(prefsRes?.data)
         ? prefsRes.data
         : Array.isArray(prefsRes)
@@ -579,7 +584,7 @@ export default function NotificationPreferencesScreen() {
         permissions.map(async (permission) => {
           const pref = list.find((p) => p.permission_name === permission)!;
           try {
-            const response = await Services.notificationPreferences.eligibleUsers(
+            const response = await fetchEligibleUsersQuietly(
               pref.event_type,
               branchScope ? { scope: branchScope } : undefined,
             );
