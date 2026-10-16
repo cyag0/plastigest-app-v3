@@ -3,8 +3,10 @@ import { SkeletonListLoader } from "@/components/SkeletonLoader";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import useDebounce from "@/hooks/useDebounce";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
+import type { PermissionRule } from "@/utils/permissions/permissions";
 import {
   CrudService,
   IndexParams,
@@ -79,6 +81,13 @@ function ItemMenu<T>({
 }: ItemMenuProps<T>) {
   const [visible, setVisible] = useState(false);
   const { colors } = useTheme();
+
+  // Sin ninguna opción visible (p. ej. sin permisos) no se muestra el botón
+  // de tres puntos: abría un menú vacío.
+  const hasCustomActions = customActions.some((action) =>
+    typeof action.show === "function" ? action.show(item) : action.show !== false,
+  );
+  if (!showView && !showEdit && !showDelete && !hasCustomActions) return null;
 
   return (
     <Menu
@@ -294,6 +303,21 @@ interface AppListProps<T> {
   tabletBreakpoint?: number;
   actionColumnTitle?: string;
   actionColumnWidth?: number;
+
+  /**
+   * Permisos de la lista (opcional). Con `permissionPrefix="products"` se
+   * piden products_create (botón "+"), products_read (abrir el renglón y
+   * "Ver detalles"), products_update ("Editar") y products_delete
+   * ("Eliminar"): sin el permiso la acción no se muestra. Sin estos props la
+   * lista se comporta como siempre.
+   */
+  permissionPrefix?: string;
+  /**
+   * Cambia el permiso de una acción (gana sobre `permissionPrefix`). Un
+   * permiso o varios (basta uno); un arreglo vacío no exige nada.
+   *   permissions={{ create: "inventory_manage", update: [], delete: [] }}
+   */
+  permissions?: Partial<Record<"create" | "read" | "update" | "delete", PermissionRule>>;
 }
 
 function AppList<T extends { id: number | string }>({
@@ -321,6 +345,8 @@ function AppList<T extends { id: number | string }>({
   tabletBreakpoint = 768,
   actionColumnTitle = "Acciones",
   actionColumnWidth = 220,
+  permissionPrefix,
+  permissions,
 }: AppListProps<T>) {
   // Estados
   const [data, setData] = useState<T[]>([]);
@@ -340,6 +366,16 @@ function AppList<T extends { id: number | string }>({
   const { colors } = useTheme();
   const styles = useThemedStyles(makeAppListStyles);
 
+  // Permisos de las acciones (permissionPrefix / permissions). Sin esos props
+  // la regla queda vacía y todo se permite, como antes.
+  const { can } = useCan();
+  const actionRule = (action: "create" | "read" | "update" | "delete") =>
+    permissions?.[action] ?? (permissionPrefix ? `${permissionPrefix}_${action}` : undefined);
+  const allowCreate = can(actionRule("create"));
+  const allowRead = can(actionRule("read"));
+  const allowUpdate = can(actionRule("update"));
+  const allowDelete = can(actionRule("delete"));
+
   const getMenuFlag = (
     flag: ((item: T) => boolean) | boolean | undefined,
     item: T,
@@ -355,7 +391,7 @@ function AppList<T extends { id: number | string }>({
     useCallback(() => {
       navigation.setOptions({
         headerRight: () => {
-          if (onPressCreate || menu?.onCreate) {
+          if ((onPressCreate || menu?.onCreate) && allowCreate) {
             return (
               <AppBar.Action
                 icon="plus"
@@ -368,7 +404,8 @@ function AppList<T extends { id: number | string }>({
           return null;
         },
       });
-    }, []),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [allowCreate]),
   );
 
   // Solo se aplica la respuesta de la petición más reciente: con búsquedas o
@@ -497,6 +534,8 @@ function AppList<T extends { id: number | string }>({
   };
 
   const handleItemPress = (item: T) => {
+    // Sin permiso de lectura no se abre el detalle.
+    if (!allowRead) return;
     if (menu?.onShow) {
       menu.onShow(item);
     } else if (onItemPress) {
@@ -612,11 +651,11 @@ function AppList<T extends { id: number | string }>({
                 columns={columns}
                 actionColumnTitle={actionColumnTitle}
                 actionColumnWidth={actionColumnWidth}
-                onRowPress={handleItemPress}
+                onRowPress={allowRead ? handleItemPress : undefined}
                 renderActionsCell={(item) => {
-                  const showView = getMenuFlag(menu?.showView, item, true);
-                  const showEdit = getMenuFlag(menu?.showEdit, item, true);
-                  const showDelete = getMenuFlag(menu?.showDelete, item, true);
+                  const showView = allowRead && getMenuFlag(menu?.showView, item, true);
+                  const showEdit = allowUpdate && getMenuFlag(menu?.showEdit, item, true);
+                  const showDelete = allowDelete && getMenuFlag(menu?.showDelete, item, true);
 
                   return (
                     <View style={styles.tableActionsRow}>
@@ -670,9 +709,9 @@ function AppList<T extends { id: number | string }>({
                 {(data || []).map((item, index) => {
                   const cardProps = renderCard({ item, index });
 
-                  const showView = getMenuFlag(menu?.showView, item, true);
-                  const showEdit = getMenuFlag(menu?.showEdit, item, true);
-                  const showDelete = getMenuFlag(menu?.showDelete, item, true);
+                  const showView = allowRead && getMenuFlag(menu?.showView, item, true);
+                  const showEdit = allowUpdate && getMenuFlag(menu?.showEdit, item, true);
+                  const showDelete = allowDelete && getMenuFlag(menu?.showDelete, item, true);
 
                   return (
                     <View key={item.id} style={styles.gridItem}>
@@ -743,15 +782,16 @@ function AppList<T extends { id: number | string }>({
               <View style={styles.listGroup}>
               {(data || []).map((item, index) => {
                 const cardProps = renderCard({ item, index });
-                const showView = getMenuFlag(menu?.showView, item, true);
-                const showEdit = getMenuFlag(menu?.showEdit, item, true);
-                const showDelete = getMenuFlag(menu?.showDelete, item, true);
+                const showView = allowRead && getMenuFlag(menu?.showView, item, true);
+                const showEdit = allowUpdate && getMenuFlag(menu?.showEdit, item, true);
+                const showDelete = allowDelete && getMenuFlag(menu?.showDelete, item, true);
                 const hasBottom = cardProps.bottom && cardProps.bottom.length > 0;
 
                 return (
                   <TouchableRipple
                     key={item.id}
                     onPress={() => handleItemPress(item)}
+                    disabled={!allowRead}
                     style={[styles.listCard, index > 0 && styles.listCardDivider]}
                   >
                     <View style={styles.listCardInner}>

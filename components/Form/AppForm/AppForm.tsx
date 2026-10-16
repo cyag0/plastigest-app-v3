@@ -1,13 +1,15 @@
 import { tokens } from "@/constants/tokens";
-import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { describeError } from "@/utils/axios";
 import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
 import { goBack } from "@/utils/navigation";
+import type { PermissionRule } from "@/utils/permissions/permissions";
 import { CrudService } from "@/utils/services/crudService";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { FormikProps, FormikProvider, useFormik } from "formik";
 import React, {
   createContext,
@@ -26,7 +28,7 @@ import {
   View,
   ViewStyle,
 } from "react-native";
-import { Button } from "react-native-paper";
+import { Button, Text } from "react-native-paper";
 
 // Ref interface que expone todos los métodos
 export interface AppFormRef<T> {
@@ -94,10 +96,24 @@ interface FormProps<T> {
   card?: boolean;
   /**
    * Permiso necesario para el botón "Eliminar" del modo solo lectura (p. ej.
-   * "categories_delete"). Si el usuario no lo tiene, el botón no se muestra.
-   * Sin este prop el botón se muestra y el backend decide (con confirmación).
+   * "categories_delete"; varios = basta uno). Si el usuario no lo tiene, el
+   * botón no se muestra. Sin este prop (ni permissionPrefix) el botón se
+   * muestra y el backend decide (con confirmación).
    */
-  deletePermission?: string;
+  deletePermission?: PermissionRule;
+  /**
+   * Permiso para guardar (opcional; varios = basta uno). Sin él no se
+   * muestran "Crear/Actualizar", "Resetear", los botones extra ni "Editar
+   * Registro", y en su lugar aparece "Solo lectura". Sin este prop (ni
+   * permissionPrefix) se puede guardar como siempre.
+   */
+  submitPermission?: PermissionRule;
+  /**
+   * Recurso CRUD del formulario (p. ej. "categories"): deduce
+   * submitPermission (<prefix>_update con id, <prefix>_create sin id) y
+   * deletePermission (<prefix>_delete) cuando no se pasan.
+   */
+  permissionPrefix?: string;
   /** Oculta el botón "Eliminar" del modo solo lectura. */
   showDeleteButton?: boolean;
   /** Qué hacer tras eliminar en modo solo lectura (por defecto, regresar). */
@@ -114,7 +130,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
 
   const alerts = useAlerts();
   const { colors } = useTheme();
-  const { hasPermission } = useAuth();
+  const { can } = useCan();
   // Candado contra envíos dobles (guardar y eliminar), ver handleSubmit.
   const { submitting, run } = useSubmitGuard();
   // Web usa botones compactos alineados a la derecha; mobile mantiene
@@ -156,7 +172,26 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       width: isWeb ? undefined : "100%",
       maxWidth: isWeb ? 240 : undefined,
     },
+    readOnlyHint: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 6,
+      paddingVertical: 4,
+    },
+    readOnlyText: {
+      color: c.textMuted,
+    },
   }));
+
+  // Permiso para guardar (submitPermission / permissionPrefix). Sin regla se
+  // puede guardar, como antes.
+  const submitRule =
+    props.submitPermission ??
+    (props.permissionPrefix
+      ? `${props.permissionPrefix}_${props.id ? "update" : "create"}`
+      : undefined);
+  const canSubmit = can(submitRule);
 
   // Va antes de useFormik a propósito: este efecto corre antes que el
   // validateOnMount de Formik (después, la validación del formulario vacío
@@ -293,6 +328,11 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   // deshabiliten el botón: se mandaban dos altas iguales. Mientras un envío
   // sigue en curso (confirmación incluida), los demás se ignoran.
   function handleSubmit(_values: T) {
+    // También cuando la pantalla llama submitForm() desde su propio botón.
+    if (!canSubmit) {
+      alerts.error("No tienes permiso para guardar estos cambios.");
+      return;
+    }
     return run(() => submitValues(_values));
   }
 
@@ -405,10 +445,23 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
 
   // "Eliminar" del modo solo lectura: solo con registro y API, y si se indicó
   // el permiso, solo cuando el usuario lo tiene.
+  const deleteRule =
+    props.deletePermission ??
+    (props.permissionPrefix ? `${props.permissionPrefix}_delete` : undefined);
   const canDelete =
     props.showDeleteButton !== false &&
     Boolean(props.id && props.api) &&
-    (!props.deletePermission || hasPermission(props.deletePermission));
+    can(deleteRule);
+
+  // "Solo lectura": en lugar de los botones de guardar cuando falta el permiso.
+  const readOnlyHint = (
+    <View style={styles.readOnlyHint}>
+      <MaterialCommunityIcons name="lock-outline" size={16} color={colors.textMuted} />
+      <Text variant="bodySmall" style={styles.readOnlyText}>
+        Solo lectura
+      </Text>
+    </View>
+  );
 
   function handleDelete() {
     return run(deleteRecord);
@@ -461,17 +514,21 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         <View style={styles.buttonContainer}>
           {readonly ? (
             <>
-              <View style={styles.buttonWrap}>
-                <Button
-                  mode="contained"
-                  compact={isWeb}
-                  onPress={() => {
-                    setReadonly(false);
-                  }}
-                >
-                  Editar Registro
-                </Button>
-              </View>
+              {canSubmit ? (
+                <View style={styles.buttonWrap}>
+                  <Button
+                    mode="contained"
+                    compact={isWeb}
+                    onPress={() => {
+                      setReadonly(false);
+                    }}
+                  >
+                    Editar Registro
+                  </Button>
+                </View>
+              ) : (
+                readOnlyHint
+              )}
 
               {canDelete && (
                 <View style={styles.buttonWrap}>
@@ -488,6 +545,8 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
                 </View>
               )}
             </>
+          ) : !canSubmit ? (
+            readOnlyHint
           ) : (
             (props.showSubmitButton !== false ||
               props.showResetButton !== false) && (
