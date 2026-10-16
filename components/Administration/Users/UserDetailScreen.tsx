@@ -14,7 +14,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from "rea
 import { Button } from "react-native-paper";
 import RolePicker from "./RolePicker";
 import UserAvatar from "./UserAvatar";
-import { AdminUser, isProtectedUser } from "./userAccess";
+import { AdminUser, canManageUser, isProtectedUser } from "./userAccess";
 import { useCompanyRoles } from "./useCompanyRoles";
 import { useUserScope } from "./useUserScope";
 import { UserScope, apiMessage, shortLocationName, userRoutes } from "./userDisplay";
@@ -216,14 +216,18 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
   // Administrador del sistema: solo otro administrador del sistema lo
   // modifica (el backend responde 403 a los demás), así que no se ofrece.
   const locked = !hasPermission("system_admin") && isProtectedUser(user, roleIds, selectedCompany?.id);
+  // Tiene permisos que tú no tienes (can_manage: false del backend): solo se
+  // le cambian nombre y foto; lo demás respondería 403.
+  const restricted = !locked && !canManageUser(user);
 
   const actions: Omit<ActionRowProps, "first">[] = [];
   if (canEdit && !locked) {
     actions.push({
       icon: "pencil-outline",
       label: "Editar datos",
-      hint:
-        scope !== "location"
+      hint: restricted
+        ? "Nombre y foto"
+        : scope !== "location"
           ? "Nombre, correo, contraseña y sucursales"
           : isMe
             ? "Nombre, correo y contraseña"
@@ -240,7 +244,7 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
         router.push({ pathname: "/(stacks)/activity", params: { user_id: String(user.id), name: user.name } } as any),
     });
   }
-  if (canEdit && !isMe && !locked) {
+  if (canEdit && !isMe && !locked && !restricted) {
     actions.push({
       icon: user.is_active ? "account-cancel-outline" : "account-check-outline",
       label: user.is_active ? "Desactivar usuario" : "Activar usuario",
@@ -248,7 +252,7 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
       onPress: toggleActive,
     });
   }
-  if (scope === "location" && canEdit && !isMe && !locked && branchAccess) {
+  if (scope === "location" && canEdit && !isMe && !locked && !restricted && branchAccess) {
     actions.push({
       icon: "account-remove-outline",
       label: "Quitar de esta sucursal",
@@ -257,7 +261,7 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
       onPress: removeFromBranch,
     });
   }
-  if (scope !== "location" && canDelete && !isMe && !locked) {
+  if (scope !== "location" && canDelete && !isMe && !locked && !restricted) {
     actions.push({ icon: "delete-outline", label: "Eliminar usuario", danger: true, onPress: remove });
   }
 
@@ -297,7 +301,7 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
                     {branchAccess ? (branchAccess.role_name ?? "Sin rol") : "Sin acceso a esta sucursal"}
                   </Text>
                 </View>
-                {canEdit && !isMe && !locked && branchAccess && (
+                {canEdit && !isMe && !locked && !restricted && branchAccess && (
                   <Button
                     compact
                     mode="text"
@@ -358,6 +362,15 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
             <Text style={styles.lockedNoteText}>
               Es administrador del sistema: entra a todas las sucursales y solo otro administrador del
               sistema puede cambiar sus datos, su contraseña, su acceso o sus roles.
+            </Text>
+          </View>
+        )}
+        {restricted && (
+          <View style={styles.lockedNote}>
+            <MaterialCommunityIcons name="shield-lock-outline" size={20} color={colors.info} />
+            <Text style={styles.lockedNoteText}>
+              Tiene permisos que tú no tienes: puedes cambiar su nombre y su foto, pero su correo,
+              contraseña, estado, rol y sucursales los cambia alguien con esos permisos.
             </Text>
           </View>
         )}

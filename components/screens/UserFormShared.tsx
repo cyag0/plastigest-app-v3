@@ -4,6 +4,7 @@ import {
   AdminUser,
   UserFormValues,
   buildUserPayload,
+  canManageUser,
   isProtectedUser,
 } from "@/components/Administration/Users/userAccess";
 import { UserScope, apiMessage, shortLocationName } from "@/components/Administration/Users/userDisplay";
@@ -84,8 +85,12 @@ export default function UserFormShared(props: UserFormSharedProps) {
   const isSelf = isEditing && me?.id === id;
   const locked =
     isEditing && !!target && !hasPermission("system_admin") && isProtectedUser(target, roleIds, selectedCompany?.id);
-  const canChangeActive = isEditing && !isSelf && !locked;
-  const canChangeRole = isBranch && !isSelf && !locked;
+  // Tiene permisos que quien edita no tiene (can_manage: false): solo nombre y
+  // foto; correo, contraseña, estado, rol y sucursales los rechazaría el
+  // servidor con 403.
+  const restricted = isEditing && !!target && !locked && !canManageUser(target);
+  const canChangeActive = isEditing && !isSelf && !locked && !restricted;
+  const canChangeRole = isBranch && !isSelf && !locked && !restricted;
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: isEditing ? "Editar usuario" : "Nuevo usuario" });
@@ -168,10 +173,10 @@ export default function UserFormShared(props: UserFormSharedProps) {
       values,
       initial: isEditing ? initialRef.current : null,
       branchMode: isBranch,
-      canChangePassword: !locked,
+      canChangePassword: !locked && !restricted,
       canChangeActive,
       canChangeRole,
-      locationRoles: !isBranch && locationRolesTouched ? locationRoles : null,
+      locationRoles: !isBranch && !restricted && locationRolesTouched ? locationRoles : null,
     });
 
     const confirmed = await alerts.confirm("¿Estás seguro de guardar los cambios?", {
@@ -277,6 +282,15 @@ export default function UserFormShared(props: UserFormSharedProps) {
           </View>
 
           <Text style={styles.sectionTitle}>Datos</Text>
+          {restricted && (
+            <View style={styles.lockedBox}>
+              <MaterialCommunityIcons name="shield-lock-outline" size={22} color={colors.info} />
+              <Text style={[styles.helper, { flex: 1 }]}>
+                {target?.name} tiene permisos que tú no tienes: puedes cambiar su nombre y su foto; su
+                correo, contraseña, estado, rol y sucursales los cambia alguien con esos permisos.
+              </Text>
+            </View>
+          )}
           <FormInput name="name" label="Nombre completo" placeholder="Ej: Juan Pérez" required autoCapitalize="words" />
           <FormInput
             name="email"
@@ -286,9 +300,10 @@ export default function UserFormShared(props: UserFormSharedProps) {
             autoCapitalize="none"
             autoCorrect={false}
             required
+            disabled={restricted}
           />
 
-          {showPasswordField ? (
+          {restricted ? null : showPasswordField ? (
             <FormInput
               name="password"
               label={isEditing ? "Nueva contraseña" : "Contraseña"}
@@ -325,7 +340,7 @@ export default function UserFormShared(props: UserFormSharedProps) {
           )}
 
           {/* Acceso */}
-          {isBranch ? (
+          {restricted ? null : isBranch ? (
             <>
               <Text style={styles.sectionTitle}>Rol en {branch}</Text>
               {canChangeRole ? (

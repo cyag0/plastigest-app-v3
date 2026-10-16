@@ -10,7 +10,23 @@ export type AdminUser = App.Entities.User & {
   roles?: { id: number; name: string }[];
   /** Cuando el backend lo manda: es administrador del sistema. */
   is_system_admin?: boolean;
+  /**
+   * Quien consulta puede hacerle cambios protegidos (contraseña, correo,
+   * estado, roles, sucursales, quitarlo o eliminarlo): UserController lo manda
+   * en la lista, el detalle y la respuesta al guardar.
+   */
+  can_manage?: boolean;
 };
+
+/**
+ * ¿Se le ofrecen a quien edita la contraseña, el correo, el estado y los roles
+ * de este usuario? Con `can_manage: false` el servidor los rechazaría con 403
+ * (tiene permisos que quien edita no tiene); el nombre y la foto sí se pueden
+ * cambiar. Si el dato no viene, no se sabe: se ofrecen y decide el servidor.
+ */
+export function canManageUser(user: AdminUser | null | undefined): boolean {
+  return user?.can_manage !== false;
+}
 
 /**
  * ¿Es administrador del sistema (o trae un rol que no es de la empresa)?
