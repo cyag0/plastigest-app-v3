@@ -1,5 +1,6 @@
 import axiosClient, { getAuthToken } from "@/utils/axios";
-import { getAppVersionLabel } from "@/utils/appVersion";
+import { getAppVersionLabel, notifyChunkLoadError } from "@/utils/appVersion";
+import { isChunkLoadError } from "@/utils/versionCheck";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 
@@ -97,6 +98,9 @@ function isNoise(value: unknown, message: string, stack?: string): boolean {
     if (candidate.name === "CanceledError" || candidate.code === "ERR_CANCELED") return true;
   }
   if (message === "Script error." || message === "Script error") return true;
+  // Pedazo del bundle de un despliegue anterior: se ofrece recargar (ver
+  // AppUpdateGate), no es un error de la app.
+  if (isChunkLoadError(value) || isChunkLoadError(message)) return true;
   if (/ResizeObserver loop/i.test(message)) return true;
   if (stack && /(chrome|moz|safari(-web)?)-extension:\/\//.test(stack)) return true;
   return false;
@@ -244,6 +248,10 @@ export function installGlobalErrorHandlers(): void {
         });
       });
       window.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
+        if (isChunkLoadError(event.reason)) {
+          notifyChunkLoadError();
+          return;
+        }
         reportClientError(event.reason, { source: "unhandledrejection" });
       });
       return;

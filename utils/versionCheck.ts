@@ -87,3 +87,23 @@ export function shortBuildId(signature: string | null): string | null {
     /([0-9a-f]{7,})/i.exec(signature);
   return hash ? hash[1].slice(0, 7) : null;
 }
+
+// Errores al cargar un pedazo del bundle web bajo demanda (escáner de
+// códigos, notificaciones push): Expo los rechaza como AsyncRequireError
+// "Loading module <url> failed"; los demás textos son los de los navegadores
+// para import() dinámico.
+const CHUNK_LOAD_ERROR =
+  /Loading module .+ failed|Loading chunk .+ failed|ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i;
+
+/**
+ * ¿El error es un pedazo del bundle web que ya no existe? Pasa cuando se
+ * despliega una versión nueva con la pestaña abierta: los archivos con hash
+ * del build anterior desaparecen. No es un error de la app: hay que recargar.
+ */
+export function isChunkLoadError(error: unknown): boolean {
+  if (typeof error === "string") return CHUNK_LOAD_ERROR.test(error);
+  if (!error || typeof error !== "object") return false;
+  const { name, message } = error as { name?: unknown; message?: unknown };
+  if (name === "AsyncRequireError" || name === "ChunkLoadError") return true;
+  return typeof message === "string" && CHUNK_LOAD_ERROR.test(message);
+}

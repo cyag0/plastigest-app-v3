@@ -2,6 +2,28 @@
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
+## Versiones de la app (tiendas)
+
+El aviso "Actualiza la app" compara `expo.version` de `app.json` con
+`MIN_NATIVE_APP_VERSION` del backend (`GET /api/app/version`). EAS sube solo el
+versionCode/buildNumber, no esa versión: si no se sube a mano, todos los builds
+dicen lo mismo y no se puede obligar a actualizar.
+
+1. Antes de cada build para las tiendas: `npm run version:bump -- patch` (o
+   `minor`, `major`, `1.2.3`) y commit.
+2. `eas build --profile production`. El hook `eas-build-pre-install`
+   (`npm run version:check`) detiene el build si la versión no es mayor que
+   `LATEST_NATIVE_APP_VERSION` o es menor que `MIN_NATIVE_APP_VERSION`; si el
+   API no responde solo avisa.
+3. Ya publicada en las dos tiendas: `LATEST_NATIVE_APP_VERSION=<versión>` en el
+   backend (aviso "Hay una versión nueva"). Para obligar a actualizar,
+   `MIN_NATIVE_APP_VERSION=<versión>`, solo con una versión ya publicada.
+   Vacía, o menor o igual que la instalada, nunca bloquea; la app tampoco
+   bloquea si no sabe su versión.
+
+Web: cada despliegue en Cloudflare Pages es una versión nueva; si una pestaña
+abierta ya no encuentra un archivo del build anterior, la app ofrece recargar.
+
 ## Get started
 
 1. Install dependencies

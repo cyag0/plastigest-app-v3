@@ -1,6 +1,8 @@
 import palette, { type Palette } from "@/constants/palette";
 import { useColors } from "@/contexts/ThemeContext";
+import { notifyChunkLoadError } from "@/utils/appVersion";
 import { reportClientError } from "@/utils/errorReporting";
+import { isChunkLoadError } from "@/utils/versionCheck";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { usePathname, useRouter, type ErrorBoundaryProps } from "expo-router";
 import React, { useEffect, useRef } from "react";
@@ -19,6 +21,15 @@ interface State {
   error: Error | null;
 }
 
+// En web, un pedazo del bundle de un despliegue anterior que ya no existe:
+// no es una falla de la pantalla, hay que recargar para tomar la versión nueva.
+const NEW_VERSION_TITLE = "Hay una versión nueva de GCStock";
+const NEW_VERSION_MESSAGE =
+  "Esta parte de la app cambió con la última actualización. Recarga la página para seguir.";
+const reloadPage = () => {
+  if (typeof window !== "undefined") window.location.reload();
+};
+
 /**
  * Último recurso: envuelve toda la app en app/_layout.tsx (sesión, tema y
  * navegación). Los errores de una pantalla los atrapan antes los
@@ -35,6 +46,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    if (isChunkLoadError(error)) notifyChunkLoadError();
     reportClientError(error, {
       source: "root-boundary",
       componentStack: info.componentStack ?? undefined,
@@ -58,6 +70,20 @@ export default class ErrorBoundary extends React.Component<Props, State> {
     if (this.state.hasError) {
       if (this.props.fallback) {
         return this.props.fallback;
+      }
+
+      if (Platform.OS === "web" && isChunkLoadError(this.state.error)) {
+        return (
+          <ErrorFallback
+            colors={palette}
+            error={this.state.error}
+            icon="update"
+            title={NEW_VERSION_TITLE}
+            message={NEW_VERSION_MESSAGE}
+            primaryLabel="Recargar"
+            onPrimary={reloadPage}
+          />
+        );
       }
 
       return (
@@ -97,7 +123,10 @@ export function RouteErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   const baselineRef = useRef(pathname);
   const settledRef = useRef(false);
 
+  const newVersion = Platform.OS === "web" && isChunkLoadError(error);
+
   useEffect(() => {
+    if (isChunkLoadError(error)) notifyChunkLoadError();
     reportClientError(error, {
       source: "route-boundary",
       route: baselineRef.current,
@@ -125,6 +154,24 @@ export function RouteErrorBoundary({ error, retry }: ErrorBoundaryProps) {
     void retry();
   };
 
+  if (newVersion) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={["top"]}>
+        <ErrorFallback
+          colors={colors}
+          error={error}
+          icon="update"
+          title={NEW_VERSION_TITLE}
+          message={NEW_VERSION_MESSAGE}
+          primaryLabel="Recargar"
+          onPrimary={reloadPage}
+          secondaryLabel="Ir al inicio"
+          onSecondary={goHome}
+        />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }} edges={["top"]}>
       <ErrorFallback
@@ -144,6 +191,7 @@ export function RouteErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 function ErrorFallback({
   colors,
   error,
+  icon = "alert-circle-outline",
   title,
   message,
   primaryLabel,
@@ -153,6 +201,7 @@ function ErrorFallback({
 }: {
   colors: Palette;
   error: Error | null;
+  icon?: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
   title: string;
   message: string;
   primaryLabel: string;
@@ -163,9 +212,9 @@ function ErrorFallback({
   return (
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
       <MaterialCommunityIcons
-        name="alert-circle-outline"
+        name={icon}
         size={64}
-        color={colors.error}
+        color={icon === "alert-circle-outline" ? colors.error : colors.primary}
       />
       <Text variant="titleLarge" style={[styles.title, { color: colors.text }]}>
         {title}

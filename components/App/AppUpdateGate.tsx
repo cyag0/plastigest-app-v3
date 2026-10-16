@@ -3,9 +3,10 @@ import { useColors } from "@/contexts/ThemeContext";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { API_BASE_URL } from "@/utils/appConfig";
 import {
-  APP_VERSION,
+  GATE_VERSION,
   getAppVersionLabel,
   getLoadedWebBuildSignature,
+  onChunkLoadError,
 } from "@/utils/appVersion";
 import {
   bundleSignature,
@@ -137,7 +138,9 @@ function NativeVersionGate({ children }: { children: React.ReactNode }) {
     }
   };
 
-  if (info && isVersionBelow(APP_VERSION, info.min_native_version)) {
+  // Sin versión conocida, o sin mínima (o una menor que la instalada), no se
+  // bloquea nada.
+  if (info && GATE_VERSION && isVersionBelow(GATE_VERSION, info.min_native_version)) {
     return (
       <UpdateRequiredScreen
         required={info.min_native_version as string}
@@ -150,7 +153,8 @@ function NativeVersionGate({ children }: { children: React.ReactNode }) {
   const showLatest =
     !latestDismissed &&
     !!info &&
-    isVersionBelow(APP_VERSION, info.latest_native_version);
+    !!GATE_VERSION &&
+    isVersionBelow(GATE_VERSION, info.latest_native_version);
 
   return (
     <>
@@ -248,6 +252,19 @@ function UpdateRequiredScreen({
 function WebNewVersionBanner() {
   const [available, setAvailable] = useState(false);
   const [snoozed, setSnoozed] = useState(false);
+  // Un pedazo del bundle ya no existe (despliegue nuevo con la pestaña
+  // abierta): el escáner o las notificaciones no cargan hasta recargar.
+  const [chunkFailed, setChunkFailed] = useState(false);
+
+  useEffect(
+    () =>
+      onChunkLoadError(() => {
+        setChunkFailed(true);
+        setAvailable(true);
+        setSnoozed(false);
+      }),
+    [],
+  );
 
   useEffect(() => {
     // Con el servidor de desarrollo no hay bundle con hash que comparar.
@@ -292,7 +309,11 @@ function WebNewVersionBanner() {
   return (
     <UpdateBanner
       icon="update"
-      text="Hay una nueva versión de GCStock."
+      text={
+        chunkFailed
+          ? "Nueva versión de GCStock: recarga para seguir (una parte de la app ya no se pudo cargar)."
+          : "Hay una nueva versión de GCStock."
+      }
       actionLabel="Recargar"
       onAction={() => window.location.reload()}
       dismissLabel="Después"

@@ -17,12 +17,15 @@
   Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=(), usb=()
   Strict-Transport-Security: max-age=31536000
 
-# Archivos con el hash del contenido en el nombre: nunca cambian.
-/_expo/static/*
-  Cache-Control: public, max-age=31536000, immutable
-
-/assets/*
-  Cache-Control: public, max-age=31536000, immutable
+# Sin "immutable" (ni max-age largo) para /_expo/static/* ni /assets/*: los
+# archivos con hash nunca cambian, pero Pages responde index.html (200) a
+# cualquier ruta que no exista (modo SPA: no hay 404.html en la raíz, y
+# _redirects no admite reescrituras con 404). Tras un despliegue, un pedazo
+# del build anterior pedido desde una pestaña abierta recibiría index.html y
+# el navegador lo guardaría un año bajo esa URL (y seguiría fallando si se
+# regresa a ese despliegue). Con el "public, max-age=0, must-revalidate" + ETag
+# de Pages cada carga revalida (304 sin volver a bajar el archivo) y la app
+# ofrece recargar cuando un pedazo no carga (AppUpdateGate).
 
 # La página y el service worker de notificaciones siempre se revalidan.
 /index.html

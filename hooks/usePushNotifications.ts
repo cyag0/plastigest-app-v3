@@ -1,11 +1,12 @@
 import { getNotificationEntityId } from "@/components/Notifications/notificationLinks";
-import { APP_VERSION } from "@/utils/appVersion";
+import { APP_VERSION, notifyChunkLoadError } from "@/utils/appVersion";
 import axiosClient, { describeError } from "@/utils/axios";
 import { reportClientError } from "@/utils/errorReporting";
 import {
   notificationOpenedBus,
   type NotificationOpenedPayload,
 } from "@/utils/notificationEvents";
+import { isChunkLoadError } from "@/utils/versionCheck";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -154,6 +155,9 @@ export function usePushNotifications({
     } catch (error) {
       webSetupStartedRef.current = false;
       setWebPushState("failed");
+      // Firebase se carga aparte: con un despliegue nuevo ese archivo ya no
+      // existe y hay que recargar.
+      if (isChunkLoadError(error)) notifyChunkLoadError();
       throw error;
     }
   }, []);

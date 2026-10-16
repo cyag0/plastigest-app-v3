@@ -11,6 +11,9 @@
     "web": "expo start --web",
     "build:web": "node scripts/check-web-env.mjs && expo export --platform web --clear",
     "lint": "expo lint",
+    "version:bump": "node scripts/native-release.mjs bump",
+    "version:check": "node scripts/native-release.mjs check",
+    "eas-build-pre-install": "node scripts/native-release.mjs check --eas",
     "help:screenshots": "node scripts/help-screenshots/run.mjs"
   },
   "engines": {
