@@ -1,5 +1,7 @@
 import { AxiosResponse } from "axios";
-import axiosClient from "../axios";
+import axiosClient, { describeError } from "../axios";
+import { errorMessageOf } from "../errorNotice";
+import { logHandledError } from "../silenceLogs";
 
 // Tipos base para la respuesta de Laravel
 export interface LaravelPaginatedResponse<T> {
@@ -85,26 +87,17 @@ export function createCrudService<T = any>(endpoint: string): CrudService<T> {
     }
   };
 
+  // Falla del API: el usuario ya la ve en el aviso de la app (interceptor de
+  // axios), así que va a la consola sin el aviso rojo de LogBox.
   const logError = (method: string, error: any) => {
-    const errorInfo = {
-      method: method.toUpperCase(),
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      message: error.response?.data?.message || error.message,
-      url: error.config?.url,
-      data: error.response?.data,
-      validation_errors: error.response?.data?.errors,
-    };
-
-    console.error(`❌ CRUD ${method.toUpperCase()} Error:`, errorInfo);
-
-    // Logging específico para errores comunes de Laravel
-    if (error.response?.status === 422) {
-      console.error("📝 Validation Errors:", error.response.data.errors);
-    } else if (error.response?.status === 404) {
-      console.error("🔍 Resource not found:", error.config?.url);
-    } else if (error.response?.status === 500) {
-      console.error("💥 Server Error:", error.response.data);
+    if (error?.response?.status === 422 && error.response.data?.errors) {
+      logHandledError(
+        `CRUD ${method.toUpperCase()}:`,
+        describeError(error),
+        error.response.data.errors,
+      );
+    } else {
+      logHandledError(`CRUD ${method.toUpperCase()}:`, describeError(error));
     }
   };
 
@@ -194,56 +187,57 @@ export function createCrudService<T = any>(endpoint: string): CrudService<T> {
 
 // Funciones helper para manejo de errores
 export const handleApiError = (error: any) => {
-  if (error.response) {
-    // Error de respuesta del servidor
+  // Mismo texto que el aviso global (utils/errorNotice): mensaje del servidor
+  // o el de red/tiempo agotado en español.
+  if (error?.response) {
     const status = error.response.status;
-    const data = error.response.data;
+    const data = error.response.data ?? {};
 
     switch (status) {
       case 422:
         // Errores de validación
         return {
           type: "validation",
-          message: data.message || "Error de validación",
+          message: errorMessageOf(error, "Error de validación"),
           errors: data.errors || {},
         };
       case 404:
         return {
           type: "not_found",
-          message: data.message || "Recurso no encontrado",
+          message: errorMessageOf(error, "Recurso no encontrado"),
         };
       case 401:
         return {
           type: "unauthorized",
-          message: data.message || "No autorizado",
+          message: errorMessageOf(error, "No autorizado"),
         };
       case 403:
         return {
           type: "forbidden",
-          message: data.message || "Acceso denegado",
+          message: errorMessageOf(error, "Acceso denegado"),
         };
       case 500:
         return {
           type: "server_error",
-          message: data.message || "Error interno del servidor",
+          message: errorMessageOf(error),
         };
       default:
         return {
           type: "unknown",
-          message: data.message || "Error desconocido",
+          message: errorMessageOf(error, "Error desconocido"),
         };
     }
-  } else if (error.request) {
-    // Error de red
+  } else if (error?.request) {
+    // Error de red o tiempo agotado
     return {
       type: "network",
-      message: "Error de conexión",
+      message: errorMessageOf(error, "Error de conexión"),
     };
   } else {
     // Otro tipo de error
     return {
       type: "client",
-      message: error.message || "Error en la aplicación",
+      message: error?.message || "Error en la aplicación",
     };
   }
 };
