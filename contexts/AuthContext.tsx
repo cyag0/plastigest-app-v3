@@ -4,7 +4,7 @@ import {
   clearSessionStorage,
   clearTabSelection,
   describeError,
-  getAuthToken,
+  readAuthToken,
   getSelectedCompany,
   getSelectedLocation,
   isNetworkError,
@@ -517,8 +517,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       setIsLoading(true);
       setAuthError(null);
 
-      // Verificar si hay token guardado
-      const token = await getAuthToken();
+      // Verificar si hay token guardado. Si no se pudo leer (SecureStore
+      // falló sin copia en AsyncStorage) lanza: no es "sin sesión" y no se
+      // borra nada; el catch de abajo ofrece reintentar.
+      const token = await readAuthToken();
 
       if (!token) {
         // Sin sesión. Se borran restos de sesiones anteriores (empresa,

@@ -95,14 +95,14 @@ async function writeSelection(key: string, value: string | null): Promise<void> 
   }
 }
 
-/** id (texto) de la empresa guardada, o null si no hay o no se entiende. */
-function companyIdOf(selection: string | null): string | null {
+/** id (texto) de la empresa o sucursal guardada, o null si no hay o no se entiende. */
+function selectionIdOf(selection: string | null): string | null {
   if (!selection) return null;
   try {
     const id = JSON.parse(selection)?.id;
     return id ? String(id) : null;
   } catch (parseError) {
-    console.error("Error parsing company data:", parseError);
+    console.error("Error parsing selection data:", parseError);
     return null;
   }
 }
@@ -117,7 +117,19 @@ const COMPANY_SELECTION_CODES = ["company_forbidden", "company_required"];
  */
 async function isStoredCompany(sentCompanyId: string | null): Promise<boolean> {
   try {
-    return companyIdOf(await readSelection(SELECTED_COMPANY_KEY)) === sentCompanyId;
+    return selectionIdOf(await readSelection(SELECTED_COMPANY_KEY)) === sentCompanyId;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Lo mismo con la sucursal: un location_forbidden de una petición que salió
+ * con la sucursal anterior no borra la que el usuario acaba de elegir.
+ */
+async function isStoredLocation(sentLocationId: string | null): Promise<boolean> {
+  try {
+    return selectionIdOf(await readSelection(SELECTED_LOCATION_KEY)) === sentLocationId;
   } catch {
     return true;
   }
@@ -349,20 +361,15 @@ axiosClient.interceptors.request.use(
 
       // Con qué empresa salió la petición: un 403 de empresa tardío (de
       // antes de elegir o cambiar de empresa) no debe borrar la nueva.
-      config._companyId = companyIdOf(selectedCompanyData);
+      config._companyId = selectionIdOf(selectedCompanyData);
       if (config._companyId && config.headers) {
         config.headers["X-Company-ID"] = config._companyId;
       }
 
-      if (selectedLocationData && config.headers) {
-        try {
-          const location = JSON.parse(selectedLocationData);
-          if (location.id) {
-            config.headers["X-Location-ID"] = location.id.toString();
-          }
-        } catch (parseError) {
-          console.error("Error parsing location data:", parseError);
-        }
+      // Igual con la sucursal (ver location_forbidden en la respuesta).
+      config._locationId = selectionIdOf(selectedLocationData);
+      if (config._locationId && config.headers) {
+        config.headers["X-Location-ID"] = config._locationId;
       }
 
       return config;
@@ -511,7 +518,8 @@ axiosClient.interceptors.response.use(
 
     if (
       error.response?.status === 403 &&
-      error.response?.data?.code === "location_forbidden"
+      error.response?.data?.code === "location_forbidden" &&
+      (await isStoredLocation(error.config?._locationId ?? null))
     ) {
       try {
         await writeSelection(SELECTED_LOCATION_KEY, null);
@@ -549,6 +557,9 @@ const SECURE_TOKEN_MARKER_KEY = "auth_token_in_secure_store";
 // petición y SecureStore descifra en cada lectura. undefined = aún no se leyó.
 let nativeTokenCache: string | null | undefined;
 let nativeTokenStoreReady: Promise<void> | null = null;
+// La migración falló: la siguiente lectura sin token en memoria la vuelve a
+// intentar (si no, en el siguiente arranque).
+let nativeTokenStoreFailed = false;
 
 /**
  * Una vez por arranque, antes de la primera lectura o escritura del token en
@@ -573,13 +584,27 @@ const prepareNativeTokenStore = (): Promise<void> => {
         await AsyncStorage.setItem(SECURE_TOKEN_MARKER_KEY, "1");
       }
     } catch (error) {
-      // Se reintenta en el siguiente arranque; mientras, readStoredToken
-      // sigue encontrando el token en AsyncStorage.
+      // Se reintenta en el siguiente arranque (o en la siguiente lectura sin
+      // token en memoria); mientras, readStoredToken sigue encontrando el
+      // token en AsyncStorage.
       console.error("Error moving token to SecureStore:", describeError(error));
+      nativeTokenStoreFailed = true;
     }
   })();
   return nativeTokenStoreReady;
 };
+
+/**
+ * No se pudo leer el token (SecureStore no descifró, Keystore dañado, iOS
+ * antes del primer desbloqueo) y tampoco hay copia en AsyncStorage: no es lo
+ * mismo que "no hay token". Ver readAuthToken.
+ */
+class TokenReadError extends Error {
+  constructor(cause: unknown) {
+    super(`No se pudo leer el token guardado: ${describeError(cause)}`);
+    this.name = "TokenReadError";
+  }
+}
 
 /** Token guardado: SecureStore en el teléfono (con copia en memoria), AsyncStorage en web. */
 const readStoredToken = async (): Promise<string | null> => {
@@ -587,11 +612,29 @@ const readStoredToken = async (): Promise<string | null> => {
     return AsyncStorage.getItem(AUTH_TOKEN_KEY);
   }
   if (nativeTokenCache !== undefined) return nativeTokenCache;
+  if (nativeTokenStoreFailed) {
+    // Reintentar la migración pendiente.
+    nativeTokenStoreFailed = false;
+    nativeTokenStoreReady = null;
+  }
   await prepareNativeTokenStore();
-  const stored =
-    (await SecureStore.getItemAsync(SECURE_TOKEN_KEY, SECURE_TOKEN_OPTIONS)) ??
-    // La migración no pudo terminar: el token sigue en AsyncStorage.
-    (await AsyncStorage.getItem(AUTH_TOKEN_KEY));
+  let secureToken: string | null = null;
+  let secureError: unknown = null;
+  try {
+    secureToken = await SecureStore.getItemAsync(SECURE_TOKEN_KEY, SECURE_TOKEN_OPTIONS);
+  } catch (error) {
+    // Keystore o descifrado fallaron: se usa la copia de AsyncStorage (la de
+    // una migración que no terminó) y la sesión no se toca.
+    secureError = error;
+    console.error("Error reading token from SecureStore:", describeError(error));
+  }
+  // La migración no pudo terminar: el token sigue en AsyncStorage.
+  const stored = secureToken ?? (await AsyncStorage.getItem(AUTH_TOKEN_KEY));
+  if (!stored && secureError) {
+    // Ni SecureStore ni copia en AsyncStorage: no se sabe si hay sesión. Nada
+    // se fija en memoria, así que la siguiente lectura lo vuelve a intentar.
+    throw new TokenReadError(secureError);
+  }
   // Si mientras se leía se inició o se cerró sesión, vale lo más reciente.
   if (nativeTokenCache === undefined) nativeTokenCache = stored;
   return nativeTokenCache;
@@ -622,6 +665,14 @@ export const getAuthToken = async (): Promise<string | null> => {
     return null;
   }
 };
+
+/**
+ * Como getAuthToken, pero si el token no se pudo leer lanza el error en lugar
+ * de devolver null: al abrir la app, AuthContext no debe tomar "no se pudo
+ * leer" por "no hay sesión" (cerraría la sesión y borraría la copia del token
+ * que sigue en AsyncStorage); muestra "Reintentar".
+ */
+export const readAuthToken = (): Promise<string | null> => readStoredToken();
 
 /**
  * Borra todo lo que pertenece a la sesión: token (en el teléfono, de
