@@ -2,6 +2,7 @@ import NotificationBell from "@/components/Notifications/NotificationBell";
 import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
 import UserMenu from "@/components/App/UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCan } from "@/hooks/useCan";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import Logo from "@/components/App/Logo";
@@ -27,28 +28,10 @@ const routeToPathname = (route: string) => route.replace(/^\/\([^)]+\)/, "");
 interface NavItem {
   label: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  /** Pantalla destino. La entrada solo se muestra si el usuario puede
+   * abrirla según el mapa central (utils/permissions/routePermissions.ts). */
   route: string;
-  /** Permiso (o cualquiera de varios) que pide la pantalla destino. Sin él
-   * la entrada no se muestra, en lugar de llevar a "sin permiso". */
-  permission?: string | string[];
 }
-
-// Cualquiera de estos da acceso a alguna opción de Administración.
-const ADMIN_PERMISSIONS = [
-  "companies_manage",
-  "users_manage",
-  "companies_update",
-  "users_list",
-  "locations_list",
-  "locations_update",
-  "cash_registers_list",
-  "roles_list",
-  "categories_list",
-  "units_list",
-  "products_list",
-  "suppliers_list",
-  "customers_list",
-];
 
 interface NavSection {
   label: string;
@@ -68,13 +51,11 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Dashboard",
         icon: "view-dashboard-outline",
         route: "/(tabs)/reports",
-        permission: "reports_view",
       },
       {
         label: "Reportes",
         icon: "file-chart-outline",
         route: "/(tabs)/home/business-reports",
-        permission: "reports_view",
       },
     ],
   },
@@ -85,25 +66,21 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Inventario",
         icon: "archive-outline",
         route: "/(tabs)/inventory",
-        permission: ["products_list", "inventory_list"],
       },
       {
         label: "Compras",
         icon: "truck-delivery-outline",
         route: "/(tabs)/home/purchases",
-        permission: "purchases_list",
       },
       {
         label: "Producción",
         icon: "factory",
         route: "/(tabs)/home/production",
-        permission: "production_orders_list",
       },
       {
         label: "Transferencias",
         icon: "swap-horizontal",
         route: "/(tabs)/home/transfers-menu",
-        permission: "transfers_list",
       },
     ],
   },
@@ -114,19 +91,16 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Ventas",
         icon: "cart-outline",
         route: "/(tabs)/home/sales",
-        permission: "sales_list",
       },
       {
         label: "Pedidos",
         icon: "clipboard-list-outline",
         route: "/(tabs)/home/sales-orders",
-        permission: "sales_orders_list",
       },
       {
         label: "Caja",
         icon: "cash-multiple",
         route: "/(tabs)/home/cash",
-        permission: "cash_movements_list",
       },
     ],
   },
@@ -137,7 +111,6 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Administración",
         icon: "cog-outline",
         route: "/(tabs)/administration",
-        permission: ADMIN_PERMISSIONS,
       },
     ],
   },
@@ -166,14 +139,10 @@ export default function NavigationSidebar({
     loadUnreadNotificationsCount,
     unreadNotificationsCount,
     location,
-    hasPermission,
   } = useAuth();
+  const { canAccessRoute } = useCan();
 
-  const canSee = (item: NavItem) => {
-    if (!item.permission) return true;
-    const required = Array.isArray(item.permission) ? item.permission : [item.permission];
-    return required.some((p) => hasPermission(p));
-  };
+  const canSee = (item: NavItem) => canAccessRoute(item.route);
   const visibleSections = NAV_SECTIONS.map((section) => ({
     ...section,
     items: section.items.filter(canSee),

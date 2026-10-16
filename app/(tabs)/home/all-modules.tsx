@@ -10,7 +10,7 @@
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useAuth } from "@/contexts/AuthContext";
+import { useCan } from "@/hooks/useCan";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
@@ -28,7 +28,6 @@ interface ModuleItem {
   description: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   route: string;
-  permission?: string;
 }
 
 interface ModuleSection {
@@ -115,7 +114,6 @@ const MODULE_SECTIONS: ModuleSection[] = [
         description: "Cobrar en caja por turno",
         icon: "point-of-sale",
         route: "/(stacks)/pos",
-        permission: "sales_pos",
       },
       {
         label: "Ventas",
@@ -188,46 +186,20 @@ const MODULE_SECTIONS: ModuleSection[] = [
   },
 ];
 
-// Permiso que pide cada pantalla destino: sin él el módulo no se lista (antes
-// solo el punto de venta se filtraba y los demás llevaban a "sin permiso").
-const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
-  "/(tabs)/reports": "reports_view",
-  "/(tabs)/home/business-reports": "reports_view",
-  "/(tabs)/inventory": ["products_list", "inventory_list"],
-  "/(tabs)/home/production": "production_orders_list",
-  "/(tabs)/home/purchases": "purchases_list",
-  "/(tabs)/home/adjustment": "inventory_list",
-  "/(tabs)/home/transfers-menu": "transfers_list",
-  "/(tabs)/home/transfers/suggestions": "transfers_list",
-  "/(tabs)/home/sales": "sales_list",
-  "/(tabs)/home/sales-orders": "sales_orders_list",
-  "/(tabs)/home/cash": "cash_movements_list",
-  "/(tabs)/home/expenses": "expenses_list",
-  "/(tabs)/home/reminders": "reminders_list",
-  "/(tabs)/home/sales-reports": "reports_list",
-  "/(tabs)/home/companies": "companies_list",
-  "/(tabs)/administration/company-users": "users_list",
-  "/(tabs)/home/roles": "roles_list",
-};
-
 export default function AllModulesScreen() {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const { hasPermission } = useAuth();
+  // Solo se listan los módulos que el usuario puede abrir, según el mapa
+  // central de permisos (utils/permissions/routePermissions.ts).
+  const { canAccessRoute } = useCan();
 
   const sections = useMemo(
     () =>
       MODULE_SECTIONS.map((section) => ({
         ...section,
-        items: section.items.filter((item) => {
-          const required = item.permission ?? ROUTE_PERMISSIONS[item.route];
-          if (!required) return true;
-          return (Array.isArray(required) ? required : [required]).some((p) =>
-            hasPermission(p),
-          );
-        }),
+        items: section.items.filter((item) => canAccessRoute(item.route)),
       })).filter((section) => section.items.length > 0),
-    [hasPermission]
+    [canAccessRoute]
   );
 
   const filteredSections = useMemo(() => {
