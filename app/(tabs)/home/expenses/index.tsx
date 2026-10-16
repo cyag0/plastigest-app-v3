@@ -187,8 +187,9 @@ export default function ExpensesIndex() {
         showEdit: true,
       }}
       searchPlaceholder="Buscar gastos..."
-      defaultParams={{
-        sort: "-expense_date",
+      defaultFilters={{
+        sort_by: "expense_date",
+        sort_direction: "desc",
       }}
     />
     </PermissionGate>
