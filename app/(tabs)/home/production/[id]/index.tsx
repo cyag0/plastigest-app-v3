@@ -2,6 +2,7 @@ import { goBack } from "@/utils/navigation";
 import ProductionStatusBadge from "@/components/Production/ProductionStatusBadge";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import Services from "@/utils/services";
 import { printPdf } from "@/utils/printDocument";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -27,6 +28,8 @@ export default function ProductionDetail() {
   const params = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const alerts = useAlerts();
+  // Editar, completar y empacar piden production_orders_update.
+  const canUpdate = useCan().can("production_orders_update");
   const [order, setOrder] = useState<any | null>(null);
   const [variance, setVariance] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
@@ -289,7 +292,7 @@ export default function ProductionDetail() {
                 </Text>
               ) : null}
 
-              {order.can_pack ? (
+              {order.can_pack && canUpdate ? (
                 <Button
                   mode="contained"
                   icon="package-variant-closed"
@@ -395,7 +398,7 @@ export default function ProductionDetail() {
       ) : null}
 
       <View style={styles.actionBar}>
-        {order.status === "draft" ? (
+        {order.status === "draft" && canUpdate ? (
           <Button
             mode="outlined"
             onPress={() => router.push(`/(tabs)/home/production/${order.id}/edit` as any)}
@@ -405,7 +408,7 @@ export default function ProductionDetail() {
             Editar
           </Button>
         ) : null}
-        {order.status === "draft" ? (
+        {order.status === "draft" && canUpdate ? (
           <Button
             mode="contained"
             onPress={handleComplete}

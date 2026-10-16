@@ -3,6 +3,7 @@ import AppInput from "@/components/Form/AppInput";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -26,6 +27,8 @@ export default function ProductionPackaging() {
   const alerts = useAlerts();
   const { colors } = useTheme();
   const styles = useStyles();
+  // Empacar, revertir y cerrar el empaque piden production_orders_update.
+  const canUpdate = useCan().can("production_orders_update");
 
   const [plan, setPlan] = useState<App.Entities.PackagingPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,6 +154,7 @@ export default function ProductionPackaging() {
 
   const registered = plan.packagings ?? [];
   const packable = plan.lines.filter((l) => l.products.length > 0);
+  const canPack = plan.can_pack && canUpdate;
 
   return (
     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -167,8 +171,17 @@ export default function ProductionPackaging() {
         />
       ) : null}
 
+      {plan.can_pack && !canUpdate ? (
+        <Banner
+          icon="lock-outline"
+          color={colors.textSecondary}
+          title="Solo lectura"
+          text="Empacar, revertir o cerrar el empaque requiere permiso para actualizar producciones."
+        />
+      ) : null}
+
       {/* ───────── Lo que se puede empacar ───────── */}
-      {plan.can_pack ? (
+      {canPack ? (
         packable.length === 0 ? (
           <Banner
             icon="package-variant-closed-remove"
@@ -241,7 +254,7 @@ export default function ProductionPackaging() {
                 </Text>
               </View>
 
-              {plan.can_pack ? (
+              {canPack ? (
                 <Button
                   mode="text"
                   compact
@@ -257,7 +270,7 @@ export default function ProductionPackaging() {
         </View>
       ) : null}
 
-      {plan.can_pack ? (
+      {canPack ? (
         <View style={styles.actionBar}>
           <Button
             mode="outlined"

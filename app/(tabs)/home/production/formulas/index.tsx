@@ -136,6 +136,7 @@ export default function FormulasIndex() {
       <AppList
         title="Fórmulas"
         service={Services.formulas}
+        permissionPrefix="formulas"
         columns={FORMULAS_COLUMNS}
         actionColumnTitle="Acciones"
         actionColumnWidth={140}

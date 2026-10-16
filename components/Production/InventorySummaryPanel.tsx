@@ -1,4 +1,5 @@
 import palette from "@/constants/palette";
+import { useCan } from "@/hooks/useCan";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFormikContext, getIn } from "formik";
@@ -58,8 +59,12 @@ export default function InventorySummaryPanel({
   );
 
   const [cache, setCache] = React.useState<Record<number, any>>({});
+  // GET /products/{id} pide products_read o products_list: sin ellos no se
+  // consulta (el resumen se arma con lo que trae el formulario).
+  const canReadProducts = useCan().can(["products_read", "products_list"]);
 
   React.useEffect(() => {
+    if (!canReadProducts) return;
     let cancelled = false;
     (async () => {
       const missing = productIds.filter((id) => !cache[id]);
@@ -85,7 +90,7 @@ export default function InventorySummaryPanel({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productIds.join(",")]);
+  }, [productIds.join(","), canReadProducts]);
 
   const groupedConsumed = useMemo(
     () => groupByProduct(consumptions, cache),
