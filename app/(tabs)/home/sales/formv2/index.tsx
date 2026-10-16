@@ -17,7 +17,11 @@ import { usePreventRemove } from "expo-router/react-navigation";
 import React, { useEffect, useMemo, useState } from "react";
 import { Modal, StyleSheet, Text as RNText, TouchableOpacity, View } from "react-native";
 import { Button, RadioButton, Text, TextInput } from "react-native-paper";
-import { useSale } from "./SaleContext";
+import { PendingPayment, useSale } from "./SaleContext";
+
+/** Aviso de un cobro en duda recuperado al volver a la pantalla. */
+const RESTORED_MESSAGE =
+  "No se pudo confirmar si la venta de este carrito quedó registrada. Vuelve a presionar «Confirmar venta»: si ya se registró no se cobra dos veces.";
 
 const PAYMENT_LABELS: Record<string, string> = {
   cash: "Efectivo",
@@ -105,6 +109,37 @@ export default function SaleFormScreen() {
     alerts.warning("Espera a que termine de registrarse la venta.");
   });
 
+  // Mientras se envía o un cobro sigue en duda el pago no se cambia, como el
+  // carrito: el reintento con la misma llave lleva el mismo, y si el primero
+  // entró el servidor devuelve esa venta con su forma de pago.
+  const paymentLocked = sending || saleContext.pendingUnknown;
+
+  // Cobro en duda recuperado del equipo al volver: el pago con que se mandó
+  // (bloqueado) y el aviso para reintentarlo aquí mismo. Se ajusta durante el
+  // render, una vez por recuperación.
+  const restored = saleContext.restoredPending;
+  const [appliedRestore, setAppliedRestore] = useState<PendingPayment | null>(null);
+  if (restored && restored !== appliedRestore) {
+    setAppliedRestore(restored);
+    setPaymentMethod(restored.payment_method);
+    if (restored.payment_method === "credit") {
+      setPaymentTouched(true);
+      setPaymentAmount("0");
+    } else if (restored.paid_amount === undefined) {
+      setPaymentTouched(false);
+    } else {
+      setPaymentTouched(true);
+      setPaymentAmount(restored.paid_amount.toFixed(2));
+    }
+    setFormMessage({ text: RESTORED_MESSAGE, tone: "warning" });
+  }
+  // En celular el carrito (con el aviso) está cerrado: también un aviso global.
+  useEffect(() => {
+    if (restored) {
+      alerts.warning("Hay una venta sin confirmar: abre el carrito y vuelve a presionar «Confirmar venta».");
+    }
+  }, [restored, alerts]);
+
   // El contexto ya expone los items del carrito con el formato de Cart.
   const cartItems = saleContext.cartItems;
 
@@ -133,6 +168,7 @@ export default function SaleFormScreen() {
    * con un ingreso que nunca entró.
    */
   const changePaymentMethod = (method: string) => {
+    if (paymentLocked) return;
     setPaymentMethod(method);
     setFormMessage(null);
     if (method === "credit") {
@@ -167,13 +203,10 @@ export default function SaleFormScreen() {
       // y un monto que no se entiende se avisa: antes "1,500" se mandaba como
       // 1 y la venta quedaba con $1 pagado.
       let paidAmountForApi: number | undefined;
-      let paidCents: number;
       if (isCredit) {
         paidAmountForApi = 0;
-        paidCents = 0;
       } else if (!paymentTouched) {
         paidAmountForApi = undefined;
-        paidCents = saleContext.totalCents;
       } else {
         const parsed = parseMoney(paymentAmount);
         if (parsed === null || parsed < 0) {
@@ -183,8 +216,7 @@ export default function SaleFormScreen() {
           });
           return;
         }
-        paidCents = amountToCents(parsed);
-        paidAmountForApi = centsToAmount(paidCents);
+        paidAmountForApi = centsToAmount(amountToCents(parsed));
       }
 
       const confirmed = await alerts.confirm("¿Deseas confirmar esta venta?", {
@@ -207,15 +239,22 @@ export default function SaleFormScreen() {
       if (!attempt) return; // ya había un envío en curso
 
       if (attempt.status === "charged") {
-        // El resumen sale de lo que registró el servidor.
+        // El resumen sale de lo que registró el servidor y del pago que se
+        // mandó (en un reintento, el del primer envío): no del formulario.
         const sale = attempt.sale ?? {};
         const saleTotalCents = sale.total != null ? amountToCents(Number(sale.total)) : totalCents;
+        const method =
+          typeof sale.payment_method === "string" && sale.payment_method
+            ? sale.payment_method
+            : attempt.payment.payment_method;
+        const sentPaidCents =
+          attempt.payment.paid_amount != null ? amountToCents(attempt.payment.paid_amount) : saleTotalCents;
         const paidServer =
           sale.paid_amount != null
             ? Number(sale.paid_amount)
             : Array.isArray(sale.payments)
               ? sale.payments.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0)
-              : centsToAmount(paidCents);
+              : centsToAmount(sentPaidCents);
         const mismatch = saleTotalCents !== totalCents;
         setCartVisible(false);
         setPaymentAmount("");
@@ -224,10 +263,10 @@ export default function SaleFormScreen() {
         setLastSale({
           total: centsToAmount(saleTotalCents),
           itemCount,
-          method: paymentMethod,
+          method,
           change:
-            !mismatch && paymentMethod === "cash" && paidCents > totalCents
-              ? centsToAmount(paidCents - totalCents)
+            !mismatch && method === "cash" && sentPaidCents > saleTotalCents
+              ? centsToAmount(sentPaidCents - saleTotalCents)
               : 0,
           pending: Math.max(0, centsToAmount(saleTotalCents - amountToCents(paidServer))),
           saleNumber: sale.sale_number,
@@ -247,7 +286,7 @@ export default function SaleFormScreen() {
 
       if (attempt.status === "unknown") {
         setFormMessage({
-          text: `${apiErrorMessage(attempt.error, "No llegó la respuesta del servidor.")} No se pudo confirmar si la venta quedó registrada: vuelve a presionar «Confirmar venta» (si ya se registró no se cobra dos veces) y no vacíes el carrito sin revisarla en Ventas.`,
+          text: `${apiErrorMessage(attempt.error, "No llegó la respuesta del servidor.")} No se pudo confirmar si la venta quedó registrada: vuelve a presionar «Confirmar venta» (si ya se registró no se cobra dos veces). El carrito y el pago no se pueden cambiar y quedan guardados en este equipo hasta confirmarla.`,
           tone: "warning",
         });
         return;
@@ -295,27 +334,32 @@ export default function SaleFormScreen() {
             {/* Método de pago */}
             <View style={styles.field}>
               <Text style={styles.label}>Método de Pago</Text>
+              {saleContext.pendingUnknown && !sending && (
+                <Text style={styles.sublabel}>
+                  No se puede cambiar hasta confirmar la venta anterior.
+                </Text>
+              )}
               <RadioButton.Group
                 onValueChange={changePaymentMethod}
                 value={paymentMethod}
               >
                 <View style={styles.radioRow}>
                   <View style={styles.radioItem}>
-                    <RadioButton value="cash" />
+                    <RadioButton value="cash" disabled={paymentLocked} />
                     <Text>Efectivo</Text>
                   </View>
                   <View style={styles.radioItem}>
-                    <RadioButton value="card" />
+                    <RadioButton value="card" disabled={paymentLocked} />
                     <Text>Tarjeta</Text>
                   </View>
                 </View>
                 <View style={styles.radioRow}>
                   <View style={styles.radioItem}>
-                    <RadioButton value="transfer" />
+                    <RadioButton value="transfer" disabled={paymentLocked} />
                     <Text>Transferencia</Text>
                   </View>
                   <View style={styles.radioItem}>
-                    <RadioButton value="credit" />
+                    <RadioButton value="credit" disabled={paymentLocked} />
                     <Text>Crédito</Text>
                   </View>
                 </View>
@@ -342,7 +386,7 @@ export default function SaleFormScreen() {
                   setFormMessage(null);
                 }}
                 keyboardType="decimal-pad"
-                disabled={isCredit || sending}
+                disabled={isCredit || paymentLocked}
               />
               {!isCredit && <AmountPreview value={paymentAmount} label="Pagado" />}
             </View>

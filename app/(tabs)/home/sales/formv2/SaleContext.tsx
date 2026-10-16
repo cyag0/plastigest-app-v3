@@ -13,15 +13,17 @@ import { Unit } from "@/components/Views/POSV3/components/ListProducts";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
-import {
-  centsToAmount,
-  lineTotalCents,
-  roundMoney,
-  roundQuantity,
-  sumCents,
-} from "@/utils/money";
+import { centsToAmount, lineTotalCents, roundQuantity, sumCents } from "@/utils/money";
 import { newClientRequestId } from "@/utils/requestId";
+import {
+  NormalizedSaleLine,
+  normalizedLineCents,
+  normalizeSaleLine,
+  unitDisplayPrice,
+  unitRatio,
+} from "@/utils/saleUnits";
 import services from "@/utils/services";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, {
   createContext,
   useCallback,
@@ -38,9 +40,19 @@ type GroupedUnits = Record<unitType, Unit[]>;
 interface SelectedProduct {
   id: string | number;
   product_id: number;
+  /** Cantidad en la unidad elegida (la que ve el usuario). */
   quantity: number;
+  /** Unidad elegida; la del producto para un paquete. */
   unit_id: number;
+  /**
+   * Precio de catálogo por unidad del producto (o el del paquete). El precio
+   * por la unidad elegida solo se muestra (unitDisplayPrice).
+   */
   price: number;
+  /** Unidad del producto: el renglón se manda y se cobra en ella. */
+  product_unit_id: number;
+  /** Unidades del producto en una de la elegida (gramo de uno por kilo: 0.001); 1 en un paquete. */
+  ratio: number;
   package_id?: number;
   detail_id?: number; // ID del detalle en el backend
 }
@@ -57,13 +69,14 @@ type SaleListItem = ProductListItem & { for_sale?: boolean };
 /**
  * Resultado de confirmar la venta:
  * - charged: quedó registrada (`sale` es la respuesta del servidor; con
- *   `recovered` se encontró por su llave después de perder la respuesta).
+ *   `recovered` se encontró por su llave después de perder la respuesta;
+ *   `payment`, el pago que se mandó).
  * - rejected: el servidor la rechazó y no registró nada.
  * - not_charged: no llegó respuesta y la búsqueda confirmó que no se registró.
  * - unknown: no llegó respuesta y no se pudo confirmar en qué quedó.
  */
 export type SaleAttempt =
-  | { status: "charged"; sale: any; recovered?: boolean }
+  | { status: "charged"; sale: any; recovered?: boolean; payment: PendingPayment }
   | { status: "rejected"; error: unknown }
   | { status: "not_charged" }
   | { status: "unknown"; error: unknown };
@@ -85,6 +98,12 @@ interface SaleContextType {
   submitting: boolean;
   /** La última venta se quedó sin respuesta: no se sabe si se registró. */
   pendingUnknown: boolean;
+  /**
+   * Cobro en duda recuperado del equipo al volver a la pantalla, con el pago
+   * que llevaba: la pantalla lo vuelve a mostrar (bloqueado) para reintentar
+   * con la misma llave.
+   */
+  restoredPending: PendingPayment | null;
 
   // Actions
   loadData: () => Promise<void>;
@@ -115,8 +134,115 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 const packagePrice = (pkg: { sale_price?: string | number | null; quantity_per_package?: string | number }, unitPrice: number) => {
   const own = Number(pkg.sale_price ?? 0);
-  return own > 0 ? own : roundMoney(unitPrice * Number(pkg.quantity_per_package ?? 0));
+  // Contenido × precio en centavos enteros, como el servidor (catalogPrice).
+  return own > 0 ? own : centsToAmount(lineTotalCents(Number(pkg.quantity_per_package ?? 0), unitPrice));
 };
+
+/** Pago de un cobro en duda: el reintento lleva el mismo. */
+export interface PendingPayment {
+  payment_method: string;
+  paid_amount?: number;
+}
+
+/**
+ * Unidades del producto en una de `unitId`, con las unidades de su tipo que
+ * trae el renglón base de la lista (1 si es la del producto; NaN si no se
+ * puede convertir).
+ */
+function ratioFor(baseProduct: SaleListItem | undefined, unitId: number): number {
+  if (!baseProduct) return NaN;
+  if (unitId === baseProduct.unit_id) return 1;
+  const units = baseProduct.available_units ?? [];
+  return unitRatio(
+    units.find((u) => u.id === unitId),
+    units.find((u) => u.id === baseProduct.unit_id),
+  );
+}
+
+/** El renglón como se manda y se cobra: en la unidad del producto. */
+const lineOf = (item: SelectedProduct): NormalizedSaleLine =>
+  normalizeSaleLine(item.quantity, item.ratio, item.price, item.product_unit_id);
+
+/** Menos de una milésima de la unidad del producto (0.4 g de uno por kilo) no se registra. */
+const belowMinimum = (quantity: number, ratio: number) => !(roundQuantity(quantity * ratio) > 0);
+
+/* ─────────────── Cobro en duda guardado en el equipo ─────────────── */
+
+// Si no se sabe en qué quedó un cobro, el carrito, su llave y su pago se
+// guardan en el equipo: al salir de la pantalla y volver (o cerrar la app) el
+// reintento usa la misma llave y no se cobra dos veces. Uno por usuario,
+// empresa y sucursal (la llave de otra sucursal se rechazaría).
+const PENDING_PREFIX = "sale_form_pending:";
+const PENDING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const PAYMENT_METHODS = ["cash", "card", "transfer", "credit"];
+
+interface StoredPending {
+  version: 1;
+  requestId: string;
+  items: SelectedProducts;
+  payment: PendingPayment;
+  savedAt: number;
+}
+
+const isFiniteNumber = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+
+function isValidItem(item: any): item is SelectedProduct {
+  return (
+    !!item &&
+    (typeof item.id === "string" || isFiniteNumber(item.id)) &&
+    isFiniteNumber(item.product_id) &&
+    isFiniteNumber(item.unit_id) &&
+    isFiniteNumber(item.product_unit_id) &&
+    isFiniteNumber(item.quantity) &&
+    item.quantity > 0 &&
+    isFiniteNumber(item.price) &&
+    item.price >= 0 &&
+    isFiniteNumber(item.ratio) &&
+    item.ratio > 0 &&
+    (item.package_id === undefined || item.package_id === null || isFiniteNumber(item.package_id))
+  );
+}
+
+/** Lee lo guardado; algo incompleto, raro o de hace más de una semana se descarta. */
+function parseStoredPending(raw: string | null): StoredPending | null {
+  if (!raw) return null;
+  let data: any;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (
+    !data ||
+    data.version !== 1 ||
+    typeof data.requestId !== "string" ||
+    data.requestId.length === 0 ||
+    data.requestId.length > 64 ||
+    !isFiniteNumber(data.savedAt) ||
+    Date.now() - data.savedAt > PENDING_MAX_AGE_MS ||
+    !data.items ||
+    typeof data.items !== "object"
+  ) {
+    return null;
+  }
+  const items = Object.values(data.items);
+  // El reintento tiene que llevar exactamente el mismo carrito.
+  if (items.length === 0 || !items.every(isValidItem)) return null;
+
+  const paid = data.payment?.paid_amount;
+  return {
+    version: 1,
+    requestId: data.requestId,
+    items: data.items as SelectedProducts,
+    payment: {
+      payment_method: PAYMENT_METHODS.includes(data.payment?.payment_method)
+        ? data.payment.payment_method
+        : "cash",
+      paid_amount: isFiniteNumber(paid) && paid >= 0 ? paid : undefined,
+    },
+    savedAt: data.savedAt,
+  };
+}
 
 const SaleContext = createContext<SaleContextType | undefined>(undefined);
 
@@ -141,7 +267,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
   const [currentSaleId, setCurrentSaleId] = useState<number | null>(null);
   const [customerId, setCustomerId] = useState<number | null>(null);
   const alerts = useAlerts();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user, selectedCompany, location } = useAuth();
   const { submitting, run } = useSubmitGuard();
   // Llave de cobro (client_request_id) del carrito: la misma en cada
   // reintento hasta que la venta queda registrada o se vacía el carrito. Si
@@ -158,6 +284,57 @@ export function SaleProvider({ children }: SaleProviderProps) {
   useEffect(() => {
     pendingUnknownRef.current = pendingUnknown;
   }, [pendingUnknown]);
+  // Pago del cobro en duda: el reintento lleva el mismo (la pantalla lo bloquea).
+  const pendingPaymentRef = useRef<PendingPayment | null>(null);
+  const [restoredPending, setRestoredPending] = useState<PendingPayment | null>(null);
+
+  const storageKey = user?.id
+    ? `${PENDING_PREFIX}${user.id}:${selectedCompany?.id ?? "none"}:${location?.id ?? "none"}`
+    : null;
+
+  /** Guarda el cobro en duda en el equipo (sin almacenamiento sigue en memoria). */
+  const savePending = (pending: Omit<StoredPending, "version" | "savedAt">) => {
+    if (!storageKey) return;
+    AsyncStorage.setItem(
+      storageKey,
+      JSON.stringify({ version: 1, ...pending, savedAt: Date.now() } satisfies StoredPending),
+    ).catch(() => undefined);
+  };
+
+  const clearPending = () => {
+    if (!storageKey) return;
+    AsyncStorage.removeItem(storageKey).catch(() => undefined);
+  };
+
+  // Al entrar: si quedó un cobro en duda, vuelve el carrito con su llave y su
+  // pago, bloqueado hasta reintentarlo (o vaciarlo).
+  useEffect(() => {
+    if (!storageKey) return;
+    let cancelled = false;
+    (async () => {
+      let raw: string | null = null;
+      try {
+        raw = await AsyncStorage.getItem(storageKey);
+      } catch {
+        return;
+      }
+      if (cancelled || !raw) return;
+      const stored = parseStoredPending(raw);
+      if (!stored) {
+        AsyncStorage.removeItem(storageKey).catch(() => undefined);
+        return;
+      }
+      requestIdRef.current = stored.requestId;
+      pendingPaymentRef.current = stored.payment;
+      pendingUnknownRef.current = true;
+      setSelectedProducts(stored.items);
+      setPendingUnknown(true);
+      setRestoredPending(stored.payment);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey]);
 
   /** true (y avisa) si el carrito está bloqueado por un cobro sin confirmar. */
   const cartLocked = () => {
@@ -275,7 +452,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
     loadData();
   }, [loadData]);
 
-  // Calcular stock total usado para un producto base (en unidades base)
+  // Stock usado de un producto base (en la unidad del producto)
   const calculateUsedStock = (baseProductId: number) => {
     let totalUsed = 0;
 
@@ -287,13 +464,8 @@ export function SaleProvider({ children }: SaleProviderProps) {
           const qtyPerPkg = Number(productData.quantity_per_package);
           totalUsed += item.quantity * qtyPerPkg;
         } else {
-          // Producto individual - considerar el factor de conversión de la unidad
-          const selectedUnit = productData?.available_units?.find(
-            (u) => u.id === item.unit_id,
-          );
-
-          const factorToBase = Number(selectedUnit?.factor_to_base || 1);
-          totalUsed += item.quantity * factorToBase;
+          // En la unidad del producto, la de su existencia.
+          totalUsed += item.quantity * item.ratio;
         }
       }
     });
@@ -308,7 +480,6 @@ export function SaleProvider({ children }: SaleProviderProps) {
       return;
     }
     const productId = product.id;
-    const defaultUnit = product.available_units?.[0];
     const basePrice = parseFloat(product.price.toString());
 
     // Determinar el product_id correcto
@@ -316,57 +487,55 @@ export function SaleProvider({ children }: SaleProviderProps) {
       ? product.base_product_id!
       : parseInt(productId.toString().replace("product_", ""));
 
+    // Si el producto ya está en el carrito, se suma uno (con su unidad y su
+    // validación de stock).
+    if (selectedProducts[productId]) {
+      handleItemChange(productId, "increment");
+      return;
+    }
+
     // Obtener el stock actual del producto base
     const baseProduct = products.find(
       (p) => p.id === `product_${numericProductId}`,
     );
     const availableStock = Number(baseProduct?.current_stock || 0);
+    const productUnit = baseProduct?.available_units?.find(
+      (u) => u.id === baseProduct.unit_id,
+    );
 
-    // Para paquetes, usar el unit_id del producto base
-    const finalUnitId = product.is_package 
-      ? (baseProduct?.unit_id || 0)
-      : unitId || defaultUnit?.id || 0;
+    // Un paquete se vende en la unidad del producto; lo demás en la elegida
+    // (por omisión, la del producto).
+    const productUnitId = baseProduct?.unit_id || product.unit_id || 0;
+    const finalUnitId = product.is_package ? productUnitId : unitId || productUnitId;
+    const ratio = product.is_package ? 1 : ratioFor(baseProduct, finalUnitId);
 
-    const selectedUnit = product.available_units?.find(
-      (unit) => unit.id === finalUnitId,
-    ) || defaultUnit;
-
-    const calculatedPrice =
-      product.is_package || selectedUnit?.is_base_unit || !selectedUnit?.factor_to_base
-        ? basePrice
-        : basePrice * Number(selectedUnit.factor_to_base);
-
-    // Calcular cuánto stock ya está siendo usado en el carrito
-    const usedStock = calculateUsedStock(numericProductId);
-
-    // Calcular cuánto stock adicional se requiere para esta operación (en unidades base)
-    let requiredStock = 1;
-    if (product.is_package && product.quantity_per_package) {
-      requiredStock = Number(product.quantity_per_package);
-    } else {
-      // Para productos individuales, considerar el factor de conversión
-      const selectedUnit = baseProduct?.available_units?.find(
-        (u) => u.id === finalUnitId,
-      );
-      const factorToBase = Number(selectedUnit?.factor_to_base || 1);
-      requiredStock = factorToBase;
+    if (!(ratio > 0)) {
+      alerts.error(`No se puede vender ${product.name} en esa unidad.`);
+      return;
     }
-
-    // Validar que hay stock suficiente (usedStock ya incluye lo que está en el carrito)
-    if (usedStock + requiredStock > availableStock) {
-      const productBaseUnit = baseProduct?.available_units?.find(
-        (u) => u.id === baseProduct.unit_id,
-      );
-      const remaining = availableStock - usedStock;
+    if (belowMinimum(1, ratio)) {
       alerts.error(
-        `Stock insuficiente. Disponible: ${formatQuantity(availableStock)} ${productBaseUnit?.abbreviation || ""}, En carrito: ${formatQuantity(usedStock)} ${productBaseUnit?.abbreviation || ""}, Restante: ${formatQuantity(remaining)} ${productBaseUnit?.abbreviation || ""}, Requiere: ${formatQuantity(requiredStock)} ${productBaseUnit?.abbreviation || ""}`,
+        `La cantidad es menor que la mínima que se registra de ${product.name} (0.001 ${productUnit?.abbreviation || "de su unidad"}).`,
       );
       return;
     }
 
-    // Si el producto ya existe en el carrito, incrementar cantidad
-    if (selectedProducts[productId]) {
-      handleItemChange(productId, "increment");
+    // Calcular cuánto stock ya está siendo usado en el carrito
+    const usedStock = calculateUsedStock(numericProductId);
+
+    // Stock que requiere (en la unidad del producto)
+    const requiredStock =
+      product.is_package && product.quantity_per_package
+        ? Number(product.quantity_per_package)
+        : ratio;
+
+    // Validar que hay stock suficiente (usedStock ya incluye lo que está en el carrito)
+    if (usedStock + requiredStock > availableStock) {
+      const remaining = availableStock - usedStock;
+      const abbr = productUnit?.abbreviation || "";
+      alerts.error(
+        `Stock insuficiente. Disponible: ${formatQuantity(availableStock)} ${abbr}, En carrito: ${formatQuantity(usedStock)} ${abbr}, Restante: ${formatQuantity(remaining)} ${abbr}, Requiere: ${formatQuantity(requiredStock)} ${abbr}`,
+      );
       return;
     }
 
@@ -376,7 +545,9 @@ export function SaleProvider({ children }: SaleProviderProps) {
       package_id: product.package_id,
       quantity: 1,
       unit_id: finalUnitId,
-      price: calculatedPrice,
+      price: basePrice,
+      product_unit_id: productUnitId,
+      ratio,
       detail_id: undefined,
     };
 
@@ -422,17 +593,11 @@ export function SaleProvider({ children }: SaleProviderProps) {
         const availableStock = Number(baseProduct?.current_stock || 0);
         const usedStock = calculateUsedStock(product.product_id);
 
-        let requiredStock = 1;
-        if (productData?.is_package && productData.quantity_per_package) {
-          requiredStock = Number(productData.quantity_per_package);
-        } else {
-          // Para productos individuales, considerar el factor de conversión
-          const selectedUnit = productData?.available_units?.find(
-            (u) => u.id === product.unit_id,
-          );
-          const factorToBase = Number(selectedUnit?.factor_to_base || 1);
-          requiredStock = factorToBase;
-        }
+        // En la unidad del producto
+        const requiredStock =
+          productData?.is_package && productData.quantity_per_package
+            ? Number(productData.quantity_per_package)
+            : product.ratio;
 
         if (usedStock + requiredStock > availableStock) {
           const productBaseUnitId = baseProduct?.unit_id;
@@ -451,7 +616,10 @@ export function SaleProvider({ children }: SaleProviderProps) {
           quantity: product.quantity + 1,
         };
       } else if (action === "decrement") {
-        if (product.quantity > 1) {
+        if (product.quantity > 1 && belowMinimum(product.quantity - 1, product.ratio)) {
+          alerts.error("La cantidad es menor que la mínima que se registra (0.001 de la unidad del producto).");
+          return prev;
+        } else if (product.quantity > 1) {
           updated[productId] = {
             ...product,
             quantity: product.quantity - 1,
@@ -478,16 +646,16 @@ export function SaleProvider({ children }: SaleProviderProps) {
         );
         const availableStock = Number(baseProduct?.current_stock || 0);
 
-        // Stock (en unidad base) que consume una unidad de este renglón.
-        let perUnit = 1;
-        if (productData?.is_package && productData.quantity_per_package) {
-          perUnit = Number(productData.quantity_per_package);
-        } else {
-          const selectedUnit = productData?.available_units?.find(
-            (u) => u.id === product.unit_id,
-          );
-          perUnit = Number(selectedUnit?.factor_to_base || 1);
+        if (belowMinimum(qty, product.ratio)) {
+          alerts.error("La cantidad es menor que la mínima que se registra (0.001 de la unidad del producto).");
+          return prev;
         }
+
+        // Stock (en la unidad del producto) que consume una unidad de este renglón.
+        const perUnit =
+          productData?.is_package && productData.quantity_per_package
+            ? Number(productData.quantity_per_package)
+            : product.ratio;
 
         const usedByOthers =
           calculateUsedStock(product.product_id) - product.quantity * perUnit;
@@ -519,35 +687,42 @@ export function SaleProvider({ children }: SaleProviderProps) {
 
         // Validar que con la nueva unidad no se exceda el stock
         const productData = products.find((p) => p.id === productId);
+        if (productData?.is_package) {
+          return prev;
+        }
         const baseProduct = products.find(
           (p) => p.id === `product_${product.product_id}`,
         );
-        const availableStock = baseProduct?.current_stock || 0;
+        const availableStock = Number(baseProduct?.current_stock || 0);
 
         // Obtener la nueva unidad
         const newUnit = productData?.available_units?.find(
           (u) => u.id === unitId,
         );
 
-        // Calcular cuánto stock en unidad base requiere la cantidad actual con la nueva unidad
-        const factorToBase = Number(newUnit?.factor_to_base || 1);
-        const requiredStockInBaseUnit = product.quantity * factorToBase;
+        // Unidades del producto en una de la nueva unidad
+        const ratio = ratioFor(baseProduct, unitId);
+        if (!(ratio > 0)) {
+          alerts.error("No se puede vender este producto en esa unidad.");
+          return prev;
+        }
+        if (belowMinimum(product.quantity, ratio)) {
+          alerts.error(
+            `La cantidad es menor que la mínima que se registra: aumenta la cantidad antes de cambiar a ${newUnit?.abbreviation || "esa unidad"}.`,
+          );
+          return prev;
+        }
 
-        // Calcular cuánto stock está usando actualmente este producto
-        const currentUnit = productData?.available_units?.find(
-          (u) => u.id === product.unit_id,
-        );
-        const currentFactorToBase = Number(currentUnit?.factor_to_base || 1);
-        const currentUsedStock = product.quantity * currentFactorToBase;
-
-        // Calcular stock usado por otros productos (excluyendo este)
+        // Stock (en la unidad del producto) con la nueva unidad y el que
+        // usan los demás renglones del mismo producto
+        const requiredStock = product.quantity * ratio;
         const usedStockByOthers =
-          calculateUsedStock(product.product_id) - currentUsedStock;
+          calculateUsedStock(product.product_id) - product.quantity * product.ratio;
 
         // Validar que no se exceda el stock
-        if (usedStockByOthers + requiredStockInBaseUnit > availableStock) {
+        if (usedStockByOthers + requiredStock > availableStock) {
           const maxQuantityInNewUnit = Math.floor(
-            (availableStock - usedStockByOthers) / factorToBase,
+            (availableStock - usedStockByOthers) / ratio,
           );
           alerts.error(
             `Stock insuficiente para esta unidad. Máximo disponible: ${maxQuantityInNewUnit} ${newUnit?.abbreviation || "unidades"}`,
@@ -555,17 +730,12 @@ export function SaleProvider({ children }: SaleProviderProps) {
           return prev;
         }
 
-        // Calcular el nuevo precio basado en el precio base del producto y el factor de conversión
-        const basePrice = parseFloat(String(productData?.price ?? "0"));
-        const newPrice =
-          newUnit?.is_base_unit || !newUnit?.factor_to_base
-            ? basePrice
-            : basePrice * Number(factorToBase);
-
+        // El precio sigue siendo el del producto por su unidad: el de la
+        // unidad elegida solo se muestra.
         updated[productId] = {
           ...product,
           unit_id: unitId,
-          price: newPrice,
+          ratio,
         };
       }
 
@@ -578,13 +748,24 @@ export function SaleProvider({ children }: SaleProviderProps) {
     setSelectedProducts({});
     setCurrentSaleId(null);
     requestIdRef.current = null;
+    pendingPaymentRef.current = null;
     setPendingUnknown(false);
+    setRestoredPending(null);
+    clearPending();
+  };
+
+  /** Ya se sabe en qué quedó el cobro: deja de estar en duda (la llave se conserva). */
+  const settlePending = () => {
+    pendingPaymentRef.current = null;
+    setPendingUnknown(false);
+    setRestoredPending(null);
+    clearPending();
   };
 
   const clearCart = async () => {
     if (pendingUnknown) {
       const ok = await alerts.confirm(
-        "No se pudo confirmar si la última venta quedó registrada. Si vacías el carrito y vuelves a cobrar estos productos podría quedar dos veces: revísala en Ventas.",
+        "No se pudo confirmar si la última venta quedó registrada. Si vacías el carrito y vuelves a cobrar estos productos podría quedar dos veces: primero vuelve a presionar «Confirmar venta» (si ya se registró no se cobra otra vez).",
         { title: "Vaciar carrito", okText: "Vaciar", cancelText: "Volver" },
       );
       if (!ok) return;
@@ -607,31 +788,42 @@ export function SaleProvider({ children }: SaleProviderProps) {
     paid_amount?: number;
   }): Promise<SaleAttempt | undefined> =>
     run(async (): Promise<SaleAttempt> => {
-      // Cantidad y precio redondeados como el servidor: el total que ve el
-      // usuario es el que se registra.
+      // Cada renglón en la unidad del producto (500 g de uno por kilo van
+      // como 0.5 kg a su precio por kilo), con la cantidad y el precio
+      // redondeados como el servidor: el total que ve el usuario es el que se
+      // registra.
       const details = Object.values(selectedProducts).map((item) => ({
         product_id: item.product_id,
         package_id: item.package_id,
-        unit_id: item.unit_id,
-        quantity: roundQuantity(item.quantity),
-        unit_price: roundMoney(item.price),
+        ...lineOf(item),
       }));
+
+      // El reintento de un cobro en duda lleva el mismo pago que el primero
+      // (la pantalla no deja cambiarlo mientras tanto).
+      const payment: PendingPayment =
+        pendingUnknownRef.current && pendingPaymentRef.current
+          ? pendingPaymentRef.current
+          : { payment_method: data?.payment_method || "cash", paid_amount: data?.paid_amount };
 
       const clientRequestId = requestIdRef.current ?? newClientRequestId();
       requestIdRef.current = clientRequestId;
+      pendingPaymentRef.current = payment;
       setPendingUnknown(true);
+      // En el equipo desde ahora: si se pierde la respuesta y se sale de la
+      // pantalla, al volver se reintenta con la misma llave.
+      savePending({ requestId: clientRequestId, items: selectedProducts, payment });
 
       const charged = (sale: any, recovered = false): SaleAttempt => {
         resetCart();
         // Recargar datos para actualizar el stock
         loadData();
-        return { status: "charged", sale, recovered };
+        return { status: "charged", sale, recovered, payment };
       };
 
       try {
         const response = await services.sales.store({
-          payment_method: data?.payment_method || "cash",
-          paid_amount: data?.paid_amount,
+          payment_method: payment.payment_method,
+          paid_amount: payment.paid_amount,
           details,
           client_request_id: clientRequestId,
         });
@@ -639,7 +831,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
         return charged(body?.data ?? body);
       } catch (error) {
         if (!isOutcomeUnknown(error)) {
-          setPendingUnknown(false);
+          settlePending();
           // La llave ya se usó en otra operación: el siguiente intento lleva
           // una nueva (con la misma se rechazaría otra vez).
           if (apiErrorCode(error) === SALE_ERROR_CODES.clientRequestConflict) {
@@ -656,7 +848,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
           try {
             const found = await services.pos.findSaleByRequest(clientRequestId);
             if (found) return charged(found.data, true);
-            setPendingUnknown(false);
+            settlePending();
             return { status: "not_charged" };
           } catch {
             // Tampoco se pudo consultar: sigue en duda.
@@ -670,7 +862,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
     () =>
       sumCents(
         Object.values(selectedProducts).map((item) =>
-          lineTotalCents(item.quantity, item.price),
+          normalizedLineCents(lineOf(item)),
         ),
       ),
     [selectedProducts],
@@ -690,20 +882,24 @@ export function SaleProvider({ children }: SaleProviderProps) {
         product_id: item.product_id,
         code: product?.code || "",
         name: product?.name || "Producto desconocido",
-        price: item.price,
+        // Por la unidad elegida, solo para mostrarlo ($25/kg → $0.025/g).
+        price: unitDisplayPrice(item.price, item.ratio),
         quantity: item.quantity,
-        // Redondeado a centavos como el servidor (la suma es el total cobrado).
-        total: centsToAmount(lineTotalCents(item.quantity, item.price)),
+        // El renglón en la unidad del producto, redondeado a centavos como el
+        // servidor (la suma es el total cobrado).
+        total: centsToAmount(normalizedLineCents(lineOf(item))),
         unit: selectedUnit?.abbreviation || "",
         unit_id: item.unit_id,
         unit_name: selectedUnit?.name,
         unit_abbreviation: selectedUnit?.abbreviation,
+        // Peso y volumen admiten decimales (1.5 kg); piezas y paquetes, no.
+        unit_type: product?.unit_type ?? undefined,
+        is_package: !!item.package_id,
         main_image: product?.main_image,
         available_units: product?.available_units?.map((unit) => ({
           id: unit.id,
           name: unit.name,
           abbreviation: unit.abbreviation,
-          price: item.price,
         })),
       };
     });
@@ -729,6 +925,7 @@ export function SaleProvider({ children }: SaleProviderProps) {
     customerId,
     submitting,
     pendingUnknown,
+    restoredPending,
     loadData,
     handleAddProduct,
     handleRemoveProduct,
