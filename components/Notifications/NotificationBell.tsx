@@ -1,7 +1,9 @@
+import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
 import NotificationDetailContent from "@/components/Notifications/NotificationDetailContent";
 import {
   getNotificationLink,
   NOTIFICATIONS_INBOX_ROUTE,
+  notificationPreferencesRoute,
 } from "@/components/Notifications/notificationLinks";
 import NotificationsPopover from "@/components/Notifications/NotificationsPopover";
 import palette from "@/constants/palette";
@@ -72,8 +74,9 @@ export default function NotificationBell({
 }: NotificationBellProps) {
   const router = useRouter();
   const alerts = useAlerts();
-  const { unreadNotificationsCount, loadUnreadNotificationsCount, hasPermission } =
+  const { unreadNotificationsCount, loadUnreadNotificationsCount, hasPermission, location } =
     useAuth();
+  const allLocations = useAllLocationsAccess();
   const { width, height } = useWindowDimensions();
 
   const isDesktop =
@@ -92,8 +95,8 @@ export default function NotificationBell({
 
   const openSettings = useCallback(() => {
     setMenuVisible(false);
-    router.push("/(stacks)/notification-preferences" as any);
-  }, [router]);
+    router.push(notificationPreferencesRoute(allLocations, !!location) as any);
+  }, [router, allLocations, location]);
 
   const handleItemPress = useCallback(
     async (notification: App.Entities.Notification) => {

@@ -1,6 +1,9 @@
+import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
 import AppBar from "@/components/App/AppBar";
 import SectionHeader from "@/components/App/SectionHeader";
+import { notificationPreferencesRoute } from "@/components/Notifications/notificationLinks";
 import { tokens } from "@/constants/tokens";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme, ThemePreference } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { getAppVersionLabel } from "@/utils/appVersion";
@@ -78,6 +81,9 @@ const DENSITY_OPTIONS: {
 
 export default function PreferencesScreen() {
   const router = useRouter();
+  const { location } = useAuth();
+  // Quien no entra a todas las sucursales abre las de su sucursal.
+  const allLocations = useAllLocationsAccess();
   const alerts = useAlerts();
   const { preference, mode, colors, setPreference } = useTheme();
 
@@ -296,7 +302,7 @@ export default function PreferencesScreen() {
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() =>
-              router.push("/(stacks)/notification-preferences" as any)
+              router.push(notificationPreferencesRoute(allLocations, !!location) as any)
             }
             style={[styles.linkCard, { backgroundColor: colors.surface }]}
           >

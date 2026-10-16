@@ -24,6 +24,17 @@ export interface NotificationLink {
 
 export const NOTIFICATIONS_INBOX_ROUTE = "/(tabs)/notifications";
 
+/**
+ * Preferencias de notificaciones. Quien no entra a todas las sucursales solo
+ * puede cambiar las de su sucursal (el servidor rechaza las de la empresa con
+ * company_scope_forbidden): abre esas.
+ */
+export function notificationPreferencesRoute(allLocations: boolean, hasLocation: boolean): string {
+  return !allLocations && hasLocation
+    ? "/(stacks)/notification-preferences?scope=location"
+    : "/(stacks)/notification-preferences";
+}
+
 export function notificationDetailRoute(id: number | string) {
   return `${NOTIFICATIONS_INBOX_ROUTE}/${id}`;
 }

@@ -242,6 +242,10 @@ export default function AdministrationScreen() {
     // Quien no entra a todas las sucursales (locations_all) solo ve a los
     // usuarios de la suya: los tiene en "Esta sucursal".
     if (option.id === "company-users" && !allLocations) return false;
+    // Las notificaciones de la empresa solo las cambia quien entra a todas
+    // las sucursales (el servidor responde company_scope_forbidden); los
+    // demás tienen las de su sucursal en "Esta sucursal".
+    if (option.id === "notification-preferences" && !allLocations) return false;
     if (!option.requiredPermission) return true;
     return hasPermission(option.requiredPermission);
   });

@@ -1,3 +1,4 @@
+import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -532,8 +533,12 @@ export default function NotificationPreferencesScreen() {
     });
   }, [navigation, branchScope, location?.name]);
   // GET pide notifications_list; cambiar algo (y ver los usuarios elegibles)
-  // pide notifications_manage.
-  const canManage = hasPermission("notifications_manage");
+  // pide notifications_manage. La configuración de la empresa además pide
+  // entrar a todas las sucursales (si no, el servidor responde
+  // company_scope_forbidden): para los demás es de solo lectura.
+  const allLocations = useAllLocationsAccess();
+  const companyLocked = !branchScope && !allLocations;
+  const canManage = hasPermission("notifications_manage") && !companyLocked;
 
   const [prefs, setPrefs] = useState<Preference[]>([]);
   // Usuarios elegibles por permiso (varios eventos comparten permiso).
@@ -591,9 +596,12 @@ export default function NotificationPreferencesScreen() {
       );
     } catch (error: any) {
       setLoadError(
-        error?.response?.status === 403
-          ? "No tienes permiso para ver las preferencias de notificaciones."
-          : errorMessage(error, "No se pudieron cargar las preferencias."),
+        errorMessage(
+          error,
+          error?.response?.status === 403
+            ? "No tienes permiso para ver las preferencias de notificaciones."
+            : "No se pudieron cargar las preferencias.",
+        ),
       );
     } finally {
       setLoading(false);
@@ -736,8 +744,9 @@ export default function NotificationPreferencesScreen() {
               <View style={styles.readOnlyNote}>
                 <Icon source="lock-outline" size={16} color={palette.textSecondary} />
                 <Text variant="bodySmall" style={styles.infoText}>
-                  Solo lectura: cambiar estas preferencias requiere el permiso
-                  &quot;Gestionar notificaciones&quot;.
+                  {companyLocked && hasPermission("notifications_manage")
+                    ? `Solo lectura: la configuración de la empresa la cambia quien tiene acceso a todas las sucursales. Los avisos de ${location?.name ?? "tu sucursal"} están en Administración › Esta sucursal.`
+                    : "Solo lectura: cambiar estas preferencias requiere el permiso \"Gestionar notificaciones\"."}
                 </Text>
               </View>
             )}
