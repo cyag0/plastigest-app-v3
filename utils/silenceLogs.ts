@@ -126,6 +126,31 @@ if (!__DEV__) {
       logHandledError(...args);
       return;
     }
+    if (isKnownDevNoise(args[0])) {
+      console.debug(...args);
+      return;
+    }
     consoleError(...args);
   };
+}
+
+/**
+ * Avisos conocidos que no son errores de la app, pero abrían el aviso rojo de
+ * Expo en desarrollo y se confundían con una falla real:
+ *
+ * - React DOM, por react-native-chart-kit en web (sus gráficas pasan props de
+ *   React Native, como onStartShouldSetResponder o transform-origin, a
+ *   elementos SVG): cada visita a Ventas, Compras o Transferencias.
+ * - React Navigation, "The action 'ROUTE_NAMES_CHANGED' … was not handled":
+ *   NavigationHandler desmonta y vuelve a montar la navegación al iniciar
+ *   sesión y al cambiar de sucursal (se muestra el loader), y esa acción
+ *   interna llega cuando el navegador ya no está.
+ */
+function isKnownDevNoise(first: unknown): boolean {
+  if (typeof first !== "string") return false;
+  return (
+    first.includes("Unknown event handler property") ||
+    first.includes("Invalid DOM property") ||
+    first.includes("The action 'ROUTE_NAMES_CHANGED'")
+  );
 }

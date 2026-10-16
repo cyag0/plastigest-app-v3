@@ -83,7 +83,9 @@ export default function PrintLabelsModal({
             disabled={loading}
           />
 
-          {error && <HelperText type="error">{error}</HelperText>}
+          {/* !!: con error "" quedaba un texto vacío suelto en el View
+              ("Unexpected text node" en web). */}
+          {!!error && <HelperText type="error">{error}</HelperText>}
 
           <Text style={styles.hint}>
             Se generarán etiquetas con código de barras optimizadas para
