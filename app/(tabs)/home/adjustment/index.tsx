@@ -161,6 +161,8 @@ export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
       <AppList<InventoryAdjustmentItem>
       title="Ajustes de Inventario"
       service={Services.inventoryAdjustments}
+      // Abrir un ajuste pide inventory_read; crear, inventory_manage.
+      permissions={{ read: "inventory_read" }}
       defaultFilters={{
         location_id: selectedLocation?.id,
       }}

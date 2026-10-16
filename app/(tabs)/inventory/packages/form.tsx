@@ -118,6 +118,7 @@ export default function PackagesForm(props: PackagesFormProps) {
 
   return (
     <AppForm
+      permissionPrefix="products"
       deletePermission="products_delete"
       ref={formRef}
       api={Services.productPackages}

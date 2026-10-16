@@ -136,6 +136,8 @@ export default function InventoryPackagesIndex() {
     <>
       <AppList
         service={Services.productPackages}
+        // Paquetes usan los permisos de productos (ProductPackageController).
+        permissionPrefix="products"
         columns={columns}
         renderCard={({ item }: { item: any }) => ({
           title: item.package_name,
