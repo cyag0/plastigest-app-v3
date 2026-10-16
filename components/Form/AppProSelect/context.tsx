@@ -1,7 +1,9 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { onMutationSuccess } from "@/utils/axios";
+import { errorMessageOf } from "@/utils/errorNotice";
 import Services from "@/utils/services";
 import { IndexParams } from "@/utils/services/crudService";
+import { logCaughtError } from "@/utils/silenceLogs";
 import React, {
   createContext,
   useCallback,
@@ -237,7 +239,9 @@ export function SelectDataProvider({ children }: SelectDataProviderProps) {
         const service = getService(model);
         const fetchParams = { ...params, all: true }; // Obtener todos los registros para selects
 
-        const response = await service.index(fetchParams);
+        // silent: si falla, el select lo dice debajo del campo (y lo vuelve
+        // a intentar); el aviso global salía además en cada reintento.
+        const response = await service.index(fetchParams, { silent: true });
         let data = response.data;
 
         // Si la respuesta es paginada, extraer el array de datos
@@ -268,7 +272,7 @@ export function SelectDataProvider({ children }: SelectDataProviderProps) {
           },
         }));
       } catch (error: any) {
-        console.error(`Error fetching data for ${model}:`, error);
+        logCaughtError(`Error fetching data for ${model}:`, error);
 
         if (scopeRef.current !== requestScope) return;
 
@@ -277,7 +281,8 @@ export function SelectDataProvider({ children }: SelectDataProviderProps) {
           [cacheKey]: {
             data: prev[cacheKey]?.data ?? [],
             loading: false,
-            error: error?.message || "Error loading data",
+            // Texto para el usuario (el de axios venía en inglés).
+            error: errorMessageOf(error, "Inténtalo de nuevo."),
             lastFetch: null,
             failedAt: Date.now(),
             model,

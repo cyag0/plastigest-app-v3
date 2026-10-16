@@ -1,6 +1,7 @@
 import { useSelectData } from "@/components/Form/AppProSelect/context";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useCan } from "@/hooks/useCan";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import React, { useEffect, useMemo } from "react";
 import { View } from "react-native";
@@ -10,6 +11,9 @@ interface FlowRow {
   product_id?: number | string;
   unit_id?: number | string;
   expected_quantity?: number | string;
+  /** Nombres que trae la fórmula guardada (por si no hay catálogo). */
+  product_name?: string;
+  unit_name?: string;
 }
 
 interface Props {
@@ -28,13 +32,16 @@ export default function FormulaFlowSummary({ items, outputs }: Props) {
   const { colors } = useTheme();
   const styles = useStyles();
   const selectData = useSelectData();
+  // Sin units_list no se piden las unidades (el backend respondería 403).
+  const canListUnits = useCan().can("units_list");
 
   // Los catálogos ya los pide EditableTable; aquí sólo los leemos del cache
   // para resolver nombre y abreviatura sin disparar peticiones extra.
   useEffect(() => {
+    if (!canListUnits) return;
     selectData.fetchData("home.unidades");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [canListUnits]);
 
   const units = selectData.getCachedData("home.unidades").data ?? [];
   const consumables = selectData.getCachedData("products", { is_consumable: 1 }).data ?? [];
@@ -47,9 +54,9 @@ export default function FormulaFlowSummary({ items, outputs }: Props) {
       const qty = Number(row.expected_quantity) || 0;
 
       return {
-        name: product?.name ?? "Producto sin seleccionar",
+        name: product?.name ?? row.product_name ?? "Producto sin seleccionar",
         quantity: qty.toLocaleString("es-MX", { maximumFractionDigits: 3 }),
-        unit: unit?.abbreviation ?? unit?.name ?? "",
+        unit: unit?.abbreviation ?? unit?.name ?? row.unit_name ?? "",
       };
     };
 

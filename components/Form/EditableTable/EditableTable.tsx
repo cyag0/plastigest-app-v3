@@ -1,7 +1,9 @@
+import { useAppForm } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { useSelectData } from "@/components/Form/AppProSelect/context";
 import palette from "@/constants/palette";
+import { useCan } from "@/hooks/useCan";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
@@ -48,6 +50,11 @@ export interface EditableTableColumn {
   // for "number"
   helperText?: (row: any) => string | null;
   accentColor?: string;
+  /**
+   * "product" / "unit": campo del renglón con el nombre a mostrar si el
+   * catálogo no se puede cargar (p. ej. "material_name", "unit_name").
+   */
+  labelKey?: string;
 }
 
 export interface EditableTableProps {
@@ -61,6 +68,11 @@ export interface EditableTableProps {
   borderLeft?: boolean;
   // si se quiere un id-key custom para key de React
   rowKeyField?: string;
+  /**
+   * Solo lectura: sin "Agregar" ni el bote de cada renglón. Por defecto, el
+   * del formulario (AppForm en solo lectura o sin permiso para guardar).
+   */
+  readonly?: boolean;
 }
 
 export default function EditableTable({
@@ -73,8 +85,13 @@ export default function EditableTable({
   highlightColor,
   borderLeft = false,
   rowKeyField = "_key",
+  readonly: readonlyProp,
 }: EditableTableProps) {
   const { values, setFieldValue } = useFormikContext<any>();
+  const formContext = useAppForm();
+  // Antes la tabla de un formulario en solo lectura seguía agregando y
+  // quitando renglones (no se guardaba, pero parecía editable).
+  const readonly = readonlyProp ?? formContext.readonly;
   const rows: any[] = getIn(values, name) || [];
 
   const addRow = () => {
@@ -90,7 +107,7 @@ export default function EditableTable({
   };
 
   const totalWidth =
-    columns.reduce((acc, c) => acc + (c.width ?? 140), 0) + 60; // +60 for remove button
+    columns.reduce((acc, c) => acc + (c.width ?? 140), 0) + (readonly ? 0 : 60); // +60 for remove button
 
   return (
     <View style={{ marginBottom: 16 }}>
@@ -121,7 +138,9 @@ export default function EditableTable({
         <Card.Content style={{ padding: 0 }}>
           {rows.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={{ color: palette.textSecondary }}>{emptyMessage}</Text>
+              <Text style={{ color: palette.textSecondary }}>
+                {readonly ? "Sin renglones." : emptyMessage}
+              </Text>
             </View>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator>
@@ -139,9 +158,11 @@ export default function EditableTable({
                       </Text>
                     </View>
                   ))}
-                  <View style={[styles.cell, { width: 50 }]}>
-                    <Text style={styles.headerCellText}>—</Text>
-                  </View>
+                  {!readonly && (
+                    <View style={[styles.cell, { width: 50 }]}>
+                      <Text style={styles.headerCellText}>—</Text>
+                    </View>
+                  )}
                 </View>
 
                 {rows.map((row, index) => (
@@ -160,19 +181,21 @@ export default function EditableTable({
                         {renderCell(name, index, c, row)}
                       </View>
                     ))}
-                    <View style={[styles.cell, { width: 50, alignItems: "center" }]}>
-                      <TouchableOpacity
-                        onPress={() => removeRow(index)}
-                        style={styles.removeBtn}
-                        accessibilityLabel="Eliminar fila"
-                      >
-                        <MaterialCommunityIcons
-                          name="trash-can-outline"
-                          size={18}
-                          color={palette.error}
-                        />
-                      </TouchableOpacity>
-                    </View>
+                    {!readonly && (
+                      <View style={[styles.cell, { width: 50, alignItems: "center" }]}>
+                        <TouchableOpacity
+                          onPress={() => removeRow(index)}
+                          style={styles.removeBtn}
+                          accessibilityLabel="Eliminar fila"
+                        >
+                          <MaterialCommunityIcons
+                            name="trash-can-outline"
+                            size={18}
+                            color={palette.error}
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
                 ))}
               </View>
@@ -181,17 +204,19 @@ export default function EditableTable({
         </Card.Content>
       </Card>
 
-      <View style={{ marginTop: 8 }}>
-        <Button
-          icon="plus"
-          mode="contained-tonal"
-          onPress={addRow}
-          buttonColor={palette.surface}
-          textColor={palette.primary}
-        >
-          {addLabel}
-        </Button>
-      </View>
+      {!readonly && (
+        <View style={{ marginTop: 8 }}>
+          <Button
+            icon="plus"
+            mode="contained-tonal"
+            onPress={addRow}
+            buttonColor={palette.surface}
+            textColor={palette.primary}
+          >
+            {addLabel}
+          </Button>
+        </View>
+      )}
     </View>
   );
 
@@ -202,6 +227,10 @@ export default function EditableTable({
     row: any,
   ) {
     const fieldName = `${fieldArrayName}.${index}.${col.key}`;
+    // Nombre que trae el renglón, por si el catálogo no se puede cargar.
+    const labelField = col.labelKey
+      ? `${fieldArrayName}.${index}.${col.labelKey}`
+      : undefined;
     if (col.type === "product") {
       return (
         <FormProSelect
@@ -209,6 +238,7 @@ export default function EditableTable({
           model="products"
           fetchParams={col.productFetchParams}
           placeholder="Seleccionar producto"
+          selectedLabelField={labelField}
           required={col.required}
         />
       );
@@ -220,6 +250,7 @@ export default function EditableTable({
           fieldName={fieldName}
           productId={productCol ? row[productCol.key] : 0}
           productParams={productCol?.productFetchParams}
+          labelField={labelField}
           required={col.required}
         />
       );
@@ -291,23 +322,28 @@ function UnitCell({
   fieldName,
   productId,
   productParams,
+  labelField,
   required,
 }: {
   fieldName: string;
   productId: any;
   productParams?: Record<string, any>;
+  labelField?: string;
   required?: boolean;
 }) {
   const { values, setFieldValue } = useFormikContext<any>();
   const selectData = useSelectData();
   const paramsKey = JSON.stringify(productParams ?? null);
+  // Sin products_list el catálogo no se pide (el backend respondería 403).
+  const canListProducts = useCan().can("products_list");
 
   // Garantizamos que el catálogo de productos esté cargado para resolver el
   // tipo de medida del producto seleccionado.
   useEffect(() => {
+    if (!canListProducts) return;
     selectData.fetchData("products", productParams);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paramsKey]);
+  }, [paramsKey, canListProducts]);
 
   const product = useMemo(() => {
     if (!productId) return null;
@@ -358,6 +394,7 @@ function UnitCell({
       placeholder="Unidad"
       required={required}
       filterItem={filterItem}
+      selectedLabelField={labelField}
     />
   );
 }
@@ -389,12 +426,15 @@ function StockCell({
 
   const [stock, setStock] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(false);
+  // Sin products_list el catálogo no se pide (el backend respondería 403).
+  const canListProducts = useCan().can("products_list");
 
   // Catálogo de productos para resolver la unidad base del seleccionado.
   useEffect(() => {
+    if (!canListProducts) return;
     selectData.fetchData("products", productParams);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paramsKey]);
+  }, [paramsKey, canListProducts]);
 
   const product = useMemo(() => {
     if (!productId) return null;

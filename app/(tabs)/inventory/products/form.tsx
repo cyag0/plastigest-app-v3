@@ -229,11 +229,15 @@ export default function ProductsForm(props: ProductsFormProps) {
       >
         <Row isWide={isWide} styles={styles}>
           <Field isWide={isWide} styles={styles}>
+            {/* selectedLabelField: el nombre que trae el producto. Sin
+                permiso para listar el catálogo, el select no lo pide y
+                muestra ese nombre. */}
             <FormProSelect
               name="inventory_type_id"
               label="Tipo de Inventario"
               model="inventoryTypes"
               placeholder="Seleccione un tipo de inventario"
+              selectedLabelField="inventory_type.name"
               required
             />
           </Field>
@@ -244,6 +248,7 @@ export default function ProductsForm(props: ProductsFormProps) {
               label="Categoría"
               model="categories"
               placeholder="Seleccione una categoría"
+              selectedLabelField="category_name"
             />
           </Field>
 
@@ -253,6 +258,7 @@ export default function ProductsForm(props: ProductsFormProps) {
               name="unit_id"
               label="Unidad de Medida"
               placeholder="Seleccione una unidad de medida"
+              selectedLabelField="unit.name"
               required
               fetchParams={{
                 only_base: true,
@@ -274,6 +280,7 @@ export default function ProductsForm(props: ProductsFormProps) {
                     label="Proveedor"
                     model="suppliers"
                     placeholder="Seleccione un proveedor (opcional)"
+                    selectedLabelField="supplier_name"
                   />
                 </Field>
               );
@@ -462,6 +469,7 @@ function PackagingFields({
             model="products"
             placeholder="Granel del que sale (opcional)"
             fetchParams={{ is_producible: 1 }}
+            selectedLabelField="packaging_source_product.name"
           />
         </Field>
 
@@ -480,6 +488,7 @@ function PackagingFields({
             label="Unidad del granel"
             model="home.unidades"
             placeholder="Unidad"
+            selectedLabelField="packaging_source_unit.name"
           />
         </Field>
       </Row>
@@ -505,8 +514,16 @@ const PACKAGING_MATERIAL_COLUMNS: EditableTableColumn[] = [
     width: 230,
     required: true,
     productFetchParams: { inventory_type_code: "packaging_material" },
+    labelKey: "material_name",
   },
-  { key: "unit_id", label: "Unidad", type: "unit", width: 110, required: true },
+  {
+    key: "unit_id",
+    label: "Unidad",
+    type: "unit",
+    width: 110,
+    required: true,
+    labelKey: "unit_name",
+  },
   {
     key: "quantity",
     label: "Cantidad por unidad",

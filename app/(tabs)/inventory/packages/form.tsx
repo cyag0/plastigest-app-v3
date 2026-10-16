@@ -151,6 +151,7 @@ export default function PackagesForm(props: PackagesFormProps) {
         placeholder="Seleccione un producto"
         required
         fetchParams={{ company_id: company.id }}
+        selectedLabelField="product.name"
         onDataLoaded={setAllProducts}
         onChange={() => {
           // Clear unit when product changes so stale unit type isn't kept.
@@ -217,6 +218,7 @@ export default function PackagesForm(props: PackagesFormProps) {
         label="Unidad de Medida"
         model="home.unidades"
         placeholder="Seleccione una unidad"
+        selectedLabelField="unit.name"
         filterItem={
           productUnitType
             ? (item: any) => item.unit_type === productUnitType
