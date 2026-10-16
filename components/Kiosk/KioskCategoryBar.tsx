@@ -15,7 +15,9 @@ interface Props {
 
 export default function KioskCategoryBar({ categories, selectedId, onSelect }: Props) {
   const styles = useThemedStyles((c) => ({
-    scroll: { flexGrow: 0, backgroundColor: c.background },
+    // flexShrink 0: en web el ScrollView se encoge por omisión y la cuadrícula
+    // (flex 1) le quitaba el alto: las píldoras salían cortadas a la mitad.
+    scroll: { flexGrow: 0, flexShrink: 0, backgroundColor: c.background },
     content: { paddingHorizontal: 16, paddingVertical: 12, gap: 10, alignItems: "center" },
     pill: {
       minHeight: 48,
