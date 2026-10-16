@@ -1,4 +1,6 @@
-import axiosClient, { getAuthToken } from "@/utils/axios";
+import axiosClient, { describeError, getAuthToken } from "@/utils/axios";
+import { isApiError } from "@/utils/errorNotice";
+import { logHandledError } from "@/utils/silenceLogs";
 import { getAppVersionLabel, notifyChunkLoadError } from "@/utils/appVersion";
 import { isChunkLoadError } from "@/utils/versionCheck";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -174,6 +176,8 @@ async function send(payload: ErrorReportPayload): Promise<boolean> {
     await axiosClient.post(ENDPOINT, payload, {
       headers: { "Content-Type": "application/json" },
       timeout: 8000,
+      // Un reporte que no sale no se le anuncia al usuario.
+      silent: true,
     });
     return true;
   } catch {
@@ -227,6 +231,43 @@ async function flushPendingFatal(): Promise<void> {
 let handlersInstalled = false;
 
 /**
+ * Desarrollo en el teléfono: una petición al API rechazada sin catch abría el
+ * aviso rojo de LogBox, aunque el usuario ya ve la falla en el aviso de la app
+ * (utils/errorNotice). Esas van a la consola sin LogBox; cualquier otra
+ * promesa rechazada sin catch sigue llegando a LogBox (como error no fatal,
+ * por el manejador global) igual que con el rastreador de Expo, que este
+ * reemplaza.
+ */
+function installDevRejectionTracker(hermes: any, errorUtils: any): void {
+  const quietIds = new Set<number>();
+  hermes.enablePromiseRejectionTracker({
+    allRejections: true,
+    onUnhandled: (id: number, rejection: unknown) => {
+      if (isApiError(rejection)) {
+        quietIds.add(id);
+        logHandledError(`Petición sin catch (promesa ${id}):`, describeError(rejection));
+        return;
+      }
+      // Mismo texto que el rastreador de Expo, con la pila original.
+      const { message, stack } = describe(rejection);
+      const error = new Error(`Uncaught (in promise, id: ${id}): ${message}`);
+      if (stack) error.stack = stack;
+      if (errorUtils?.reportError) {
+        errorUtils.reportError(error);
+      } else {
+        console.error(`Uncaught (in promise, id: ${id})`, error);
+      }
+    },
+    onHandled: (id: number) => {
+      if (quietIds.delete(id)) return;
+      console.warn(
+        `Promise rejection handled (id: ${id})\nThis means you can ignore any previous messages of the form "Uncaught (in promise, id: ${id})"`,
+      );
+    },
+  });
+}
+
+/**
  * Errores que ningún try/catch ni error boundary atrapa: en web los de
  * window ("error" y "unhandledrejection"); en el teléfono el manejador
  * global de React Native (ErrorUtils) y, en producción, las promesas
@@ -272,9 +313,13 @@ export function installGlobalErrorHandlers(): void {
       });
     }
 
-    // En desarrollo React Native ya registra un rastreador (avisos de LogBox);
-    // en producción no hay ninguno.
+    // En desarrollo React Native (Expo) ya registra un rastreador que muestra
+    // cada promesa rechazada sin catch en el aviso rojo de LogBox; en
+    // producción no hay ninguno.
     const hermes = (globalThis as any).HermesInternal;
+    if (__DEV__ && hermes?.enablePromiseRejectionTracker) {
+      installDevRejectionTracker(hermes, errorUtils);
+    }
     if (!__DEV__ && hermes?.enablePromiseRejectionTracker) {
       hermes.enablePromiseRejectionTracker({
         allRejections: true,

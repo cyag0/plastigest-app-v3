@@ -7,6 +7,12 @@
  * (Authorization: Bearer …). Ese objeto se reduce a estado, método, ruta y
  * mensaje, y en textos y objetos se ocultan tokens y contraseñas.
  *
+ * En desarrollo (sobre todo en el teléfono) console.error abre el aviso rojo de
+ * LogBox. Una falla del API no es un error de la app: el usuario ya la ve en
+ * el aviso de la app (utils/errorNotice). Por eso esas fallas se registran con
+ * logHandledError y un console.error que trae un error de axios se registra
+ * igual; lo demás (errores de verdad) sigue llegando a LogBox.
+ *
  * Se importa primero en app/_layout.tsx.
  */
 
@@ -63,6 +69,45 @@ function withSanitizedArgs(original: (...args: unknown[]) => void) {
   };
 }
 
+function isAxiosError(value: unknown): boolean {
+  const candidate = value as any;
+  return Boolean(
+    candidate &&
+      typeof candidate === "object" &&
+      (candidate.isAxiosError || (candidate.config && "request" in candidate)),
+  );
+}
+
+// Referencias propias: console.info se calla en producción más abajo.
+const consoleInfo = console.info.bind(console);
+let consoleWarn = console.warn.bind(console);
+
+/**
+ * Registra una falla esperada (una petición al API que ya se le avisó al
+ * usuario) sin abrir LogBox: en desarrollo va a console.info (Metro y la
+ * consola del navegador); en producción a console.warn, limpio de tokens.
+ */
+export function logHandledError(...args: unknown[]): void {
+  if (__DEV__) {
+    consoleInfo(...args.map((arg) => sanitize(arg, 0)));
+  } else {
+    consoleWarn(...args);
+  }
+}
+
+/**
+ * Error atrapado en un catch: si es una falla del API va a logHandledError;
+ * si es un error de la app (un TypeError, p. ej.) sigue a console.error, que
+ * en desarrollo lo muestra en LogBox.
+ */
+export function logCaughtError(label: string, error: unknown): void {
+  if (isAxiosError(error)) {
+    logHandledError(label, error);
+  } else {
+    console.error(label, error);
+  }
+}
+
 if (!__DEV__) {
   const noop = () => {};
   console.log = noop;
@@ -70,6 +115,17 @@ if (!__DEV__) {
   console.debug = noop;
   console.warn = withSanitizedArgs(console.warn.bind(console));
   console.error = withSanitizedArgs(console.error.bind(console));
+  consoleWarn = console.warn;
+} else {
+  // Muchas pantallas hacen console.error("…", error) en su catch con el error
+  // de axios: en el teléfono eso abría el aviso rojo de LogBox por una falla
+  // que la app ya le muestra al usuario.
+  const consoleError = console.error.bind(console);
+  console.error = (...args: unknown[]) => {
+    if (args.some(isAxiosError)) {
+      logHandledError(...args);
+      return;
+    }
+    consoleError(...args);
+  };
 }
-
-export {};
