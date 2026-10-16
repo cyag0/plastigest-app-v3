@@ -640,7 +640,7 @@ export default function NotificationsScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
-              ) : null
+              ) : undefined
             }
             ListEmptyComponent={
               <View style={styles.emptyContainer}>

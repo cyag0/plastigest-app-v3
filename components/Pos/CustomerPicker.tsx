@@ -115,7 +115,7 @@ export default function CustomerPicker({ visible, onClose, onSelect }: Props) {
               ListEmptyComponent={
                 !loading && query.trim() ? (
                   <Text style={styles.notice}>Sin resultados para “{query.trim()}”.</Text>
-                ) : null
+                ) : undefined
               }
               renderItem={({ item }) => (
                 <Pressable onPress={() => pick(item)} style={styles.row}>

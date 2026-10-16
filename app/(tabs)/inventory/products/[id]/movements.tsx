@@ -187,7 +187,7 @@ export default function ProductMovements() {
           <Button onPress={onEndReached} style={styles.footer}>
             Cargar más
           </Button>
-        ) : null
+        ) : undefined
       }
     />
   );

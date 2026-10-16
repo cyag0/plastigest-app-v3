@@ -188,10 +188,11 @@ function ThemedApp() {
                   backgroundColor: colors.background,
                 }}
               >
-                <Stack
-                  screenOptions={{ headerShown: false }}
-                  initialRouteName="login"
-                >
+                {/* Sin ruta index, "/" abre la primera pantalla declarada
+                    (login). Desde SDK 58 los navegadores ya no aceptan
+                    initialRouteName; no se usa unstable_settings.anchor
+                    porque metería login debajo de los enlaces profundos. */}
+                <Stack screenOptions={{ headerShown: false }}>
                   <Stack.Screen
                     name="login"
                     options={{ headerShown: false }}

@@ -13,6 +13,7 @@ import {
   LayoutChangeEvent,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   Text,
   View,
 } from "react-native";
@@ -32,7 +33,7 @@ export default function HelpTopicScreen() {
   const { isLg, isXl } = useResponsive();
   const wide = isLg || isXl;
 
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const offsets = useRef<Record<string, number>>({});
   // Sección a la que falta llevar el scroll: se resuelve en cuanto se mide.
   const pendingScroll = useRef<string | undefined>(section);

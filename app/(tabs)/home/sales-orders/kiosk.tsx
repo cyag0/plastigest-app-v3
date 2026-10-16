@@ -26,8 +26,7 @@ import { newClientRequestId } from "@/utils/requestId";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { router } from "expo-router";
-import { usePreventRemove } from "expo-router/react-navigation";
+import { router, usePreventRemove } from "expo-router";
 import React, {
   memo,
   useCallback,

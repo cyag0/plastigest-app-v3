@@ -252,7 +252,7 @@ export default function ActivityTimeline({ userId = "me", title, scope }: Props)
           </Text>
         </View>
       }
-      ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: tokens.spacing[4] }} color={colors.primary} /> : null}
+      ListFooterComponent={loadingMore ? <ActivityIndicator style={{ padding: tokens.spacing[4] }} color={colors.primary} /> : undefined}
     />
   );
 }

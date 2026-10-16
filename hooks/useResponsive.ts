@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Dimensions } from "react-native";
+import { Dimensions, type DisplayMetrics } from "react-native";
 
 interface BreakpointConfig {
   xs: number; // Mobile
@@ -47,7 +47,7 @@ export function useResponsive(config: Partial<ResponsiveConfig> = {}) {
   const finalConfig = { ...defaultConfig, ...config };
 
   useEffect(() => {
-    const subscription = Dimensions.addEventListener("change", ({ window }) => {
+    const subscription = Dimensions.addEventListener("change", ({ window }: { window: DisplayMetrics }) => {
       setDimensions(window);
     });
 

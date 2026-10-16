@@ -4,7 +4,7 @@ import { parseMoney, parseQuantity } from "@/utils/format";
 import { centsToAmount } from "@/utils/money";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import { FlatList, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, TextInput, type TextInputInstance, View } from "react-native";
 import { IconButton, Text } from "react-native-paper";
 
 interface Props {
@@ -37,7 +37,7 @@ const formatQuantity = (n: number) => String(Math.round(n * 1000) / 1000);
 /** Carrito: tabla en escritorio, lista compacta en celular. */
 const CartTable = forwardRef<CartTableRef, Props>(function CartTable(props, ref) {
   const { lines, selectedKey, canEditPrice, compact } = props;
-  const inputs = useRef<Record<string, TextInput | null>>({});
+  const inputs = useRef<Record<string, TextInputInstance | null>>({});
 
   useImperativeHandle(ref, () => ({
     focusQuantity: (key) => inputs.current[key]?.focus(),
@@ -145,7 +145,7 @@ interface QuantityInputProps {
  * evento onBlur, que en Android no lo trae: la cantidad tecleada se ignoraba
  * pero seguía viéndose en el campo y se cobraba la anterior.
  */
-const QuantityInput = forwardRef<TextInput, QuantityInputProps>(function QuantityInput(
+const QuantityInput = forwardRef<TextInputInstance, QuantityInputProps>(function QuantityInput(
   { value, allowDecimal, onFocus, onCommit },
   ref,
 ) {

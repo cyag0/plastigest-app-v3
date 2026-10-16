@@ -18,8 +18,7 @@ import { printSaleTicket } from "@/utils/printDocument";
 import { newClientRequestId } from "@/utils/requestId";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router, useLocalSearchParams, useNavigation } from "expo-router";
-import { usePreventRemove } from "expo-router/react-navigation";
+import { router, useLocalSearchParams, useNavigation, usePreventRemove } from "expo-router";
 import React, { useLayoutEffect, useRef, useState } from "react";
 import {
   Image,

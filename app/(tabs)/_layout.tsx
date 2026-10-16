@@ -20,6 +20,19 @@ import { useThemedStyles } from "@/hooks/useThemedStyles";
 // reportes, preferencias): se reemplaza esta área y el error se reporta.
 export { RouteErrorBoundary as ErrorBoundary } from "@/components/ErrorBoundary";
 
+// Pestaña inicial (SDK 58 quitó la prop initialRouteName de los navegadores).
+export const unstable_settings = { anchor: "home" };
+
+/**
+ * Pantallas sin botón en la barra (notificaciones, tareas, preferencias).
+ * Desde SDK 58 `href: null` además las vuelve inalcanzables (redirige a la
+ * pestaña inicial), así que solo se oculta el botón.
+ */
+const HIDDEN_TAB_OPTIONS = {
+  tabBarButton: () => null,
+  tabBarItemStyle: { display: "none" },
+} as const;
+
 /**
  * Pantallas para la versión web. Se reutiliza tanto cuando el
  * sidebar es inline (desktop/tablet) como cuando es overlay (móvil),
@@ -32,7 +45,6 @@ function WebTabs() {
         tabBarStyle: { display: "none" },
         headerShown: false,
       }}
-      initialRouteName="home"
     >
       <Tabs.Screen name="home" />
       <Tabs.Screen name="inventory" />
@@ -69,9 +81,9 @@ function WebTabs() {
           ),
         }}
       />
-      <Tabs.Screen name="notifications" options={{ href: null }} />
-      <Tabs.Screen name="tasks" options={{ href: null }} />
-      <Tabs.Screen name="preferences" options={{ href: null }} />
+      <Tabs.Screen name="notifications" options={HIDDEN_TAB_OPTIONS} />
+      <Tabs.Screen name="tasks" options={HIDDEN_TAB_OPTIONS} />
+      <Tabs.Screen name="preferences" options={HIDDEN_TAB_OPTIONS} />
     </Tabs>
   );
 }
@@ -200,7 +212,6 @@ function NativeTabLayout() {
         },
         headerShown: false,
       }}
-      initialRouteName="home"
     >
       <Tabs.Screen
         name="home"
@@ -281,24 +292,9 @@ function NativeTabLayout() {
         }}
       />
 
-      <Tabs.Screen
-        name="notifications"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="tasks"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="preferences"
-        options={{
-          href: null,
-        }}
-      />
+      <Tabs.Screen name="notifications" options={HIDDEN_TAB_OPTIONS} />
+      <Tabs.Screen name="tasks" options={HIDDEN_TAB_OPTIONS} />
+      <Tabs.Screen name="preferences" options={HIDDEN_TAB_OPTIONS} />
     </Tabs>
   );
 }
