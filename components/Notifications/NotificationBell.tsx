@@ -4,8 +4,15 @@ import {
   getNotificationLink,
   NOTIFICATIONS_INBOX_ROUTE,
   notificationPreferencesRoute,
+  type NotificationLink,
 } from "@/components/Notifications/notificationLinks";
 import NotificationsPopover from "@/components/Notifications/NotificationsPopover";
+import { markNotificationReadQuietly } from "@/components/Notifications/notificationRequests";
+import {
+  isLinkedRecordNote,
+  type LinkedRecordNote,
+  useLinkedRecordOpener,
+} from "@/components/Notifications/useLinkedRecordOpener";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -79,6 +86,9 @@ export default function NotificationBell({
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedNotification, setSelectedNotification] =
     useState<App.Entities.Notification | null>(null);
+  // Por qué no se abrió el registro del aviso (lo explica el modal).
+  const [selectedLinkNote, setSelectedLinkNote] = useState<LinkedRecordNote | null>(null);
+  const { open: openLinkedRecord } = useLinkedRecordOpener();
 
   const closeMenu = useCallback(() => setMenuVisible(false), []);
 
@@ -96,40 +106,46 @@ export default function NotificationBell({
     async (notification: App.Entities.Notification) => {
       setMenuVisible(false);
 
-      // Igual que en la bandeja y en el push: se abre el registro
-      // relacionado; si el aviso no trae su id, el detalle en un modal.
-      const target = getNotificationLink(notification.event_type, notification.data);
-      if (target) {
-        router.push(target.route as any);
-      } else {
-        setSelectedNotification({ ...notification, is_read: true });
-      }
-
       // Marcamos como leida en el backend para que el badge baje; usamos el
       // mismo patron silencioso que la pagina completa (sin toast).
-      if (notification.is_read) return;
-      try {
-        await services.notifications.markAsRead(notification.id);
-      } catch (error) {
-        console.warn("No se pudo marcar como leída:", error);
-      } finally {
-        loadUnreadNotificationsCount();
+      if (!notification.is_read) {
+        markNotificationReadQuietly(notification.id)
+          .catch((error) => console.warn("No se pudo marcar como leída:", error))
+          .finally(() => {
+            loadUnreadNotificationsCount();
+          });
+      }
+
+      // Igual que en la bandeja y en el push: se abre el registro
+      // relacionado (si existe, se puede ver y es de esta sucursal); si el
+      // aviso no trae su id o el registro no se pudo abrir, el detalle en un
+      // modal con el motivo.
+      const target = getNotificationLink(notification.event_type, notification.data);
+      const outcome = target ? await openLinkedRecord(target) : null;
+      if (!target || isLinkedRecordNote(outcome)) {
+        setSelectedNotification({ ...notification, is_read: true });
+        setSelectedLinkNote(isLinkedRecordNote(outcome) ? outcome : null);
       }
     },
-    [loadUnreadNotificationsCount, router],
-  );
-
-  const openRelated = useCallback(
-    (route: string) => {
-      setSelectedNotification(null);
-      router.push(route as any);
-    },
-    [router],
+    [loadUnreadNotificationsCount, openLinkedRecord],
   );
 
   const closeDetail = useCallback(() => {
     setSelectedNotification(null);
+    setSelectedLinkNote(null);
   }, []);
+
+  // Botón del modal: mismas revisiones; al navegar se cierra el modal.
+  const openRelated = useCallback(
+    (link: NotificationLink) =>
+      openLinkedRecord(link, {
+        navigate: (route) => {
+          closeDetail();
+          router.push(route as any);
+        },
+      }),
+    [closeDetail, openLinkedRecord, router],
+  );
 
   const handleDelete = useCallback(async () => {
     if (!selectedNotification) return;
@@ -205,12 +221,13 @@ export default function NotificationBell({
         />
       </Menu>
 
-      {/* Detalle de los avisos que no llevan a otra pantalla. */}
+      {/* Detalle de los avisos sin registro relacionado o cuyo registro no se pudo abrir. */}
       <NotificationDetailModal
         notification={selectedNotification}
         onDismiss={closeDetail}
         onDelete={handleDelete}
         onOpenLink={openRelated}
+        linkNote={selectedLinkNote}
       />
     </>
   );

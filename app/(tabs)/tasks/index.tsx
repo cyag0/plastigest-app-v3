@@ -9,10 +9,14 @@ import ListSearchbar from "@/components/App/ListSearchbar";
 import TaskDetailContent, {
   type TaskAction,
 } from "@/components/Tasks/TaskDetailContent";
+import type { NotificationLink } from "@/components/Notifications/notificationLinks";
+import { useLinkedRecordOpener } from "@/components/Notifications/useLinkedRecordOpener";
 import TaskRow from "@/components/Tasks/TaskRow";
 import {
   fetchMyOpenTasks,
   fetchMyTasks,
+  fetchTask,
+  isTaskNotFound,
 } from "@/components/Tasks/taskQueries";
 import {
   getTaskErrorMessage,
@@ -76,6 +80,7 @@ export default function TasksScreen() {
   const { hasPermission, user, location } = useAuth();
   const { colors } = useTheme();
   const hasTasksUpdate = hasPermission("tasks_update");
+  const { open: openLinkedRecord } = useLinkedRecordOpener();
   const permissionsFor = (task: App.Entities.Task) =>
     getTaskPermissions(task, user?.id, hasTasksUpdate);
   const { width, height } = useWindowDimensions();
@@ -198,13 +203,16 @@ export default function TasksScreen() {
   const loadTaskDetail = async (taskId: number) => {
     try {
       setSelectedTaskLoading(true);
-      const response = await services.tasks.show(taskId);
-      const raw = response.data as any;
-      const data = raw?.data ?? raw;
-      setSelectedTask(data as App.Entities.Task);
+      setSelectedTask(await fetchTask(taskId));
     } catch (error) {
-      console.error("Error loading task detail:", error);
-      alerts.error(getTaskErrorMessage(error, "No se pudo abrir la tarea"));
+      if (isTaskNotFound(error)) {
+        // Se borró mientras se veía la lista: se cierra y se quita de ella.
+        setDetailVisible(false);
+        alerts.info("Esta tarea ya no existe.");
+        void loadTasks();
+      } else {
+        alerts.error(getTaskErrorMessage(error, "No se pudo abrir la tarea"));
+      }
     } finally {
       setSelectedTaskLoading(false);
     }
@@ -269,10 +277,15 @@ export default function TasksScreen() {
     }
   };
 
-  const openRelatedRoute = (route: string) => {
-    setDetailVisible(false);
-    router.push(route as any);
-  };
+  // "Ver compra / transferencia…" del modal: revisa permiso, que exista y su
+  // sucursal; al navegar se cierra el modal.
+  const openRelated = (link: NotificationLink) =>
+    openLinkedRecord(link, {
+      navigate: (route) => {
+        setDetailVisible(false);
+        router.push(route as any);
+      },
+    });
 
   const resetFilters = () => {
     setSearch("");
@@ -428,7 +441,7 @@ export default function TasksScreen() {
                   task={selectedTask}
                   onChangeStatus={(action) => handleTaskAction(selectedTask, action)}
                   onAddComment={handleAddComment}
-                  onOpenRoute={openRelatedRoute}
+                  onOpenLink={openRelated}
                   canAct={permissionsFor(selectedTask).canAct}
                   canCancel={permissionsFor(selectedTask).canCancel}
                   pendingAction={

@@ -1,56 +1,81 @@
-import { goBack } from "@/utils/navigation";
+import EmptyState from "@/components/App/EmptyState";
 import NotificationDetailContent from "@/components/Notifications/NotificationDetailContent";
+import {
+  fetchNotification,
+  markNotificationReadQuietly,
+} from "@/components/Notifications/notificationRequests";
+import { useLinkedRecordOpener } from "@/components/Notifications/useLinkedRecordOpener";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { goBack } from "@/utils/navigation";
 import services from "@/utils/services";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { ActivityIndicator } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function NotificationDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, open } = useLocalSearchParams<{ id: string; open?: string }>();
   const router = useRouter();
   const alerts = useAlerts();
   const { colors } = useTheme();
   const { loadUnreadNotificationsCount } = useAuth();
+  const { open: openLinkedRecord } = useLinkedRecordOpener();
 
   const [notification, setNotification] = useState<App.Entities.Notification | null>(null);
   const [loading, setLoading] = useState(true);
+  // "missing" = ya no existe (se borró); "error" = no se pudo cargar.
+  const [problem, setProblem] = useState<"missing" | "error" | null>(null);
+  const loadedOnceRef = useRef(false);
+
+  // Push tocado (?open=1): el registro del aviso se abre solo al cargar. Una
+  // vez: el parámetro se quita para que al volver o recargar no se repita.
+  const [autoOpen] = useState(open === "1");
+  useEffect(() => {
+    if (open === "1") router.setParams({ open: undefined } as any);
+    // Solo al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const notificationId = Number(id);
 
   const loadNotification = useCallback(async () => {
     if (!notificationId) {
+      setProblem("missing");
+      setLoading(false);
       return;
     }
 
     try {
-      setLoading(true);
-      const response = await services.notifications.show(notificationId);
-      // El show devuelve la notificación sin envolver y ésta trae su propio
-      // campo `data` (el payload del evento): no confundirlo con un wrapper.
-      const body = response.data as any;
-      const item: App.Entities.Notification =
-        body && body.id !== undefined ? body : body?.data;
+      // El loader de pantalla completa solo la primera vez: al volver del
+      // registro relacionado se refresca sin desmontar el detalle.
+      if (!loadedOnceRef.current) setLoading(true);
+      // Sin aviso global: una notificación borrada se explica aquí.
+      const item = await fetchNotification(notificationId);
       setNotification(item);
+      setProblem(null);
+      loadedOnceRef.current = true;
 
       if (!item.is_read) {
-        await services.notifications.markAsRead(item.id);
+        // En segundo plano: si falla, el detalle se ve igual.
         setNotification({ ...item, is_read: true, read_at: new Date().toISOString() });
-        loadUnreadNotificationsCount();
+        markNotificationReadQuietly(item.id)
+          .catch(() => undefined)
+          .finally(() => {
+            loadUnreadNotificationsCount();
+          });
       }
       // loadUnreadNotificationsCount es estable (useCallback en AuthContext):
       // refrescar el contador ya no vuelve a disparar esta carga.
-    } catch {
-      alerts.error("Error al cargar la notificación");
-      goBack();
+    } catch (error: any) {
+      if (loadedOnceRef.current) return; // ya se muestra: se queda como estaba
+      setProblem(error?.response?.status === 404 ? "missing" : "error");
     } finally {
       setLoading(false);
     }
-  }, [alerts, loadUnreadNotificationsCount, notificationId]);
+  }, [loadUnreadNotificationsCount, notificationId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -83,11 +108,37 @@ export default function NotificationDetailScreen() {
     }
   };
 
-  if (loading || !notification) {
+  if (loading) {
     return (
       <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
-        <View style={styles.loadingContainer}>
+        <View style={styles.centered}>
           <ActivityIndicator color={colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!notification || problem) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={["bottom"]}>
+        <View style={styles.centered}>
+          {problem === "error" ? (
+            <EmptyState
+              icon="cloud-off-outline"
+              title="No se pudo cargar la notificación"
+              description="Revisa tu conexión e intenta de nuevo."
+              actionLabel="Reintentar"
+              onAction={loadNotification}
+            />
+          ) : (
+            <EmptyState
+              icon="bell-off-outline"
+              title="Esta notificación ya no existe"
+              description="Pudo haberse eliminado."
+              actionLabel="Ver notificaciones"
+              onAction={() => router.replace("/(tabs)/notifications" as any)}
+            />
+          )}
         </View>
       </SafeAreaView>
     );
@@ -98,7 +149,8 @@ export default function NotificationDetailScreen() {
       <NotificationDetailContent
         notification={notification}
         onDelete={handleDelete}
-        onOpenLink={(route) => router.push(route as any)}
+        onOpenLink={(link) => openLinkedRecord(link)}
+        autoOpenLink={autoOpen}
       />
     </SafeAreaView>
   );
@@ -108,9 +160,10 @@ const styles = {
   safeArea: {
     flex: 1,
   },
-  loadingContainer: {
+  centered: {
     flex: 1,
     alignItems: "center" as const,
     justifyContent: "center" as const,
+    padding: 24,
   },
 };

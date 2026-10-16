@@ -8,6 +8,8 @@ import {
   TASK_ACTION_MESSAGES,
   getTaskPermissions,
 } from "@/components/Tasks/taskPresentation";
+import { useLinkedRecordOpener } from "@/components/Notifications/useLinkedRecordOpener";
+import { fetchTask, isTaskNotFound } from "@/components/Tasks/taskQueries";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -24,8 +26,11 @@ export default function TaskDetailScreen() {
   const { colors } = useTheme();
   const { hasPermission, user } = useAuth();
   const hasTasksUpdate = hasPermission("tasks_update");
+  const { open: openLinkedRecord } = useLinkedRecordOpener();
   const [task, setTask] = useState<App.Entities.Task | null>(null);
   const [loading, setLoading] = useState(true);
+  // No se pudo cargar (sin conexión, error del servidor): se ofrece reintentar.
+  const [loadFailed, setLoadFailed] = useState(false);
   const [pendingAction, setPendingAction] = useState<TaskAction | null>(null);
   const loadedOnceRef = useRef(false);
 
@@ -41,17 +46,21 @@ export default function TaskDetailScreen() {
       // El loader de pantalla completa solo la primera vez; al volver (p. ej.
       // de recibir la compra relacionada) se refresca sin parpadeo.
       if (!loadedOnceRef.current) setLoading(true);
-      const response = await services.tasks.show(taskId);
-      const data = response.data?.data || response.data;
-      setTask(data as App.Entities.Task);
+      setTask(await fetchTask(taskId));
+      setLoadFailed(false);
       loadedOnceRef.current = true;
     } catch (error) {
-      console.error("Error loading task:", error);
-      alerts.error(getTaskErrorMessage(error, "No se pudo cargar la tarea"));
+      // Ya no existe: se muestra el estado vacío en lugar de un error.
+      if (isTaskNotFound(error)) {
+        setTask(null);
+      } else if (!loadedOnceRef.current) {
+        setLoadFailed(true);
+      }
+      // Al volver a la pantalla sin conexión se queda la que ya se veía.
     } finally {
       setLoading(false);
     }
-  }, [alerts, taskId]);
+  }, [taskId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -120,11 +129,23 @@ export default function TaskDetailScreen() {
   if (!task) {
     return (
       <View style={styles.centerContainer}>
-        <EmptyState
-          icon="clipboard-remove-outline"
-          title="Tarea no encontrada"
-          description="Pudo haberse eliminado o no tienes acceso a ella."
-        />
+        {loadFailed ? (
+          <EmptyState
+            icon="cloud-off-outline"
+            title="No se pudo cargar la tarea"
+            description="Revisa tu conexión e intenta de nuevo."
+            actionLabel="Reintentar"
+            onAction={loadTask}
+          />
+        ) : (
+          <EmptyState
+            icon="clipboard-remove-outline"
+            title="Esta tarea ya no existe"
+            description="Pudo haberse eliminado."
+            actionLabel="Ver mis tareas"
+            onAction={() => router.replace("/(tabs)/tasks" as any)}
+          />
+        )}
       </View>
     );
   }
@@ -136,7 +157,7 @@ export default function TaskDetailScreen() {
       task={task}
       onChangeStatus={handleChangeStatus}
       onAddComment={handleAddComment}
-      onOpenRoute={(route) => router.push(route as any)}
+      onOpenLink={(link) => openLinkedRecord(link)}
       canAct={permissions.canAct}
       canCancel={permissions.canCancel}
       pendingAction={pendingAction}

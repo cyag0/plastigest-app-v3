@@ -4,6 +4,12 @@ import {
   ListSection,
   ListValueRow,
 } from "@/components/App/ListGroup";
+import LinkedRecordAction from "@/components/Notifications/LinkedRecordAction";
+import type { NotificationLink } from "@/components/Notifications/notificationLinks";
+import type {
+  LinkedRecordNote,
+  LinkedRecordOutcome,
+} from "@/components/Notifications/useLinkedRecordOpener";
 import { useTheme } from "@/contexts/ThemeContext";
 import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { formatDateTime } from "@/utils/dates";
@@ -29,6 +35,17 @@ import {
 } from "./taskPresentation";
 
 export type TaskAction = "start" | "complete" | "cancel";
+
+// El backend mandó la relación vacía: el registro ya no existe. Objetos fijos
+// por tipo para que LinkedRecordAction no los tome como uno nuevo.
+const RELATED_GONE: Record<string, LinkedRecordNote> = {
+  purchase: { type: "gone", message: "Esta compra ya no existe." },
+  transfer: { type: "gone", message: "Esta transferencia ya no existe." },
+  count: { type: "gone", message: "Este conteo ya no existe." },
+  adjustment: { type: "gone", message: "Este ajuste ya no existe." },
+};
+const relatedGoneNote = (kind: string): LinkedRecordNote =>
+  RELATED_GONE[kind] ?? { type: "gone", message: "El registro ya no existe." };
 
 function CommentComposer({
   onAddComment,
@@ -85,7 +102,7 @@ export default function TaskDetailContent({
   task,
   onChangeStatus,
   onAddComment,
-  onOpenRoute,
+  onOpenLink,
   canAct = true,
   canCancel,
   pendingAction = null,
@@ -93,8 +110,12 @@ export default function TaskDetailContent({
   task: App.Entities.Task;
   onChangeStatus?: (action: TaskAction) => Promise<void>;
   onAddComment?: (comment: string) => Promise<boolean | void>;
-  /** Abre una ruta (registro relacionado); el padre cierra su modal si aplica. */
-  onOpenRoute?: (route: string) => void;
+  /**
+   * Abre el registro relacionado: el `open` de useLinkedRecordOpener del
+   * padre, que revisa permiso, que exista y su sucursal, y cierra su modal si
+   * navega (el modal de Paper queda fuera de AlertsProvider).
+   */
+  onOpenLink?: (link: NotificationLink) => Promise<LinkedRecordOutcome>;
   canAct?: boolean;
   /** Cancelar: tasks_update o quien creó la tarea (por defecto, igual que canAct). */
   canCancel?: boolean;
@@ -114,7 +135,7 @@ export default function TaskDetailContent({
   const showActions = Boolean(onChangeStatus) && canAct && isOpen;
   const canStart = showActions && canStartTask(task);
   const busy = pendingAction !== null;
-  const relatedLink = onOpenRoute ? getTaskRelatedLink(task) : null;
+  const relatedLink = onOpenLink ? getTaskRelatedLink(task) : null;
   const assignedTo = getTaskUser(task, "assigned_to");
   const assignedBy = getTaskUser(task, "assigned_by");
   const completedBy = getTaskUser(task, "completed_by");
@@ -157,16 +178,14 @@ export default function TaskDetailContent({
           </View>
         </View>
 
-        {relatedLink && onOpenRoute && (
-          <Button
+        {relatedLink && onOpenLink && (
+          <LinkedRecordAction
+            key={relatedLink.route}
+            link={relatedLink}
             mode="outlined"
-            icon="arrow-right"
-            contentStyle={styles.relatedButtonContent}
-            onPress={() => onOpenRoute(relatedLink.route)}
-            style={styles.relatedButton}
-          >
-            {relatedLink.label}
-          </Button>
+            onOpen={onOpenLink}
+            initialNote={relatedLink.gone ? relatedGoneNote(relatedLink.kind) : null}
+          />
         )}
 
         {!!task.description && (
@@ -297,9 +316,6 @@ const makeStyles = themedStyles((c) => ({
   },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
   status: { fontSize: 14, fontWeight: "500", color: c.textSecondary, flexShrink: 1 },
-
-  relatedButton: { alignSelf: "flex-start" },
-  relatedButtonContent: { flexDirection: "row-reverse" },
 
   body: { fontSize: 15, lineHeight: 22, color: c.text },
   calm: { fontSize: 14, color: c.textSecondary },

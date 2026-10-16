@@ -4,7 +4,11 @@ import {
   ListSection,
   ListValueRow,
 } from "@/components/App/ListGroup";
-import { getNotificationLink } from "@/components/Notifications/notificationLinks";
+import LinkedRecordAction from "@/components/Notifications/LinkedRecordAction";
+import {
+  getNotificationLink,
+  type NotificationLink,
+} from "@/components/Notifications/notificationLinks";
 import {
   getNotificationCategoryLabel,
   getNotificationIcon,
@@ -17,6 +21,7 @@ import { formatDateTime } from "@/utils/dates";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { ScrollView, Text, useWindowDimensions, View } from "react-native";
 import { Button } from "react-native-paper";
+import type { LinkedRecordNote, LinkedRecordOutcome } from "./useLinkedRecordOpener";
 
 type DetailRow = {
   label: string;
@@ -84,17 +89,26 @@ function buildDataRows(
  *
  * `onOpenLink` muestra el botón para abrir el registro relacionado (tarea,
  * compra, transferencia…) cuando el payload trae su id; el padre navega
- * (y cierra su modal si lo tiene).
+ * (y cierra su modal si lo tiene). Antes de navegar se revisa permiso,
+ * existencia y sucursal (LinkedRecordAction): si no se puede abrir, queda
+ * el motivo en lugar del botón.
  */
 export default function NotificationDetailContent({
   notification,
   onDelete,
   onOpenLink,
+  linkNote = null,
+  autoOpenLink = false,
   inModal = false,
 }: {
   notification: App.Entities.Notification;
   onDelete?: () => void;
-  onOpenLink?: (route: string) => void;
+  /** Abre el registro: el `open` de useLinkedRecordOpener del padre. */
+  onOpenLink?: (link: NotificationLink) => Promise<LinkedRecordOutcome>;
+  /** Por qué no se abrió el registro al tocar el aviso en la lista. */
+  linkNote?: LinkedRecordNote | null;
+  /** Abrir el registro al cargar (push tocado). */
+  autoOpenLink?: boolean;
   /** Dentro de un modal: sin ocupar toda la altura ni limitar el ancho. */
   inModal?: boolean;
 }) {
@@ -135,15 +149,13 @@ export default function NotificationDetailContent({
       </View>
 
       {relatedLink && onOpenLink && (
-        <Button
-          mode="contained"
-          icon="arrow-right"
-          contentStyle={styles.linkButtonContent}
-          onPress={() => onOpenLink(relatedLink.route)}
-          style={styles.linkButton}
-        >
-          {relatedLink.label}
-        </Button>
+        <LinkedRecordAction
+          key={`${notification.id}:${linkNote?.type ?? ""}`}
+          link={relatedLink}
+          onOpen={onOpenLink}
+          initialNote={linkNote}
+          autoOpen={autoOpenLink}
+        />
       )}
 
       {dataRows.length > 0 && (
@@ -190,7 +202,5 @@ const makeStyles = themedStyles((c) => ({
   },
   message: { fontSize: 15, lineHeight: 22, color: c.text, marginTop: 4 },
 
-  linkButton: { alignSelf: "flex-start" },
-  linkButtonContent: { flexDirection: "row-reverse" },
   deleteButton: { alignSelf: "flex-start", marginLeft: -12 },
 }));

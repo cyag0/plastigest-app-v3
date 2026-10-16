@@ -1,3 +1,7 @@
+import {
+  recordLink,
+  type NotificationLink,
+} from "@/components/Notifications/notificationLinks";
 import { formatDate } from "@/utils/dates";
 import type { MaterialCommunityIcons } from "@expo/vector-icons";
 
@@ -282,26 +286,39 @@ export function mergeUpdatedTask(
   };
 }
 
-/** Registro que originó la tarea (compra, transferencia, conteo…). */
+// Modelo del backend (related_type) → tipo de registro que abre la app.
+const RELATED_KINDS: Record<string, "purchase" | "transfer" | "count" | "adjustment"> = {
+  PurchaseV2: "purchase",
+  InventoryTransfer: "transfer",
+  InventoryCount: "count",
+  // El ajuste de inventario es un renglón: InventoryAdjustmentDetail (la
+  // pantalla /home/adjustment/{id} abre ese id).
+  InventoryAdjustmentDetail: "adjustment",
+  InventoryAdjustment: "adjustment",
+};
+
+/**
+ * Registro que originó la tarea (compra, transferencia, conteo, ajuste), con
+ * la sucursal de la tarea: ahí se trabaja (recibir la compra o la
+ * transferencia, revisar el conteo). `gone`: el backend mandó la relación
+ * vacía, el registro ya no existe.
+ */
 export function getTaskRelatedLink(
   task: App.Entities.Task,
-): { route: string; label: string } | null {
+): (NotificationLink & { gone: boolean }) | null {
   const id = task.related_id;
   if (!id || !task.related_type) return null;
-  const model = task.related_type.split("\\").pop();
-  switch (model) {
-    case "PurchaseV2":
-      return { route: `/(tabs)/home/purchases/${id}`, label: "Ver compra" };
-    case "InventoryTransfer":
-      return { route: `/(tabs)/home/transfers/${id}`, label: "Ver transferencia" };
-    case "InventoryCount":
-      return {
-        route: `/(tabs)/inventory/weekly-inventory/${id}`,
-        label: "Ver conteo",
-      };
-    case "InventoryAdjustment":
-      return { route: `/(tabs)/home/adjustment/${id}`, label: "Ver ajuste" };
-    default:
-      return null;
-  }
+  const model = task.related_type.split("\\").pop() ?? "";
+  const kind = RELATED_KINDS[model];
+  if (!kind) return null;
+  const locationId = Number(task.location_id ?? task.location?.id);
+  const link = recordLink(
+    kind,
+    id,
+    Number.isInteger(locationId) && locationId > 0 ? [locationId] : undefined,
+    task.location?.name,
+  );
+  // "related" solo cuenta si vino en la respuesta (show e index lo cargan).
+  const gone = "related" in task && task.related === null;
+  return { ...link, gone };
 }

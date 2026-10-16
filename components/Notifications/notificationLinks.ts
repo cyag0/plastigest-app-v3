@@ -8,18 +8,49 @@
  * string y los nulos como "" (FCM no admite null), por eso los ids se
  * normalizan aquí.
  *
- * IMPORTANTE: mantener sincronizado con routeForNotification() de
- * public/firebase-messaging-sw.js (allá van las mismas rutas pero en formato
- * URL web, sin los grupos "(tabs)").
+ * IMPORTANTE: mantener las rutas sincronizadas con routeForNotification()
+ * de public/firebase-messaging-sw.js (allá van en formato URL web, sin los
+ * grupos "(tabs)").
  */
 
 type NotificationData = Record<string, unknown> | null | undefined;
+
+/**
+ * Qué registro abre el enlace. Con el tipo se revisa, antes de navegar, que
+ * el registro siga existiendo, que el usuario pueda verlo y en qué sucursal
+ * está (ver useLinkedRecordOpener). "reminders" abre la lista (no hay
+ * detalle de un recordatorio).
+ */
+export type LinkedRecordKind =
+  | "task"
+  | "purchase"
+  | "transfer"
+  | "count"
+  | "adjustment"
+  | "product"
+  | "reminders";
 
 export interface NotificationLink {
   /** Ruta de expo-router, p. ej. "/(tabs)/tasks/12". */
   route: string;
   /** Texto del botón que abre la ruta, p. ej. "Ver tarea". */
   label: string;
+  kind: LinkedRecordKind;
+  /** Id del registro (sin id en "reminders"). */
+  id?: string;
+  /**
+   * Sucursal donde se trabaja el registro, si se sabe: location_id del aviso
+   * o la sucursal de la tarea. En una transferencia pueden ser dos (origen y
+   * destino); la primera es la preferida al ofrecer el cambio de sucursal.
+   */
+  locationIds?: number[];
+  /** Nombre de esa sucursal, si se sabe (la tarea lo trae). */
+  locationName?: string | null;
+  /**
+   * Transferencia sin sucursales en el aviso: a qué lado conviene cambiarse
+   * si la sucursal actual no es ni el origen ni el destino.
+   */
+  transferSide?: "from" | "to";
 }
 
 export const NOTIFICATIONS_INBOX_ROUTE = "/(tabs)/notifications";
@@ -40,6 +71,16 @@ export function notificationDetailRoute(id: number | string) {
 }
 
 /**
+ * Detalle de la notificación que abre solo su registro al cargar (push
+ * tocado, aviso que no se pudo abrir desde la lista): si el registro ya no
+ * existe, es de otra sucursal o no hay permiso, el detalle lo explica en
+ * lugar de navegar a una pantalla con error.
+ */
+export function notificationOpenRoute(id: number | string) {
+  return `${notificationDetailRoute(id)}?open=1`;
+}
+
+/**
  * Id de entidad válido como string, o null si falta ("", "null", 0…).
  * Solo se aceptan enteros positivos: van directo a una ruta.
  */
@@ -51,43 +92,90 @@ export function readEntityId(data: NotificationData, key: string): string | null
   return value;
 }
 
-const link = (route: string, label: string): NotificationLink => ({
-  route,
-  label,
+/** Sucursales del aviso (en orden de preferencia), sin repetir ni vacías. */
+function readLocationIds(data: NotificationData, keys: string[]): number[] | undefined {
+  const ids = keys
+    .map((key) => readEntityId(data, key))
+    .filter((value): value is string => value !== null)
+    .map(Number);
+  const unique = [...new Set(ids)];
+  return unique.length > 0 ? unique : undefined;
+}
+
+// Ruta y texto del botón de cada tipo de registro.
+const RECORD_LINKS: Record<
+  Exclude<LinkedRecordKind, "reminders">,
+  { route: (id: string) => string; label: string }
+> = {
+  task: { route: (id) => `/(tabs)/tasks/${id}`, label: "Ver tarea" },
+  purchase: { route: (id) => `/(tabs)/home/purchases/${id}`, label: "Ver compra" },
+  transfer: { route: (id) => `/(tabs)/home/transfers/${id}`, label: "Ver transferencia" },
+  count: { route: (id) => `/(tabs)/inventory/weekly-inventory/${id}`, label: "Ver conteo" },
+  adjustment: { route: (id) => `/(tabs)/home/adjustment/${id}`, label: "Ver ajuste" },
+  product: { route: (id) => `/(tabs)/inventory/products/${id}`, label: "Ver producto" },
+};
+
+export const REMINDERS_ROUTE = "/(tabs)/home/reminders";
+
+/** Enlace al registro `kind` con id `id` (y su sucursal, si se sabe). */
+export function recordLink(
+  kind: Exclude<LinkedRecordKind, "reminders">,
+  id: string | number,
+  locationIds?: number[],
+  locationName?: string | null,
+): NotificationLink {
+  const config = RECORD_LINKS[kind];
+  const value = String(id);
+  return {
+    route: config.route(value),
+    label: config.label,
+    kind,
+    id: value,
+    ...(locationIds && locationIds.length > 0 ? { locationIds } : {}),
+    ...(locationName ? { locationName } : {}),
+  };
+}
+
+const remindersLink = (): NotificationLink => ({
+  route: REMINDERS_ROUTE,
+  label: "Ver recordatorios",
+  kind: "reminders",
 });
 
 // Para tipos de evento que esta versión de la app aún no conoce: se intenta
 // por la llave del id que traiga el payload.
-const GENERIC_LINKS: {
-  key: string;
-  build: (id: string) => NotificationLink;
-}[] = [
-  { key: "task_id", build: (id) => link(`/(tabs)/tasks/${id}`, "Ver tarea") },
-  {
-    key: "transfer_id",
-    build: (id) => link(`/(tabs)/home/transfers/${id}`, "Ver transferencia"),
-  },
-  {
-    key: "purchase_id",
-    build: (id) => link(`/(tabs)/home/purchases/${id}`, "Ver compra"),
-  },
-  {
-    key: "inventory_count_id",
-    build: (id) => link(`/(tabs)/inventory/weekly-inventory/${id}`, "Ver conteo"),
-  },
-  {
-    key: "adjustment_id",
-    build: (id) => link(`/(tabs)/home/adjustment/${id}`, "Ver ajuste"),
-  },
-  {
-    key: "product_id",
-    build: (id) => link(`/(tabs)/inventory/products/${id}`, "Ver producto"),
-  },
-  {
-    key: "reminder_id",
-    build: () => link("/(tabs)/home/reminders", "Ver recordatorios"),
-  },
+const GENERIC_KEYS: [string, Exclude<LinkedRecordKind, "reminders">][] = [
+  ["task_id", "task"],
+  ["transfer_id", "transfer"],
+  ["purchase_id", "purchase"],
+  ["inventory_count_id", "count"],
+  ["adjustment_id", "adjustment"],
+  ["product_id", "product"],
 ];
+
+/**
+ * Enlace a una transferencia según el aviso: aprobada/rechazada/en camino le
+ * llega a quien la pidió (destino) y recibida, a quien la envió (origen); a
+ * ese lado conviene cambiarse. El payload todavía no trae origen ni destino
+ * (se leen si algún día llegan); sin ellos el lado se toma del registro.
+ */
+function transferLink(transferId: string, data: NotificationData): NotificationLink {
+  const subType = typeof data?.sub_type === "string" ? data.sub_type : "";
+  const side: "from" | "to" | undefined =
+    subType === "received"
+      ? "from"
+      : ["approved", "rejected", "shipped"].includes(subType)
+        ? "to"
+        : undefined;
+  const keys =
+    side === "from"
+      ? ["from_location_id", "to_location_id"]
+      : ["to_location_id", "from_location_id"];
+  return {
+    ...recordLink("transfer", transferId, readLocationIds(data, keys)),
+    ...(side ? { transferSide: side } : {}),
+  };
+}
 
 /**
  * Pantalla del registro relacionado con la notificación, o null si el payload
@@ -100,56 +188,48 @@ export function getNotificationLink(
   const id = (key: string) => readEntityId(data, key);
   const type =
     eventType || (typeof data?.event_type === "string" ? data.event_type : "");
+  // Sucursal del aviso (stock bajo, ajuste, conteo). La compra no la trae.
+  const location = readLocationIds(data, ["location_id"]);
 
   switch (type) {
     case "task_event": {
       const taskId = id("task_id");
-      return taskId ? link(`/(tabs)/tasks/${taskId}`, "Ver tarea") : null;
+      return taskId ? recordLink("task", taskId) : null;
     }
     case "purchase_update": {
       const purchaseId = id("purchase_id");
-      return purchaseId
-        ? link(`/(tabs)/home/purchases/${purchaseId}`, "Ver compra")
-        : null;
+      return purchaseId ? recordLink("purchase", purchaseId, location) : null;
     }
     case "low_stock": {
       const productId = id("product_id");
-      return productId
-        ? link(`/(tabs)/inventory/products/${productId}`, "Ver producto")
-        : null;
+      return productId ? recordLink("product", productId, location) : null;
     }
     case "inventory_adjustment": {
       const adjustmentId = id("adjustment_id");
-      if (adjustmentId) {
-        return link(`/(tabs)/home/adjustment/${adjustmentId}`, "Ver ajuste");
-      }
+      if (adjustmentId) return recordLink("adjustment", adjustmentId, location);
       // Avisos anteriores solo traen el producto ajustado.
       const productId = id("product_id");
-      return productId
-        ? link(`/(tabs)/inventory/products/${productId}`, "Ver producto")
-        : null;
+      return productId ? recordLink("product", productId, location) : null;
     }
     case "inventory_count_discrepancy": {
       const countId = id("inventory_count_id");
-      return countId
-        ? link(`/(tabs)/inventory/weekly-inventory/${countId}`, "Ver conteo")
-        : null;
+      return countId ? recordLink("count", countId, location) : null;
     }
     case "transfer_update": {
       const transferId = id("transfer_id");
-      return transferId
-        ? link(`/(tabs)/home/transfers/${transferId}`, "Ver transferencia")
-        : null;
+      return transferId ? transferLink(transferId, data) : null;
     }
     case "reminder":
       // La lista de recordatorios es el destino (no hay pantalla de detalle).
-      return link("/(tabs)/home/reminders", "Ver recordatorios");
+      return remindersLink();
     default: {
-      for (const candidate of GENERIC_LINKS) {
-        const value = id(candidate.key);
-        if (value) return candidate.build(value);
+      for (const [key, kind] of GENERIC_KEYS) {
+        const value = id(key);
+        if (value) {
+          return kind === "transfer" ? transferLink(value, data) : recordLink(kind, value, location);
+        }
       }
-      return null;
+      return id("reminder_id") ? remindersLink() : null;
     }
   }
 }
@@ -159,25 +239,28 @@ export function getNotificationEntityId(
   eventType: string | null | undefined,
   data: NotificationData,
 ): string | undefined {
-  const target = getNotificationLink(eventType, data);
-  if (!target) return undefined;
-  const match = target.route.match(/\/(\d+)$/);
-  return match?.[1];
+  return getNotificationLink(eventType, data)?.id;
 }
 
 /**
- * Destino al tocar un push: la pantalla del registro; si el payload no trae
- * el id, el detalle de la notificación (cuando el push incluye
- * notification_id) o, si tampoco, la bandeja.
+ * Destino al tocar un push dentro de la app (nativo, o web con la pestaña
+ * abierta): si el push trae notification_id, el detalle de esa notificación,
+ * que abre solo su registro al cargar (notificationOpenRoute) y, si no se
+ * puede abrir (ya no existe, otra sucursal, sin permiso), lo explica ahí. Sin
+ * notification_id (el aviso no se guardó en la bandeja): la pantalla del
+ * registro o, si el payload no trae su id, la bandeja.
+ *
+ * El service worker (public/firebase-messaging-sw.js), cuando no hay pestaña
+ * abierta, abre directo la URL del registro: ahí la protege el guard de rutas.
  */
 export function resolvePushRoute(
   eventType: string | null | undefined,
   data: NotificationData,
 ): string {
-  const target = getNotificationLink(eventType, data);
-  if (target) return target.route;
   const notificationId = readEntityId(data, "notification_id");
-  return notificationId
-    ? notificationDetailRoute(notificationId)
-    : NOTIFICATIONS_INBOX_ROUTE;
+  const target = getNotificationLink(eventType, data);
+  if (notificationId) {
+    return target ? notificationOpenRoute(notificationId) : notificationDetailRoute(notificationId);
+  }
+  return target ? target.route : NOTIFICATIONS_INBOX_ROUTE;
 }
