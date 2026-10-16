@@ -4,6 +4,18 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { API_BASE_URL, API_CONFIG_ERROR } from "./appConfig";
 
+// Opciones propias de las peticiones (se pasan junto a params, headers, …).
+declare module "axios" {
+  interface AxiosRequestConfig {
+    /**
+     * Quien llama muestra su propio error (un aviso en el formulario, un
+     * estado vacío con "Reintentar"…): si la petición falla no sale el aviso
+     * global de error. Ej.: `axiosClient.get(url, { silent: true })`.
+     */
+    silent?: boolean;
+  }
+}
+
 // Configuración base para el cliente axios usando variables de entorno.
 // La URL sale de EXPO_PUBLIC_API_URL (ver utils/appConfig): en desarrollo se
 // conserva el fallback a localhost; en un build de producción no hay valor
