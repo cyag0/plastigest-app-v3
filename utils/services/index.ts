@@ -83,7 +83,8 @@ const Services = {
   /** Reportes del dueño en PDF o Excel: ventas, inventario valorizado, mermas y caja. */
   businessReports: {
     async options(): Promise<App.Entities.BusinessReportOptions> {
-      const response = await axiosClient.get("/auth/admin/business-reports/options");
+      // silent: la pantalla muestra "Reportes no disponibles" con el motivo.
+      const response = await axiosClient.get("/auth/admin/business-reports/options", { silent: true });
       return response.data;
     },
     /** URL firmada (30 min) del reporte con el periodo y la sucursal elegidos. */
@@ -317,9 +318,12 @@ const Services = {
         client_request_id?: string;
       },
     ) {
+      // silent: el detalle de la venta muestra cada resultado (también la
+      // verificación de un pago sin respuesta); el aviso global salía encima.
       const response = await axiosClient.post(
         `/auth/admin/sales/${id}/add-payment`,
         data,
+        { silent: true },
       );
       return response.data;
     },
@@ -394,9 +398,11 @@ const Services = {
         client_request_id?: string;
       },
     ) {
+      // silent: el detalle del pedido muestra cada resultado del cobro.
       const response = await axiosClient.post(
         `/auth/admin/sales-orders/${id}/checkout`,
         data ?? {},
+        { silent: true },
       );
       return response.data;
     },
@@ -422,10 +428,12 @@ const Services = {
       notes?: string;
       client_request_id: string;
     }) {
+      // silent: el kiosko muestra cada resultado del cobro (y la duda de un
+      // cobro sin respuesta); el aviso global decía "inténtalo de nuevo".
       const response = await axiosClient.post(
         "/auth/admin/sales-orders/quick-checkout",
         payload,
-        { timeout: LONG_REQUEST_TIMEOUT },
+        { timeout: LONG_REQUEST_TIMEOUT, silent: true },
       );
       return response.data;
     },
@@ -515,8 +523,10 @@ const Services = {
 
     /** Qué se puede empacar de cada salida y cuánto material haría falta. */
     async getPackagingPlan(id: number) {
+      // silent: la pantalla de empaque explica la falla en su lugar.
       const response = await axiosClient.get(
         `/auth/admin/production-orders/${id}/packaging`,
+        { silent: true },
       );
       return response.data;
     },
@@ -808,19 +818,27 @@ const Services = {
         summary: App.Entities.CashRegisterSessionSummary | null;
       };
     },
+    // open, show y close van con silent: quien los llama (abrir turno, corte,
+    // detalle del turno) muestra el error en su lugar.
     async open(payload: { cash_register_id: number; opening_amount: number }) {
-      const response = await axiosClient.post("/auth/admin/cash-register-sessions/open", payload);
+      const response = await axiosClient.post("/auth/admin/cash-register-sessions/open", payload, {
+        silent: true,
+      });
       return response.data as { data: App.Entities.CashRegisterSession };
     },
     async show(id: number) {
-      const response = await axiosClient.get(`/auth/admin/cash-register-sessions/${id}`);
+      const response = await axiosClient.get(`/auth/admin/cash-register-sessions/${id}`, {
+        silent: true,
+      });
       return response.data as {
         data: App.Entities.CashRegisterSession;
         summary: App.Entities.CashRegisterSessionSummary | null;
       };
     },
     async close(id: number, payload: { counted_cash: number; notes?: string }) {
-      const response = await axiosClient.post(`/auth/admin/cash-register-sessions/${id}/close`, payload);
+      const response = await axiosClient.post(`/auth/admin/cash-register-sessions/${id}/close`, payload, {
+        silent: true,
+      });
       return response.data as {
         data: App.Entities.CashRegisterSession;
         summary: App.Entities.CashRegisterSessionSummary;
@@ -835,7 +853,9 @@ const Services = {
       return response.data as { data: App.Entities.PosCatalogItem[] };
     },
     async sale(payload: App.Entities.PosSalePayload) {
-      const response = await axiosClient.post("/auth/admin/pos/sales", payload);
+      // silent: el cobro muestra cada resultado en su modal (y verifica uno
+      // sin respuesta por client_request_id); el aviso global lo contradecía.
+      const response = await axiosClient.post("/auth/admin/pos/sales", payload, { silent: true });
       return response.data as { message: string; data: App.Entities.PosSaleResult };
     },
     /**

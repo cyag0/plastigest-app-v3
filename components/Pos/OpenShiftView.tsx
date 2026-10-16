@@ -34,13 +34,17 @@ export default function OpenShiftView({ locationName, onOpened, onCancel }: Prop
   useEffect(() => {
     (async () => {
       try {
-        const res: any = await Services.cashRegisters.index({ is_active: 1, current_location: 1, per_page: 100 } as any);
+        // silent: si falla, la tarjeta lo dice (el aviso global salía además).
+        const res: any = await Services.cashRegisters.index(
+          { is_active: 1, current_location: 1, per_page: 100 } as any,
+          { silent: true },
+        );
         const list: App.Entities.CashRegister[] = res?.data?.data ?? res?.data ?? [];
         setRegisters(list);
         const free = list.filter((r) => !r.open_session);
         if (free.length === 1) setSelected(free[0].id);
-      } catch {
-        setError("No se pudieron cargar las cajas");
+      } catch (e: any) {
+        setError(apiErrorMessage(e, "No se pudieron cargar las cajas"));
       } finally {
         setLoading(false);
       }

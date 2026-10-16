@@ -16,6 +16,7 @@ import { router } from "expo-router";
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "react-native-paper";
+import { errorMessageOf } from "@/utils/errorNotice";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -42,7 +43,8 @@ export default function CashClosingIndex() {
   const { selectedCompany } = useAuth();
   const { can, canAccessRoute } = useCan();
   const { downloadPdfFromApi } = usePdfDownload({
-    onError: (error) => alerts.error("Error al descargar el PDF: " + error.message),
+    onError: (error) =>
+      alerts.error(errorMessageOf(error, "No se pudo descargar el PDF. Inténtalo de nuevo.")),
   });
 
   const handleDownloadPdf = async (item: any) => {

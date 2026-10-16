@@ -9,6 +9,7 @@ import ListSearchbar from "@/components/App/ListSearchbar";
 import NotificationDetailModal from "@/components/Notifications/NotificationDetailModal";
 import NotificationRow from "@/components/Notifications/NotificationRow";
 import { markNotificationReadQuietly } from "@/components/Notifications/notificationRequests";
+import { errorMessageOf } from "@/utils/errorNotice";
 import {
   getNotificationLink,
   notificationDetailRoute,
@@ -317,9 +318,11 @@ export default function NotificationsScreen() {
       } else {
         await services.notifications.markAsRead(id);
       }
-    } catch {
+    } catch (error) {
       ignoreUnreadIncreaseRef.current = false;
-      alerts.error("Error al actualizar la notificación");
+      // Si ya se borró, el backend responde 404 «Notificación no encontrada»
+      // (antes un 400 con el texto de Laravel): se dice eso y se recarga.
+      alerts.error(errorMessageOf(error, "Error al actualizar la notificación"));
       void loadNotifications(1);
     } finally {
       loadUnreadNotificationsCount();

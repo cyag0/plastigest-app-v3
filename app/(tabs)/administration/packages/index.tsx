@@ -11,6 +11,7 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { Text } from "react-native-paper";
+import { errorMessageOf } from "@/utils/errorNotice";
 
 export default function PackagesIndex() {
   const router = useRouter();
@@ -27,7 +28,7 @@ export default function PackagesIndex() {
       setSelectedPackage(null);
     },
     onError: (error) => {
-      alerts.error("Error al descargar el PDF: " + error.message);
+      alerts.error(errorMessageOf(error, "No se pudo descargar el PDF. Inténtalo de nuevo."));
     },
   });
 
