@@ -75,6 +75,12 @@ namespace App {
       notes?: string;
       /** Llave del intento de cobro: el reintento con la misma no duplica la venta. */
       client_request_id?: string;
+      /**
+       * Pedido del kiosko que se cobra con esta venta: el servidor libera lo
+       * que tenía apartado y lo marca entregado. 422 kiosk_order_unavailable
+       * si ya se cobró o se canceló.
+       */
+      kiosk_order_id?: number;
     }
 
     interface PosSaleResult {
@@ -85,6 +91,8 @@ namespace App {
       payment_method: PosPaymentMethod | "mixed";
       payments: { method: PosPaymentMethod; amount: number; tendered: number | null; change: number | null }[];
       change: number;
+      /** Pedido del kiosko que quedó cobrado con esta venta. */
+      kiosk_order?: { id: number; ticket_number: number | null } | null;
     }
 
     interface User {

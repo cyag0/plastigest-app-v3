@@ -29,6 +29,24 @@ export type PosCatalogChange =
   | { kind: "stock"; name: string; quantity: number; stock: number; unit: string }
   | { kind: "removed"; name: string };
 
+/**
+ * Pedido del kiosko que se cobra con este carrito (POS › Kiosko). Se guarda
+ * con el carrito y viaja como kiosk_order_id en el cobro.
+ */
+export interface PosKioskLink {
+  id: number;
+  ticketNumber: number | null;
+  customerName: string | null;
+  /**
+   * Lo que el pedido tiene apartado, en unidades base por producto
+   * (product_id → cantidad). El catálogo del POS ya lo descuenta de la
+   * existencia, pero al cobrar el servidor libera ese apartado antes de
+   * revisarla: mientras el carrito está ligado cuenta como disponible (si no,
+   * un pedido que apartó lo último no se podía cargar ni cambiar).
+   */
+  reserved: Record<string, number>;
+}
+
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /**
@@ -38,8 +56,18 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000;
 export const allowsDecimalQuantity = (item: Item): boolean =>
   !item.package_id && !!item.unit?.type && item.unit.type !== "quantity";
 
-const stockMessage = (item: Item) =>
-  `Solo hay ${item.stock} ${item.unit?.abbreviation ?? ""} de ${item.name}`.trim();
+/** Existencia para el carrito: la del catálogo más lo que aparta el pedido del kiosko ligado. */
+export function availableStock(item: Item, link?: PosKioskLink | null): number {
+  const reserved = link?.reserved[String(item.product_id)] ?? 0;
+  if (!(reserved > 0)) return item.stock;
+  if (!item.package_id) return round3(item.stock + reserved);
+  // Paquetes completos: los que alcanzan con lo apartado se suman.
+  const perPackage = Number(item.per_package) || 0;
+  return perPackage > 0 ? item.stock + Math.floor(round3(reserved / perPackage)) : item.stock;
+}
+
+const stockMessage = (item: Item, available = item.stock) =>
+  `Solo hay ${available} ${item.unit?.abbreviation ?? ""} de ${item.name}`.trim();
 
 /** Importe del renglón en centavos (cantidad × precio − descuento), igual que el backend. */
 export const lineCents = (line: Pick<PosLine, "quantity" | "unitPrice" | "discount">) =>
@@ -67,9 +95,27 @@ interface StoredCart {
   requestId: string | null;
   requestUnknown: boolean;
   savedAt: number;
+  /** Pedido del kiosko ligado (los carritos guardados antes no lo traen). */
+  kioskOrder?: PosKioskLink | null;
 }
 
 const isFiniteNumber = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n);
+
+function parseKioskLink(raw: any): PosKioskLink | null {
+  if (!raw || typeof raw !== "object" || !isFiniteNumber(raw.id) || raw.id <= 0) return null;
+  const reserved: Record<string, number> = {};
+  if (raw.reserved && typeof raw.reserved === "object") {
+    for (const [productId, quantity] of Object.entries(raw.reserved)) {
+      if (isFiniteNumber(quantity) && quantity > 0) reserved[productId] = quantity;
+    }
+  }
+  return {
+    id: raw.id,
+    ticketNumber: isFiniteNumber(raw.ticketNumber) ? raw.ticketNumber : null,
+    customerName: typeof raw.customerName === "string" && raw.customerName ? raw.customerName : null,
+    reserved,
+  };
+}
 
 function isValidLine(line: any): line is PosLine {
   const item = line?.item;
@@ -119,6 +165,7 @@ export function parseStoredCart(raw: string | null): StoredCart | null {
     requestId,
     requestUnknown: !!requestId && data.requestUnknown === true,
     savedAt: isFiniteNumber(data.savedAt) ? data.savedAt : 0,
+    kioskOrder: parseKioskLink(data.kioskOrder),
   };
 }
 
@@ -141,11 +188,13 @@ async function pruneStoredCarts(keepKey: string) {
 
 /**
  * Renglones con el catálogo recién descargado (ver syncWithCatalog del
- * hook): `changed` indica si hay que reemplazar los renglones.
+ * hook): `changed` indica si hay que reemplazar los renglones. `link`: el
+ * pedido del kiosko ligado, cuyo apartado cuenta como existencia.
  */
 export function syncLinesWithCatalog(
   lines: PosLine[],
   items: Item[],
+  link?: PosKioskLink | null,
 ): { next: PosLine[]; changes: PosCatalogChange[]; changed: boolean } {
   const byKey = new Map(items.map((i) => [i.key, i]));
   const changes: PosCatalogChange[] = [];
@@ -166,12 +215,13 @@ export function syncLinesWithCatalog(
       unitPrice = fresh.price;
       changes.push({ kind: "price", name: fresh.name, from: line.item.price, to: fresh.price });
     }
-    if (line.quantity > fresh.stock) {
+    const available = availableStock(fresh, link);
+    if (line.quantity > available) {
       changes.push({
         kind: "stock",
         name: fresh.name,
         quantity: line.quantity,
-        stock: fresh.stock,
+        stock: available,
         unit: fresh.unit?.abbreviation ?? "",
       });
     }
@@ -209,6 +259,9 @@ export function syncLinesWithCatalog(
  * `carryFromKey`: carrito guardado de un turno que resultó cerrado a media
  * venta. Si este turno empieza vacío, ese carrito (con su llave de cobro) pasa
  * aquí en lugar de borrarse con los de turnos anteriores.
+ *
+ * `kioskOrder`: pedido del kiosko que se trajo al carrito (loadKioskOrder).
+ * Se guarda con el carrito y se suelta al vaciarlo o con unlinkKioskOrder.
  */
 export function usePosCart(storageKey?: string | null, carryFromKey?: string | null) {
   const [lines, setLinesState] = useState<PosLine[]>([]);
@@ -217,6 +270,7 @@ export function usePosCart(storageKey?: string | null, carryFromKey?: string | n
   const [method, setMethodState] = useState<CheckoutMethod>("cash");
   const [requestId, setRequestId] = useState<string | null>(null);
   const [requestUnknown, setRequestUnknown] = useState(false);
+  const [kioskOrder, setKioskOrderState] = useState<PosKioskLink | null>(null);
   // Llave cuyo carrito guardado ya se leyó. Sin almacenamiento no hay nada
   // que recuperar.
   const [restoredKey, setRestoredKey] = useState<string | null>(null);
@@ -236,7 +290,8 @@ export function usePosCart(storageKey?: string | null, carryFromKey?: string | n
     method: CheckoutMethod;
     requestId: string | null;
     requestUnknown: boolean;
-  }>({ customer: null, method: "cash", requestId: null, requestUnknown: false });
+    kioskOrder: PosKioskLink | null;
+  }>({ customer: null, method: "cash", requestId: null, requestUnknown: false, kioskOrder: null });
 
   const setLines = useCallback((updater: (prev: PosLine[]) => PosLine[]) => {
     const next = updater(linesRef.current);
@@ -261,13 +316,18 @@ export function usePosCart(storageKey?: string | null, carryFromKey?: string | n
     setRequestUnknown(!!id && unknown);
   }, []);
 
+  const setKioskOrder = useCallback((value: PosKioskLink | null) => {
+    draftRef.current.kioskOrder = value;
+    setKioskOrderState(value);
+  }, []);
+
   /** Guarda (o borra, si no queda nada pendiente) el carrito en el equipo. */
   const writeStorage = useCallback(() => {
     if (!storageKey) return;
     const draft = draftRef.current;
     const current = linesRef.current;
     const write =
-      current.length === 0 && !draft.requestId
+      current.length === 0 && !draft.requestId && !draft.kioskOrder
         ? AsyncStorage.removeItem(storageKey)
         : AsyncStorage.setItem(
             storageKey,
@@ -316,6 +376,7 @@ export function usePosCart(storageKey?: string | null, carryFromKey?: string | n
         setCustomer(stored.customer);
         setMethod(stored.method);
         setRequest(stored.requestId, stored.requestUnknown);
+        setKioskOrder(stored.kioskOrder ?? null);
         setRestoredLines(stored.lines.length);
         setCarriedOver(carried);
       }
@@ -332,12 +393,12 @@ export function usePosCart(storageKey?: string | null, carryFromKey?: string | n
     return () => {
       cancelled = true;
     };
-  }, [storageKey, carryFromKey, setCustomer, setMethod, setRequest]);
+  }, [storageKey, carryFromKey, setCustomer, setMethod, setRequest, setKioskOrder]);
 
   // Guardar cada cambio (después de recuperar, para no pisar lo guardado).
   useEffect(() => {
     if (restored) writeStorage();
-  }, [restored, lines, customer, method, requestId, requestUnknown, writeStorage]);
+  }, [restored, lines, customer, method, requestId, requestUnknown, kioskOrder, writeStorage]);
 
   /** Agrega o suma. Devuelve un mensaje si la existencia no alcanza. */
   const add = useCallback(
@@ -345,8 +406,9 @@ export function usePosCart(storageKey?: string | null, carryFromKey?: string | n
       const current =
         linesRef.current.find((l) => l.key === item.key)?.quantity ?? 0;
       const next = round3(current + quantity);
-      if (next > item.stock) {
-        return stockMessage(item);
+      const available = availableStock(item, draftRef.current.kioskOrder);
+      if (next > available) {
+        return stockMessage(item, available);
       }
       setLines((prev) =>
         prev.some((l) => l.key === item.key)
@@ -382,8 +444,9 @@ export function usePosCart(storageKey?: string | null, carryFromKey?: string | n
         return `${line.item.name} se vende por pieza: usa una cantidad entera.`;
       }
       const next = round3(quantity);
-      if (next > line.item.stock) {
-        return stockMessage(line.item);
+      const available = availableStock(line.item, draftRef.current.kioskOrder);
+      if (next > available) {
+        return stockMessage(line.item, available);
       }
       // Con menos cantidad, un descuento fijo podía dejar el renglón en
       // negativo y el cobro no cuadraba con el del servidor.
@@ -419,14 +482,45 @@ export function usePosCart(storageKey?: string | null, carryFromKey?: string | n
     [setLines],
   );
 
-  /** Vacía el carrito: renglones, cliente, método y la llave de cobro. */
+  /** Vacía el carrito: renglones, cliente, método, la llave de cobro y el pedido del kiosko ligado. */
   const clear = useCallback(() => {
     setLines(() => []);
     setSelectedKey(null);
     setCustomer(null);
     setMethod("cash");
     setRequest(null, false);
-  }, [setLines, setCustomer, setMethod, setRequest]);
+    setKioskOrder(null);
+  }, [setLines, setCustomer, setMethod, setRequest, setKioskOrder]);
+
+  /**
+   * Trae un pedido del kiosko: el carrito se reemplaza con sus renglones (al
+   * precio de hoy del catálogo) y queda ligado al pedido. Empieza como un
+   * carrito nuevo: Público en general, en efectivo y sin llave de cobro.
+   * Quien llama ya preguntó si reemplazar lo que había.
+   */
+  const loadKioskOrder = useCallback(
+    (link: PosKioskLink, entries: { item: Item; quantity: number }[]) => {
+      const byKey = new Map<string, PosLine>();
+      for (const { item, quantity } of entries) {
+        const total = round3((byKey.get(item.key)?.quantity ?? 0) + quantity);
+        byKey.set(item.key, { key: item.key, item, quantity: total, unitPrice: item.price, discount: 0 });
+      }
+      const next = [...byKey.values()];
+      setCustomer(null);
+      setMethod("cash");
+      setRequest(null, false);
+      setKioskOrder(link);
+      setLines(() => next);
+      setSelectedKey(next[next.length - 1]?.key ?? null);
+    },
+    [setLines, setCustomer, setMethod, setRequest, setKioskOrder],
+  );
+
+  /** Suelta el pedido del kiosko: los renglones se quedan y se cobran como venta normal. */
+  const unlinkKioskOrder = useCallback(() => setKioskOrder(null), [setKioskOrder]);
+
+  /** Pedido del kiosko ligado, leído al momento (no el del último render). */
+  const getKioskOrder = useCallback(() => draftRef.current.kioskOrder, []);
 
   /**
    * Antes de mandar el cobro: devuelve la llave del carrito (la crea en el
@@ -482,7 +576,7 @@ export function usePosCart(storageKey?: string | null, carryFromKey?: string | n
       if (items.length === 0 || linesRef.current.length === 0 || draftRef.current.requestUnknown) {
         return [];
       }
-      const { next, changes, changed } = syncLinesWithCatalog(linesRef.current, items);
+      const { next, changes, changed } = syncLinesWithCatalog(linesRef.current, items, draftRef.current.kioskOrder);
 
       if (changed) {
         setLines(() => next);
@@ -549,6 +643,10 @@ export function usePosCart(storageKey?: string | null, carryFromKey?: string | n
     restored,
     restoredLines,
     carriedOver,
+    kioskOrder,
+    getKioskOrder,
+    loadKioskOrder,
+    unlinkKioskOrder,
   };
 }
 
