@@ -1,11 +1,12 @@
 import AppChip from "@/components/App/Chip";
+import PermissionGate from "@/components/App/PermissionGate";
 import EmptyState from "@/components/App/EmptyState";
 import KpiCard from "@/components/Dashboard/KpiCard";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useResponsive } from "@/hooks/useResponsive";
 import { formatDate } from "@/utils/dates";
-import Services from "@/utils/services";
+import axiosClient from "@/utils/axios";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
@@ -18,7 +19,16 @@ import {
 } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
 
+/** GET /sales/stats pide sales_read: sin él no se consulta y se ve «sin permiso». */
 export default function SaleStats() {
+  return (
+    <PermissionGate permission="sales_read">
+      <SaleStatsContent />
+    </PermissionGate>
+  );
+}
+
+function SaleStatsContent() {
   const { isMobile } = useResponsive();
   const { width: screenWidth } = useWindowDimensions();
   const [loading, setLoading] = useState(true);
@@ -33,8 +43,9 @@ export default function SaleStats() {
   const loadStats = async () => {
     try {
       setLoading(true);
-      const response = await Services.sales.stats();
-      setStats(response.data);
+      // silent: si falla, la pantalla ya lo dice ("No se pudieron cargar…").
+      const response = await axiosClient.get("/auth/admin/sales/stats", { silent: true });
+      setStats(response.data?.data);
     } catch (error) {
       console.error("Error loading sales stats:", error);
     } finally {
