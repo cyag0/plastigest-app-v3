@@ -25,6 +25,7 @@ import {
 import { newClientRequestId } from "@/utils/requestId";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import React, {
@@ -84,6 +85,8 @@ type PayMessage = {
   tone: "error" | "warning" | "info";
   /** Ofrecer abrir el turno de caja (cobro en efectivo sin turno). */
   openShift?: boolean;
+  /** Ofrecer verificar el cobro sin confirmar (permiso de punto de venta). */
+  verify?: boolean;
 };
 type Product = {
   id: number;
@@ -129,6 +132,62 @@ const fmt = (value: number) =>
 
 const makeKey = () =>
   `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+/* Cobro sin confirmar guardado en el equipo, con su carrito y su llave: al
+   volver al kiosko (o al reabrir la app) se verifica o se reintenta con la
+   misma llave en lugar de empezar de cero y arriesgar un cobro doble. */
+
+const PENDING_PREFIX = "kiosk_pending:";
+const pendingStorageKeyFor = (userId: number, locationId: number) =>
+  `${PENDING_PREFIX}${userId}:${locationId}`;
+
+type StoredPending = {
+  version: 1;
+  requestId: string;
+  cart: CartItem[];
+  paymentMethod: PaymentMethod;
+  isPaid: boolean;
+  paidAmount: string;
+  customerId: number | null;
+  savedAt: number;
+};
+
+const isCartItem = (c: any): c is CartItem =>
+  !!c &&
+  typeof c.key === "string" &&
+  Number.isFinite(c.product_id) &&
+  typeof c.product_name === "string" &&
+  Number.isFinite(c.unit_id) &&
+  Number.isFinite(c.quantity) &&
+  c.quantity > 0 &&
+  Number.isFinite(c.unit_price) &&
+  Number.isFinite(c.base_per_unit);
+
+/** Lee lo guardado; cualquier cosa rara se descarta. */
+function parseStoredPending(raw: string | null): StoredPending | null {
+  if (!raw) return null;
+  let data: any;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!data || data.version !== 1 || typeof data.requestId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(data.requestId)) {
+    return null;
+  }
+  const cart = Array.isArray(data.cart) ? data.cart.filter(isCartItem) : [];
+  if (cart.length === 0) return null;
+  return {
+    version: 1,
+    requestId: data.requestId,
+    cart,
+    paymentMethod: ["cash", "card", "transfer"].includes(data.paymentMethod) ? data.paymentMethod : "cash",
+    isPaid: data.isPaid !== false,
+    paidAmount: typeof data.paidAmount === "string" ? data.paidAmount : "",
+    customerId: Number.isFinite(data.customerId) ? data.customerId : null,
+    savedAt: Number.isFinite(data.savedAt) ? data.savedAt : 0,
+  };
+}
 
 /**
  * Precio de un paquete como lo cobra el servidor: el suyo si tiene, si no el
@@ -305,7 +364,10 @@ const CartRow = memo(function CartRow({
 
 export default function KioskScreen() {
   const alerts = useAlerts();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user, location } = useAuth();
+  // Solo quien puede usar el punto de venta puede buscar una venta por su llave.
+  const canVerify = hasPermission("sales_pos");
+  const pendingStorageKey = user?.id && location?.id ? pendingStorageKeyFor(user.id, location.id) : null;
   const screenWidth = Dimensions.get("window").width;
   const wide = screenWidth >= 900;
 
@@ -575,13 +637,128 @@ export default function KioskScreen() {
     [products, handleAddFromCard, alerts],
   );
 
+  // ---------- Cobro sin confirmar guardado ----------
+
+  const savePending = useCallback(
+    async (record: Omit<StoredPending, "version" | "savedAt">) => {
+      if (!pendingStorageKey) return;
+      try {
+        await AsyncStorage.setItem(
+          pendingStorageKey,
+          JSON.stringify({ version: 1, ...record, savedAt: Date.now() } satisfies StoredPending),
+        );
+      } catch {
+        // Sin almacenamiento (modo privado, cuota llena) sigue en memoria.
+      }
+    },
+    [pendingStorageKey],
+  );
+
+  const dropPending = useCallback(() => {
+    if (pendingStorageKey) AsyncStorage.removeItem(pendingStorageKey).catch(() => undefined);
+  }, [pendingStorageKey]);
+
+  /** El cobro sin confirmar sí quedó registrado: se cierra como un cobro exitoso. */
+  const pendingRegistered = useCallback(
+    (saleNumber?: string | null) => {
+      requestIdRef.current = null;
+      pendingUnknownRef.current = false;
+      setPendingUnknown(false);
+      setCart([]);
+      setPayDialog(false);
+      setCustomerId(null);
+      setPaidAmount("");
+      setPayMessage(null);
+      dropPending();
+      alerts.success(
+        saleNumber ? `La venta pendiente sí quedó registrada (${saleNumber}).` : "La venta pendiente sí quedó registrada.",
+      );
+    },
+    [alerts, dropPending],
+  );
+
+  /**
+   * Busca la venta por la llave del cobro sin confirmar (permiso de punto de
+   * venta). Registrada: se cierra. No registrada: el carrito se puede
+   * corregir y cobrar con la misma llave (si el primer envío entrara tarde, el
+   * reintento devuelve esa venta). Sin respuesta: sigue en duda.
+   */
+  const verifyPending = useCallback(async () => {
+    const requestId = requestIdRef.current;
+    if (!requestId || !canVerify) return;
+    try {
+      const found = await Services.pos.findSaleByRequest(requestId);
+      if (requestIdRef.current !== requestId) return;
+      if (found?.data) {
+        pendingRegistered(found.data.sale_number);
+        return;
+      }
+      pendingUnknownRef.current = false;
+      setPendingUnknown(false);
+      dropPending();
+      setPayMessage({
+        text: "La venta anterior no quedó registrada: revisa el carrito y vuelve a cobrar.",
+        tone: "info",
+      });
+    } catch (e: any) {
+      if (requestIdRef.current !== requestId) return;
+      setPayMessage({
+        text: `${apiErrorMessage(e, "No se pudo verificar la venta.")} Vuelve a intentarlo o presiona «Confirmar venta»: con la misma llave no se cobra dos veces.`,
+        tone: "warning",
+        verify: true,
+      });
+    }
+  }, [canVerify, pendingRegistered, dropPending]);
+
+  // Al entrar: un cobro que se quedó sin confirmar (se salió del kiosko o se
+  // cerró la app) vuelve con su carrito y su llave, y se verifica.
+  useEffect(() => {
+    if (!pendingStorageKey) return;
+    let cancelled = false;
+    (async () => {
+      let stored: StoredPending | null = null;
+      try {
+        stored = parseStoredPending(await AsyncStorage.getItem(pendingStorageKey));
+      } catch {
+        stored = null;
+      }
+      // Con un cobro ya en curso en memoria, ese manda.
+      if (cancelled || !stored || requestIdRef.current) return;
+      requestIdRef.current = stored.requestId;
+      pendingUnknownRef.current = true;
+      setPendingUnknown(true);
+      setCart(stored.cart);
+      setPaymentMethod(stored.paymentMethod);
+      setIsPaid(stored.isPaid);
+      setPaidAmount(stored.paidAmount);
+      setCustomerId(stored.customerId);
+      setPayMessage({
+        text: canVerify
+          ? "Verificando si la última venta quedó registrada…"
+          : "No se confirmó si la última venta quedó registrada: vuelve a presionar «Confirmar venta» con el mismo carrito (si ya se registró no se cobra dos veces).",
+        tone: "warning",
+      });
+      if (canVerify) {
+        await verifyPending();
+      } else {
+        alerts.warning("La última venta se quedó sin confirmar: abre «Cobrar» y vuelve a confirmarla.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingStorageKey]);
+
   // ---------- Submit ----------
 
   /** Vacía el carrito; con un cobro sin confirmar, avisa antes. */
   const clearCart = useCallback(async () => {
     if (pendingUnknown) {
       const ok = await alerts.confirm(
-        "No se pudo confirmar si la última venta quedó registrada. Si vacías el carrito y vuelves a cobrar estos productos podría quedar dos veces: revísala en Pedidos.",
+        `No se pudo confirmar si la última venta quedó registrada. Si vacías el carrito y vuelves a cobrar estos productos podría quedar dos veces. ${
+          canVerify ? "Antes usa «Verificar» o" : "Antes"
+        } vuelve a presionar «Confirmar venta»: si ya se registró, no se cobra otra vez.`,
         { title: "Vaciar carrito", okText: "Vaciar", cancelText: "Volver" },
       );
       if (!ok) return;
@@ -590,7 +767,8 @@ export default function KioskScreen() {
     requestIdRef.current = null;
     setPendingUnknown(false);
     setPayMessage(null);
-  }, [pendingUnknown, alerts]);
+    dropPending();
+  }, [pendingUnknown, alerts, canVerify, dropPending]);
 
   /**
    * Crea el pedido y lo cobra en una sola llamada (antes eran dos: si fallaba
@@ -622,6 +800,16 @@ export default function KioskScreen() {
       const clientRequestId = requestIdRef.current ?? newClientRequestId();
       requestIdRef.current = clientRequestId;
       setPendingUnknown(true);
+      // Guardado antes de mandarlo: si se pierde la respuesta y se sale del
+      // kiosko (o se cierra la app), al volver sigue la misma llave.
+      await savePending({
+        requestId: clientRequestId,
+        cart,
+        paymentMethod,
+        isPaid,
+        paidAmount,
+        customerId,
+      });
 
       try {
         const body: any = await Services.salesOrders.quickCheckout({
@@ -644,6 +832,7 @@ export default function KioskScreen() {
         // Registrada: el siguiente carrito lleva una llave nueva.
         requestIdRef.current = null;
         setPendingUnknown(false);
+        dropPending();
         setCart([]);
         setPayDialog(false);
         setCustomerId(null);
@@ -655,14 +844,18 @@ export default function KioskScreen() {
           // Sin respuesta: el pedido pudo quedar cobrado. Reintentar con la
           // misma llave no lo duplica.
           setPayMessage({
-            text: `${apiErrorMessage(e, "No llegó la respuesta del servidor.")} No se pudo confirmar si la venta quedó registrada: vuelve a presionar «Confirmar venta» (si ya se registró no se cobra dos veces) y no vacíes el carrito sin revisarla en Pedidos.`,
+            text: `${apiErrorMessage(e, "No llegó la respuesta del servidor.")} No se pudo confirmar si la venta quedó registrada: ${
+              canVerify ? "usa «Verificar» o " : ""
+            }vuelve a presionar «Confirmar venta» (si ya se registró no se cobra dos veces). El carrito queda guardado con su llave aunque salgas del kiosko.`,
             tone: "warning",
+            verify: canVerify,
           });
           return;
         }
 
         // Rechazada: no se registró nada.
         setPendingUnknown(false);
+        dropPending();
         const code = apiErrorCode(e);
         if (code === SALE_ERROR_CODES.clientRequestConflict) {
           // La llave ya se usó en otra operación: el siguiente cobro lleva
@@ -828,9 +1021,12 @@ export default function KioskScreen() {
           disabled={cart.length === 0 || submitting}
           loading={submitting}
           onPress={() => {
-            setPaidAmount(totals.total.toFixed(2));
-            // El aviso de un cobro sin confirmar se queda hasta resolverlo.
-            if (!pendingUnknown) setPayMessage(null);
+            // El aviso (y lo recibido) de un cobro sin confirmar se quedan
+            // hasta resolverlo.
+            if (!pendingUnknown) {
+              setPaidAmount(totals.total.toFixed(2));
+              setPayMessage(null);
+            }
             setPayDialog(true);
           }}
         >
@@ -1051,6 +1247,18 @@ export default function KioskScreen() {
                       style={{ alignSelf: "flex-start" }}
                     >
                       Abrir turno
+                    </Button>
+                  )}
+                  {payMessage.verify && pendingUnknown && (
+                    <Button
+                      mode="outlined"
+                      icon="magnify"
+                      compact
+                      onPress={() => run(verifyPending)}
+                      disabled={submitting}
+                      style={{ alignSelf: "flex-start" }}
+                    >
+                      Verificar
                     </Button>
                   )}
                 </View>
