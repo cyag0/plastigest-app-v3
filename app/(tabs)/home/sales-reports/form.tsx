@@ -2,6 +2,7 @@ import { goBack } from "@/utils/navigation";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -69,6 +70,11 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
   const alerts = useAlerts();
 
   const { location } = useAuth();
+  const { can } = useCan();
+  // Los datos del día salen de GET /sales/cash-register, que pide sales_read:
+  // sin él no se piden y los montos se capturan a mano.
+  const canSeeDailyStats = can("sales_read");
+  const canSave = can(reportId ? "reports_update" : "reports_create");
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -162,7 +168,7 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
   }, [alerts, reportId, resetTouchedFields]);
 
   const loadDailyStats = useCallback(async () => {
-    if (!location) return;
+    if (!location || !canSeeDailyStats) return;
 
     try {
       setLoadingStats(true);
@@ -219,7 +225,7 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
     } finally {
       setLoadingStats(false);
     }
-  }, [applySuggestedValues, location, reportDate]);
+  }, [applySuggestedValues, canSeeDailyStats, location, reportDate]);
 
   useEffect(() => {
     if (reportId) {
@@ -315,7 +321,7 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
           </Card>
 
           {/* Daily Statistics */}
-          {!reportId && (
+          {!reportId && canSeeDailyStats && (
             <Card style={styles.card}>
               <Card.Content>
                 <View style={styles.sectionHeader}>
@@ -645,7 +651,7 @@ export default function SalesReportsForm(props: SalesReportsFormProps) {
         </View>
       </ScrollView>
 
-      {!props.readonly && (
+      {!props.readonly && canSave && (
         <View style={styles.actions}>
           <Button mode="outlined" onPress={() => goBack()}>
             Cancelar

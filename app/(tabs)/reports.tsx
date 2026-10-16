@@ -23,6 +23,7 @@ import KpiCard from "@/components/Dashboard/KpiCard";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useCan } from "@/hooks/useCan";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
@@ -619,6 +620,10 @@ export default function ReportsScreen() {
   const { selectedLocation } = useSelectedLocation();
   const auth = useAuth();
   const { colors } = useTheme();
+  const { can } = useCan();
+  // "Producción de hoy" pide production_orders_list: sin él no se consulta
+  // (antes se pedía igual y el backend respondía 403).
+  const canSeeProduction = can("production_orders_list");
 
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -642,11 +647,13 @@ export default function ReportsScreen() {
         Services.reportsV2
           .dashboard({ period: selectedPeriod, scope })
           .catch(() => null),
-        Services.productionOrders
-          ?.getTodayStats?.({
-            location_id: selectedLocation?.id,
-          })
-          .catch(() => null),
+        canSeeProduction
+          ? Services.productionOrders
+              ?.getTodayStats?.({
+                location_id: selectedLocation?.id,
+              })
+              .catch(() => null)
+          : null,
       ]);
 
       const dData: any = dashboardRes?.data;
@@ -660,7 +667,7 @@ export default function ReportsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [scope, selectedPeriod, selectedLocation?.id]);
+  }, [scope, selectedPeriod, selectedLocation?.id, canSeeProduction]);
 
   React.useEffect(() => {
     loadAll();
