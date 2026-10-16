@@ -15,9 +15,11 @@ import MermasTable from "@/components/Production/MermasTable";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
+import axios from "@/utils/axios";
 import { mergeProductRow } from "@/utils/groupByProduct";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -153,10 +155,12 @@ function scaleQuantity(
 function FormulaListener() {
   const { values, setFieldValue } = useFormikContext<any>();
   const lastFormulaIdRef = useRef<number | null>(null);
+  // GET /formulas/{id} pide formulas_read: sin él no se pre-rellena.
+  const canReadFormulas = useCan().can("formulas_read");
 
   useEffect(() => {
     const id = values.formula_id;
-    if (!id || id === lastFormulaIdRef.current) return;
+    if (!canReadFormulas || !id || id === lastFormulaIdRef.current) return;
     lastFormulaIdRef.current = id;
     (async () => {
       try {
@@ -196,7 +200,7 @@ function FormulaListener() {
         console.warn("No se pudo pre-rellenar desde la fórmula", e);
       }
     })();
-  }, [values.formula_id, setFieldValue]);
+  }, [values.formula_id, setFieldValue, canReadFormulas]);
 
   return null;
 }
@@ -266,7 +270,12 @@ export default function ProductionForm() {
       const sourceId = params.id ?? params.duplicateFrom;
       if (sourceId) {
         try {
-          const r: any = await Services.productionOrders.show(parseInt(sourceId as string, 10));
+          // silent: el error se muestra en la pantalla (editar) o con
+          // alerts.error (duplicar), no también en el aviso global.
+          const r: any = await axios.get(
+            `/auth/admin/production-orders/${parseInt(sourceId as string, 10)}`,
+            { silent: true },
+          );
           const order = r?.data?.data ?? r?.data;
           ensureOption(order.responsible_user_id, order.responsible_name);
           setResponsibles(options);
@@ -480,6 +489,8 @@ function ProductionFormBody({
   const { values, submitForm, isSubmitting, setFieldValue } = useFormikContext<any>();
   const router = useRouter();
   const formulaPickerRef = useRef<FormulaPickerModalRef>(null);
+  // El selector de fórmulas consulta GET /formulas (formulas_list).
+  const canUseFormulas = useCan().can("formulas_list");
 
   // La confirmación, llamada a la API, alertas de éxito y navegación se
   // manejan dentro del onSubmit de AppForm. Aquí solo disparamos submitForm
@@ -616,16 +627,18 @@ function ProductionFormBody({
 
       <View style={{ height: 12 }} />
 
-      <Button
-        icon="plus-circle"
-        mode="contained-tonal"
-        onPress={openFormulaPicker}
-        style={{ marginBottom: 12 }}
-        buttonColor={palette.primarySoft}
-        textColor={palette.primary}
-      >
-        Agregar fórmulas a la producción
-      </Button>
+      {canUseFormulas && (
+        <Button
+          icon="plus-circle"
+          mode="contained-tonal"
+          onPress={openFormulaPicker}
+          style={{ marginBottom: 12 }}
+          buttonColor={palette.primarySoft}
+          textColor={palette.primary}
+        >
+          Agregar fórmulas a la producción
+        </Button>
+      )}
 
       <SectionHeader
         icon="package-variant-closed"

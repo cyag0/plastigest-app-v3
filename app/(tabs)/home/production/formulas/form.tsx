@@ -9,6 +9,7 @@ import FormulaFlowSummary from "@/components/Production/FormulaFlowSummary";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -90,6 +91,10 @@ export default function FormulaForm() {
   const router = useRouter();
   const alerts = useAlerts();
   const formRef = useRef<AppFormRef<any>>(null);
+  // Con ?id= se abre con formulas_read: guardar cambios pide formulas_update
+  // (crear, formulas_create). Sin el permiso la fórmula queda en solo lectura.
+  const savePermission = params.id ? "formulas_update" : "formulas_create";
+  const canSave = useCan().can(savePermission);
   const [initialValues, setInitialValues] = useState<any | null>(null);
 
   useEffect(() => {
@@ -161,6 +166,9 @@ export default function FormulaForm() {
       api={Services.formulas}
       id={params.id ? parseInt(params.id, 10) : undefined}
       initialValues={initialValues}
+      submitPermission={savePermission}
+      readonly={!canSave}
+      showDeleteButton={false}
       showSubmitButton={false}
       showResetButton={false}
       onSuccess={() => {
@@ -168,12 +176,12 @@ export default function FormulaForm() {
         router.push("/(tabs)/home/production/formulas" as any);
       }}
     >
-      <FormulaFormBody editing={!!params.id} />
+      <FormulaFormBody editing={!!params.id} canSave={canSave} />
     </AppForm>
   );
 }
 
-function FormulaFormBody({ editing }: { editing: boolean }) {
+function FormulaFormBody({ editing, canSave }: { editing: boolean; canSave: boolean }) {
   const { values, submitForm, isSubmitting } = useFormikContext<any>();
   const { colors } = useTheme();
   const styles = useFormStyles();
@@ -287,18 +295,20 @@ function FormulaFormBody({ editing }: { editing: boolean }) {
           style={{ flex: 1 }}
           disabled={isSubmitting}
         >
-          Cancelar
+          {canSave ? "Cancelar" : "Volver"}
         </Button>
-        <Button
-          mode="contained"
-          onPress={handleSubmit}
-          loading={isSubmitting}
-          disabled={isSubmitting}
-          icon="content-save"
-          style={{ flex: 1.4 }}
-        >
-          {editing ? "Guardar cambios" : "Crear fórmula"}
-        </Button>
+        {canSave && (
+          <Button
+            mode="contained"
+            onPress={handleSubmit}
+            loading={isSubmitting}
+            disabled={isSubmitting}
+            icon="content-save"
+            style={{ flex: 1.4 }}
+          >
+            {editing ? "Guardar cambios" : "Crear fórmula"}
+          </Button>
+        )}
       </View>
     </ScrollView>
   );

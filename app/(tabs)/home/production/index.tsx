@@ -4,8 +4,8 @@ import PermissionGate from "@/components/App/PermissionGate";
 import ProductionKpiCards from "@/components/Production/ProductionKpiCards";
 import ProductionStatusBadge from "@/components/Production/ProductionStatusBadge";
 import palette from "@/constants/palette";
-import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useResponsive } from "@/hooks/useResponsive";
@@ -81,9 +81,15 @@ export default function ProductionIndex() {
   const { company } = useSelectedCompany();
   const { selectedLocation } = useSelectedLocation();
   const { isMobile } = useResponsive();
-  const { hasPermission } = useAuth();
+  const { can } = useCan();
   // Cancelar revierte el stock: el backend pide production_orders_update.
-  const canUpdate = hasPermission("production_orders_update");
+  const canUpdate = can("production_orders_update");
+  // Duplicar abre el alta (production_orders_create) con los datos de la
+  // orden original (GET /production-orders/{id}: production_orders_read).
+  const canDuplicate = can(["production_orders_create", "production_orders_read"], {
+    all: true,
+  });
+  const canSeeFormulas = can("formulas_list");
   const layout = useWindowDimensions();
   const [tabIndex, setTabIndex] = useState(0);
   const [routes] = useState([
@@ -163,6 +169,7 @@ export default function ProductionIndex() {
         {
           title: "Duplicar",
           icon: "content-copy",
+          show: () => canDuplicate,
           onPress: (item: any) =>
             router.push({
               pathname: "/(tabs)/home/production/form",
@@ -180,7 +187,7 @@ export default function ProductionIndex() {
         },
       ],
     }),
-    [handleItem, handleEdit, handleCancel, router, canUpdate],
+    [handleItem, handleEdit, handleCancel, router, canUpdate, canDuplicate],
   );
 
   const formulasButton = (
@@ -231,11 +238,13 @@ export default function ProductionIndex() {
   const listScene = useMemo(
     () => () => (
       <View style={{ flex: 1 }}>
-        {formulasButton}
+        {canSeeFormulas && formulasButton}
         <AppList
           key={listKey}
           title="Producción"
           service={Services.productionOrders}
+          // «+» pide _create, abrir _read y «Editar» _update.
+          permissionPrefix="production_orders"
           columns={PRODUCTION_COLUMNS}
           showAppBar={isMobile ? false : undefined}
           actionColumnTitle="Acciones"
@@ -300,7 +309,7 @@ export default function ProductionIndex() {
         />
       </View>
     ),
-    [listFilters, listKey, handleItem, productionMenu, isMobile],
+    [listFilters, listKey, handleItem, productionMenu, isMobile, canSeeFormulas],
   );
 
   const statsScene = useMemo(() => () => <ProductionKpiCards />, []);
@@ -348,11 +357,13 @@ export default function ProductionIndex() {
     <PermissionGate permission="production_orders_list">
       <View style={{ flex: 1, backgroundColor: "transparent" as any }}>
         <ProductionKpiCards />
-        {formulasButton}
+        {canSeeFormulas && formulasButton}
         <AppList
           key={listKey}
           title="Producción"
           service={Services.productionOrders}
+          // «+» pide _create, abrir _read y «Editar» _update.
+          permissionPrefix="production_orders"
           columns={PRODUCTION_COLUMNS}
           actionColumnTitle="Acciones"
           actionColumnWidth={200}
