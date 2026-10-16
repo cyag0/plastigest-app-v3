@@ -2,6 +2,7 @@ import { formatDateTime, formatTime } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import AppChip from "@/components/App/Chip";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCan } from "@/hooks/useCan";
 import { formatMoney } from "@/utils/format";
 import { shortLocationName } from "@/utils/locations";
 import { createCrudService } from "@/utils/services/crudService";
@@ -56,8 +57,16 @@ function shiftTime(item: Session): string {
 
 /** Historial de turnos de caja (reemplaza al cierre diario). */
 export default function CashSessionsIndex() {
-  const { selectedCompany } = useAuth();
-  const show = (item: Session) => router.push(`/(tabs)/home/cash/sessions/${item.id}` as any);
+  const { selectedCompany, user } = useAuth();
+  const { can, canAccessRoute } = useCan();
+  const detailRoute = (item: Session) => `/(tabs)/home/cash/sessions/${item.id}`;
+  // El backend deja ver el turno propio sin permiso; el de otro cajero pide
+  // cash_register_sessions_read. Además, la pantalla de detalle tiene su regla.
+  const canOpen = (item: Session) =>
+    (item.user_id === user?.id || can("cash_register_sessions_read")) && canAccessRoute(detailRoute(item));
+  const show = (item: Session) => {
+    if (canOpen(item)) router.push(detailRoute(item) as any);
+  };
 
   return (
     <AppList<Session>
@@ -77,7 +86,7 @@ export default function CashSessionsIndex() {
           ],
         },
       ]}
-      menu={{ onShow: show, showView: true, showEdit: false, showDelete: false }}
+      menu={{ onShow: show, showView: canOpen, showEdit: false, showDelete: false }}
       columns={[
         { key: "opened_at", title: "Apertura", width: 140, render: (_, item) => formatDateTime(item.opened_at) },
         { key: "cash_register_name", title: "Caja", width: 110, render: (_, item) => item.cash_register_name ?? "—" },

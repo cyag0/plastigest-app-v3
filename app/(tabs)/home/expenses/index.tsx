@@ -58,6 +58,9 @@ export default function ExpensesIndex() {
       <AppList
       title="Gastos"
       service={Services.expenses}
+      // "+" pide expenses_create, abrir el gasto expenses_read, "Editar"
+      // expenses_update y "Eliminar" expenses_delete.
+      permissionPrefix="expenses"
       filters={[
         {
           type: "simple",
