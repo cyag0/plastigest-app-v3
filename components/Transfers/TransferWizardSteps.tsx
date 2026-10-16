@@ -2,6 +2,7 @@ import type { VariantMatchMap } from "@/components/App/StatusBadge";
 import StatusBadge from "@/components/App/StatusBadge";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { notifyError } from "@/utils/errorNotice";
 import { printTransferRemission } from "@/utils/printDocument";
 import React, { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -87,16 +88,15 @@ export function TransferWizardStatusCard({
 }: TransferWizardStatusCardProps) {
   const theme = getStepTheme(selectedStep);
   const [printing, setPrinting] = useState(false);
-  const [printError, setPrintError] = useState(false);
 
   // La remisión es la hoja que viaja con la mercancía y se firma al recibir.
   const printRemission = async () => {
     try {
       setPrinting(true);
-      setPrintError(false);
       await printTransferRemission(transfer.id, transfer.transfer_number);
-    } catch {
-      setPrintError(true);
+    } catch (error) {
+      // Un solo aviso (el de la app), con el motivo del servidor.
+      notifyError(error, "No se pudo generar la remisión.");
     } finally {
       setPrinting(false);
     }
@@ -132,7 +132,6 @@ export function TransferWizardStatusCard({
           >
             Imprimir remisión
           </Button>
-          {printError && <Text style={styles.statusSubtitle}>No se pudo generar la remisión</Text>}
         </View>
 
         <View style={styles.progressRow}>

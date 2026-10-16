@@ -27,7 +27,9 @@ type InventoryType = App.Entities.InventoryType;
  */
 export default function ProductsIndex() {
   const router = useRouter();
-  const { types, loading, error, reload } = useInventoryTypes({
+  // Si la consulta falla, el aviso global de la app ya dice por qué (antes se
+  // repetía aquí con el texto de axios).
+  const { types, loading, reload } = useInventoryTypes({
     withCounts: true,
   });
   const [refreshing, setRefreshing] = React.useState(false);
@@ -53,8 +55,6 @@ export default function ProductsIndex() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
     >
-      {!!error && <Text style={styles.error}>{error}</Text>}
-
       {loading ? (
         <TypesSkeleton />
       ) : (
@@ -147,10 +147,6 @@ const styles = StyleSheet.create({
     maxWidth: 720,
     width: "100%",
     alignSelf: "center",
-  },
-  error: {
-    color: palette.error,
-    fontSize: 13,
   },
   groupTitle: {
     fontSize: 14,
