@@ -89,9 +89,10 @@ export default function _layout() {
       />
       <Stack.Screen
         name="cash/form"
-        options={{
-          title: "Nuevo Movimiento",
-        }}
+        // Con ?id= es un movimiento que ya existe (antes decía "Nuevo").
+        options={({ route }: any) => ({
+          title: route.params?.id ? "Detalle del Movimiento" : "Nuevo Movimiento",
+        })}
       />
       <Stack.Screen
         name="cash/sessions/index"
@@ -178,9 +179,9 @@ export default function _layout() {
       />
       <Stack.Screen
         name="production/formulas/form"
-        options={{
-          title: "Nueva Fórmula",
-        }}
+        options={({ route }: any) => ({
+          title: route.params?.id ? "Detalle de Fórmula" : "Nueva Fórmula",
+        })}
       />
 
       <Stack.Screen

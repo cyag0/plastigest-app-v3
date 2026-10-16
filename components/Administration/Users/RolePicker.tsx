@@ -58,18 +58,23 @@ export default function RolePicker({ value, onChange, disabled }: Props) {
     <View style={styles.list}>
       {roles.map((role) => {
         const selected = role.id === value;
+        // Un rol con permisos que el usuario no tiene no se puede asignar
+        // (el backend responde 403): se ve, pero no se puede elegir.
+        const locked = role.assignable === false && !selected;
+        const optionDisabled = disabled || locked;
         return (
           <Pressable
             key={role.id}
-            onPress={() => !disabled && onChange(role.id)}
-            disabled={disabled}
+            onPress={() => !optionDisabled && onChange(role.id)}
+            disabled={optionDisabled}
             role="radio"
             aria-checked={selected}
-            aria-disabled={disabled}
+            aria-disabled={optionDisabled}
             style={({ pressed }) => [
               styles.option,
               selected && styles.optionSelected,
-              pressed && !disabled && { opacity: 0.85 },
+              locked && { opacity: 0.55 },
+              pressed && !optionDisabled && { opacity: 0.85 },
             ]}
           >
             <MaterialCommunityIcons
@@ -87,6 +92,11 @@ export default function RolePicker({ value, onChange, disabled }: Props) {
               {role.permissions_count !== undefined && (
                 <Text style={styles.optionMeta}>
                   {role.permissions_count} {role.permissions_count === 1 ? "permiso" : "permisos"}
+                </Text>
+              )}
+              {locked && (
+                <Text style={styles.optionMeta}>
+                  No puedes asignarlo: tiene permisos que tú no tienes.
                 </Text>
               )}
             </View>
