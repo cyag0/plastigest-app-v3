@@ -36,7 +36,7 @@ const segmentLabels: Record<string, string> = {
   history: "Historial",
   home: "Inicio",
   inventory: "Inventario",
-  kiosk: "Quiosco",
+  kiosk: "Kiosko",
   kardex: "Kárdex",
   activity: "Actividad",
   locations: "Sucursales",
@@ -101,7 +101,9 @@ const GENERIC_LABELS = new Set(["Nuevo", "Detalle", "Editar"]);
 // Segmentos que forman parte de la URL pero no son una pantalla navegable
 // (ej. /inventory/products/type/[slug]): se conservan en el href de los
 // siguientes items pero no se muestran como miga.
-const skippedSegments = new Set(["type"]);
+// "setup": /kiosk/setup se muestra como "Inicio › Kiosko" (la miga de /kiosk
+// queda como la actual: así nunca lleva a la pantalla del cliente).
+const skippedSegments = new Set(["type", "setup"]);
 
 function isDynamicSegment(segment: string) {
   return /^\d+$/.test(segment) || /^[0-9a-f-]{12,}$/i.test(segment);

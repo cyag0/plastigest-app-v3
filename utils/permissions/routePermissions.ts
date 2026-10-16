@@ -90,6 +90,9 @@ export const ROUTE_PERMISSIONS: Readonly<Record<string, RouteRule>> = {
   "(stacks)/change-password": AUTHENTICATED,
   "(stacks)/help/[topic]": AUTHENTICATED,
   "(stacks)/help/index": AUTHENTICATED,
+  // Kiosko de autoservicio: la pantalla del cliente y la que inicia el modo kiosko.
+  "(stacks)/kiosk/index": "sales_kiosk",
+  "(stacks)/kiosk/setup": "sales_kiosk",
   "(stacks)/notification-preferences/index": "notifications_list",
   "(stacks)/pos/index": "sales_pos",
   "(stacks)/selectCompany": AUTHENTICATED,

@@ -71,6 +71,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   [ALL_LOCATIONS]: "Todas las sucursales",
   [SYSTEM_ADMIN]: "Administrador del sistema",
   sales_pos: "Punto de venta",
+  sales_kiosk: "Usar el kiosko de autoservicio",
   sales_discount: "Precios y descuentos",
 };
 
