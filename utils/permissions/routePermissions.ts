@@ -196,7 +196,6 @@ export const ROUTE_PERMISSIONS: Readonly<Record<string, RouteRule>> = {
   "(tabs)/home/roles/[id]/edit": "roles_update",
   "(tabs)/home/sales-orders/index": "sales_orders_list",
   "(tabs)/home/sales-orders/[id]": "sales_orders_read",
-  "(tabs)/home/sales-orders/kiosk": { all: ["sales_orders_create", "sales_orders_update"] },
   "(tabs)/home/sales-reports/index": "reports_list",
   "(tabs)/home/sales-reports/form": "reports_create",
   "(tabs)/home/sales-reports/[id]": "reports_read",
