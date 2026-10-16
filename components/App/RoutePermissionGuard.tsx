@@ -16,6 +16,7 @@
  * El argumento es la carpeta del layout dentro de app/. Login, selección de
  * empresa/sucursal y las pantallas de "cualquier usuario" pasan sin revisar.
  */
+import EmptyState from "@/components/App/EmptyState";
 import NoPermissionView from "@/components/App/NoPermissionView";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCan } from "@/hooks/useCan";
@@ -26,6 +27,7 @@ import {
   routeRuleForScreen,
 } from "@/utils/permissions/routePermissions";
 import React, { useEffect, useState } from "react";
+import { View } from "react-native";
 
 interface RoutePermissionGuardProps {
   /** Carpeta del layout dentro de app/, p. ej. "(tabs)/home". */
@@ -46,7 +48,16 @@ export function RoutePermissionGuard({
   params,
   children,
 }: RoutePermissionGuardProps) {
-  const { user, selectedCompany, location, isLoading, isSwitchingLocation } = useAuth();
+  const {
+    user,
+    selectedCompany,
+    location,
+    isLoading,
+    isSwitchingLocation,
+    permissionsError,
+    retryPermissions,
+  } = useAuth();
+  const [retrying, setRetrying] = useState(false);
   const { can } = useCan();
 
   const routeKey = `${layoutDir}/${routeName}`;
@@ -84,6 +95,24 @@ export function RoutePermissionGuard({
 
   if (!needsPermission) return children;
   if (current === null) return null;
+  if (!current && ready && permissionsError) {
+    // Los permisos no se pudieron cargar (sin red, error del servidor): no
+    // es "sin permiso".
+    return (
+      <View style={{ flex: 1, justifyContent: "center" }}>
+        <EmptyState
+          icon="cloud-off-outline"
+          title={retrying ? "Cargando tus permisos…" : "No se pudieron cargar tus permisos"}
+          description="Revisa tu conexión e inténtalo de nuevo."
+          actionLabel={retrying ? undefined : "Reintentar"}
+          onAction={() => {
+            setRetrying(true);
+            retryPermissions().finally(() => setRetrying(false));
+          }}
+        />
+      </View>
+    );
+  }
   if (!current) {
     return <NoPermissionView requiredPermissions={describeRouteRule(resolved)} />;
   }

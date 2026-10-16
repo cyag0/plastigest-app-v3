@@ -19,6 +19,7 @@ import {
   onUnauthorized,
 } from "@/utils/axios";
 import Services from "@/utils/services";
+import { logCaughtError } from "@/utils/silenceLogs";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import React, {
@@ -95,6 +96,14 @@ interface AuthContextType {
   unreadNotificationsCount: number;
   permissions: string[];
   /**
+   * No se pudieron cargar los permisos de la sucursal (sin red, 5xx) y no
+   * había copia guardada: `permissions` queda vacío, pero no es "sin
+   * permiso". El guard de rutas ofrece reintentar.
+   */
+  permissionsError: boolean;
+  /** Vuelve a pedir los permisos de la sucursal actual. */
+  retryPermissions: () => Promise<void>;
+  /**
    * Error al verificar la sesión al abrir la app sin poder llegar al servidor
    * (sin red, timeout, error 5xx) y sin un usuario guardado con el cual
    * continuar. El NavigationHandler muestra "Reintentar" en vez de mandar a
@@ -154,6 +163,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoadingCompanies, setIsLoadingCompanies] = useState(false);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [permissions, setPermissions] = useState<string[]>([]);
+  const [permissionsError, setPermissionsError] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   // Aviso para el usuario cuando la sesión se cerró sola (401).
   const [sessionEndMessage, setSessionEndMessage] = useState<string | null>(null);
@@ -285,6 +295,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     setLocation(null);
     setCompanies([]);
     setPermissions([]);
+    setPermissionsError(false);
     setUnreadNotificationsCount(0);
     setIsSwitchingLocation(false);
     setIsSessionUnverified(false);
@@ -331,19 +342,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const response = await authAPI.myPermissions();
       const perms: string[] = response.data.permissions ?? [];
       setPermissions(perms);
+      setPermissionsError(false);
       await AsyncStorage.setItem(permissionsKey, JSON.stringify(perms));
     } catch (error) {
-      console.error("Error loading permissions:", describeError(error));
+      // Falla del API: no abre el aviso rojo de desarrollo (la pantalla
+      // ofrece reintentar).
+      logCaughtError("Error loading permissions:", error);
       // Intentar restaurar desde caché
       try {
         const cached = await AsyncStorage.getItem(permissionsKey);
         if (cached) {
           setPermissions(JSON.parse(cached));
+          setPermissionsError(false);
           return;
         }
       } catch {}
 
       setPermissions([]);
+      // Sin permisos por una falla, no porque no los tenga: el guard ofrece
+      // reintentar (y se reintenta al volver a la app).
+      setPermissionsError(true);
     }
   };
 
@@ -620,6 +638,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, isSessionUnverified]);
 
+  // Los permisos no se pudieron cargar: se vuelven a pedir al volver a la
+  // app (antes solo al cambiar de sucursal, reiniciar o reverificar).
+  const shouldRetryPermissions = permissionsError && Boolean(user) && Boolean(location);
+  useEffect(() => {
+    if (!shouldRetryPermissions) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void loadPermissions();
+    });
+    return () => subscription.remove();
+    // loadPermissions usa la empresa y la sucursal actuales.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shouldRetryPermissions, location?.id, selectedCompany?.id]);
+
   // Contador de la campana al día sin recargar: al volver a la app (en web,
   // al volver a la pestaña) y cada minuto mientras está visible. Los push
   // recibidos con la app abierta lo refrescan aparte (onForegroundMessage) y
@@ -843,6 +874,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     isLoadingCompanies,
     unreadNotificationsCount,
     permissions,
+    permissionsError,
+    retryPermissions: () => loadPermissions(),
     authError,
     sessionEndMessage,
     clearSessionEndMessage: () => setSessionEndMessage(null),
