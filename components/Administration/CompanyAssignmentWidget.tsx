@@ -1,7 +1,8 @@
 import { shortLocationName } from "@/utils/locations";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
-import Services from "@/utils/services";
+import { useCan } from "@/hooks/useCan";
+import axiosClient from "@/utils/axios";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { Button, Card, IconButton, Text } from "react-native-paper";
@@ -31,6 +32,8 @@ interface Props {
 
 export default function LocationRoleList({ value, onChange, readonly, companyId }: Props) {
   const { selectedCompany } = useAuth();
+  // Sin «Roles › Listar» el backend responde 403: los roles ni se piden.
+  const canListRoles = useCan().can("roles_list");
   // En celular los dos selects lado a lado cortaban los nombres
   // ("Cocos Francisco Suc…", "Encargado …"): se apilan.
   const { width } = useWindowDimensions();
@@ -47,9 +50,11 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
     const params: any = { all: true };
     if (companyId) params.company_id = companyId;
 
+    // silent: si fallan, el error se muestra aquí mismo (loadError), sin el
+    // aviso global encima.
     Promise.allSettled([
-      Services.admin.locations.index(params),
-      Services.admin.roles.index(params),
+      axiosClient.get("/auth/admin/locations", { params, silent: true }),
+      canListRoles ? axiosClient.get("/auth/admin/roles", { params, silent: true }) : Promise.resolve(null),
     ])
       .then(([locResult, roleResult]) => {
         const problems: string[] = [];
@@ -63,9 +68,11 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
           console.error(locResult.reason);
           problems.push("No se pudieron cargar las sucursales.");
         }
-        if (roleResult.status === "fulfilled") {
+        if (!canListRoles) {
+          problems.push("Para elegir roles necesitas el permiso «Roles › Listar».");
+        } else if (roleResult.status === "fulfilled") {
           const roleRes = roleResult.value;
-          const rls: any[] = Array.isArray(roleRes.data) ? roleRes.data : (roleRes.data as any)?.data || [];
+          const rls: any[] = Array.isArray(roleRes?.data) ? roleRes.data : (roleRes?.data as any)?.data || [];
           setRoles(rls.map((r) => ({ value: String(r.id), label: r.name })));
         } else {
           console.error(roleResult.reason);
@@ -78,7 +85,7 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
         setLoadError(problems.length ? problems.join(" ") : null);
       })
       .finally(() => setLoading(false));
-  }, [companyId, selectedCompany?.name]);
+  }, [companyId, selectedCompany?.name, canListRoles]);
 
   const add = () => onChange([...value, { location_id: undefined, role_id: undefined }]);
 

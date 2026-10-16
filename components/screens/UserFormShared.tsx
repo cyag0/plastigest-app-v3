@@ -22,6 +22,7 @@ import { useAlerts } from "@/hooks/useAlerts";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
 import { goBack } from "@/utils/navigation";
+import axiosClient from "@/utils/axios";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
@@ -126,7 +127,8 @@ export default function UserFormShared(props: UserFormSharedProps) {
 
     let response: any;
     try {
-      response = await Services.admin.users.show(id);
+      // silent: si falla, el motivo se muestra en el formulario (loadError).
+      response = await axiosClient.get(`/auth/admin/users/${id}`, { silent: true });
     } catch (error: any) {
       initialRef.current = null;
       setLoadError(
@@ -202,6 +204,8 @@ export default function UserFormShared(props: UserFormSharedProps) {
       ref={formRef}
       api={Services.admin.users}
       id={id}
+      // Guardar pide users_update al editar y users_create al crear.
+      permissionPrefix="users"
       validationSchema={validationSchema}
       initialValues={loadInitialValues}
       showResetButton={false}

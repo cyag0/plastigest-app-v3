@@ -1,4 +1,5 @@
-import Services from "@/utils/services";
+import { useCan } from "@/hooks/useCan";
+import axiosClient from "@/utils/axios";
 import { useEffect, useMemo, useState } from "react";
 import { listFrom } from "./userDisplay";
 
@@ -17,8 +18,10 @@ let inFlight: Promise<RoleOption[]> | null = null;
 
 function fetchCompanyRoles(): Promise<RoleOption[]> {
   if (!inFlight) {
-    inFlight = Services.admin.roles
-      .index({ all: true } as any)
+    // silent: quien la usa decide qué mostrar si falla (el selector de rol lo
+    // dice en su lugar; la lista y el detalle siguen sin ella).
+    inFlight = axiosClient
+      .get("/auth/admin/roles", { params: { all: true }, silent: true })
       .then((response: any) => listFrom<RoleOption>(response?.data))
       .finally(() => {
         inFlight = null;
@@ -29,14 +32,18 @@ function fetchCompanyRoles(): Promise<RoleOption[]> {
 
 /**
  * Roles de la empresa actual (Administración › Roles y permisos). Requiere
- * roles_list: sin él `error` trae el 403 y `roles` queda en null.
+ * roles_list: sin él no se piden (el backend respondería 403), `forbidden`
+ * queda en true y `roles` en null.
  */
 export function useCompanyRoles(enabled = true) {
+  const { can } = useCan();
+  const forbidden = !can("roles_list");
+  const shouldFetch = enabled && !forbidden;
   const [roles, setRoles] = useState<RoleOption[] | null>(null);
   const [error, setError] = useState<any>(null);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!shouldFetch) return;
     let cancelled = false;
     fetchCompanyRoles()
       .then((list) => {
@@ -50,9 +57,9 @@ export function useCompanyRoles(enabled = true) {
     return () => {
       cancelled = true;
     };
-  }, [enabled]);
+  }, [shouldFetch]);
 
   const roleIds = useMemo(() => (roles ? new Set(roles.map((role) => role.id)) : null), [roles]);
 
-  return { roles, roleIds, error };
+  return { roles, roleIds, error, forbidden };
 }

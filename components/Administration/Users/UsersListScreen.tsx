@@ -62,9 +62,15 @@ export default function UsersListScreen({ scope: requestedScope }: { scope: User
   const [search, setSearch] = useState("");
   const [addingExisting, setAddingExisting] = useState(false);
 
-  const canCreate = hasPermission("users_create");
-  // Traer a alguien de otra sucursal: quien entra a todas las sucursales.
-  const canAddExisting = scope === "location" && hasPermission("users_update") && allLocations;
+  // En la sucursal el usuario nuevo entra con un rol, y elegirlo pide la
+  // lista de roles (roles_list): sin ella el formulario no se podría guardar.
+  const canCreate = hasPermission("users_create") && (scope !== "location" || hasPermission("roles_list"));
+  // Abrir a alguien pide users_read (sin él el detalle respondería 403).
+  const canOpen = hasPermission("users_read");
+  // Traer a alguien de otra sucursal: quien entra a todas las sucursales (y
+  // puede ver los roles para elegir con cuál entra: roles_list).
+  const canAddExisting =
+    scope === "location" && hasPermission("users_update") && hasPermission("roles_list") && allLocations;
 
   const requestId = useRef(0);
   const load = useCallback(
@@ -190,13 +196,14 @@ export default function UsersListScreen({ scope: requestedScope }: { scope: User
     return (
       <Pressable
         key={u.id}
-        onPress={() => router.push(routes.detail(u.id) as any)}
+        onPress={canOpen ? () => router.push(routes.detail(u.id) as any) : undefined}
+        disabled={!canOpen}
         style={({ pressed }) => [
           styles.row,
           index > 0 && styles.rowDivider,
           pressed && { backgroundColor: colors.surfaceMuted },
         ]}
-        accessibilityRole="button"
+        accessibilityRole={canOpen ? "button" : undefined}
         accessibilityLabel={`${u.name}, ${u.email}`}
       >
         <View style={!u.is_active && styles.dimmed}>
@@ -223,7 +230,7 @@ export default function UsersListScreen({ scope: requestedScope }: { scope: User
           </Text>
           <View style={styles.accessLine}>{access}</View>
         </View>
-        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />
+        {canOpen && <MaterialCommunityIcons name="chevron-right" size={20} color={colors.textMuted} />}
       </Pressable>
     );
   };

@@ -6,6 +6,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { goBack } from "@/utils/navigation";
+import axiosClient from "@/utils/axios";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
@@ -81,11 +82,15 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
   const canEdit = hasPermission("users_update");
   const canDelete = hasPermission("users_delete");
   const canSeeActivity = hasPermission("users_read");
+  // Elegir el nuevo rol pide la lista de roles (roles_list).
+  const canPickRole = hasPermission("roles_list");
   const branch = shortLocationName(location?.name ?? "esta sucursal", selectedCompany?.name);
 
   const load = useCallback(async () => {
     try {
-      const response: any = await Services.admin.users.show(id);
+      // silent: un 403/404 se explica en la pantalla; los demás errores, con
+      // alerts.error.
+      const response: any = await axiosClient.get(`/auth/admin/users/${id}`, { silent: true });
       setUser(response?.data?.data ?? null);
       setLoadFailed(false);
       setLoadError(null);
@@ -301,7 +306,7 @@ export default function UserDetailScreen({ id, scope: requestedScope }: { id: nu
                     {branchAccess ? (branchAccess.role_name ?? "Sin rol") : "Sin acceso a esta sucursal"}
                   </Text>
                 </View>
-                {canEdit && !isMe && !locked && !restricted && branchAccess && (
+                {canEdit && canPickRole && !isMe && !locked && !restricted && branchAccess && (
                   <Button
                     compact
                     mode="text"

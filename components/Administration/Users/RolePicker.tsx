@@ -21,7 +21,7 @@ interface Props {
 export default function RolePicker({ value, onChange, disabled }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const { roles: allRoles, error } = useCompanyRoles();
+  const { roles: allRoles, error, forbidden } = useCompanyRoles();
   // El rol que tenía al abrir (el primero que llega: en el formulario los
   // valores cargan después de montar): si está desactivado se sigue mostrando.
   const [initialValue, setInitialValue] = useState(value);
@@ -32,10 +32,10 @@ export default function RolePicker({ value, onChange, disabled }: Props) {
     [allRoles, initialValue],
   );
 
-  if (error) {
+  if (forbidden || error) {
     return (
       <Text style={styles.hint}>
-        {error?.response?.status === 403
+        {forbidden || error?.response?.status === 403
           ? "Para elegir el rol necesitas el permiso «Roles › Listar». Pídeselo al administrador."
           : "No se pudieron cargar los roles."}
       </Text>
