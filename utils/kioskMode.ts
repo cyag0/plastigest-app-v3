@@ -105,7 +105,10 @@ function parseLock(raw: string | null): PinLock {
     const data = raw ? JSON.parse(raw) : null;
     return {
       failures: Math.max(0, Number(data?.failures) || 0),
-      lockedUntil: Math.max(0, Number(data?.lockedUntil) || 0),
+      // Nunca más de una espera desde ahora: si el reloj del equipo estaba
+      // adelantado al guardarla y luego se corrigió, la espera duraría todo
+      // el desfase y el personal no podría salir del kiosko.
+      lockedUntil: Math.min(Math.max(0, Number(data?.lockedUntil) || 0), Date.now() + KIOSK_PIN_LOCK_MS),
     };
   } catch {
     return { failures: 0, lockedUntil: 0 };

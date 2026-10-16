@@ -96,6 +96,8 @@ export const KIOSK_ERROR_CODES = {
   productUnavailable: "product_unavailable",
   /** Demasiados pedidos del kiosko esperando en caja en la sucursal. */
   kioskBusy: "kiosk_busy",
+  /** La llave es de un pedido que ya se canceló (venció o lo canceló caja): enviar con otra. */
+  orderCancelled: "kiosk_order_cancelled",
 } as const;
 
 /** Al enviar el pedido no se espera el minuto del alta de ventas: el cliente está frente a la pantalla. */

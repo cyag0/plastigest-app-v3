@@ -27,7 +27,7 @@ import KioskToast, { useKioskToast } from "@/components/Kiosk/KioskToast";
 import KioskTopBar from "@/components/Kiosk/KioskTopBar";
 import KioskUnavailable from "@/components/Kiosk/KioskUnavailable";
 import KioskWelcome from "@/components/Kiosk/KioskWelcome";
-import { joinNames, KIOSK_NAME_MAX, productOptions, visibleProducts } from "@/components/Kiosk/model";
+import { joinNames, KIOSK_MAX_QTY, KIOSK_NAME_MAX, productOptions, visibleProducts } from "@/components/Kiosk/model";
 import { apiErrorCode, apiErrorMessage, isOutcomeUnknown, SALE_ERROR_CODES } from "@/components/Pos/saleErrors";
 import { useAuth } from "@/contexts/AuthContext";
 import { useKioskCart, type KioskCartEntry, type KioskCartResult } from "@/hooks/useKioskCart";
@@ -63,6 +63,9 @@ type Phase = "welcome" | "catalog" | "review" | "sending" | "done";
 const CATALOG_REFRESH_MS = 5 * 60 * 1000;
 /** Al volver la app a primer plano en la bienvenida, si el catálogo tiene más de esto. */
 const CATALOG_STALE_MS = 60 * 1000;
+
+/** El diálogo de salida con PIN se cierra solo pasado este tiempo. */
+const EXIT_DIALOG_TIMEOUT_MS = 45 * 1000;
 
 const NETWORK_ERROR = "No pudimos enviar tu pedido. Revisa la conexión e intenta de nuevo.";
 const ADJUSTED = "Ajustamos tu pedido; revísalo antes de enviarlo.";
@@ -219,12 +222,35 @@ function KioskApp({ onExited, backRef, disablePrevention }: AppProps) {
     hasItems: cart.lines.length > 0,
     onTimeout: resetSession,
   });
-  const { bump } = idle;
+  const { bump, warning: idleWarning } = idle;
   /** Captura de toques en la raíz: cualquier toque reinicia el contador. */
   const captureActivity = useCallback(() => {
+    // Con "¿Sigues ahí?" abierto el toque es del diálogo: reiniciar aquí lo
+    // cerraba al apoyar el dedo y su botón ("Empezar de nuevo") se quedaba
+    // sin el toque (en web táctil el clic caía en lo que estaba detrás).
+    if (idleWarning !== null) return false;
     bump();
     return false;
-  }, [bump]);
+  }, [bump, idleWarning]);
+
+  // El diálogo de salida (solo personal) se cierra solo: abierto por error o
+  // abandonado, detenía el reinicio por inactividad con el pedido a la vista.
+  useEffect(() => {
+    if (!exitOpen) return;
+    const timer = setTimeout(() => setExitOpen(false), EXIT_DIALOG_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [exitOpen]);
+
+  // Un catálogo recargado quitó o recortó algo del pedido: se avisa.
+  const { catalogAdjustment } = cart;
+  useEffect(() => {
+    if (!catalogAdjustment) return;
+    showToast(`Ya no está disponible como lo pediste: ${catalogAdjustment.names.join(", ")}. Revisa tu pedido.`, {
+      tone: "warning",
+    });
+    // Solo cuando llega un ajuste nuevo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogAdjustment]);
 
   // ── Bienvenida: catálogo al día y versión nueva (web) ──
   useEffect(() => {
@@ -254,7 +280,12 @@ function KioskApp({ onExited, backRef, disablePrevention }: AppProps) {
   const showResult = useCallback(
     (result: KioskCartResult) => {
       if (result.ok) return;
-      if (result.reason === "limit") {
+      if (result.reason === "limit" && result.max >= KIOSK_MAX_QTY) {
+        // Tope por producto del kiosko, no falta de existencia.
+        showToast(`Puedes pedir hasta ${KIOSK_MAX_QTY} de cada producto; si necesitas más, pide en caja.`, {
+          tone: "warning",
+        });
+      } else if (result.reason === "limit") {
         showToast(result.max > 0 ? `Solo quedan ${result.max}` : "Ya no quedan más", { tone: "warning" });
       } else if (result.reason === "lines") {
         showToast("Tu pedido ya tiene muchos productos distintos. Envíalo y haz otro.", { tone: "warning" });
@@ -393,6 +424,18 @@ function KioskApp({ onExited, backRef, disablePrevention }: AppProps) {
       // La llave ya se usó en otra cosa: el siguiente envío lleva una nueva.
       renewRequestId();
       setNotice({ tone: "error", text: apiErrorMessage(error, "No pudimos registrar tu pedido. Pide ayuda en caja.") });
+      setPhase("review");
+      return;
+    }
+
+    if (code === KIOSK_ERROR_CODES.orderCancelled) {
+      // El pedido con esta llave sí entró, pero ya se canceló (venció o lo
+      // canceló caja): el siguiente envío lleva otra llave y crea uno nuevo.
+      renewRequestId();
+      setNotice({
+        tone: "warning",
+        text: apiErrorMessage(error, "Ese pedido ya no está vigente. Revisa tu pedido y vuelve a enviarlo."),
+      });
       setPhase("review");
       return;
     }

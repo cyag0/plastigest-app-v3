@@ -9,8 +9,9 @@
  * Mientras tanto tapa la pantalla con el fondo del tema para que no se vea
  * la del personal.
  *
- * Si la cuenta ya no tiene el permiso del kiosko no se fuerza nada (la
- * pantalla del kiosko se quedaría en "sin permiso" sin forma de salir).
+ * Aunque a la cuenta le quiten el permiso del kiosko, el equipo sigue en
+ * /kiosk: ahí sale "no disponible" con la salida por PIN. Si la puerta lo
+ * soltara, el cliente quedaría en la app del personal.
  *
  * También informa a utils/kioskMode la sesión actual, para que
  * isKioskModeActive() (avisos push) sepa si el modo es de esta sesión.
@@ -34,7 +35,7 @@ const KIOSK_SETUP_PATH = "/kiosk/setup";
 const RETRY_MS = 1500;
 
 export default function KioskModeGate() {
-  const { user, location, isLoading, isSwitchingLocation, hasPermission } = useAuth();
+  const { user, location, isLoading, isSwitchingLocation } = useAuth();
   const { colors } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
@@ -48,11 +49,7 @@ export default function KioskModeGate() {
     setKioskSession(userId != null && locationId != null ? { userId, locationId } : null);
   }, [userId, locationId]);
 
-  const applies =
-    !isLoading &&
-    !isSwitchingLocation &&
-    isKioskModeFor(record, userId, locationId) &&
-    hasPermission("sales_kiosk");
+  const applies = !isLoading && !isSwitchingLocation && isKioskModeFor(record, userId, locationId);
   const away = applies && pathname !== KIOSK_PATH && pathname !== KIOSK_SETUP_PATH;
 
   useEffect(() => {

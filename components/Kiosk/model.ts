@@ -12,8 +12,12 @@ import { amountToCents, centsToAmount } from "@/utils/money";
 
 export type { KioskCatalog, KioskCategory, KioskOrder, KioskPackage, KioskProduct } from "@/utils/services/kiosk";
 
-/** El servidor acepta de 1 a 99 por renglón. */
-export const KIOSK_MAX_QTY = 99;
+/**
+ * El servidor acepta de 1 a 30 por renglón (kiosk.max_quantity_per_item):
+ * más que eso se pide en caja. Sin tope, un solo pedido apartaba toda la
+ * existencia de un producto hasta que alguien lo cancelaba o vencía.
+ */
+export const KIOSK_MAX_QTY = 30;
 /** Y de 1 a 40 renglones por pedido. */
 export const KIOSK_MAX_LINES = 40;
 /** "¿A nombre de quién?" */

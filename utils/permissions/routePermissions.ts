@@ -91,7 +91,11 @@ export const ROUTE_PERMISSIONS: Readonly<Record<string, RouteRule>> = {
   "(stacks)/help/[topic]": AUTHENTICATED,
   "(stacks)/help/index": AUTHENTICATED,
   // Kiosko de autoservicio: la pantalla del cliente y la que inicia el modo kiosko.
-  "(stacks)/kiosk/index": "sales_kiosk",
+  // La del cliente revisa sales_kiosk por su cuenta: si se lo quitan a la
+  // cuenta, muestra "no disponible" con salida por PIN. Con el guardia de
+  // aquí salía "Sin permiso" con "Ir al inicio" y el cliente quedaba dentro
+  // del sistema.
+  "(stacks)/kiosk/index": AUTHENTICATED,
   "(stacks)/kiosk/setup": "sales_kiosk",
   "(stacks)/notification-preferences/index": "notifications_list",
   "(stacks)/pos/index": "sales_pos",

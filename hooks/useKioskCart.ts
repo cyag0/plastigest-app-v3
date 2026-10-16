@@ -97,9 +97,6 @@ export function useKioskCart(products: ProductsById) {
   // parten del pedido ya actualizado, no del anterior.
   const linesRef = useRef<KioskCartLine[]>([]);
   const productsRef = useRef(products);
-  useLayoutEffect(() => {
-    productsRef.current = products;
-  }, [products]);
   const requestIdRef = useRef<string | null>(null);
 
   const commit = useCallback((next: KioskCartLine[]) => {
@@ -108,6 +105,28 @@ export function useKioskCart(products: ProductsById) {
     requestIdRef.current = null;
     setLines(next);
   }, []);
+
+  /** Lo que un catálogo recargado quitó o recortó del pedido (para avisar). */
+  const [catalogAdjustment, setCatalogAdjustment] = useState<{ names: string[]; seq: number } | null>(null);
+  useLayoutEffect(() => {
+    const previous = productsRef.current;
+    productsRef.current = products;
+    // Un catálogo recargado con el pedido a medias (p. ej. la recarga de la
+    // bienvenida que llega después del primer toque) se aplica al pedido.
+    // Antes lo que salía del catálogo seguía en el pedido sin verse en la
+    // revisión, contaba en la barra y el envío lo rechazaba.
+    if (previous === products || linesRef.current.length === 0) return;
+    const current = linesRef.current;
+    const { lines: next, names } = clampLines(current, products, previous);
+    const changed =
+      next.length !== current.length ||
+      next.some((line, i) => line.key !== current[i].key || line.quantity !== current[i].quantity);
+    if (!changed) return;
+    commit(next);
+    if (names.length > 0) {
+      setCatalogAdjustment((prev) => ({ names: Array.from(new Set(names)), seq: (prev?.seq ?? 0) + 1 }));
+    }
+  }, [products, commit]);
 
   /** Cambia la cantidad de una opción (0 la quita), con su tope. */
   const setOptionQuantity = useCallback(
@@ -368,6 +387,7 @@ export function useKioskCart(products: ProductsById) {
     totals,
     quantityByProduct,
     isEmpty: lines.length === 0,
+    catalogAdjustment,
     add,
     setOptionQuantity,
     setProductQuantities,

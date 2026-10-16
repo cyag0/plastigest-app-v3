@@ -2,7 +2,7 @@ import { getNotificationEntityId } from "@/components/Notifications/notification
 import { APP_VERSION, notifyChunkLoadError } from "@/utils/appVersion";
 import axiosClient, { describeError } from "@/utils/axios";
 import { reportClientError } from "@/utils/errorReporting";
-import { isKioskModeActive } from "@/utils/kioskMode";
+import { getCachedKioskMode, isKioskModeActive } from "@/utils/kioskMode";
 import {
   notificationOpenedBus,
   type NotificationOpenedPayload,
@@ -178,6 +178,11 @@ export function usePushNotifications({
       }
       return;
     }
+
+    // Equipo en modo kiosko: sin avisos push. Ni el permiso de Android ni el
+    // registro del token, cuyo error salía como aviso del personal frente al
+    // cliente. (El modo se lee del equipo al importar utils/kioskMode.)
+    if (getCachedKioskMode()?.enabled) return;
 
     // WEB: solo auto-corremos el setup si el permiso ya estaba concedido al
     // cargar (sesion previa). Si esta en "default"/"denied", la UI muestra el
