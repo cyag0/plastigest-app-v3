@@ -8,8 +8,8 @@ import {
   readEntityId,
   resolvePushRoute,
 } from "@/components/Notifications/notificationLinks";
+import { markNotificationReadQuietly } from "@/components/Notifications/notificationRequests";
 import { notificationOpenedBus } from "@/utils/notificationEvents";
-import services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useSegments } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -26,12 +26,32 @@ import Animated, {
 /**
  * Al cambiar de sucursal se desmonta la navegación (se muestra el loader) y
  * vuelve a empezar en Inicio. Una pantalla puede pedir que se regrese a ella
- * al terminar: el punto de venta, al cambiarse a la sucursal del turno.
+ * al terminar: el punto de venta, al cambiarse a la sucursal del turno, o el
+ * registro de una tarea o notificación de otra sucursal.
  */
 let routeAfterSwitch: string | null = null;
+/** Ya se mandó a routeAfterSwitch (desde "/" o login, al volver a montar). */
+let routeAfterSwitchSent = false;
+/**
+ * El regreso que se acaba de cumplir. Al volver a montar en "/", la
+ * redirección de app/index.tsx a /login puede llegar justo después de que ya
+ * se mandó a la ruta pendiente; si en ese momento login manda a Inicio, el
+ * regreso se pierde. Un momento después de cumplirse, login la repite.
+ */
+let recentReturn: { route: string; at: number } | null = null;
+const RECENT_RETURN_MS = 2000;
 
 export function returnAfterLocationSwitch(route: string | null) {
   routeAfterSwitch = route;
+  routeAfterSwitchSent = false;
+  recentReturn = null;
+}
+
+/** Ruta pendiente tras el cambio de sucursal (o la recién cumplida). */
+function pendingReturnRoute(): string | null {
+  if (routeAfterSwitch) return routeAfterSwitch;
+  if (recentReturn && Date.now() - recentReturn.at < RECENT_RETURN_MS) return recentReturn.route;
+  return null;
 }
 
 export default function NavigationHandler({
@@ -90,6 +110,10 @@ export default function NavigationHandler({
 
     // 1. Verificar autenticación
     if (!user) {
+      // Sin sesión no hay a dónde regresar tras un cambio de sucursal.
+      routeAfterSwitch = null;
+      routeAfterSwitchSent = false;
+      recentReturn = null;
       if (!inPublicRoute) {
         // Usuario no autenticado intentando acceder a rutas protegidas
         // (también cuando la sesión expira a medio uso: AuthContext limpia
@@ -104,12 +128,21 @@ export default function NavigationHandler({
       // pidió volver tras cambiar de sucursal).
       // No se limpia aquí: justo tras el cambio el navegador todavía se está
       // montando y este replace puede perderse; el efecto vuelve a correr.
-      router.replace((routeAfterSwitch ?? "/(tabs)/home") as any);
+      const pending = pendingReturnRoute();
+      router.replace((pending ?? "/(tabs)/home") as any);
+      if (routeAfterSwitch) routeAfterSwitchSent = true;
       return;
     }
 
-    // Ya fuera de login: el regreso pendiente (si había) se cumplió.
-    routeAfterSwitch = null;
+    // Ya fuera de login: el regreso pendiente se cumplió solo si ya se mandó
+    // a esa ruta. La primera vez que corre al terminar el cambio, `segments`
+    // todavía es la pantalla anterior (la navegación aún no se vuelve a
+    // montar en "/"): borrarlo ahí lo perdía y la app quedaba en Inicio.
+    if (routeAfterSwitchSent && routeAfterSwitch) {
+      recentReturn = { route: routeAfterSwitch, at: Date.now() };
+      routeAfterSwitch = null;
+      routeAfterSwitchSent = false;
+    }
 
     // 2. Verificar compañía (solo si está autenticado y no está cargando)
     if (user && !isLoadingCompanies) {
@@ -158,10 +191,12 @@ export default function NavigationHandler({
     });
   }, []);
 
-  // Web: si no había pestaña abierta, el service worker abre la app ya en la
-  // ruta del aviso con ?notification_id=… para poder marcarlo como leído. Se
-  // monta mientras la sesión aún carga: el efecto de abajo lo procesa cuando
-  // la app queda lista (cambia isLoading), sin forzar otro render aquí.
+  // Web: el service worker abre ahora el detalle del aviso
+  // (/notifications/{id}?open=1, que lo marca como leído); uno anterior que
+  // siga instalado abre la ruta del registro con ?notification_id=… para
+  // marcarlo aquí. Se monta mientras la sesión aún carga: el efecto de abajo
+  // lo procesa cuando la app queda lista (cambia isLoading), sin forzar otro
+  // render aquí.
   useEffect(() => {
     if (Platform.OS !== "web" || typeof window === "undefined") return;
     try {
@@ -206,9 +241,10 @@ export default function NavigationHandler({
     }
 
     if (readId) {
-      services.notifications
-        .markAsRead(Number(readId))
-        .catch(() => undefined) // ya borrada u otra empresa: no es un error
+      // Sin aviso global: si ya se borró, el backend responde 404
+      // ("Notificación no encontrada") y no es un error para el usuario.
+      markNotificationReadQuietly(Number(readId))
+        .catch(() => undefined)
         .finally(() => {
           loadUnreadNotificationsCount();
         });

@@ -1,10 +1,12 @@
 import type { NotificationLink } from "@/components/Notifications/notificationLinks";
 import {
   forbiddenLinkNote,
+  isLinkFromOtherBranch,
   isLinkedRecordNote,
   type LinkedRecordNote,
   type LinkedRecordOutcome,
 } from "@/components/Notifications/useLinkedRecordOpener";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useCan } from "@/hooks/useCan";
 import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
@@ -52,6 +54,8 @@ export default function LinkedRecordAction({
   const styles = useThemedStyles(makeStyles);
   const { colors } = useTheme();
   const { canAccessRoute } = useCan();
+  const { location } = useAuth();
+  const currentLocationId = location?.id ? Number(location.id) : null;
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<LinkedRecordNote | null>(initialNote);
   const mountedRef = useRef(true);
@@ -83,8 +87,13 @@ export default function LinkedRecordAction({
 
   if (!link) return null;
 
-  // Sin permiso para la pantalla destino no se ofrece el botón.
-  const shown = !canAccessRoute(link.route) ? forbiddenLinkNote(link) : note;
+  // Sin permiso para la pantalla destino no se ofrece el botón, salvo que el
+  // registro sea de otra sucursal: allá el rol puede ser otro (al tocarlo se
+  // ofrece cambiarse).
+  const shown =
+    !canAccessRoute(link.route) && !isLinkFromOtherBranch(link, currentLocationId)
+      ? forbiddenLinkNote(link)
+      : note;
 
   if (shown) {
     return (

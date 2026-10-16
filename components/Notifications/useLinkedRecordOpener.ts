@@ -69,6 +69,20 @@ export function forbiddenLinkNote(link: NotificationLink): LinkedRecordNote {
   };
 }
 
+/**
+ * ¿El enlace dice que el registro es de otra sucursal? Los permisos son por
+ * sucursal (el rol de cada una, CurrentWorker::permissions): sin permiso aquí
+ * puede tenerlo allá, así que se ofrece cambiarse en vez de "No tienes
+ * permiso" (al llegar, el guard de rutas lo revisa con el rol de esa).
+ */
+export function isLinkFromOtherBranch(
+  link: NotificationLink,
+  currentLocationId: number | null,
+): boolean {
+  const ids = link.locationIds ?? [];
+  return currentLocationId !== null && ids.length > 0 && !ids.includes(currentLocationId);
+}
+
 // Endpoint del detalle de cada registro (el mismo que carga su pantalla).
 const ENDPOINTS: Record<Exclude<LinkedRecordKind, "reminders">, (id: string) => string> = {
   task: (id) => `/auth/admin/tasks/${id}`,
@@ -167,12 +181,11 @@ async function accessibleLocations(companyId: number): Promise<App.Entities.Loca
 }
 
 /**
- * Abre `route` cuando termina el cambio de sucursal. El cambio desmonta la
- * navegación y NavigationHandler la reinicia ("/" → login → Inicio o la ruta
- * de returnAfterLocationSwitch); ese regreso a veces se pierde (al volver a
- * montar todavía ve la pantalla anterior y lo borra) y se queda en Inicio.
- * Aquí se espera a que la navegación se asiente y se abre con navigate: si
- * ya está en esa ruta no se duplica.
+ * Respaldo para abrir `route` cuando termina el cambio de sucursal. El cambio
+ * desmonta la navegación y NavigationHandler la reinicia en la ruta de
+ * returnAfterLocationSwitch; si ese regreso no llegara, aquí se espera a que
+ * la navegación se asiente y se abre con navigate (si ya está en esa ruta no
+ * se duplica).
  */
 function openAfterSwitch(route: string, pathBefore: string | null) {
   const startedAt = Date.now();
@@ -280,8 +293,19 @@ export function useLinkedRecordOpener() {
       const navigate = options.navigate ?? ((route: string) => router.push(route as any));
       const noun = NOUNS[link.kind];
 
-      // 1. Permiso de la pantalla destino (mismo mapa que el guard).
-      if (!canAccessRoute(link.route)) return forbiddenLinkNote(link);
+      const knownIds = link.locationIds ?? [];
+      const knownBranches: Branch[] = knownIds.map((id, index) => ({
+        id,
+        name: index === 0 ? link.locationName : null,
+      }));
+      const inKnownBranch = currentLocationId !== null && knownIds.includes(currentLocationId);
+      const fromOtherBranch = isLinkFromOtherBranch(link, currentLocationId);
+
+      // 1. Permiso de la pantalla destino (mismo mapa que el guard). El de
+      // otra sucursal se revisa allá: se ofrece cambiarse.
+      if (!canAccessRoute(link.route)) {
+        return fromOtherBranch ? offerSwitch(link, knownBranches) : forbiddenLinkNote(link);
+      }
 
       // La lista de recordatorios no tiene registro que revisar.
       if (link.kind === "reminders" || !link.id) {
@@ -302,14 +326,9 @@ export function useLinkedRecordOpener() {
         return { type: "error" };
       }
 
-      if (result.status === "forbidden") return forbiddenLinkNote(link);
-
-      const knownIds = link.locationIds ?? [];
-      const knownBranches: Branch[] = knownIds.map((id, index) => ({
-        id,
-        name: index === 0 ? link.locationName : null,
-      }));
-      const inKnownBranch = currentLocationId !== null && knownIds.includes(currentLocationId);
+      if (result.status === "forbidden") {
+        return fromOtherBranch ? offerSwitch(link, knownBranches) : forbiddenLinkNote(link);
+      }
 
       if (result.status === "ok") {
         // La transferencia se trabaja desde su origen o su destino (la
@@ -323,10 +342,21 @@ export function useLinkedRecordOpener() {
           const byRecord = link.transferSide === "to" ? [...record].reverse() : record;
           const work = knownBranches.length > 0 ? knownBranches : byRecord;
           if (work.length > 0 && !work.some((branch) => branch.id === currentLocationId)) {
-            return offerSwitch(
+            const outcome = await offerSwitch(
               link,
               work.map((branch) => ({ ...branch, name: branch.name ?? names.get(branch.id) })),
             );
+            // No entra a la sucursal de la tarea, pero la transferencia se ve
+            // desde aquí (es su origen o su destino): se abre y la pantalla
+            // decide qué puede hacer este lado.
+            if (
+              outcome.type === "unavailable" &&
+              record.some((branch) => branch.id === currentLocationId)
+            ) {
+              navigate(link.route);
+              return { type: "opened" };
+            }
+            return outcome;
           }
         }
         navigate(link.route);
