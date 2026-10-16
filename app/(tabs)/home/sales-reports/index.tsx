@@ -2,6 +2,7 @@ import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
+import { useCan } from "@/hooks/useCan";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import axios from "@/utils/axios";
 import Services from "@/utils/services";
@@ -12,6 +13,7 @@ import { View } from "react-native";
 
 export default function SalesReportsIndexScreen() {
   const router = useRouter();
+  const { can } = useCan();
   const { downloadPdfFromApi, isDownloading } = usePdfDownload({
     onSuccess: (uri) => console.log("PDF abierto exitosamente:", uri),
     onError: (error) => console.error("Error al descargar PDF:", error),
@@ -34,6 +36,9 @@ export default function SalesReportsIndexScreen() {
         title="Reportes de Ventas"
         service={Services.salesReports}
         searchPlaceholder="Buscar reportes..."
+        // SalesReportController usa el prefijo reports: "+" pide reports_create
+        // y abrir el reporte, reports_read.
+        permissionPrefix="reports"
         renderCard={({ item }) => ({
           title: formatDate(item.report_date),
           subtitle: item.location?.name || "Sin ubicación",
@@ -68,7 +73,8 @@ export default function SalesReportsIndexScreen() {
               title: isDownloading ? "Descargando..." : "Descargar PDF",
               icon: "file-pdf-box",
               color: palette.primary,
-              show: () => true,
+              // El PDF pide lo mismo que ver el reporte.
+              show: () => can("reports_read"),
               onPress: async (item: any) => {
                 try {
                   // Obtener la URL firmada
