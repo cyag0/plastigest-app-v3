@@ -205,8 +205,12 @@ export function syncLinesWithCatalog(
  * cobra dos veces: si la venta ya existía, el servidor la devuelve.
  * `requestUnknown` indica que el último envío se quedó sin respuesta y hay
  * que verificar en qué quedó antes de cobrar otra vez.
+ *
+ * `carryFromKey`: carrito guardado de un turno que resultó cerrado a media
+ * venta. Si este turno empieza vacío, ese carrito (con su llave de cobro) pasa
+ * aquí en lugar de borrarse con los de turnos anteriores.
  */
-export function usePosCart(storageKey?: string | null) {
+export function usePosCart(storageKey?: string | null, carryFromKey?: string | null) {
   const [lines, setLinesState] = useState<PosLine[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [customer, setCustomerState] = useState<PosCustomer | null>(null);
@@ -219,6 +223,8 @@ export function usePosCart(storageKey?: string | null) {
   const restored = !storageKey || restoredKey === storageKey;
   /** Renglones recuperados al entrar (0 si el carrito empezó vacío). */
   const [restoredLines, setRestoredLines] = useState(0);
+  /** Lo recuperado venía del turno anterior (ver carryFromKey). */
+  const [carriedOver, setCarriedOver] = useState(false);
 
   // Copia síncrona de los renglones: con un lector de códigos dos escaneos
   // pueden llegar antes de que React vuelva a renderizar y el segundo leía la
@@ -282,11 +288,28 @@ export function usePosCart(storageKey?: string | null) {
       } catch {
         stored = null;
       }
+      // El turno anterior se cerró a media venta y este empieza vacío: su
+      // carrito pasa aquí con la misma llave de cobro (si ese cobro llegara a
+      // registrarse, el reintento devuelve la venta en lugar de duplicarla; con
+      // un envío sin respuesta, primero se verifica).
+      let carried = false;
+      if ((!stored || stored.lines.length === 0) && carryFromKey && carryFromKey !== storageKey) {
+        try {
+          const previous = parseStoredCart(await AsyncStorage.getItem(carryFromKey));
+          if (previous && previous.lines.length > 0) {
+            stored = previous;
+            carried = true;
+          }
+        } catch {
+          // Sin almacenamiento no hay carrito que pasar.
+        }
+      }
       if (cancelled) return;
 
       // Lo escaneado mientras se leía el almacenamiento se respeta, salvo que
       // haya un cobro sin confirmar: ese manda, para verificarlo.
-      if (stored && (linesRef.current.length === 0 || stored.requestUnknown)) {
+      const adopt = !!stored && (linesRef.current.length === 0 || stored.requestUnknown);
+      if (stored && adopt) {
         linesRef.current = stored.lines;
         setLinesState(stored.lines);
         setSelectedKey(stored.lines[stored.lines.length - 1]?.key ?? null);
@@ -294,14 +317,22 @@ export function usePosCart(storageKey?: string | null) {
         setMethod(stored.method);
         setRequest(stored.requestId, stored.requestUnknown);
         setRestoredLines(stored.lines.length);
+        setCarriedOver(carried);
       }
       setRestoredKey(storageKey);
-      pruneStoredCarts(storageKey).catch(() => undefined);
+      // Un carrito que pasó de turno se guarda con la llave nueva antes de
+      // borrar los de turnos anteriores; si no se adoptó, se deja como está.
+      if (carried && !adopt) return;
+      const saveCarried =
+        carried && stored
+          ? AsyncStorage.setItem(storageKey, JSON.stringify({ ...stored, savedAt: Date.now() } satisfies StoredCart))
+          : Promise.resolve();
+      saveCarried.then(() => pruneStoredCarts(storageKey)).catch(() => undefined);
     })();
     return () => {
       cancelled = true;
     };
-  }, [storageKey, setCustomer, setMethod, setRequest]);
+  }, [storageKey, carryFromKey, setCustomer, setMethod, setRequest]);
 
   // Guardar cada cambio (después de recuperar, para no pisar lo guardado).
   useEffect(() => {
@@ -416,8 +447,12 @@ export function usePosCart(storageKey?: string | null) {
    * reintento devolvería esa venta en lugar de crear otra.
    */
   const markNotCharged = useCallback(() => {
-    if (draftRef.current.requestId) setRequest(draftRef.current.requestId, false);
-  }, [setRequest]);
+    if (!draftRef.current.requestId) return;
+    setRequest(draftRef.current.requestId, false);
+    // Guardado ya: si la pantalla se desmonta enseguida (turno cerrado), lo
+    // guardado no debe seguir marcado como "sin confirmar".
+    writeStorage();
+  }, [setRequest, writeStorage]);
 
   /**
    * El servidor rechazó la llave porque ya se usó en otra operación
@@ -426,7 +461,8 @@ export function usePosCart(storageKey?: string | null) {
    */
   const renewRequestId = useCallback(() => {
     setRequest(null, false);
-  }, [setRequest]);
+    writeStorage();
+  }, [setRequest, writeStorage]);
 
   /** Llave actual, leída al momento (no la del último render). */
   const getRequestId = useCallback(() => draftRef.current.requestId, []);
@@ -512,6 +548,7 @@ export function usePosCart(storageKey?: string | null) {
     syncWithCatalog,
     restored,
     restoredLines,
+    carriedOver,
   };
 }
 

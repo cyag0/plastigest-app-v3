@@ -76,6 +76,9 @@ export default function PosScreen() {
   const [loadingSession, setLoadingSession] = useState(true);
   const [switching, setSwitching] = useState(false);
   const [closeOtherOpen, setCloseOtherOpen] = useState(false);
+  // Carrito del turno que resultó cerrado a media venta: pasa al turno que se
+  // abra desde aquí en la misma sucursal, en lugar de borrarse.
+  const [lostCart, setLostCart] = useState<{ key: string; sessionId: number; locationId: number } | null>(null);
 
   const loadSession = useCallback(async () => {
     try {
@@ -100,6 +103,7 @@ export default function PosScreen() {
     const diff = closed.difference ?? 0;
     alerts.success(diff === 0 ? "Turno cerrado. La caja cuadra." : `Turno cerrado. ${diff > 0 ? "Sobrante" : "Faltante"} de ${formatMoney(Math.abs(diff))}.`);
     setSession(null);
+    setLostCart(null);
     // El carrito guardado de ese turno ya no se puede cobrar.
     if (user) {
       AsyncStorage.removeItem(posCartStorageKey(user.id, closed.location_id, closed.id)).catch(() => undefined);
@@ -194,6 +198,9 @@ export default function PosScreen() {
       key={session.id}
       session={session}
       userId={user?.id ?? null}
+      carryFromKey={
+        lostCart && lostCart.sessionId !== session.id && lostCart.locationId === session.location_id ? lostCart.key : null
+      }
       compact={compact}
       canEditPrice={hasPermission("sales_discount")}
       cashierName={user?.name}
@@ -201,6 +208,14 @@ export default function PosScreen() {
       onShiftClosed={handleShiftClosed}
       onSessionLost={(message) => {
         // El turno se cerró o cambió desde otro equipo: volver a consultarlo.
+        // El carrito sigue guardado con su turno y pasa al que se abra.
+        if (user) {
+          setLostCart({
+            key: posCartStorageKey(user.id, session.location_id, session.id),
+            sessionId: session.id,
+            locationId: session.location_id,
+          });
+        }
         alerts.warning(message);
         loadSession();
       }}
@@ -211,6 +226,8 @@ export default function PosScreen() {
 interface RegisterProps {
   session: Session;
   userId: number | null;
+  /** Carrito guardado del turno que se cerró a media venta (ver usePosCart). */
+  carryFromKey?: string | null;
   compact: boolean;
   canEditPrice: boolean;
   cashierName?: string;
@@ -219,11 +236,21 @@ interface RegisterProps {
   onSessionLost: (message: string) => void;
 }
 
-function PosRegister({ session, userId, compact, canEditPrice, cashierName, onExit, onShiftClosed, onSessionLost }: RegisterProps) {
+function PosRegister({
+  session,
+  userId,
+  carryFromKey,
+  compact,
+  canEditPrice,
+  cashierName,
+  onExit,
+  onShiftClosed,
+  onSessionLost,
+}: RegisterProps) {
   const alerts = useAlerts();
   const catalog = usePosCatalog();
   // Un carrito guardado por cajero, sucursal y turno.
-  const cart = usePosCart(userId ? posCartStorageKey(userId, session.location_id, session.id) : null);
+  const cart = usePosCart(userId ? posCartStorageKey(userId, session.location_id, session.id) : null, carryFromKey);
   const table = useRef<CartTableRef>(null);
 
   const [searchOpen, setSearchOpen] = useState(false);
@@ -238,19 +265,24 @@ function PosRegister({ session, userId, compact, canEditPrice, cashierName, onEx
   const checkoutVisible = checkoutOpen || cart.requestUnknown;
 
   const anyModal = searchOpen || customerOpen || checkoutVisible || closeOpen;
-  // Con un cobro o un corte abiertos no se refresca el catálogo en segundo plano.
+  // Con un cobro o un corte abiertos no se refresca el catálogo en segundo
+  // plano, y uno que ya venía en camino espera a que se cierre la ventana.
+  const busy = checkoutVisible || closeOpen;
   const busyRef = useRef(false);
   const loadedAtRef = useRef(0);
   useEffect(() => {
-    busyRef.current = checkoutVisible || closeOpen;
+    busyRef.current = busy;
     loadedAtRef.current = catalog.loadedAt;
-  }, [checkoutVisible, closeOpen, catalog.loadedAt]);
+  }, [busy, catalog.loadedAt]);
 
-  // Al entrar con un carrito recuperado, se avisa.
+  // Al entrar con un carrito recuperado (o traído del turno anterior), se avisa.
   useEffect(() => {
     if (cart.restored && cart.restoredLines > 0 && !cart.requestUnknown) {
+      const count = `${cart.restoredLines} ${cart.restoredLines === 1 ? "producto" : "productos"}`;
       alerts.info(
-        `Se recuperó la venta en curso (${cart.restoredLines} ${cart.restoredLines === 1 ? "producto" : "productos"}).`,
+        cart.carriedOver
+          ? `La venta en curso pasó al turno nuevo (${count}): revisa el carrito y cobra.`
+          : `Se recuperó la venta en curso (${count}).`,
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -273,11 +305,14 @@ function PosRegister({ session, userId, compact, canEditPrice, cashierName, onEx
   useEffect(() => {
     if (!cart.restored || catalog.items.length === 0) return;
     if (explicitReloadRef.current || appliedItemsRef.current === catalog.items) return;
+    // Un catálogo que llega con el cobro (o el corte) abierto no cambia precios
+    // ni renglones bajo la ventana: queda pendiente y se aplica, con su aviso,
+    // al cerrarla (por eso `busy` está en las dependencias).
+    if (busy) return;
     const message = applyCatalog(catalog.items);
-    // Durante un cobro o un corte el aviso esperaría detrás de la ventana.
-    if (message && !busyRef.current) alerts.warning(message);
+    if (message) alerts.warning(message);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catalog.items, cart.restored, applyCatalog]);
+  }, [catalog.items, cart.restored, applyCatalog, busy]);
 
   /** Baja el catálogo, lo aplica al carrito y devuelve el aviso de lo que cambió. */
   const reloadAndApply = useCallback(async (): Promise<{ ok: boolean; message: string | null }> => {
