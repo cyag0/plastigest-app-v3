@@ -4,11 +4,12 @@ import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
-import { describeError } from "@/utils/axios";
+import { isApiError, notifyError } from "@/utils/errorNotice";
 import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
 import { goBack } from "@/utils/navigation";
 import type { PermissionRule } from "@/utils/permissions/permissions";
 import { CrudService } from "@/utils/services/crudService";
+import { logCaughtError } from "@/utils/silenceLogs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { FormikProps, FormikProvider, useFormik } from "formik";
 import React, {
@@ -314,8 +315,8 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         return;
       }
     } catch (error) {
-      console.error("Error loading initial values:", describeError(error));
-      alerts.error("Error al cargar los datos del formulario");
+      logCaughtError("Error loading initial values:", error);
+      notifyError(error, "No se pudieron cargar los datos del formulario.");
       props.onError?.(error, {} as T);
       formInstance.setValues({} as T);
     } finally {
@@ -379,19 +380,14 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         props.onSuccess?.(response.data, _values);
       }
     } catch (error: any) {
-      console.error("Error submitting form:", describeError(error));
-      // En un 422 el backend manda "Error de validación" en message y el
-      // detalle por campo en errors; sin él el usuario no sabe qué corregir.
-      const data = error?.response?.data;
-      const fieldError = data?.errors
-        ? (Object.values(data.errors).flat()[0] as string | undefined)
-        : undefined;
-      const errorMessage =
-        [data?.message, fieldError].filter(Boolean).join(": ") ||
-        data?.error ||
-        error?.message ||
-        "Error al guardar";
-      alerts.error(errorMessage);
+      logCaughtError("Error submitting form:", error);
+      // Mensaje del servidor; en un 422 con el primer error de campo (sin él
+      // el usuario no sabe qué corregir). Un error propio de onSubmit
+      // (throw new Error("…")) muestra su texto.
+      notifyError(
+        error,
+        (!isApiError(error) && error?.message) || "No se pudo guardar.",
+      );
       props.onError?.(error, _values);
     } finally {
       setLoading(false);
@@ -490,14 +486,8 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         goBack();
       }
     } catch (error: any) {
-      console.error("Error deleting record:", describeError(error));
-      const status = error?.response?.status;
-      const message =
-        error?.response?.data?.message ||
-        (status === 403
-          ? "No tienes permiso para eliminar este registro."
-          : "No se pudo eliminar el registro.");
-      alerts.error(message);
+      logCaughtError("Error deleting record:", error);
+      notifyError(error, "No se pudo eliminar el registro.");
     } finally {
       setLoading(false);
     }

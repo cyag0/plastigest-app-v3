@@ -7,12 +7,13 @@ import { useCan } from "@/hooks/useCan";
 import useDebounce from "@/hooks/useDebounce";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import type { PermissionRule } from "@/utils/permissions/permissions";
+import { notifyError } from "@/utils/errorNotice";
 import {
   CrudService,
   IndexParams,
   LaravelPaginatedResponse,
-  handleApiError,
 } from "@/utils/services/crudService";
+import { logCaughtError } from "@/utils/silenceLogs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "expo-router";
 import { router } from "expo-router";
@@ -450,9 +451,10 @@ function AppList<T extends { id: number | string }>({
       }
     } catch (error) {
       if (requestId !== requestIdRef.current) return;
-      const apiError = handleApiError(error);
-      console.error("Error loading data:", apiError);
-      alerts.error("Error al cargar los datos: " + apiError.message);
+      // Mensaje del servidor (o de red) en el aviso de la app; sin el aviso
+      // rojo de LogBox si es una falla del API.
+      logCaughtError("Error loading data:", error);
+      notifyError(error, "No se pudieron cargar los datos.");
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false);
@@ -590,8 +592,8 @@ function AppList<T extends { id: number | string }>({
       alerts.success("Elemento eliminado exitosamente");
       loadData(true);
     } catch (error: any) {
-      const errorMessage = handleApiError(error);
-      alerts.error(errorMessage.message || "Error al eliminar el elemento");
+      logCaughtError("Error deleting item:", error);
+      notifyError(error, "No se pudo eliminar el elemento.");
     }
   };
 
