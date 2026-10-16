@@ -132,6 +132,12 @@ export default function RolesListScreen() {
 
           navigation.push("/(tabs)/home/roles/form");
         }}
+        permissionPrefix="roles"
+        // El rol del sistema no se edita ni se elimina (el backend responde 422).
+        menu={{
+          showEdit: (entity) => !entity.is_system,
+          showDelete: (entity) => !entity.is_system,
+        }}
         searchPlaceholder="Buscar roles..."
       />
 

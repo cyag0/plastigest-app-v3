@@ -40,7 +40,7 @@ export default function CategoriesForm(props: CategoriesFormProps) {
 
   return (
     <AppForm
-      deletePermission="categories_delete"
+      permissionPrefix="categories"
       ref={formRef}
       api={Services.categories}
       id={categoryId}

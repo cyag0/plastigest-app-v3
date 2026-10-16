@@ -38,6 +38,7 @@ export default function ClientsIndex() {
       <AppList
         title="Clientes"
         service={Services.customers}
+        permissionPrefix="customers"
         columns={columns}
         filters={[
           {

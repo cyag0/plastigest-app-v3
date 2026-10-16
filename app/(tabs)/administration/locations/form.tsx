@@ -56,7 +56,7 @@ const router = useRouter();
 
   return (
     <AppForm
-      deletePermission="locations_delete"
+      permissionPrefix="locations"
       id={locationId}
       submitButtonText={isEditing ? "Actualizar Sucursal" : "Crear Sucursal"}
       api={Services.admin.locations}

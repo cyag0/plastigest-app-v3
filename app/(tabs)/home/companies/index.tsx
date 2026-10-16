@@ -48,6 +48,7 @@ export default function CompaniesIndexScreen(props: CompanyIndexScreenProps) {
       <AppList
         title="Compañías"
         service={Services.admin.companies}
+        permissionPrefix="companies"
         columns={columns}
         renderCard={({ item }) => ({
           title: item.name,

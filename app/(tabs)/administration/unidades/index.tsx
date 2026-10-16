@@ -1,6 +1,7 @@
 import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import { useCan } from "@/hooks/useCan";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
@@ -11,6 +12,10 @@ export default function UnidadesScreen() {
   const router = useRouter();
   const { company, availableCompanies, selectCompany, isLoading } =
     useSelectedCompany();
+  const { can } = useCan();
+  // Las unidades globales (sin empresa) las comparten todas las empresas:
+  // solo un administrador del sistema las modifica (el backend responde 403).
+  const canChangeUnit = (item: any) => item.company_id != null || can("system_admin");
 
   useEffect(() => {
     // Seleccionar automáticamente la primera empresa si no hay ninguna seleccionada
@@ -43,6 +48,7 @@ export default function UnidadesScreen() {
       <AppList
         title="Unidades"
         service={Services.home.unidades}
+        permissionPrefix="units"
         columns={columns}
         renderCard={({ item }) => ({
           title: `${item.name} (${item.abbreviation})`,
@@ -70,6 +76,8 @@ export default function UnidadesScreen() {
               `/(tabs)/administration/unidades/${item.id}/edit` as any,
             );
           },
+          showEdit: canChangeUnit,
+          showDelete: canChangeUnit,
         }}
       />
     </View>

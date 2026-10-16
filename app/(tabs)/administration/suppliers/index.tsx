@@ -43,6 +43,7 @@ export default function SuppliersIndex() {
       <AppList
         title="Proveedores"
         service={Services.suppliers}
+        permissionPrefix="suppliers"
         columns={columns}
         renderCard={({ item }: { item: any }) => {
           console.log("Rendering supplier item:", item);

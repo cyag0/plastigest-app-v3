@@ -62,7 +62,7 @@ export default function CompaniesForm(props: CompaniesProps) {
   return (
     <View style={styles.container}>
       <AppForm
-        deletePermission="companies_delete"
+        permissionPrefix="companies"
         ref={formRef}
         api={Services.admin.companies}
         initialValues={{
