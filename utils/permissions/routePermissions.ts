@@ -55,7 +55,6 @@ export function byParam(param: string, withParam: RouteRule, withoutParam: Route
 /** Cualquiera de estos da acceso a alguna opción de Administración. */
 const ADMIN_MENU_PERMISSIONS = [
   "companies_list",
-  "companies_manage",
   "system_admin",
   "companies_update",
   "users_list",
