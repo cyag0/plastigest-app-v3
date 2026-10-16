@@ -414,6 +414,17 @@ export default function KioskScreen() {
     alerts.warning("Espera a que termine de registrarse la venta.");
   });
 
+  // El pedido recién cobrado se abre cuando se suelta el candado del cobro.
+  // Navegar dentro del envío lo frenaba usePreventRemove: con la venta ya
+  // registrada salía "Espera a que termine de registrarse la venta." y el
+  // kiosko no abría el pedido.
+  const [chargedOrderId, setChargedOrderId] = useState<number | null>(null);
+  useEffect(() => {
+    if (submitting || chargedOrderId == null) return;
+    setChargedOrderId(null);
+    router.replace(`/home/sales-orders/${chargedOrderId}`);
+  }, [submitting, chargedOrderId]);
+
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -838,7 +849,7 @@ export default function KioskScreen() {
         setCustomerId(null);
         setPaidAmount("");
         alerts.success(order?.order_number ? `Venta registrada (${order.order_number})` : "Venta registrada");
-        if (order?.id) router.replace(`/home/sales-orders/${order.id}`);
+        if (order?.id) setChargedOrderId(Number(order.id));
       } catch (e: any) {
         if (isOutcomeUnknown(e)) {
           // Sin respuesta: el pedido pudo quedar cobrado. Reintentar con la
