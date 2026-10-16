@@ -120,6 +120,20 @@ function routeForNotification(data) {
     : "/notifications";
 }
 
+// URL con la que se abre la app cuando no hay pestaña: la misma regla que
+// resolvePushRoute (notificationLinks.ts) en los toques nativos. Con
+// notification_id se abre el detalle del aviso con ?open=1: marca el aviso
+// como leído, abre solo su registro y, si ya no existe, es de otra sucursal
+// o no hay permiso, lo explica ahí (antes se abría directo el registro).
+function openUrlForNotification(data) {
+  const route = routeForNotification(data);
+  const notificationId = readId(data, "notification_id");
+  if (!notificationId) return route;
+  const detail = `/notifications/${notificationId}`;
+  // Sin registro relacionado, routeForNotification ya dio el detalle.
+  return route === detail ? detail : `${detail}?open=1`;
+}
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
@@ -146,13 +160,9 @@ self.addEventListener("notificationclick", (event) => {
       }
 
       if (self.clients.openWindow) {
-        // Sin pestaña abierta: se abre directo en la pantalla del aviso. La
-        // app lee notification_id de la URL para marcarlo como leído.
-        const notificationId = readId(data, "notification_id");
-        const url = notificationId
-          ? `${route}?notification_id=${notificationId}`
-          : route;
-        return self.clients.openWindow(url);
+        // Sin pestaña abierta: se abre en el detalle del aviso (o, si el push
+        // no se guardó en la bandeja, en la pantalla del registro).
+        return self.clients.openWindow(openUrlForNotification(data));
       }
 
       return undefined;
