@@ -1,18 +1,22 @@
-import NotificationBadge from "@/components/Notifications/NotificationBadge";
+import {
+  LIST_TEXT_INSET,
+  ListGroup,
+  ListSection,
+  ListValueRow,
+} from "@/components/App/ListGroup";
 import { getNotificationLink } from "@/components/Notifications/notificationLinks";
 import {
-  eventTypeToTypeKey,
-  formatNotificationDate,
+  getNotificationCategoryLabel,
   getNotificationIcon,
   getNotificationSubTypeLabel,
-  getTypeTokens,
-  resolveNotificationStatus,
+  notificationToneColor,
 } from "@/components/Notifications/notificationPresentation";
-import {
-  NOTIFICATION_NEUTRAL,
-} from "@/components/Notifications/notificationTheme";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { Button, Icon, Text } from "react-native-paper";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
+import { formatDateTime } from "@/utils/dates";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { Button } from "react-native-paper";
 
 type DetailRow = {
   label: string;
@@ -75,10 +79,8 @@ function buildDataRows(
 }
 
 /**
- * Detalle de una notificacion. Adopta el lenguaje visual del popover/lista
- * (tokens neutros, blanco puro, badge de tipo a color y badge de estado)
- * para que la superficie se sienta limpia y consistente. Sin tarjetas
- * crema ni iconos decorativos en los encabezados de seccion.
+ * Detalle de una notificación: en su pantalla (teléfono) o en el modal de la
+ * bandeja y la campana (escritorio).
  *
  * `onOpenLink` muestra el botón para abrir el registro relacionado (tarea,
  * compra, transferencia…) cuando el payload trae su id; el padre navega
@@ -86,20 +88,21 @@ function buildDataRows(
  */
 export default function NotificationDetailContent({
   notification,
-  onBack,
   onDelete,
   onOpenLink,
-  compact = false,
+  inModal = false,
 }: {
   notification: App.Entities.Notification;
-  onBack?: () => void;
   onDelete?: () => void;
   onOpenLink?: (route: string) => void;
-  compact?: boolean;
+  /** Dentro de un modal: sin ocupar toda la altura ni limitar el ancho. */
+  inModal?: boolean;
 }) {
-  const typeTokens = getTypeTokens(eventTypeToTypeKey(notification.event_type));
-  const icon = getNotificationIcon(notification.event_type, notification.data);
-  const status = resolveNotificationStatus(notification);
+  const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const wide = !inModal && width >= 768;
+
   const dataRows = notification.data
     ? buildDataRows(notification.event_type, notification.data)
     : [];
@@ -108,282 +111,86 @@ export default function NotificationDetailContent({
     : null;
 
   return (
-    <View style={[styles.container, compact && styles.containerCompact]}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          compact && styles.scrollContentCompact,
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Hero: badge de tipo, etiquetas de tipo/estado, titulo y fecha. */}
-        <View style={styles.hero}>
-          <View style={[styles.iconBadge, { backgroundColor: typeTokens.bgMedium }]}>
-            <Icon source={icon} size={22} color={typeTokens.text} />
-          </View>
-
-          <View style={styles.heroText}>
-            <View style={styles.chipsRow}>
-              <View style={[styles.typeChip, { backgroundColor: typeTokens.bgSoft }]}>
-                <Text style={[styles.typeChipText, { color: typeTokens.text }]}>
-                  {typeTokens.label}
-                </Text>
-              </View>
-              <NotificationBadge status={status} hideDot />
-            </View>
-
-            <Text style={styles.title}>{notification.title}</Text>
-
-            <View style={styles.dateRow}>
-              <Icon
-                source="clock-outline"
-                size={13}
-                color={NOTIFICATION_NEUTRAL.textTertiary}
-              />
-              <Text style={styles.dateText}>
-                {formatNotificationDate(notification.created_at, true)}
-              </Text>
-            </View>
-          </View>
-
-          {onDelete && (
-            <Pressable
-              onPress={onDelete}
-              hitSlop={8}
-              accessibilityLabel="Eliminar notificación"
-              style={({ pressed }) => [
-                styles.deleteButton,
-                pressed && styles.deleteButtonPressed,
-              ]}
-            >
-              <Icon
-                source="trash-can-outline"
-                size={18}
-                color={NOTIFICATION_NEUTRAL.textTertiary}
-              />
-            </Pressable>
-          )}
+    <ScrollView
+      style={inModal ? styles.scrollInModal : styles.scroll}
+      contentContainerStyle={[styles.content, wide && styles.contentWide]}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.header}>
+        <View style={styles.metaRow}>
+          <MaterialCommunityIcons
+            name={getNotificationIcon(notification.event_type, notification.data)}
+            size={16}
+            color={notificationToneColor(colors, notification.severity)}
+          />
+          <Text style={styles.meta} numberOfLines={1}>
+            {getNotificationCategoryLabel(notification.event_type)} ·{" "}
+            {formatDateTime(notification.created_at)}
+          </Text>
         </View>
+        <Text style={styles.title}>{notification.title}</Text>
+        <Text style={styles.message} selectable>
+          {notification.message}
+        </Text>
+      </View>
 
-        <View style={styles.divider} />
-
-        {/* Mensaje */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Mensaje</Text>
-          <Text style={styles.message}>{notification.message}</Text>
-        </View>
-
-        {relatedLink && onOpenLink && (
-          <Button
-            mode="contained"
-            icon="arrow-right-circle-outline"
-            onPress={() => onOpenLink(relatedLink.route)}
-            buttonColor={typeTokens.text}
-            style={styles.openButton}
-          >
-            {relatedLink.label}
-          </Button>
-        )}
-
-        {/* Detalles */}
-        {dataRows.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Detalles</Text>
-            <View style={styles.dataCard}>
-              {dataRows.map((row, index) => (
-                <View
-                  key={`${row.label}-${row.value}`}
-                  style={[styles.dataRow, index > 0 && styles.dataRowBordered]}
-                >
-                  <Text style={styles.dataLabel}>{row.label}</Text>
-                  <Text style={styles.dataValue}>{row.value}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-      </ScrollView>
-
-      {onBack && (
-        <View style={styles.bottomActions}>
-          <Button
-            mode="outlined"
-            onPress={onBack}
-            style={styles.backButton}
-            icon="arrow-left"
-            textColor={NOTIFICATION_NEUTRAL.textSecondary}
-          >
-            Volver
-          </Button>
-        </View>
+      {relatedLink && onOpenLink && (
+        <Button
+          mode="contained"
+          icon="arrow-right"
+          contentStyle={styles.linkButtonContent}
+          onPress={() => onOpenLink(relatedLink.route)}
+          style={styles.linkButton}
+        >
+          {relatedLink.label}
+        </Button>
       )}
-    </View>
+
+      {dataRows.length > 0 && (
+        <ListSection title="Detalles">
+          <ListGroup inset={LIST_TEXT_INSET}>
+            {dataRows.map((row) => (
+              <ListValueRow key={`${row.label}-${row.value}`} label={row.label} value={row.value} />
+            ))}
+          </ListGroup>
+        </ListSection>
+      )}
+
+      {onDelete && (
+        <Button
+          mode="text"
+          icon="trash-can-outline"
+          textColor={colors.error}
+          onPress={onDelete}
+          style={styles.deleteButton}
+        >
+          Eliminar notificación
+        </Button>
+      )}
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: NOTIFICATION_NEUTRAL.background,
-  },
-  containerCompact: {
-    minHeight: 0,
-    backgroundColor: "transparent",
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 96,
-    gap: 20,
-  },
-  scrollContentCompact: {
-    padding: 0,
-    paddingBottom: 4,
-    gap: 18,
-  },
+const makeStyles = themedStyles((c) => ({
+  scroll: { flex: 1, backgroundColor: c.background },
+  // En el modal el contenido define la altura (con tope del modal).
+  scrollInModal: { flexGrow: 0, flexShrink: 1 },
+  content: { padding: 16, gap: 22, paddingBottom: 32 },
+  contentWide: { padding: 24, maxWidth: 760, width: "100%", alignSelf: "center" },
 
-  // ── Hero ──────────────────────────────────────────────────────────────
-  hero: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  iconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    marginTop: 2,
-  },
-  heroText: {
-    flex: 1,
-    minWidth: 0,
-    gap: 8,
-  },
-  chipsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    alignItems: "center",
-    gap: 6,
-  },
-  typeChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    alignSelf: "flex-start",
-  },
-  typeChipText: {
-    fontSize: 10.5,
-    lineHeight: 13,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
-  },
+  header: { gap: 6 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  meta: { fontSize: 13, fontWeight: "500", color: c.textSecondary, flexShrink: 1 },
   title: {
-    fontSize: 18,
-    lineHeight: 25,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: "700",
-    color: NOTIFICATION_NEUTRAL.textPrimary,
+    color: c.text,
+    letterSpacing: -0.2,
   },
-  dateRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  dateText: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: "500",
-    color: NOTIFICATION_NEUTRAL.textTertiary,
-  },
-  deleteButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  deleteButtonPressed: {
-    backgroundColor: NOTIFICATION_NEUTRAL.borderSubtle,
-  },
+  message: { fontSize: 15, lineHeight: 22, color: c.text, marginTop: 4 },
 
-  // ── Secciones ─────────────────────────────────────────────────────────
-  divider: {
-    height: 1,
-    backgroundColor: NOTIFICATION_NEUTRAL.borderSubtle,
-  },
-  section: {
-    gap: 8,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    lineHeight: 14,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    color: NOTIFICATION_NEUTRAL.textSecondary,
-  },
-  message: {
-    fontSize: 14.5,
-    lineHeight: 22,
-    color: NOTIFICATION_NEUTRAL.textPrimary,
-  },
-
-  // ── Detalles ──────────────────────────────────────────────────────────
-  dataCard: {
-    borderWidth: 1,
-    borderColor: NOTIFICATION_NEUTRAL.border,
-    borderRadius: 12,
-    backgroundColor: NOTIFICATION_NEUTRAL.surface,
-    overflow: "hidden",
-  },
-  dataRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    paddingVertical: 11,
-    paddingHorizontal: 13,
-  },
-  dataRowBordered: {
-    borderTopWidth: 1,
-    borderTopColor: NOTIFICATION_NEUTRAL.borderSubtle,
-  },
-  dataLabel: {
-    fontSize: 12.5,
-    lineHeight: 17,
-    fontWeight: "500",
-    color: NOTIFICATION_NEUTRAL.textSecondary,
-    flexShrink: 0,
-  },
-  dataValue: {
-    flex: 1,
-    fontSize: 13.5,
-    lineHeight: 18,
-    fontWeight: "600",
-    color: NOTIFICATION_NEUTRAL.textPrimary,
-    textAlign: "right",
-  },
-
-  // ── Acciones ──────────────────────────────────────────────────────────
-  openButton: {
-    alignSelf: "flex-start",
-    borderRadius: 10,
-  },
-  bottomActions: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    backgroundColor: NOTIFICATION_NEUTRAL.background,
-    borderTopWidth: 1,
-    borderTopColor: NOTIFICATION_NEUTRAL.borderSubtle,
-  },
-  backButton: {
-    borderColor: NOTIFICATION_NEUTRAL.border,
-    borderRadius: 10,
-  },
-});
+  linkButton: { alignSelf: "flex-start" },
+  linkButtonContent: { flexDirection: "row-reverse" },
+  deleteButton: { alignSelf: "flex-start", marginLeft: -12 },
+}));

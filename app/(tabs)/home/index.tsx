@@ -14,14 +14,10 @@
  */
 
 import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
+import { ListGroup as List, ListRow as Row, ListSection as Section } from "@/components/App/ListGroup";
 import Skeleton from "@/components/SkeletonLoader";
 import NotificationPermissionBanner from "@/components/Notifications/NotificationPermissionBanner";
-import {
-  getTaskDueDateInfo,
-  getTaskPriorityConfig,
-  getTaskStatusConfig,
-  isTaskOverdue,
-} from "@/components/Tasks/taskPresentation";
+import TaskRow from "@/components/Tasks/TaskRow";
 import { fetchMyOpenTasks } from "@/components/Tasks/taskQueries";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -167,19 +163,14 @@ export default function HomeScreen() {
         <Text style={styles.calm}>No tienes tareas abiertas.</Text>
       ) : (
         <List>
-          {tasks.map((task) => {
-            const overdue = isTaskOverdue(task);
-            return (
-              <Row
-                key={task.id}
-                icon={overdue ? "alarm" : task.status === "in_progress" ? "progress-clock" : "checkbox-blank-circle-outline"}
-                iconColor={overdue ? colors.error : undefined}
-                title={task.title || "Tarea"}
-                subtitle={buildTaskMeta(task)}
-                onPress={() => go(`/(tabs)/tasks/${task.id}`)}
-              />
-            );
-          })}
+          {tasks.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              currentLocationId={auth.location?.id}
+              onPress={() => go(`/(tabs)/tasks/${task.id}`)}
+            />
+          ))}
         </List>
       )}
     </Section>
@@ -286,31 +277,6 @@ function HomeSkeleton({ wide }: { wide: boolean }) {
     <View style={{ gap: 22 }}>
       {main}
       {side}
-    </View>
-  );
-}
-
-function Section({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  action?: { label: string; onPress: () => void };
-  children: React.ReactNode;
-}) {
-  const styles = useStyles();
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        {action && (
-          <Pressable onPress={action.onPress} hitSlop={8}>
-            <Text style={styles.sectionAction}>{action.label}</Text>
-          </Pressable>
-        )}
-      </View>
-      {children}
     </View>
   );
 }
@@ -464,65 +430,6 @@ function PendingBlock({ alerts, onGo }: { alerts: Summary["alerts"]; onGo: (link
   );
 }
 
-/** Lista con separadores sólo entre filas (sin doble línea al final). */
-function List({ children }: { children: React.ReactNode }) {
-  const styles = useStyles();
-  const items = React.Children.toArray(children).filter(Boolean);
-  return (
-    <View style={styles.list}>
-      {items.map((child, i) => (
-        <React.Fragment key={i}>
-          {i > 0 && <View style={styles.divider} />}
-          {child}
-        </React.Fragment>
-      ))}
-    </View>
-  );
-}
-
-function Row({
-  icon,
-  iconColor,
-  title,
-  subtitle,
-  warning,
-  actionLabel,
-  onPress,
-}: {
-  icon: IconName;
-  iconColor?: string;
-  title: string;
-  subtitle?: string;
-  warning?: string;
-  actionLabel?: string;
-  onPress?: () => void;
-}) {
-  const styles = useStyles();
-  const { colors } = useTheme();
-  return (
-    <Pressable onPress={onPress} disabled={!onPress} style={({ pressed }) => [styles.row, pressed && onPress && { backgroundColor: colors.surfaceMuted }]}>
-      <MaterialCommunityIcons name={icon} size={20} color={iconColor ?? colors.textSecondary} />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={styles.rowTitle}>{title}</Text>
-        {!!subtitle && <Text style={styles.rowSubtitle}>{subtitle}</Text>}
-        {!!warning && <Text style={[styles.rowSubtitle, { color: colors.warning }]}>{warning}</Text>}
-        {/* La acción va debajo: a la derecha apretaba el texto en el teléfono. */}
-        {!!actionLabel && <Text style={styles.rowAction}>{actionLabel} →</Text>}
-      </View>
-      {!actionLabel && onPress ? <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textMuted} /> : null}
-    </Pressable>
-  );
-}
-
-// ─── Tareas ─────────────────────────────────────────────────────────────────
-
-function buildTaskMeta(task: App.Entities.Task): string {
-  const parts: string[] = [getTaskStatusConfig(task.status).label, getTaskPriorityConfig(task.priority).label];
-  const due = getTaskDueDateInfo(task);
-  if (due) parts.push(due.text);
-  return parts.join(" · ");
-}
-
 // ─── Estilos ────────────────────────────────────────────────────────────────
 
 const useStyles = () =>
@@ -538,11 +445,6 @@ const useStyles = () =>
     columns: { flexDirection: "row" as const, gap: 28, alignItems: "flex-start" as const },
     colMain: { flex: 3, gap: 22, minWidth: 0 },
     colSide: { flex: 2, gap: 22, minWidth: 0 },
-
-    section: { gap: 8 },
-    sectionHeader: { flexDirection: "row" as const, justifyContent: "space-between" as const, alignItems: "baseline" as const },
-    sectionTitle: { fontSize: 14, fontWeight: "600" as const, color: c.textSecondary },
-    sectionAction: { fontSize: 14, fontWeight: "600" as const, color: c.primary },
 
     bigNumber: { fontSize: 40, lineHeight: 46, fontWeight: "700" as const, color: c.text, letterSpacing: -1, fontVariant: ["tabular-nums"] as any },
     subtle: { fontSize: 13, color: c.textSecondary },
@@ -562,17 +464,6 @@ const useStyles = () =>
     legendText: { fontSize: 11, color: c.textMuted, marginRight: 8 },
 
     list: { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: "hidden" as const },
-    row: {
-      flexDirection: "row" as const,
-      alignItems: "center" as const,
-      gap: 12,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-    },
-    divider: { height: 1, backgroundColor: c.border, marginLeft: 46 },
-    rowTitle: { fontSize: 15, fontWeight: "500" as const, color: c.text },
-    rowSubtitle: { fontSize: 13, color: c.textSecondary, marginTop: 2 },
-    rowAction: { fontSize: 14, fontWeight: "600" as const, color: c.primary, marginTop: 6 },
 
     shortcuts: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: 8 },
     shortcut: {

@@ -1,13 +1,13 @@
 import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
-import NotificationDetailContent from "@/components/Notifications/NotificationDetailContent";
+import NotificationDetailModal from "@/components/Notifications/NotificationDetailModal";
 import {
   getNotificationLink,
   NOTIFICATIONS_INBOX_ROUTE,
   notificationPreferencesRoute,
 } from "@/components/Notifications/notificationLinks";
 import NotificationsPopover from "@/components/Notifications/NotificationsPopover";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAlerts } from "@/hooks/useAlerts";
 import services from "@/utils/services";
@@ -20,13 +20,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import {
-  IconButton,
-  Menu,
-  Modal,
-  Portal,
-  Text,
-} from "react-native-paper";
+import { Menu, Text } from "react-native-paper";
 
 const DESKTOP_BREAKPOINT = 900;
 
@@ -67,24 +61,24 @@ export interface NotificationBellProps {
  * se mantenga sincronizado con el backend en cuanto AuthContext lo refresca.
  */
 export default function NotificationBell({
-  iconColor = palette.textSecondary,
+  iconColor,
   badgeSize = "small",
   showBadge = true,
   popover = true,
 }: NotificationBellProps) {
   const router = useRouter();
   const alerts = useAlerts();
+  const { colors } = useTheme();
   const { unreadNotificationsCount, loadUnreadNotificationsCount, hasPermission, location } =
     useAuth();
   const allLocations = useAllLocationsAccess();
-  const { width, height } = useWindowDimensions();
+  const { width } = useWindowDimensions();
 
   const isDesktop =
     popover && Platform.OS === "web" && width >= DESKTOP_BREAKPOINT;
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedNotification, setSelectedNotification] =
     useState<App.Entities.Notification | null>(null);
-  const [detailVisible, setDetailVisible] = useState(false);
 
   const closeMenu = useCallback(() => setMenuVisible(false), []);
 
@@ -108,8 +102,7 @@ export default function NotificationBell({
       if (target) {
         router.push(target.route as any);
       } else {
-        setSelectedNotification(notification);
-        setDetailVisible(true);
+        setSelectedNotification({ ...notification, is_read: true });
       }
 
       // Marcamos como leida en el backend para que el badge baje; usamos el
@@ -128,7 +121,6 @@ export default function NotificationBell({
 
   const openRelated = useCallback(
     (route: string) => {
-      setDetailVisible(false);
       setSelectedNotification(null);
       router.push(route as any);
     },
@@ -136,15 +128,14 @@ export default function NotificationBell({
   );
 
   const closeDetail = useCallback(() => {
-    setDetailVisible(false);
     setSelectedNotification(null);
   }, []);
 
   const handleDelete = useCallback(async () => {
     if (!selectedNotification) return;
 
-    const confirmed = await alerts.confirm("Eliminar esta notificación?", {
-      title: "Confirmar eliminación",
+    const confirmed = await alerts.confirm("¿Eliminar esta notificación?", {
+      title: "Eliminar notificación",
       okText: "Eliminar",
       cancelText: "Cancelar",
     });
@@ -170,7 +161,7 @@ export default function NotificationBell({
         <MaterialCommunityIcons
           name="bell-outline"
           size={20}
-          color={iconColor}
+          color={iconColor ?? colors.textSecondary}
         />
       </TouchableOpacity>
       {showBadge && unreadNotificationsCount > 0 && (
@@ -180,9 +171,10 @@ export default function NotificationBell({
           style={[
             styles.badge,
             badgeSize === "medium" ? styles.badgeMedium : styles.badgeSmall,
+            { backgroundColor: colors.error },
           ]}
         >
-          <Text style={styles.badgeText}>
+          <Text style={[styles.badgeText, { color: colors.textInverse }]}>
             {unreadNotificationsCount > 99
               ? "99+"
               : unreadNotificationsCount}
@@ -213,50 +205,13 @@ export default function NotificationBell({
         />
       </Menu>
 
-      {/* Modal de detalle — reutiliza el componente de la pagina completa
-          para que ambas superficies (popover y lista) muestren el mismo
-          contenido. Se monta en un Portal de Paper para que flote sobre
-          toda la app. */}
-      <Portal>
-        <Modal
-          visible={detailVisible}
-          onDismiss={closeDetail}
-          contentContainerStyle={styles.detailModal}
-        >
-          <View style={styles.detailModalHeader}>
-            <View>
-              <Text variant="titleMedium" style={styles.detailModalTitle}>
-                Detalle de notificación
-              </Text>
-              <Text variant="bodySmall" style={styles.detailModalSubtitle}>
-                Vista rápida desde el popover
-              </Text>
-            </View>
-            <IconButton
-              icon="close"
-              size={20}
-              iconColor={palette.textSecondary}
-              onPress={closeDetail}
-              style={styles.closeButton}
-            />
-          </View>
-          {selectedNotification && (
-            <View
-              style={[
-                styles.detailModalBody,
-                { maxHeight: Math.min(height - 160, 680) },
-              ]}
-            >
-              <NotificationDetailContent
-                notification={selectedNotification}
-                compact
-                onDelete={handleDelete}
-                onOpenLink={openRelated}
-              />
-            </View>
-          )}
-        </Modal>
-      </Portal>
+      {/* Detalle de los avisos que no llevan a otra pantalla. */}
+      <NotificationDetailModal
+        notification={selectedNotification}
+        onDismiss={closeDetail}
+        onDelete={handleDelete}
+        onOpenLink={openRelated}
+      />
     </>
   );
 }
@@ -278,7 +233,6 @@ const styles = StyleSheet.create({
     minWidth: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: palette.error,
     paddingHorizontal: 4,
     alignItems: "center",
     justifyContent: "center",
@@ -292,53 +246,15 @@ const styles = StyleSheet.create({
     right: 4,
   },
   badgeText: {
-    color: palette.textInverse,
     fontSize: 10,
     fontWeight: "700",
     lineHeight: 12,
   },
+  // El popover trae su propia superficie, borde y sombra.
   menuContent: {
     marginTop: 48,
     backgroundColor: "transparent",
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-  },
-  detailModal: {
-    backgroundColor: palette.background,
-    borderRadius: 12,
-    overflow: "hidden",
-    // El Modal de Paper renderiza su contenido en un overlay; necesitamos
-    // centrarnos nosotros mismos y capar el ancho para que en pantallas
-    // ultra anchas no se estire de lado a lado.
-    alignSelf: "center",
-    width: "100%",
-    maxWidth: 640,
-  },
-  detailModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.border,
-  },
-  detailModalTitle: {
-    color: palette.text,
-    fontWeight: "700",
-  },
-  detailModalSubtitle: {
-    color: palette.textSecondary,
-    marginTop: 2,
-  },
-  closeButton: {
-    margin: 0,
-  },
-  detailModalBody: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    elevation: 0,
+    shadowOpacity: 0,
   },
 });

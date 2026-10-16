@@ -1,69 +1,52 @@
-import palette from "@/constants/palette";
+import {
+  LIST_TEXT_INSET,
+  ListGroup,
+  ListSection,
+  ListValueRow,
+} from "@/components/App/ListGroup";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
+import { formatDateTime } from "@/utils/dates";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useState } from "react";
-import { ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { Button, Card, Chip, Divider, IconButton, Text } from "react-native-paper";
+import {
+  ScrollView,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { Button } from "react-native-paper";
+import { taskToneColor } from "./TaskRow";
 import {
   canStartTask,
-  formatTaskDate,
-  getTaskDueDateInfo,
-  getTaskPriorityConfig,
   getTaskRelatedLink,
-  getTaskStatusConfig,
+  getTaskStateIcon,
+  getTaskStatusLine,
   getTaskTypeConfig,
   getTaskUser,
   isTaskActionable,
-  isTaskOverdue,
 } from "./taskPresentation";
 
 export type TaskAction = "start" | "complete" | "cancel";
 
-type TaskComment = App.Entities.TaskComment;
-
-function getUserName(user?: { name?: string } | null, fallback = "Sin asignar") {
-  return user?.name || fallback;
-}
-
-function DetailRow({
-  label,
-  value,
-  icon,
-}: {
-  label: string;
-  value: string;
-  icon: string;
-}) {
-  return (
-    <View style={styles.detailRow}>
-      <View style={styles.detailLabelRow}>
-        <MaterialCommunityIcons name={icon as any} size={17} color={palette.textSecondary} />
-        <Text style={styles.detailLabel}>{label}</Text>
-      </View>
-      <Text style={styles.detailValue}>{value}</Text>
-    </View>
-  );
-}
-
-function CommentsSection({
-  comments,
+function CommentComposer({
   onAddComment,
 }: {
-  comments: TaskComment[];
-  onAddComment?: (comment: string) => Promise<boolean | void>;
+  onAddComment: (comment: string) => Promise<boolean | void>;
 }) {
+  const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
 
   const handleSend = async () => {
-    const trimmedComment = comment.trim();
-    if (!trimmedComment || !onAddComment) {
-      return;
-    }
-
+    const trimmed = comment.trim();
+    if (!trimmed) return;
     try {
       setSending(true);
       // Si falla se conserva el texto para reintentar.
-      const saved = await onAddComment(trimmedComment);
+      const saved = await onAddComment(trimmed);
       if (saved !== false) setComment("");
     } finally {
       setSending(false);
@@ -71,87 +54,43 @@ function CommentsSection({
   };
 
   return (
-    <Card style={styles.card} mode="elevated">
-      <Card.Content>
-        <View style={styles.sectionHeader}>
-          <MaterialCommunityIcons name="comment-text-outline" size={21} color={palette.primary} />
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Comentarios
-          </Text>
-        </View>
-        <Divider style={styles.divider} />
-
-        {comments.length === 0 ? (
-          <View style={styles.emptyComments}>
-            <MaterialCommunityIcons name="comment-outline" size={30} color={palette.textSecondary} />
-            <Text style={styles.emptyCommentsText}>Sin comentarios registrados</Text>
-          </View>
-        ) : (
-          <View style={styles.commentsList}>
-            {comments.map((item) => (
-              <View key={item.id} style={styles.commentItem}>
-                <View style={styles.commentAvatar}>
-                  <Text style={styles.commentAvatarText}>
-                    {(item.user?.name || "U").slice(0, 1).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={styles.commentBody}>
-                  <View style={styles.commentHeader}>
-                    <Text style={styles.commentUser}>{item.user?.name || "Usuario"}</Text>
-                    <Text style={styles.commentDate}>{formatTaskDate(item.created_at)}</Text>
-                  </View>
-                  <Text style={styles.commentText}>{item.comment}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {onAddComment && (
-          <View style={styles.commentComposer}>
-            <TextInput
-              value={comment}
-              onChangeText={setComment}
-              placeholder="Agregar comentario"
-              placeholderTextColor={palette.textSecondary}
-              multiline
-              style={styles.commentInput}
-            />
-            <Button
-              mode="contained"
-              icon="send"
-              onPress={handleSend}
-              loading={sending}
-              disabled={sending || !comment.trim()}
-              buttonColor={palette.primary}
-              style={styles.commentButton}
-            >
-              Enviar
-            </Button>
-          </View>
-        )}
-      </Card.Content>
-    </Card>
+    <View style={styles.composer}>
+      <TextInput
+        value={comment}
+        onChangeText={setComment}
+        placeholder="Escribe un comentario…"
+        placeholderTextColor={colors.textMuted}
+        multiline
+        style={styles.composerInput}
+      />
+      <Button
+        mode="contained-tonal"
+        onPress={handleSend}
+        loading={sending}
+        disabled={sending || !comment.trim()}
+        style={styles.composerButton}
+      >
+        Comentar
+      </Button>
+    </View>
   );
 }
 
 /**
- * Detalle de una tarea. `canAct` / `canCancel` vienen de getTaskPermissions
- * (misma regla que el backend: tasks_update, o ser responsable / creador).
+ * Detalle de una tarea, en su pantalla (teléfono) o en el modal de la lista
+ * (escritorio). `canAct` / `canCancel` vienen de getTaskPermissions (misma
+ * regla que el backend: tasks_update, o ser responsable / creador).
  */
 export default function TaskDetailContent({
   task,
-  onBack,
   onChangeStatus,
   onAddComment,
   onOpenRoute,
   canAct = true,
   canCancel,
   pendingAction = null,
-  compact = false,
 }: {
   task: App.Entities.Task;
-  onBack?: () => void;
   onChangeStatus?: (action: TaskAction) => Promise<void>;
   onAddComment?: (comment: string) => Promise<boolean | void>;
   /** Abre una ruta (registro relacionado); el padre cierra su modal si aplica. */
@@ -161,12 +100,15 @@ export default function TaskDetailContent({
   canCancel?: boolean;
   /** Acción en curso: deshabilita los botones para evitar dobles envíos. */
   pendingAction?: TaskAction | null;
-  compact?: boolean;
 }) {
-  const typeConfig = getTaskTypeConfig(task.type);
-  const statusConfig = getTaskStatusConfig(task.status);
-  const priorityConfig = getTaskPriorityConfig(task.priority);
-  const dueDateInfo = getTaskDueDateInfo(task);
+  const styles = useThemedStyles(makeStyles);
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const wide = width >= 768;
+
+  const type = getTaskTypeConfig(task.type);
+  const state = getTaskStateIcon(task);
+  const line = getTaskStatusLine(task);
   const comments = task.comments ?? [];
   const isOpen = isTaskActionable(task);
   const showActions = Boolean(onChangeStatus) && canAct && isOpen;
@@ -176,117 +118,85 @@ export default function TaskDetailContent({
   const assignedTo = getTaskUser(task, "assigned_to");
   const assignedBy = getTaskUser(task, "assigned_by");
   const completedBy = getTaskUser(task, "completed_by");
+  const dueColor = line.due ? taskToneColor(colors, line.due.tone) : undefined;
 
   return (
-    <View style={[styles.container, compact && styles.containerCompact]}>
+    <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, compact && styles.scrollContentCompact]}
+        contentContainerStyle={[
+          styles.content,
+          wide && styles.contentWide,
+          showActions && styles.contentWithBar,
+        ]}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Card style={[styles.heroCard, isTaskOverdue(task) && styles.heroCardOverdue]} mode="elevated">
-          <Card.Content style={styles.heroContent}>
-            <View style={[styles.heroIcon, { backgroundColor: typeConfig.softBg }]}>
-              <MaterialCommunityIcons name={typeConfig.icon as any} size={32} color={typeConfig.color} />
-            </View>
-            <View style={styles.heroText}>
-              <View style={styles.chipsRow}>
-                <Chip
-                  compact
-                  mode="flat"
-                  icon={statusConfig.icon}
-                  style={[styles.chip, { backgroundColor: statusConfig.softBg }]}
-                  textStyle={[styles.chipText, { color: statusConfig.color }]}
-                >
-                  {statusConfig.label}
-                </Chip>
-                <Chip
-                  compact
-                  mode="flat"
-                  icon={priorityConfig.icon}
-                  style={[styles.chip, { backgroundColor: priorityConfig.softBg }]}
-                  textStyle={[styles.chipText, { color: priorityConfig.color }]}
-                >
-                  {priorityConfig.label}
-                </Chip>
-                <Chip
-                  compact
-                  mode="flat"
-                  icon={typeConfig.icon}
-                  style={[styles.chip, { backgroundColor: typeConfig.softBg }]}
-                  textStyle={[styles.chipText, { color: typeConfig.color }]}
-                >
-                  {typeConfig.shortLabel}
-                </Chip>
-              </View>
-              <Text variant="headlineSmall" style={styles.title}>
-                {task.title}
-              </Text>
-              {dueDateInfo && (
-                <View style={[styles.dueBadge, { backgroundColor: dueDateInfo.softBg }]}> 
-                  <MaterialCommunityIcons name={dueDateInfo.icon as any} size={15} color={dueDateInfo.color} />
-                  <Text style={[styles.dueBadgeText, { color: dueDateInfo.color }]}>{dueDateInfo.text}</Text>
-                </View>
-              )}
-            </View>
-          </Card.Content>
-        </Card>
-
-        {task.description && (
-          <Card style={styles.card} mode="elevated">
-            <Card.Content>
-              <View style={styles.sectionHeader}>
-                <MaterialCommunityIcons name="text-box-outline" size={21} color={palette.primary} />
-                <Text variant="titleMedium" style={styles.sectionTitle}>
-                  Descripción
+        <View style={styles.header}>
+          <View style={styles.metaRow}>
+            <MaterialCommunityIcons name={type.icon} size={16} color={colors.textSecondary} />
+            <Text style={styles.meta} numberOfLines={1}>
+              {type.label}
+              {task.location?.name ? ` · ${task.location.name}` : ""}
+            </Text>
+          </View>
+          <Text style={styles.title}>{task.title}</Text>
+          <View style={styles.statusRow}>
+            <MaterialCommunityIcons
+              name={state.icon}
+              size={18}
+              color={taskToneColor(colors, state.tone) ?? colors.textSecondary}
+            />
+            <Text style={styles.status}>
+              {line.text}
+              {line.due && (
+                <Text style={dueColor ? { color: dueColor } : undefined}>
+                  {` · ${line.due.text}`}
                 </Text>
-              </View>
-              <Divider style={styles.divider} />
-              <Text style={styles.description}>{task.description}</Text>
-            </Card.Content>
-          </Card>
+              )}
+            </Text>
+          </View>
+        </View>
+
+        {relatedLink && onOpenRoute && (
+          <Button
+            mode="outlined"
+            icon="arrow-right"
+            contentStyle={styles.relatedButtonContent}
+            onPress={() => onOpenRoute(relatedLink.route)}
+            style={styles.relatedButton}
+          >
+            {relatedLink.label}
+          </Button>
         )}
 
-        <Card style={styles.card} mode="elevated">
-          <Card.Content>
-            <View style={styles.sectionHeader}>
-              <MaterialCommunityIcons name="information-outline" size={21} color={palette.primary} />
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Información
-              </Text>
-            </View>
-            <Divider style={styles.divider} />
-            <View style={styles.detailsList}>
-              <DetailRow label="Tipo" value={typeConfig.label} icon="shape-outline" />
-              <DetailRow label="Asignada a" value={getUserName(assignedTo)} icon="account-check-outline" />
-              <DetailRow label="Asignada por" value={getUserName(assignedBy, "Sistema")} icon="account-arrow-right-outline" />
-              {completedBy && (
-                <DetailRow label="Completada por" value={getUserName(completedBy)} icon="account-star-outline" />
-              )}
-              <DetailRow label="Sucursal" value={task.location?.name || "Sin sucursal"} icon="map-marker-outline" />
-              <DetailRow label="Vencimiento" value={formatTaskDate(task.due_date, true)} icon="calendar-clock" />
-              <DetailRow label="Creada" value={formatTaskDate(task.created_at, true)} icon="calendar-plus" />
-              {task.completed_at && (
-                <DetailRow label="Completada" value={formatTaskDate(task.completed_at, true)} icon="calendar-check" />
-              )}
-            </View>
-            {relatedLink && onOpenRoute && (
-              <Button
-                mode="outlined"
-                icon="open-in-new"
-                onPress={() => onOpenRoute(relatedLink.route)}
-                style={styles.relatedButton}
-                textColor={palette.primary}
-              >
-                {relatedLink.label}
-              </Button>
+        {!!task.description && (
+          <ListSection title="Descripción">
+            <Text style={styles.body} selectable>
+              {task.description}
+            </Text>
+          </ListSection>
+        )}
+
+        <ListSection title="Detalles">
+          <ListGroup inset={LIST_TEXT_INSET}>
+            <ListValueRow label="Asignada a" value={assignedTo?.name || "Sin asignar"} />
+            <ListValueRow label="Asignada por" value={assignedBy?.name || "Sistema"} />
+            {completedBy && <ListValueRow label="Completada por" value={completedBy.name} />}
+            <ListValueRow
+              label="Fecha límite"
+              value={task.due_date ? formatDateTime(task.due_date) : "Sin fecha límite"}
+            />
+            <ListValueRow label="Creada" value={formatDateTime(task.created_at)} />
+            {!!task.completed_at && (
+              <ListValueRow label="Completada" value={formatDateTime(task.completed_at)} />
             )}
-          </Card.Content>
-        </Card>
+          </ListGroup>
+        </ListSection>
 
         {!canAct && isOpen && onChangeStatus && (
-          <View style={styles.permissionNote}>
-            <MaterialCommunityIcons name="lock-outline" size={16} color={palette.textSecondary} />
-            <Text style={styles.permissionNoteText}>
+          <View style={styles.note}>
+            <MaterialCommunityIcons name="lock-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.noteText}>
               Solo quien tiene asignada la tarea, quien la creó o un rol con
               &quot;Actualizar tareas&quot; puede iniciarla, completarla o comentarla. Las
               tareas del sistema (recibir una compra o una transferencia) se
@@ -295,10 +205,31 @@ export default function TaskDetailContent({
           </View>
         )}
 
-        <CommentsSection
-          comments={comments}
-          onAddComment={canAct ? onAddComment : undefined}
-        />
+        <ListSection
+          title="Comentarios"
+          count={comments.length > 0 ? comments.length : undefined}
+        >
+          {comments.length > 0 ? (
+            <ListGroup inset={LIST_TEXT_INSET}>
+              {comments.map((item) => (
+                <View key={item.id} style={styles.comment}>
+                  <View style={styles.commentHeader}>
+                    <Text style={styles.commentUser} numberOfLines={1}>
+                      {item.user?.name || "Usuario"}
+                    </Text>
+                    <Text style={styles.commentDate}>{formatDateTime(item.created_at)}</Text>
+                  </View>
+                  <Text style={styles.commentText} selectable>
+                    {item.comment}
+                  </Text>
+                </View>
+              ))}
+            </ListGroup>
+          ) : (
+            <Text style={styles.calm}>Todavía no hay comentarios.</Text>
+          )}
+          {canAct && onAddComment && <CommentComposer onAddComment={onAddComment} />}
+        </ListSection>
 
         {showActions && (canCancel ?? canAct) && (
           <Button
@@ -307,7 +238,7 @@ export default function TaskDetailContent({
             onPress={() => onChangeStatus?.("cancel")}
             disabled={busy}
             loading={pendingAction === "cancel"}
-            textColor={palette.error}
+            textColor={colors.error}
             style={styles.cancelButton}
           >
             Cancelar tarea
@@ -315,286 +246,113 @@ export default function TaskDetailContent({
         )}
       </ScrollView>
 
-      {(onBack || showActions) && (
-        <View style={styles.bottomActions}>
-          {onBack && (
-            <IconButton
-              icon="arrow-left"
-              size={20}
-              iconColor={palette.textSecondary}
-              onPress={onBack}
-              style={styles.backIconButton}
-            />
-          )}
-          {onChangeStatus && canStart && (
-            <Button
-              mode="outlined"
-              icon="play-circle-outline"
-              onPress={() => onChangeStatus("start")}
-              disabled={busy}
-              loading={pendingAction === "start"}
-              style={styles.actionButton}
-              textColor={palette.blue}
-            >
-              Iniciar
-            </Button>
-          )}
-          {onChangeStatus && showActions && (
+      {showActions && onChangeStatus && (
+        <View style={styles.actionBar}>
+          <View style={styles.actionBarInner}>
+            {canStart && (
+              <Button
+                mode="outlined"
+                icon="play-circle-outline"
+                onPress={() => onChangeStatus("start")}
+                disabled={busy}
+                loading={pendingAction === "start"}
+                style={styles.actionButton}
+              >
+                Iniciar
+              </Button>
+            )}
             <Button
               mode="contained"
-              icon="check-circle-outline"
+              icon="check"
               onPress={() => onChangeStatus("complete")}
               disabled={busy}
               loading={pendingAction === "complete"}
-              buttonColor={palette.success}
               style={styles.actionButton}
             >
               Completar
             </Button>
-          )}
+          </View>
         </View>
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: palette.background,
-  },
-  containerCompact: {
-    minHeight: 0,
-    backgroundColor: "transparent",
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 124,
-    gap: 14,
-  },
-  scrollContentCompact: {
-    padding: 0,
-    paddingBottom: 90,
-  },
-  heroCard: {
-    borderRadius: 8,
-    backgroundColor: "#F8F5EF",
-    borderWidth: 1,
-    borderColor: palette.border,
-  },
-  heroCardOverdue: {
-    borderLeftWidth: 4,
-    borderLeftColor: palette.error,
-  },
-  heroContent: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 14,
-  },
-  heroIcon: {
-    width: 62,
-    height: 62,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  heroText: {
-    flex: 1,
-    gap: 9,
-  },
-  chipsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 7,
-  },
-  chip: {
-    borderRadius: 8,
-  },
-  chipText: {
-    fontSize: 11,
-    fontWeight: "800",
-  },
+const makeStyles = themedStyles((c) => ({
+  container: { flex: 1, backgroundColor: c.background },
+  content: { padding: 16, gap: 22, paddingBottom: 32 },
+  contentWide: { padding: 24, maxWidth: 760, width: "100%", alignSelf: "center" },
+  // Deja libre el espacio de la barra de acciones fija.
+  contentWithBar: { paddingBottom: 96 },
+
+  header: { gap: 6 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  meta: { fontSize: 13, fontWeight: "500", color: c.textSecondary, flexShrink: 1 },
   title: {
-    color: palette.text,
-    fontWeight: "900",
-    lineHeight: 31,
-  },
-  dueBadge: {
-    alignSelf: "flex-start",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  dueBadgeText: {
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  card: {
-    borderRadius: 8,
-    backgroundColor: "#F8F5EF",
-    borderWidth: 1,
-    borderColor: palette.border,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  sectionTitle: {
-    color: palette.text,
-    fontWeight: "800",
-  },
-  divider: {
-    marginVertical: 12,
-    backgroundColor: palette.border,
-  },
-  description: {
-    color: palette.text,
-    lineHeight: 23,
-  },
-  detailsList: {
-    gap: 10,
-  },
-  detailRow: {
-    gap: 5,
-    padding: 11,
-    borderRadius: 8,
-    backgroundColor: palette.surface,
-  },
-  detailLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  detailLabel: {
-    color: palette.textSecondary,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  detailValue: {
-    color: palette.text,
-    fontSize: 14,
+    fontSize: 22,
+    lineHeight: 28,
     fontWeight: "700",
+    color: c.text,
+    letterSpacing: -0.2,
   },
-  relatedButton: {
-    alignSelf: "flex-start",
-    marginTop: 12,
-    borderRadius: 8,
-    borderColor: palette.primary,
-  },
-  permissionNote: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: palette.surface,
-    borderWidth: 1,
-    borderColor: palette.border,
-  },
-  permissionNoteText: {
-    flex: 1,
-    color: palette.textSecondary,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  cancelButton: {
-    alignSelf: "center",
-  },
-  emptyComments: {
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 18,
-  },
-  emptyCommentsText: {
-    color: palette.textSecondary,
-    fontWeight: "600",
-  },
-  commentsList: {
-    gap: 12,
-  },
-  commentItem: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  commentAvatar: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: palette.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  commentAvatarText: {
-    color: "#fff",
-    fontWeight: "900",
-  },
-  commentBody: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 8,
-    backgroundColor: palette.surface,
-  },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 },
+  status: { fontSize: 14, fontWeight: "500", color: c.textSecondary, flexShrink: 1 },
+
+  relatedButton: { alignSelf: "flex-start" },
+  relatedButtonContent: { flexDirection: "row-reverse" },
+
+  body: { fontSize: 15, lineHeight: 22, color: c.text },
+  calm: { fontSize: 14, color: c.textSecondary },
+
+  note: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  noteText: { flex: 1, fontSize: 13, lineHeight: 18, color: c.textSecondary },
+
+  comment: { paddingHorizontal: 14, paddingVertical: 12, gap: 4 },
   commentHeader: {
     flexDirection: "row",
+    alignItems: "baseline",
     justifyContent: "space-between",
-    gap: 8,
-    marginBottom: 4,
+    gap: 12,
   },
-  commentUser: {
-    color: palette.text,
-    fontWeight: "800",
-    flex: 1,
-  },
-  commentDate: {
-    color: palette.textSecondary,
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  commentText: {
-    color: palette.text,
-    lineHeight: 20,
-  },
-  commentComposer: {
-    marginTop: 14,
-    gap: 8,
-  },
-  commentInput: {
-    minHeight: 74,
+  commentUser: { fontSize: 14, fontWeight: "600", color: c.text, flexShrink: 1 },
+  commentDate: { fontSize: 12, color: c.textMuted },
+  commentText: { fontSize: 14, lineHeight: 20, color: c.text },
+
+  composer: { gap: 8, marginTop: 4 },
+  composerInput: {
+    minHeight: 72,
     borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: 8,
-    padding: 10,
-    color: palette.text,
-    backgroundColor: palette.background,
+    borderColor: c.border,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    lineHeight: 20,
+    color: c.text,
+    backgroundColor: c.surface,
     textAlignVertical: "top",
   },
-  commentButton: {
-    alignSelf: "flex-end",
-    borderRadius: 8,
-  },
-  bottomActions: {
+  composerButton: { alignSelf: "flex-end" },
+
+  cancelButton: { alignSelf: "flex-start", marginLeft: -12 },
+
+  actionBar: {
     position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    padding: 14,
-    backgroundColor: "#F8F5EF",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: c.surface,
     borderTopWidth: 1,
-    borderTopColor: palette.border,
+    borderTopColor: c.border,
   },
-  backIconButton: {
-    margin: 0,
-    backgroundColor: palette.surface,
+  actionBarInner: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+    maxWidth: 712,
+    alignSelf: "center",
   },
-  actionButton: {
-    flex: 1,
-    borderRadius: 8,
-  },
-});
+  actionButton: { flex: 1 },
+}));

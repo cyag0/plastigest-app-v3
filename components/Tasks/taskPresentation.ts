@@ -1,221 +1,152 @@
-import palette from "@/constants/palette";
+import { formatDate } from "@/utils/dates";
+import type { MaterialCommunityIcons } from "@expo/vector-icons";
+
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 // "open" = por hacer (pendientes + en proceso, incluidas las vencidas).
 export type TaskStatusFilter = "all" | "open" | App.Entities.TaskStatus;
 export type TaskPriorityFilter = "all" | App.Entities.TaskPriority;
 export type TaskTypeFilter = "all" | App.Entities.TaskType;
 
+/**
+ * Tono de un dato de la tarea. El componente lo resuelve con los colores del
+ * tema activo (antes cada config traía colores fijos de la paleta clara y en
+ * modo oscuro no cambiaban).
+ */
+export type TaskTone = "error" | "warning" | "success" | "muted" | "default";
+
 export function getTaskPriorityConfig(priority: App.Entities.TaskPriority) {
   switch (priority) {
     case "urgent":
-      return {
-        label: "Urgente",
-        color: palette.error,
-        softBg: palette.error + "22",
-        icon: "alert-decagram-outline",
-      };
+      return { label: "Urgente", icon: "alert-decagram-outline" };
     case "high":
-      return {
-        label: "Alta",
-        color: palette.warning,
-        softBg: palette.warning + "26",
-        icon: "arrow-up-circle-outline",
-      };
+      return { label: "Alta", icon: "arrow-up-circle-outline" };
     case "medium":
-      return {
-        label: "Media",
-        color: palette.blue,
-        softBg: palette.blue + "22",
-        icon: "minus-circle-outline",
-      };
+      return { label: "Media", icon: "minus-circle-outline" };
     case "low":
     default:
-      return {
-        label: "Baja",
-        color: palette.textSecondary,
-        softBg: palette.surface,
-        icon: "arrow-down-circle-outline",
-      };
+      return { label: "Baja", icon: "arrow-down-circle-outline" };
   }
 }
 
 export function getTaskStatusConfig(status: App.Entities.TaskStatus) {
   switch (status) {
     case "pending":
-      return {
-        label: "Pendiente",
-        color: palette.warning,
-        softBg: palette.warning + "24",
-        icon: "clock-outline",
-      };
+      return { label: "Pendiente", icon: "clock-outline" };
     case "in_progress":
-      return {
-        label: "En proceso",
-        color: palette.blue,
-        softBg: palette.blue + "22",
-        icon: "progress-clock",
-      };
+      return { label: "En proceso", icon: "progress-clock" };
     case "completed":
-      return {
-        label: "Completada",
-        color: palette.success,
-        softBg: palette.success + "22",
-        icon: "check-circle-outline",
-      };
+      return { label: "Completada", icon: "check-circle-outline" };
     case "cancelled":
-      return {
-        label: "Cancelada",
-        color: palette.textSecondary,
-        softBg: palette.surface,
-        icon: "close-circle-outline",
-      };
+      return { label: "Cancelada", icon: "close-circle-outline" };
     case "overdue":
-      return {
-        label: "Vencida",
-        color: palette.error,
-        softBg: palette.error + "22",
-        icon: "calendar-alert",
-      };
+      return { label: "Vencida", icon: "calendar-alert" };
     default:
-      return {
-        label: status,
-        color: palette.textSecondary,
-        softBg: palette.surface,
-        icon: "checkbox-marked-circle-outline",
-      };
+      return { label: status, icon: "checkbox-marked-circle-outline" };
   }
 }
 
-export function getTaskTypeConfig(type: App.Entities.TaskType) {
+export function getTaskTypeConfig(type: App.Entities.TaskType): {
+  label: string;
+  icon: IconName;
+} {
   switch (type) {
     case "inventory_count":
-      return {
-        label: "Conteo de inventario",
-        shortLabel: "Conteo",
-        icon: "clipboard-list-outline",
-        color: palette.primary,
-        softBg: palette.primary + "18",
-      };
+      return { label: "Conteo de inventario", icon: "clipboard-list-outline" };
     case "receive_purchase":
-      return {
-        label: "Recibir compra",
-        shortLabel: "Compra",
-        icon: "package-variant-closed-check",
-        color: palette.accent,
-        softBg: palette.accent + "22",
-      };
+      return { label: "Recibir compra", icon: "package-variant-closed-check" };
     case "approve_transfer":
-      return {
-        label: "Aprobar transferencia",
-        shortLabel: "Aprobar",
-        icon: "clipboard-check-outline",
-        color: palette.success,
-        softBg: palette.success + "20",
-      };
+      return { label: "Aprobar transferencia", icon: "clipboard-check-outline" };
     case "send_transfer":
-      return {
-        label: "Enviar transferencia",
-        shortLabel: "Enviar",
-        icon: "truck-delivery-outline",
-        color: palette.blue,
-        softBg: palette.blue + "20",
-      };
+      return { label: "Enviar transferencia", icon: "truck-delivery-outline" };
     case "receive_transfer":
-      return {
-        label: "Recibir transferencia",
-        shortLabel: "Recibir",
-        icon: "package-down",
-        color: palette.primary,
-        softBg: palette.primary + "18",
-      };
+      return { label: "Recibir transferencia", icon: "package-down" };
     case "sales_report":
-      return {
-        label: "Reporte de ventas",
-        shortLabel: "Ventas",
-        icon: "chart-line",
-        color: palette.blue,
-        softBg: palette.blue + "20",
-      };
+      return { label: "Reporte de ventas", icon: "chart-line" };
     case "stock_check":
-      return {
-        label: "Verificación de stock",
-        shortLabel: "Stock",
-        icon: "magnify-scan",
-        color: palette.warning,
-        softBg: palette.warning + "24",
-      };
+      return { label: "Verificación de stock", icon: "magnify-scan" };
     case "adjustment_review":
-      return {
-        label: "Revisar ajuste",
-        shortLabel: "Ajuste",
-        icon: "clipboard-edit-outline",
-        color: palette.error,
-        softBg: palette.error + "18",
-      };
+      return { label: "Revisar ajuste", icon: "clipboard-edit-outline" };
     case "custom":
     default:
-      return {
-        label: "Personalizada",
-        shortLabel: "Custom",
-        icon: "note-text-outline",
-        color: palette.textSecondary,
-        softBg: palette.surface,
-      };
+      return { label: "Personalizada", icon: "note-text-outline" };
   }
+}
+
+/**
+ * Ícono del estado, el mismo en Inicio, la lista y el detalle: vencida
+ * (alarma), en proceso, pendiente (círculo vacío), completada o cancelada.
+ */
+export function getTaskStateIcon(task: App.Entities.Task): {
+  icon: IconName;
+  tone: TaskTone;
+} {
+  if (task.status === "completed") return { icon: "check-circle-outline", tone: "success" };
+  if (task.status === "cancelled") return { icon: "close-circle-outline", tone: "muted" };
+  if (isTaskOverdue(task)) return { icon: "alarm", tone: "error" };
+  if (task.status === "in_progress") return { icon: "progress-clock", tone: "default" };
+  return { icon: "checkbox-blank-circle-outline", tone: "default" };
+}
+
+/**
+ * Línea de estado de la tarea: "Pendiente · Urgente" más la fecha límite
+ * ("Vencida hace 3 días"), que va aparte para poder resaltarla.
+ */
+export function getTaskStatusLine(task: App.Entities.Task): {
+  text: string;
+  due: { text: string; tone: TaskTone } | null;
+} {
+  const status = getTaskStatusConfig(task.status).label;
+  if (task.status === "completed") {
+    return {
+      text: task.completed_at ? `${status} el ${formatDate(task.completed_at)}` : status,
+      due: null,
+    };
+  }
+  if (task.status === "cancelled") return { text: status, due: null };
+
+  const due = getTaskDueDateInfo(task);
+  return {
+    text: `${status} · ${getTaskPriorityConfig(task.priority).label}`,
+    due: due ? { text: due.text, tone: due.tone } : null,
+  };
 }
 
 // "Vencidas" no es un status: son las pendientes/en proceso con la fecha
 // límite pasada (is_overdue). El backend ya no cambia el status a "overdue".
-export const taskStatusOptions: { value: TaskStatusFilter; label: string; icon: string }[] = [
-  { value: "open", label: "Por hacer", icon: "clipboard-text-clock-outline" },
-  { value: "pending", label: "Pendientes", icon: "clock-outline" },
-  { value: "in_progress", label: "En proceso", icon: "progress-clock" },
-  { value: "overdue", label: "Vencidas", icon: "calendar-alert" },
-  { value: "completed", label: "Completadas", icon: "check-circle-outline" },
-  { value: "cancelled", label: "Canceladas", icon: "close-circle-outline" },
-  { value: "all", label: "Todas", icon: "format-list-checks" },
+export const taskStatusOptions: { value: TaskStatusFilter; label: string }[] = [
+  { value: "open", label: "Por hacer" },
+  { value: "pending", label: "Pendientes" },
+  { value: "in_progress", label: "En proceso" },
+  { value: "overdue", label: "Vencidas" },
+  { value: "completed", label: "Completadas" },
+  { value: "cancelled", label: "Canceladas" },
+  { value: "all", label: "Todas" },
 ];
 
-export const taskPriorityOptions: { value: TaskPriorityFilter; label: string; icon: string }[] = [
-  { value: "all", label: "Todas", icon: "flag-outline" },
-  { value: "urgent", label: "Urgente", icon: "alert-decagram-outline" },
-  { value: "high", label: "Alta", icon: "arrow-up-circle-outline" },
-  { value: "medium", label: "Media", icon: "minus-circle-outline" },
-  { value: "low", label: "Baja", icon: "arrow-down-circle-outline" },
+export const taskPriorityOptions: { value: TaskPriorityFilter; label: string }[] = [
+  { value: "all", label: "Todas" },
+  { value: "urgent", label: "Urgente" },
+  { value: "high", label: "Alta" },
+  { value: "medium", label: "Media" },
+  { value: "low", label: "Baja" },
 ];
 
-export const taskTypeOptions: { value: TaskTypeFilter; label: string; icon: string }[] = [
-  { value: "all", label: "Tipos", icon: "shape-outline" },
-  { value: "inventory_count", label: "Conteos", icon: "clipboard-list-outline" },
-  { value: "receive_purchase", label: "Compras", icon: "package-variant-closed-check" },
-  { value: "approve_transfer", label: "Aprobar", icon: "clipboard-check-outline" },
-  { value: "send_transfer", label: "Enviar", icon: "truck-delivery-outline" },
-  { value: "receive_transfer", label: "Recibir", icon: "package-down" },
-  { value: "stock_check", label: "Stock", icon: "magnify-scan" },
-  { value: "adjustment_review", label: "Ajustes", icon: "clipboard-edit-outline" },
-  { value: "custom", label: "Custom", icon: "note-text-outline" },
+export const taskTypeOptions: { value: TaskTypeFilter; label: string }[] = [
+  { value: "all", label: "Todos" },
+  { value: "inventory_count", label: "Conteos" },
+  { value: "receive_purchase", label: "Recibir compra" },
+  { value: "approve_transfer", label: "Aprobar transferencia" },
+  { value: "send_transfer", label: "Enviar transferencia" },
+  { value: "receive_transfer", label: "Recibir transferencia" },
+  { value: "stock_check", label: "Verificación de stock" },
+  { value: "adjustment_review", label: "Revisar ajuste" },
+  { value: "custom", label: "Personalizadas" },
 ];
 
-export function formatTaskDate(value?: string, long = false) {
-  if (!value) {
-    return "Sin fecha";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Fecha no disponible";
-  }
-
-  return date.toLocaleDateString("es-MX", {
-    day: "numeric",
-    month: long ? "long" : "short",
-    year: long ? "numeric" : undefined,
-    hour: long ? "2-digit" : undefined,
-    minute: long ? "2-digit" : undefined,
-  });
-}
-
-export function getTaskDueDateInfo(task: App.Entities.Task) {
+export function getTaskDueDateInfo(
+  task: App.Entities.Task,
+): { text: string; tone: TaskTone } | null {
   if (!task.due_date) {
     return null;
   }
@@ -247,45 +178,14 @@ export function getTaskDueDateInfo(task: App.Entities.Task) {
         daysLate === 0
           ? "Vencida hoy"
           : `Vencida hace ${daysLate} ${daysLate === 1 ? "día" : "días"}`,
-      color: palette.error,
-      softBg: palette.error + "18",
-      icon: "calendar-alert",
+      tone: "error",
     };
   }
 
-  if (diffDays === 0) {
-    return {
-      text: "Vence hoy",
-      color: palette.warning,
-      softBg: palette.warning + "24",
-      icon: "calendar-today",
-    };
-  }
-
-  if (diffDays === 1) {
-    return {
-      text: "Vence mañana",
-      color: palette.warning,
-      softBg: palette.warning + "24",
-      icon: "calendar-clock",
-    };
-  }
-
-  if (diffDays <= 7) {
-    return {
-      text: `Vence en ${diffDays} días`,
-      color: palette.blue,
-      softBg: palette.blue + "18",
-      icon: "calendar-clock",
-    };
-  }
-
-  return {
-    text: formatTaskDate(task.due_date),
-    color: palette.textSecondary,
-    softBg: palette.surface,
-    icon: "calendar-outline",
-  };
+  if (diffDays === 0) return { text: "Vence hoy", tone: "warning" };
+  if (diffDays === 1) return { text: "Vence mañana", tone: "warning" };
+  if (diffDays <= 7) return { text: `Vence en ${diffDays} días`, tone: "default" };
+  return { text: `Vence el ${formatDate(task.due_date)}`, tone: "default" };
 }
 
 export function isTaskActionable(task: App.Entities.Task) {

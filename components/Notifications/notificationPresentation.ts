@@ -1,92 +1,33 @@
-import {
-  NOTIFICATION_STATUSES,
-  NOTIFICATION_TYPES,
-  type NotificationStatusKey,
-  type NotificationTypeKey,
-} from "@/components/Notifications/notificationTheme";
+import type { Palette } from "@/constants/palette";
+import type { MaterialCommunityIcons } from "@expo/vector-icons";
 
 /**
- * Helpers de presentacion para notificaciones.
+ * Cómo se muestra una notificación: categoría (nombre e ícono), tono según
+ * la severidad, sub-tipo, fecha relativa y grupo de fecha. La bandeja, la
+ * campana y el detalle usan estos mismos helpers.
  *
- * Se mantienen las firmas originales (getNotificationSeverityConfig y
- * getNotificationEventConfig) por compatibilidad con la pagina completa
- * de notificaciones, pero ahora delegan en los tokens centralizados en
- * notificationTheme.ts. Ademas se anaden helpers que exponen el sistema
- * nuevo (tipo y estado) directamente, pensado para el popover rediseado.
+ * Los colores salen del tema activo (`notificationToneColor`); antes cada
+ * categoría tenía su propia gama de Tailwind (índigo, morado, cian…) que no
+ * era de la paleta de la app ni cambiaba en modo oscuro.
  */
 
-export type { NotificationStatusKey, NotificationTypeKey };
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
-// ─── Severidad → presentacion legacy ────────────────────────────────────────
-// Usado por la pagina completa (lista) que muestra badges por severidad.
-// Conserva la firma para no romper consumidores.
-export function getNotificationSeverityConfig(
-  severity: App.Entities.NotificationSeverity,
-) {
-  switch (severity) {
-    case "success":
-      return {
-        color: NOTIFICATION_TYPES.purchase.text,
-        icon: NOTIFICATION_TYPES.purchase.icon,
-        softBg: NOTIFICATION_TYPES.purchase.bgSoft,
-        label: "Éxito",
-      };
-    case "error":
-      return {
-        color: NOTIFICATION_TYPES.alert.text,
-        icon: NOTIFICATION_TYPES.alert.icon,
-        softBg: NOTIFICATION_TYPES.alert.bgSoft,
-        label: "Error",
-      };
-    case "warning":
-      return {
-        color: NOTIFICATION_TYPES.inventory.text,
-        icon: "alert-outline",
-        softBg: NOTIFICATION_TYPES.inventory.bgSoft,
-        label: "Aviso",
-      };
-    case "alert":
-      return {
-        color: NOTIFICATION_TYPES.alert.text,
-        icon: "bell-alert-outline",
-        softBg: NOTIFICATION_TYPES.alert.bgSoft,
-        label: "Alerta",
-      };
-    case "info":
-    default:
-      return {
-        color: NOTIFICATION_TYPES.system.text,
-        icon: "information-outline",
-        softBg: NOTIFICATION_TYPES.system.bgSoft,
-        label: "Info",
-      };
-  }
-}
+// ─── Categoría ──────────────────────────────────────────────────────────────
 
-// ─── Event type → presentacion legacy ───────────────────────────────────────
-// Mapea los event_type del backend al set de tipos del nuevo popover.
-// Se mantiene la firma porque la pagina completa sigue leyendolo.
-export function getNotificationEventConfig(eventType: App.Entities.NotificationEventType) {
-  const key = eventTypeToTypeKey(eventType);
-  const tokens = NOTIFICATION_TYPES[key];
-  return {
-    icon: tokens.icon,
-    label: tokens.label,
-    color: tokens.text,
-    softBg: tokens.bgSoft,
-  };
-}
+const CATEGORIES = {
+  purchase: { label: "Compra", icon: "truck-delivery-outline" },
+  task: { label: "Tarea", icon: "checkbox-marked-circle-outline" },
+  inventory: { label: "Inventario", icon: "package-variant" },
+  transfer: { label: "Transferencia", icon: "swap-horizontal" },
+  reminder: { label: "Recordatorio", icon: "calendar-clock" },
+  alert: { label: "Alerta", icon: "alert-circle-outline" },
+  system: { label: "Sistema", icon: "cog-outline" },
+} satisfies Record<string, { label: string; icon: IconName }>;
 
-// ─── Helpers nuevos para el popover rediseado ──────────────────────────────
+type CategoryKey = keyof typeof CATEGORIES;
 
-/**
- * Traduce un event_type del backend a una de las categorias visuales.
- * Esto nos permite que el mismo dato (event_type) pinte una "Compra" o
- * una "Tarea" con la misma paleta en cualquier superficie.
- */
-export function eventTypeToTypeKey(
-  eventType: App.Entities.NotificationEventType | string,
-): NotificationTypeKey {
+function categoryKey(eventType: string): CategoryKey {
   switch (eventType) {
     case "purchase_update":
     case "purchase_confirmed":
@@ -110,14 +51,43 @@ export function eventTypeToTypeKey(
     case "alert":
     case "permission_required":
       return "alert";
-    case "system":
-    case "system_update":
     default:
       return "system";
   }
 }
 
+/** "Inventario", "Tarea", "Transferencia"… */
+export function getNotificationCategoryLabel(
+  eventType: App.Entities.NotificationEventType | string,
+): string {
+  return CATEGORIES[categoryKey(eventType)].label;
+}
+
+// ─── Tono ───────────────────────────────────────────────────────────────────
+
+/**
+ * Color del ícono según la severidad. "info" (la mayoría) queda en el gris
+ * normal: solo resaltan las alertas, los avisos y los éxitos.
+ */
+export function notificationToneColor(
+  colors: Palette,
+  severity: App.Entities.NotificationSeverity | string,
+): string {
+  switch (severity) {
+    case "alert":
+    case "error":
+      return colors.error;
+    case "warning":
+      return colors.warning;
+    case "success":
+      return colors.success;
+    default:
+      return colors.textSecondary;
+  }
+}
+
 // ─── Sub-tipos (data.sub_type) ──────────────────────────────────────────────
+
 const SUB_TYPE_LABELS: Record<string, Record<string, string>> = {
   task_event: {
     assigned: "Asignada",
@@ -139,7 +109,7 @@ const SUB_TYPE_LABELS: Record<string, Record<string, string>> = {
   },
 };
 
-const SUB_TYPE_ICONS: Record<string, Record<string, string>> = {
+const SUB_TYPE_ICONS: Record<string, Record<string, IconName>> = {
   task_event: {
     assigned: "clipboard-account-outline",
     completed: "check-circle-outline",
@@ -160,7 +130,7 @@ const SUB_TYPE_ICONS: Record<string, Record<string, string>> = {
   },
 };
 
-const EVENT_ICONS: Record<string, string> = {
+const EVENT_ICONS: Record<string, IconName> = {
   low_stock: "package-variant-remove",
   inventory_adjustment: "tune-variant",
   inventory_count_discrepancy: "clipboard-alert-outline",
@@ -188,103 +158,41 @@ export function getNotificationSubTypeLabel(
 /**
  * Icono de la notificación: el del sub-tipo si lo hay (tarea por vencer,
  * transferencia rechazada…), si no el del evento y por último el de la
- * categoría visual.
+ * categoría.
  */
 export function getNotificationIcon(
   eventType: App.Entities.NotificationEventType | string,
   data: unknown,
-): string {
+): IconName {
   const subType = readSubType(data);
   return (
     (subType && SUB_TYPE_ICONS[eventType]?.[subType]) ||
     EVENT_ICONS[eventType] ||
-    NOTIFICATION_TYPES[eventTypeToTypeKey(eventType)].icon
+    CATEGORIES[categoryKey(eventType)].icon
   );
 }
 
-/**
- * Estado que muestra el badge de una notificación. Las de tareas por vencer o
- * vencidas lo indican mientras no se lean; el resto solo distingue nueva /
- * leída. (Antes cualquier aviso sin leer de más de 7 días salía "Vencida".)
- */
-export function resolveNotificationStatus(
-  notification: Pick<App.Entities.Notification, "is_read" | "data" | "event_type">,
-): NotificationStatusKey {
-  if (notification.is_read) return "read";
-
-  if (notification.event_type === "task_event") {
-    const subType = readSubType(notification.data);
-    if (subType === "overdue") return "overdue";
-    if (subType === "due_soon") return "due_soon";
-  }
-
-  return "new";
-}
-
-/**
- * Acceso directo a los tokens del tipo: ahorra un import extra en los
- * subcomponentes y deja el acoplamiento centralizado aqui.
- */
-export function getTypeTokens(key: NotificationTypeKey) {
-  return NOTIFICATION_TYPES[key];
-}
-
-export function getStatusTokens(key: NotificationStatusKey) {
-  return NOTIFICATION_STATUSES[key];
-}
-
 // ─── Opciones para filtros ──────────────────────────────────────────────────
+
 export const notificationEventOptions: {
   value: "all" | App.Entities.NotificationEventType;
   label: string;
-  icon: string;
 }[] = [
-  { value: "all", label: "Todas", icon: "bell-outline" },
-  { value: "low_stock", label: "Stock", icon: "package-variant-remove" },
-  { value: "inventory_adjustment", label: "Ajustes", icon: "tune-variant" },
-  {
-    value: "inventory_count_discrepancy",
-    label: "Conteos",
-    icon: "clipboard-alert-outline",
-  },
-  { value: "purchase_update", label: "Compras", icon: "truck-delivery-outline" },
-  { value: "transfer_update", label: "Transferencias", icon: "swap-horizontal" },
-  { value: "task_event", label: "Tareas", icon: "checkbox-marked-circle-outline" },
-  { value: "reminder", label: "Recordatorios", icon: "calendar-clock" },
+  { value: "all", label: "Todos" },
+  { value: "task_event", label: "Tareas" },
+  { value: "transfer_update", label: "Transferencias" },
+  { value: "purchase_update", label: "Compras" },
+  { value: "low_stock", label: "Stock bajo" },
+  { value: "inventory_adjustment", label: "Ajustes" },
+  { value: "inventory_count_discrepancy", label: "Conteos" },
+  { value: "reminder", label: "Recordatorios" },
 ];
 
-// ─── Formateo de fechas ─────────────────────────────────────────────────────
-// Formato corto ("hace 15 min") para el popover, formato largo con hora
-// para la pagina completa. Mantenemos la firma original por compatibilidad.
-export function formatNotificationDate(value: string, long = false) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Fecha no disponible";
-  }
-
-  if (long) {
-    return date.toLocaleDateString("es-MX", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
-  return date.toLocaleDateString("es-MX", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+// ─── Fechas ─────────────────────────────────────────────────────────────────
 
 /**
- * Tiempo relativo corto. "hace 15 min", "hace 3 h", "ayer", "hace 3 d".
- * Pensado para el footer de la tarjeta del popover, donde el ancho
- * esta capado a ~120 px.
+ * Tiempo relativo corto: "ahora", "hace 15 min", "hace 3 h", "ayer",
+ * "hace 3 d" y, de una semana para atrás, la fecha ("17 sep").
  */
 export function formatRelativeShort(value: string, now: Date = new Date()) {
   const date = new Date(value);
@@ -305,33 +213,9 @@ export function formatRelativeShort(value: string, now: Date = new Date()) {
   return date.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
 }
 
-// ─── Agrupacion por fecha ──────────────────────────────────────────────────
-// Devuelve una clave estable ("today" | "yesterday" | "this_week" |
-// "earlier") y un label visible, listos para renderizar encabezados de
-// seccion al estilo GitHub/Linear.
+// ─── Agrupación por fecha ───────────────────────────────────────────────────
+
 export type NotificationGroupKey = "today" | "yesterday" | "this_week" | "earlier";
-
-export function groupNotification(
-  value: string,
-  now: Date = new Date(),
-): { key: NotificationGroupKey; label: string } {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { key: "earlier", label: "Anterior" };
-
-  const startOfDay = (d: Date) =>
-    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-
-  const todayStart = startOfDay(now);
-  const yesterdayStart = todayStart - 86_400_000;
-  const weekStart = todayStart - 6 * 86_400_000; // ventana de 7 dias contando hoy
-
-  const target = startOfDay(date);
-
-  if (target === todayStart) return { key: "today", label: "Hoy" };
-  if (target === yesterdayStart) return { key: "yesterday", label: "Ayer" };
-  if (target >= weekStart) return { key: "this_week", label: "Esta semana" };
-  return { key: "earlier", label: "Anterior" };
-}
 
 export const NOTIFICATION_GROUP_ORDER: NotificationGroupKey[] = [
   "today",
@@ -344,5 +228,47 @@ export const NOTIFICATION_GROUP_LABEL: Record<NotificationGroupKey, string> = {
   today: "Hoy",
   yesterday: "Ayer",
   this_week: "Esta semana",
-  earlier: "Anterior",
+  earlier: "Anteriores",
 };
+
+/** Grupo de fecha (días de calendario): hoy, ayer, esta semana o antes. */
+export function groupNotification(
+  value: string,
+  now: Date = new Date(),
+): NotificationGroupKey {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "earlier";
+
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+  const todayStart = startOfDay(now);
+  const yesterdayStart = todayStart - 86_400_000;
+  const weekStart = todayStart - 6 * 86_400_000; // 7 días contando hoy
+
+  const target = startOfDay(date);
+
+  if (target === todayStart) return "today";
+  if (target === yesterdayStart) return "yesterday";
+  if (target >= weekStart) return "this_week";
+  return "earlier";
+}
+
+/** Agrupa una lista (ya ordenada) en Hoy / Ayer / Esta semana / Anteriores. */
+export function groupNotifications<T extends { created_at: string }>(
+  items: T[],
+  now: Date = new Date(),
+): { key: NotificationGroupKey; title: string; data: T[] }[] {
+  const buckets = new Map<NotificationGroupKey, T[]>();
+  for (const item of items) {
+    const key = groupNotification(item.created_at, now);
+    const list = buckets.get(key) ?? [];
+    list.push(item);
+    buckets.set(key, list);
+  }
+  return NOTIFICATION_GROUP_ORDER.filter((key) => buckets.has(key)).map((key) => ({
+    key,
+    title: NOTIFICATION_GROUP_LABEL[key],
+    data: buckets.get(key)!,
+  }));
+}
