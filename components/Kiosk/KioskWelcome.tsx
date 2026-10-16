@@ -40,7 +40,7 @@ export default function KioskWelcome({ locationName, onStart, onExitRequest }: P
         style={StyleSheet.absoluteFill}
         onPress={onStart}
         accessibilityRole="button"
-        accessibilityLabel="Empezar pedido"
+        accessibilityLabel="Toca en cualquier parte para comenzar"
         testID="kiosk-welcome-area"
       />
       <View style={styles.top} pointerEvents="box-none">
