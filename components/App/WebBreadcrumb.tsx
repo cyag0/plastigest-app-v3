@@ -61,7 +61,6 @@ const segmentLabels: Record<string, string> = {
   sales: "Ventas",
   scanner: "Escáner",
   "sales-orders": "Pedidos",
-  "sales-reports": "Reportes de ventas",
   "business-reports": "Reportes del negocio",
   selectCompany: "Seleccionar empresa",
   selectLocation: "Seleccionar sucursal",

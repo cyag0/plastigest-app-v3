@@ -295,24 +295,6 @@ export default function _layout() {
       />
 
       <Stack.Screen
-        name="sales-reports/index"
-        options={{
-          title: "Reportes de Ventas",
-        }}
-      />
-      <Stack.Screen
-        name="sales-reports/form"
-        options={{
-          title: "Nuevo Reporte de Ventas",
-        }}
-      />
-      <Stack.Screen
-        name="sales-reports/[id]"
-        options={{
-          title: "Detalle de Reporte de Ventas",
-        }}
-      />
-      <Stack.Screen
         name="business-reports/index"
         options={{
           title: "Reportes del negocio",

@@ -129,7 +129,7 @@ const MODULE_SECTIONS: ModuleSection[] = [
       }, */
       {
         label: "Caja",
-        description: "Cierre y movimientos",
+        description: "Turnos, cortes y movimientos",
         icon: "cash-multiple",
         route: "/(tabs)/home/cash",
       },
@@ -144,12 +144,6 @@ const MODULE_SECTIONS: ModuleSection[] = [
         description: "Cobros pendientes",
         icon: "bell-ring-outline",
         route: "/(tabs)/home/reminders",
-      },
-      {
-        label: "Reportes de ventas",
-        description: "Análisis detallado",
-        icon: "chart-line",
-        route: "/(tabs)/home/sales-reports",
       },
     ],
   },

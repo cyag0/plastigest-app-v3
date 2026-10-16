@@ -133,7 +133,7 @@ const ENCARGADO = [
   // Catálogo solo de consulta: productos y precios son de toda la empresa
   "products_read", "products_list", "categories_read", "categories_list",
   "units_read", "units_list", "inventory_types_read", "inventory_types_list",
-  "reports_view", "reports_export", "reports_create", "reports_read", "reports_update", "reports_list",
+  "reports_view", "reports_export",
   "dashboard_view",
   "tasks_create", "tasks_read", "tasks_update", "tasks_delete", "tasks_list",
   "reminders_create", "reminders_read", "reminders_update", "reminders_delete", "reminders_list",

@@ -422,7 +422,6 @@ Ejemplo: /(tabs)/inventory/products/123/edit
 | **Envíos** | `/(tabs)/home/shipments` | N/A | `/shipments/[id]` | N/A |
 | **Transferencias** | `/(tabs)/home/transfers` | `/transfers/form` | `/transfers/[id]` | N/A |
 | **Ajustes** | `/(tabs)/home/adjustment` | `/adjustment/form` | `/adjustment/[id]` | `/adjustment/[id]/edit` |
-| **Reportes Ventas** | `/(tabs)/home/sales-reports` | `/sales-reports/form` | `/sales-reports/[id]` | N/A |
 
 ### Módulos de Inventario (Tab Inventory)
 
