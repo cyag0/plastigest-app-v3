@@ -137,7 +137,10 @@ const ENCARGADO = [
   "dashboard_view",
   "tasks_create", "tasks_read", "tasks_update", "tasks_delete", "tasks_list",
   "reminders_create", "reminders_read", "reminders_update", "reminders_delete", "reminders_list",
-  "notifications_read", "notifications_list", "notifications_manage",
+  // Sin notifications_manage: un encargado podría apagar en su sucursal los
+  // avisos de mermas o diferencias de conteo que vigilan su trabajo. Se puede
+  // dar a mano.
+  "notifications_read", "notifications_list",
   // Su personal (Administración › Esta sucursal) y los datos de su sucursal
   "users_create", "users_read", "users_update", "users_list",
   "roles_read", "roles_list",
@@ -373,9 +376,9 @@ function PermissionsManager({
     [permissionsByResource],
   );
 
-  // El backend no deja dar a un rol permisos que uno no tiene (403), salvo al
-  // administrador del sistema: esos chips no se pueden marcar. Sí se pueden
-  // quitar si el rol ya los tenía.
+  // El backend no deja dar ni quitar a un rol permisos que uno no tiene
+  // (403 "No puedes quitar permisos que tú no tienes."), salvo al
+  // administrador del sistema: esos chips quedan con candado, marcados o no.
   const isSystemAdmin = myPermissions.includes(SYSTEM_ADMIN);
   const lockedIds = useMemo(() => {
     if (isSystemAdmin) return new Set<number>();
@@ -401,11 +404,13 @@ function PermissionsManager({
   const totalCount = allPermissions.length;
   const progress = totalCount ? selectedCount / totalCount : 0;
   // Permisos del rol que quien edita no tiene: con ellos el backend rechaza
-  // el guardado completo.
+  // el guardado completo (no se pueden conservar ni quitar), así que el rol
+  // queda de solo lectura para él: plantillas, "Limpiar" y casillas apagadas.
   const lockedSelected = useMemo(
     () => allPermissions.filter((p) => selectedMap[p.id] && lockedIds.has(p.id)).length,
     [allPermissions, selectedMap, lockedIds],
   );
+  const frozen = !readonly && lockedSelected > 0;
 
   // Módulos visibles según el buscador. En modo lectura solo se muestran los
   // que tienen al menos un permiso asignado (resumen de lo que el rol puede).
@@ -423,8 +428,8 @@ function PermissionsManager({
   // --- Callbacks estables -------------------------------------------------
   const setPermission = useCallback(
     (id: number, value: boolean) => {
-      // Marcar uno que no se puede dar terminaría en un 403 al guardar.
-      if (value && lockedIds.has(id)) return;
+      // Marcar o desmarcar uno bloqueado terminaría en un 403 al guardar.
+      if (lockedIds.has(id)) return;
       const map = { ...(valuesRef.current.permissions || {}) };
       map[id] = value;
       setFieldValue("permissions", map);
@@ -441,7 +446,7 @@ function PermissionsManager({
     (ids: number[], value: boolean) => {
       const map = { ...(valuesRef.current.permissions || {}) };
       ids.forEach((id) => {
-        if (value && lockedIds.has(id)) return;
+        if (lockedIds.has(id)) return;
         map[id] = value;
       });
       setFieldValue("permissions", map);
@@ -455,6 +460,7 @@ function PermissionsManager({
 
   const applyPreset = useCallback(
     (preset: (typeof PRESETS)[number]) => {
+      const current = valuesRef.current.permissions || {};
       const map: Record<string, boolean> = {};
       let skipped = 0;
       // El módulo sale de la llave del grupo: los permisos del endpoint no
@@ -467,8 +473,9 @@ function PermissionsManager({
             resource: p.resource || resource,
           });
           const locked = lockedIds.has(p.id);
-          if (matches && locked) skipped++;
-          map[p.id] = matches && !locked;
+          if (matches && locked && !current[p.id]) skipped++;
+          // Un permiso bloqueado se queda como estaba.
+          map[p.id] = locked ? !!current[p.id] : matches;
         });
       });
       setFieldValue("permissions", map);
@@ -478,9 +485,15 @@ function PermissionsManager({
   );
 
   const clearAll = useCallback(() => {
-    setFieldValue("permissions", {});
+    // Los bloqueados no se pueden quitar: se quedan como estaban.
+    const current = valuesRef.current.permissions || {};
+    const map: Record<string, boolean> = {};
+    lockedIds.forEach((id) => {
+      if (current[id]) map[id] = true;
+    });
+    setFieldValue("permissions", map);
     setAppliedPreset(null);
-  }, [setFieldValue]);
+  }, [lockedIds, setFieldValue]);
 
   const setAllExpanded = useCallback(
     (value: boolean) => {
@@ -534,7 +547,7 @@ function PermissionsManager({
           <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
         </View>
 
-        {!readonly && (
+        {!readonly && !frozen && (
           <>
             <Text style={styles.presetsLabel}>Plantillas rápidas</Text>
             <View style={styles.presetsRow}>
@@ -579,18 +592,18 @@ function PermissionsManager({
           </>
         )}
 
-        {!readonly && !isSystemAdmin && (
+        {!readonly && !isSystemAdmin && !frozen && (
           <Text style={styles.presetHint}>
-            Solo puedes dar permisos que tú tienes; los demás aparecen con candado.
+            Solo puedes dar o quitar permisos que tú tienes; los demás aparecen con candado.
           </Text>
         )}
-        {!readonly && lockedSelected > 0 && (
+        {frozen && (
           <View style={styles.warningBox}>
-            <MaterialCommunityIcons name="alert-outline" size={18} color={colors.warning} />
+            <MaterialCommunityIcons name="lock-outline" size={18} color={colors.warning} />
             <Text style={styles.warningText}>
               {lockedSelected === 1
-                ? "Este rol tiene 1 permiso que tú no tienes. Para guardar cambios quítalo o pide al administrador que edite el rol."
-                : `Este rol tiene ${lockedSelected} permisos que tú no tienes. Para guardar cambios quítalos o pide al administrador que edite el rol.`}
+                ? "Este rol tiene 1 permiso que tú no tienes: no puedes cambiarlo ni quitarlo, así que no puedes guardar cambios en este rol. Pide al administrador que lo edite."
+                : `Este rol tiene ${lockedSelected} permisos que tú no tienes: no puedes cambiarlos ni quitarlos, así que no puedes guardar cambios en este rol. Pide al administrador que lo edite.`}
             </Text>
           </View>
         )}
@@ -616,9 +629,7 @@ function PermissionsManager({
                   : "Entra y trabaja en cualquier sucursal de la empresa y administra al personal de todas. Sin esto, cada persona solo entra a las sucursales que tenga asignadas."
               }
               value={!!selectedMap[allLocationsPerm.id]}
-              disabled={
-                readonly || (!selectedMap[allLocationsPerm.id] && lockedIds.has(allLocationsPerm.id))
-              }
+              disabled={readonly || frozen || lockedIds.has(allLocationsPerm.id)}
               onChange={(value) => setPermission(allLocationsPerm.id, value)}
               styles={styles}
               colors={colors}
@@ -629,9 +640,7 @@ function PermissionsManager({
               title="Administrador del sistema"
               description="Puede todo en todas las empresas, también administrar a otros administradores. Solo para el dueño del sistema."
               value={!!selectedMap[systemAdminPerm.id]}
-              disabled={
-                readonly || (!selectedMap[systemAdminPerm.id] && lockedIds.has(systemAdminPerm.id))
-              }
+              disabled={readonly || frozen || lockedIds.has(systemAdminPerm.id)}
               onChange={(value) => setPermission(systemAdminPerm.id, value)}
               danger
               divider={!!allLocationsPerm}
@@ -718,6 +727,7 @@ function PermissionsManager({
               lockedSignature={lockedSignature}
               expanded={isExpanded}
               readonly={readonly}
+              frozen={frozen}
               styles={styles}
               colors={colors}
               onToggleExpand={toggleExpand}
@@ -746,6 +756,8 @@ interface ModuleCardProps {
   lockedSignature: string;
   expanded: boolean;
   readonly: boolean;
+  /** El rol tiene permisos que quien edita no tiene: se ve pero no se cambia. */
+  frozen: boolean;
   styles: Styles;
   colors: ReturnType<typeof useTheme>["colors"];
   onToggleExpand: (key: string) => void;
@@ -760,6 +772,7 @@ const ModuleCard = React.memo(function ModuleCard({
   lockedSignature,
   expanded,
   readonly,
+  frozen,
   styles,
   colors,
   onToggleExpand,
@@ -807,7 +820,7 @@ const ModuleCard = React.memo(function ModuleCard({
           </Text>
         </View>
 
-        {!readonly && (
+        {!readonly && !frozen && (
           <Pressable
             hitSlop={8}
             onPress={() => onSetModule(ids, !allGrantableOn)}
@@ -850,8 +863,8 @@ const ModuleCard = React.memo(function ModuleCard({
                   key={perm.id}
                   label={actionLabel(perm)}
                   active={active}
-                  readonly={readonly}
-                  locked={!active && lockedSignature[index] === "1"}
+                  readonly={readonly || frozen}
+                  locked={lockedSignature[index] === "1"}
                   scope={perm.name === ALL_LOCATIONS || perm.name === SYSTEM_ADMIN}
                   styles={styles}
                   colors={colors}
