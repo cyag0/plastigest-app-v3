@@ -4,14 +4,22 @@ import AlertSnackbar, {
 import ConfirmDialog, {
   ConfirmDialogRef,
 } from "@/components/AppAlert/ConfirmDialog";
+import {
+  claimErrorAlert,
+  forgetErrorAlert,
+  subscribeErrorNotices,
+} from "@/utils/errorNotice";
 import React, {
   createContext,
   ReactNode,
   RefObject,
   useCallback,
   useContext,
+  useEffect,
   useRef,
 } from "react";
+
+export { notifyError } from "@/utils/errorNotice";
 
 /**
  * Tipos de alerta disponibles
@@ -121,6 +129,13 @@ interface AlertsAPI {
   info: (message: string) => void;
 }
 
+/**
+ * Duración de un error: los mensajes del servidor suelen ser más largos que
+ * un "Guardado"; con 3 s no alcanzaban a leerse.
+ */
+const errorDuration = (message: string) =>
+  Math.min(8000, Math.max(4000, message.length * 60));
+
 // Contexto para compartir la API de alertas (expuesto por AlertsProvider)
 const AlertsContext = createContext<AlertsAPI | null>(null);
 
@@ -169,11 +184,29 @@ export function AlertsProvider({ children }: { children: ReactNode }) {
    * Muestra un snackbar con el tipo especificado
    */
   const alert = useCallback((message: string, options?: AlertOptions) => {
+    const type = options?.type || "info";
+    // Un error igual al que acaba de salir (p. ej. el aviso global de la
+    // misma petición) no se vuelve a mostrar.
+    if (type === "error" && !claimErrorAlert(message)) return;
     snackbarRef.current?.show(message, {
-      type: options?.type || "info",
-      duration: options?.duration || 3000,
+      type,
+      duration:
+        options?.duration || (type === "error" ? errorDuration(message) : 3000),
     });
   }, []);
+
+  // Aviso global de peticiones fallidas (utils/errorNotice: el interceptor
+  // de axios y notifyError) en el mismo snackbar.
+  useEffect(
+    () =>
+      subscribeErrorNotices(({ message }) => {
+        snackbarRef.current?.show(message, {
+          type: "error",
+          duration: errorDuration(message),
+        });
+      }),
+    [],
+  );
 
   // API pública - usar useRef para que no cambie en cada render
   const api = useRef<AlertsAPI>({
@@ -214,8 +247,8 @@ export function AlertsDialogs() {
       {/* Diálogo de confirmación */}
       <ConfirmDialog ref={refs.confirmDialogRef} />
 
-      {/* Snackbar para notificaciones */}
-      <AlertSnackbar ref={refs.snackbarRef} />
+      {/* Snackbar para notificaciones y errores del API */}
+      <AlertSnackbar ref={refs.snackbarRef} onClose={forgetErrorAlert} />
     </>
   );
 }

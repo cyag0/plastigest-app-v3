@@ -590,8 +590,10 @@ const Services = {
       return response.data;
     },
     async getUnreadCount() {
+      // Se consulta en segundo plano (AuthContext): sin aviso si falla.
       const response = await axiosClient.get(
         "/auth/admin/notifications/unread-count",
+        { silent: true },
       );
       return response.data;
     },
@@ -606,6 +608,7 @@ const Services = {
       const response = await axiosClient.post(
         "/auth/admin/device-tokens/register",
         payload,
+        { silent: true },
       );
       return response.data;
     },
@@ -613,6 +616,7 @@ const Services = {
       const response = await axiosClient.post(
         "/auth/admin/device-tokens/deactivate",
         payload,
+        { silent: true },
       );
       return response.data;
     },
@@ -826,7 +830,8 @@ const Services = {
   // Punto de venta para cajeros.
   pos: {
     async catalog() {
-      const response = await axiosClient.get("/auth/admin/pos/catalog");
+      // usePosCatalog muestra su propio error y se refresca en segundo plano.
+      const response = await axiosClient.get("/auth/admin/pos/catalog", { silent: true });
       return response.data as { data: App.Entities.PosCatalogItem[] };
     },
     async sale(payload: App.Entities.PosSalePayload) {
@@ -840,8 +845,10 @@ const Services = {
      */
     async findSaleByRequest(clientRequestId: string) {
       try {
+        // 404 = la venta no se registró (respuesta esperada): sin aviso.
         const response = await axiosClient.get(
           `/auth/admin/pos/sales/request/${encodeURIComponent(clientRequestId)}`,
+          { silent: true },
         );
         return response.data as { message?: string; data: App.Entities.PosSaleResult };
       } catch (error: any) {

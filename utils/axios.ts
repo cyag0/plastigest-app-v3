@@ -3,6 +3,8 @@ import axios, { AxiosInstance, AxiosResponse, isCancel } from "axios";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import { API_BASE_URL, API_CONFIG_ERROR } from "./appConfig";
+import { queueRequestErrorNotice } from "./errorNotice";
+import { logHandledError } from "./silenceLogs";
 
 // Opciones propias de las peticiones (se pasan junto a params, headers, …).
 declare module "axios" {
@@ -476,7 +478,9 @@ axiosClient.interceptors.response.use(
   async (error: any) => {
     localizeError(error);
     if (!isCancel(error)) {
-      console.error("Response error:", describeError(error));
+      // Falla esperada del API: a la consola sin el aviso rojo de LogBox (el
+      // usuario la ve en el aviso de la app, ver queueRequestErrorNotice).
+      logHandledError("Response error:", describeError(error));
     }
 
     const path = normalizePath(error.config?.url, error.config?.baseURL);
@@ -540,6 +544,11 @@ axiosClient.interceptors.response.use(
       }
       locationForbiddenListeners.forEach((listener) => listener());
     }
+
+    // Aviso al usuario con el mensaje del servidor (utils/errorNotice). No
+    // sale si se pidió `silent: true`, si es de sesión/empresa/sucursal o si
+    // la pantalla muestra su propio error enseguida.
+    queueRequestErrorNotice(error);
 
     return Promise.reject(error);
   },
@@ -838,11 +847,14 @@ export const authAPI = {
   login: (credentials: { email: string; password: string }) =>
     axiosClient.post("/auth/login", credentials),
 
-  logout: () => axiosClient.post("/auth/logout"),
+  // Cerrar sesión es de mejor esfuerzo (la sesión local se borra igual) y
+  // /auth/me es la revisión de sesión en segundo plano: sus fallas no se
+  // anuncian.
+  logout: () => axiosClient.post("/auth/logout", undefined, { silent: true }),
 
   logoutAll: () => axiosClient.post("/auth/logout-all"),
 
-  me: () => axiosClient.get("/auth/me"),
+  me: () => axiosClient.get("/auth/me", { silent: true }),
 
   myPermissions: () => axiosClient.get("/auth/my-permissions"),
 
