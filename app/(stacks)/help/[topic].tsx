@@ -4,6 +4,7 @@ import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { getHelpTopic, helpHref, type HelpLink } from "@/help";
+import { useCan } from "@/hooks/useCan";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -30,6 +31,7 @@ export default function HelpTopicScreen() {
   const topic = getHelpTopic(topicId);
   const { colors } = useTheme();
   const { hasPermission } = useAuth();
+  const { canAccessRoute } = useCan();
   const { isLg, isXl } = useResponsive();
   const wide = isLg || isXl;
 
@@ -192,8 +194,11 @@ export default function HelpTopicScreen() {
   const permissions = topic.permission
     ? Array.isArray(topic.permission) ? topic.permission : [topic.permission]
     : [];
+  // «Ir a…» solo si puede abrir esa pantalla (mapa central de permisos).
   const canOpenModule =
-    !!topic.moduleRoute && (permissions.length === 0 || permissions.some(hasPermission));
+    !!topic.moduleRoute &&
+    canAccessRoute(topic.moduleRoute) &&
+    (permissions.length === 0 || permissions.some(hasPermission));
 
   return (
     <View style={styles.container}>

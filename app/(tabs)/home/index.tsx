@@ -21,6 +21,7 @@ import TaskRow from "@/components/Tasks/TaskRow";
 import { fetchMyOpenTasks } from "@/components/Tasks/taskQueries";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useCan } from "@/hooks/useCan";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { formatDate, formatTime } from "@/utils/dates";
@@ -34,14 +35,17 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native"
 type Summary = App.Entities.HomeSummary;
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
-/** Atajos a los módulos que no están en la barra inferior. */
-const SHORTCUTS: { label: string; icon: IconName; link: string; permission: string }[] = [
-  { label: "Punto de venta", icon: "point-of-sale", link: "/(stacks)/pos", permission: "sales_pos" },
-  { label: "Ventas", icon: "receipt-text-outline", link: "/(tabs)/home/sales", permission: "sales_list" },
-  { label: "Compras", icon: "cart-outline", link: "/(tabs)/home/purchases", permission: "purchases_list" },
-  { label: "Producción", icon: "factory", link: "/(tabs)/home/production", permission: "production_orders_list" },
-  { label: "Transferencias", icon: "swap-horizontal", link: "/(tabs)/home/transfers-menu", permission: "transfers_list" },
-  { label: "Ajustes", icon: "tune-variant", link: "/(tabs)/home/adjustment", permission: "inventory_list" },
+/**
+ * Atajos a los módulos que no están en la barra inferior. Cada uno se muestra
+ * si el usuario puede abrir su pantalla (mapa central de permisos).
+ */
+const SHORTCUTS: { label: string; icon: IconName; link: string }[] = [
+  { label: "Punto de venta", icon: "point-of-sale", link: "/(stacks)/pos" },
+  { label: "Ventas", icon: "receipt-text-outline", link: "/(tabs)/home/sales" },
+  { label: "Compras", icon: "cart-outline", link: "/(tabs)/home/purchases" },
+  { label: "Producción", icon: "factory", link: "/(tabs)/home/production" },
+  { label: "Transferencias", icon: "swap-horizontal", link: "/(tabs)/home/transfers-menu" },
+  { label: "Ajustes", icon: "tune-variant", link: "/(tabs)/home/adjustment" },
 ];
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -139,7 +143,8 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const shortcuts = SHORTCUTS.filter((s) => auth.hasPermission(s.permission));
+  const { canAccessRoute } = useCan();
+  const shortcuts = SHORTCUTS.filter((s) => canAccessRoute(s.link));
   const go = (link: string) => router.push(link as any);
 
   const header = (
@@ -368,6 +373,11 @@ function HourBars({ hours }: { hours: NonNullable<Summary["sales"]>["by_hour"] }
 function CashBlock({ cash, onGo }: { cash: NonNullable<Summary["cash"]>; onGo: (link: string) => void }) {
   const styles = useStyles();
   const { colors } = useTheme();
+  const { can, canAccessRoute } = useCan();
+  const canOpenPos = canAccessRoute("/(stacks)/pos");
+  // El turno de otro cajero solo se abre con cash_register_sessions_read (el
+  // backend responde 403 sin él): sin permiso la fila solo informa.
+  const canOpenOthers = can("cash_register_sessions_read");
   const others = cash.open_in_branch.filter((s) => s.id !== cash.mine?.id);
   if (!cash.mine && !cash.can_sell && others.length === 0) return null;
 
@@ -380,10 +390,10 @@ function CashBlock({ cash, onGo }: { cash: NonNullable<Summary["cash"]>; onGo: (
             title={`Tu turno en ${cash.mine.register ?? "caja"}${cash.mine.location ? ` · ${cash.mine.location}` : ""}`}
             subtitle={`Desde ${sinceText(cash.mine.opened_at)} · ${cash.mine.sales_count} ${plural(cash.mine.sales_count, "venta", "ventas")} · ${formatMoney(cash.mine.sales_total)}`}
             warning={cash.mine.stale ? "Lleva abierto desde otro día: ciérralo para que el corte cuadre." : undefined}
-            actionLabel="Ir al punto de venta"
-            onPress={() => onGo("/(stacks)/pos")}
+            actionLabel={canOpenPos ? "Ir al punto de venta" : undefined}
+            onPress={canOpenPos ? () => onGo("/(stacks)/pos") : undefined}
           />
-        ) : cash.can_sell ? (
+        ) : cash.can_sell && canOpenPos ? (
           <Row icon="cash-register" title="No tienes turno abierto" subtitle="Ábrelo para empezar a cobrar." actionLabel="Abrir turno" onPress={() => onGo("/(stacks)/pos")} />
         ) : null}
         {others.map((s) => (
@@ -393,7 +403,7 @@ function CashBlock({ cash, onGo }: { cash: NonNullable<Summary["cash"]>; onGo: (
             title={`${s.register ?? "Caja"} · ${s.user ?? "—"}`}
             subtitle={`Abierta desde ${sinceText(s.opened_at)}`}
             warning={s.stale ? "Turno olvidado: sigue abierto desde otro día." : undefined}
-            onPress={() => onGo(`/(tabs)/home/cash/sessions/${s.id}`)}
+            onPress={canOpenOthers ? () => onGo(`/(tabs)/home/cash/sessions/${s.id}`) : undefined}
           />
         ))}
       </List>
@@ -409,6 +419,9 @@ function CashBlock({ cash, onGo }: { cash: NonNullable<Summary["cash"]>; onGo: (
 function PendingBlock({ alerts, onGo }: { alerts: Summary["alerts"]; onGo: (link: string) => void }) {
   const styles = useStyles();
   const { colors } = useTheme();
+  // El aviso se muestra siempre (el backend ya lo arma según permiso); solo
+  // lleva a la pantalla si el usuario puede abrirla.
+  const { canAccessRoute } = useCan();
   const tone = { error: colors.error, warning: colors.warning, info: colors.info };
   const known = alerts.filter((a) => ALERTS[a.key]);
 
@@ -422,7 +435,13 @@ function PendingBlock({ alerts, onGo }: { alerts: Summary["alerts"]; onGo: (link
       ) : (
         <List>
           {known.map((a) => (
-            <Row key={a.key} icon={ALERTS[a.key].icon} iconColor={tone[a.tone]} title={ALERTS[a.key].text(a.count)} onPress={() => onGo(ALERTS[a.key].link)} />
+            <Row
+              key={a.key}
+              icon={ALERTS[a.key].icon}
+              iconColor={tone[a.tone]}
+              title={ALERTS[a.key].text(a.count)}
+              onPress={canAccessRoute(ALERTS[a.key].link) ? () => onGo(ALERTS[a.key].link) : undefined}
+            />
           ))}
         </List>
       )}
