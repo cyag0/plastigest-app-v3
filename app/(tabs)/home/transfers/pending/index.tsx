@@ -6,6 +6,7 @@ import StatusBadge from "@/components/App/StatusBadge";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import transferService from "@/utils/services/transferService";
 import { useRouter } from "expo-router";
@@ -39,6 +40,7 @@ export default function PendingTransfersScreen() {
   const router = useRouter();
   const auth = useAuth();
   const alerts = useAlerts();
+  const { can } = useCan();
   const [refreshKey, setRefreshKey] = useState(0);
 
   const company = auth.selectedCompany;
@@ -200,6 +202,7 @@ export default function PendingTransfersScreen() {
         key={refreshKey}
         title="Solicitudes Pendientes"
         service={transferService}
+        permissions={{ read: "transfers_read" }}
         defaultFilters={{
           company_id: company.id,
           status: "pending,approved,in_transit",
@@ -324,10 +327,12 @@ export default function PendingTransfersScreen() {
               title: "Cancelar solicitud",
               icon: "close-circle-outline",
               color: palette.error,
-              // Solo quien la pidió o la sucursal de origen.
+              // Cancelar pide transfers_delete; solo quien la pidió o la
+              // sucursal de origen.
               show: (item: InventoryTransfer) =>
-                (item.requested_by_user_id ?? item.requested_by) === auth.user?.id ||
-                item.from_location_id === location.id,
+                can("transfers_delete") &&
+                ((item.requested_by_user_id ?? item.requested_by) === auth.user?.id ||
+                  item.from_location_id === location.id),
               onPress: handleCancel,
             },
           ],

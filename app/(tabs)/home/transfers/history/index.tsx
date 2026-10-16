@@ -6,6 +6,7 @@ import type { VariantMatchMap } from "@/components/App/StatusBadge";
 import StatusBadge from "@/components/App/StatusBadge";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCan } from "@/hooks/useCan";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import transferService from "@/utils/services/transferService";
 import { useRouter } from "expo-router";
@@ -31,6 +32,8 @@ function DirectionBadge({ isSent }: { isSent: boolean }) {
 export default function HistoryTransfersScreen() {
   const router = useRouter();
   const auth = useAuth();
+  // Abrir una transferencia pide transfers_read.
+  const canRead = useCan().can("transfers_read");
   const [refreshKey, setRefreshKey] = useState(0);
 
   const company = auth.selectedCompany;
@@ -162,6 +165,7 @@ export default function HistoryTransfersScreen() {
         key={refreshKey}
         title="Historial de Transferencias"
         service={transferService}
+        permissions={{ read: "transfers_read" }}
         defaultFilters={{
           company_id: company.id,
           status: "completed,rejected,cancelled",
@@ -276,14 +280,16 @@ export default function HistoryTransfersScreen() {
                   ]
                 : []),
             ],
-            actions: [
-              {
-                label: "Ver Detalle",
-                icon: "eye-outline",
-                onPress: () =>
-                  router.push(`/(tabs)/home/transfers/${item.id}` as any),
-              },
-            ],
+            actions: canRead
+              ? [
+                  {
+                    label: "Ver Detalle",
+                    icon: "eye-outline",
+                    onPress: () =>
+                      router.push(`/(tabs)/home/transfers/${item.id}` as any),
+                  },
+                ]
+              : [],
           };
         }}
         menu={{

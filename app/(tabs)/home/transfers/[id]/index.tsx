@@ -13,6 +13,7 @@ import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useHelpSection } from "@/help";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import transferService from "@/utils/services/transferService";
@@ -45,6 +46,9 @@ export default function TransferDetailWizardScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const auth = useAuth();
   const alerts = useAlerts();
+  // Aprobar, rechazar, enviar y recibir piden transfers_update (además de la
+  // sucursal: origen para aprobar y enviar, destino para recibir).
+  const hasTransferWorkflowPermission = useCan().can("transfers_update");
 
   const [transfer, setTransfer] = useState<InventoryTransfer | null>(null);
   const [loading, setLoading] = useState(true);
@@ -117,12 +121,13 @@ export default function TransferDetailWizardScreen() {
     (transfer as any).requested_by;
   const isRequester = auth.user?.id === requesterId;
 
-  const hasTransferWorkflowPermission = true;
   const canApproveInStep1 =
     hasTransferWorkflowPermission && isSourceLocationUser && currentStep === 1;
   const canEditQuantitiesInStep1 = canApproveInStep1;
-  const canContinueShipInStep2 = isSourceLocationUser && currentStep === 2;
-  const canContinueReceiveInStep3 = isTargetLocationUser && currentStep === 3;
+  const canContinueShipInStep2 =
+    hasTransferWorkflowPermission && isSourceLocationUser && currentStep === 2;
+  const canContinueReceiveInStep3 =
+    hasTransferWorkflowPermission && isTargetLocationUser && currentStep === 3;
 
   const maxStep = currentStep;
 
