@@ -73,6 +73,16 @@ const PAYMENT_METHOD_OPTIONS: [string, string][] = [
   ["card", "Tarjeta"],
   ["transfer", "Transferencia"],
 ];
+const paymentMethodLabel = (method: string) =>
+  (PAYMENT_METHOD_OPTIONS.find(([value]) => value === method)?.[1] ?? method).toLowerCase();
+
+/** Abono mandado: su llave y lo que se mandó con ella. */
+interface PaymentAttempt {
+  id: string;
+  paidBeforeCents: number;
+  amountCents: number;
+  method: string;
+}
 
 /** Espera antes de revisar un abono cuya respuesta se perdió: pudo seguir en proceso. */
 const VERIFY_DELAY_MS = 1500;
@@ -113,7 +123,12 @@ export default function SaleDetail() {
   // Abono en curso: su llave (client_request_id), reusada en los reintentos
   // hasta que queda registrado, y lo pagado antes de mandarlo para saber si
   // entró cuando se pierde la respuesta.
-  const paymentAttemptRef = useRef<{ id: string; paidBeforeCents: number; amountCents: number } | null>(null);
+  const paymentAttemptRef = useRef<PaymentAttempt | null>(null);
+  // Abono sin confirmar (se perdió la respuesta): monto y método quedan fijos
+  // hasta saber si entró. El reintento con la misma llave devuelve el abono
+  // original, así que con otro monto o método se mandaría una cosa y se
+  // registraría otra.
+  const [paymentInDoubt, setPaymentInDoubt] = useState<{ amountCents: number; method: string } | null>(null);
   const alerts = useAlerts();
   const { hasPermission } = useAuth();
 
@@ -164,24 +179,67 @@ export default function SaleDetail() {
    * ¿Entró el abono que se quedó sin respuesta? Recarga la venta y compara lo
    * pagado con lo que había antes de mandarlo.
    */
-  const pendingPaymentWentThrough = async (): Promise<boolean> => {
+  const pendingPaymentWentThrough = async (): Promise<any | null> => {
     const attempt = paymentAttemptRef.current;
-    if (!attempt) return false;
+    if (!attempt) return null;
     const response = await Services.sales.show(id);
     const fresh = response.data.data;
     setSale(fresh);
-    return amountToCents(toNum(fresh?.paid_amount)) - attempt.paidBeforeCents >= attempt.amountCents;
+    return amountToCents(toNum(fresh?.paid_amount)) - attempt.paidBeforeCents >= attempt.amountCents ? fresh : null;
   };
 
-  const paymentRegistered = (message: string) => {
+  /**
+   * Abono registrado: dice lo que el servidor registró (lo que subió lo
+   * pagado desde antes de mandarlo), no lo escrito en el formulario. Si no
+   * coincide con lo mandado (un reintento devolvió otro abono, u otro pago
+   * entró a la vez), lo avisa para revisar los pagos de la venta.
+   */
+  const paymentRegistered = (prefix: string, attempt: PaymentAttempt, fresh: any) => {
     paymentAttemptRef.current = null;
+    setPaymentInDoubt(null);
     setShowPaymentDialog(false);
     setPaymentAmount("");
     setPaymentNotes("");
-    // El alert de éxito ya es visible porque el modal se cerró.
-    alerts.success(message);
+    // El alert ya es visible porque el modal se cerró.
+    const registeredCents = fresh ? amountToCents(toNum(fresh.paid_amount)) - attempt.paidBeforeCents : attempt.amountCents;
+    if (registeredCents === attempt.amountCents) {
+      alerts.success(`${prefix}: ${fmt(centsToAmount(registeredCents))} en ${paymentMethodLabel(attempt.method)}.`);
+    } else {
+      alerts.warning(
+        `${prefix}, pero lo pagado subió ${fmt(centsToAmount(registeredCents))} y se mandaron ${fmt(centsToAmount(attempt.amountCents))} en ${paymentMethodLabel(attempt.method)}: revisa los pagos de la venta.`,
+      );
+    }
+    if (fresh) setSale(fresh);
     loadSale();
   };
+
+  /**
+   * Cambiar el monto o el método de un abono sin confirmar: primero se revisa
+   * si el anterior entró. Solo si no entró se suelta su llave y el siguiente
+   * envío lleva una nueva (con la misma, el servidor devolvería el anterior).
+   */
+  const releasePaymentInDoubt = () =>
+    run(async () => {
+      const attempt = paymentAttemptRef.current;
+      if (!attempt) {
+        setPaymentInDoubt(null);
+        return;
+      }
+      setPaymentNeedsShift(false);
+      try {
+        const fresh = await pendingPaymentWentThrough();
+        if (fresh) {
+          paymentRegistered("El pago anterior sí quedó registrado", attempt, fresh);
+          return;
+        }
+      } catch {
+        setPaymentError("No se pudo revisar si el pago anterior quedó registrado: revisa la conexión e inténtalo de nuevo.");
+        return;
+      }
+      paymentAttemptRef.current = null;
+      setPaymentInDoubt(null);
+      setPaymentError("El pago anterior no quedó registrado. Corrige el monto o el método y confirma.");
+    });
 
   const handleAddPayment = () =>
     run(async () => {
@@ -195,8 +253,22 @@ export default function SaleDetail() {
       }
       const amountCents = amountToCents(amount);
       const paidCents = amountToCents(toNum(sale?.paid_amount));
+      const previous = paymentAttemptRef.current;
+      // Otro monto o método que el del abono sin confirmar: la misma llave
+      // devolvería el anterior. Antes de cambiarla hay que saber si entró.
+      if (previous && (previous.amountCents !== amountCents || previous.method !== paymentMethod)) {
+        setPaymentInDoubt({ amountCents: previous.amountCents, method: previous.method });
+        setPaymentAmount(String(centsToAmount(previous.amountCents)));
+        setPaymentMethod(previous.method);
+        setPaymentError(
+          `El pago anterior de ${fmt(centsToAmount(previous.amountCents))} en ${paymentMethodLabel(previous.method)} no se ha confirmado: vuelve a mandarlo igual o usa «Cambiar monto o método».`,
+        );
+        return;
+      }
+      // El reintento del mismo abono no se revisa contra el saldo: si ya
+      // entró, el saldo ya lo descuenta y el servidor devuelve ese abono.
       const pendingCents = amountToCents(toNum(sale?.total)) - paidCents;
-      if (amountCents > pendingCents) {
+      if (!previous && amountCents > pendingCents) {
         setPaymentError(
           `El monto no puede ser mayor al saldo pendiente (${fmt(centsToAmount(pendingCents))})`,
         );
@@ -204,33 +276,37 @@ export default function SaleDetail() {
       }
       setPaymentError("");
 
-      const previous = paymentAttemptRef.current;
-      const attempt = previous
-        ? { ...previous, amountCents: Math.min(previous.amountCents, amountCents) }
-        : { id: newClientRequestId(), paidBeforeCents: paidCents, amountCents };
+      const attempt: PaymentAttempt = previous ?? {
+        id: newClientRequestId(),
+        paidBeforeCents: paidCents,
+        amountCents,
+        method: paymentMethod,
+      };
       paymentAttemptRef.current = attempt;
 
       try {
-        await Services.sales.addPayment(Number(id), {
-          amount: centsToAmount(amountCents),
-          payment_method: paymentMethod,
+        const res = await Services.sales.addPayment(Number(id), {
+          amount: centsToAmount(attempt.amountCents),
+          payment_method: attempt.method,
           notes: paymentNotes || undefined,
           client_request_id: attempt.id,
         });
-        paymentRegistered("Pago registrado correctamente");
+        paymentRegistered("Pago registrado", attempt, res?.data ?? null);
       } catch (e: any) {
         if (isOutcomeUnknown(e)) {
           await wait(VERIFY_DELAY_MS);
           try {
-            if (await pendingPaymentWentThrough()) {
-              paymentRegistered("El pago quedó registrado.");
+            const fresh = await pendingPaymentWentThrough();
+            if (fresh) {
+              paymentRegistered("El pago quedó registrado", attempt, fresh);
               return;
             }
           } catch {
             // Tampoco se pudo consultar la venta.
           }
+          setPaymentInDoubt({ amountCents: attempt.amountCents, method: attempt.method });
           setPaymentError(
-            `${apiErrorMessage(e, "No llegó la respuesta del servidor.")} No se pudo confirmar si el pago quedó registrado: vuelve a presionar «Confirmar» (si ya se registró no se duplica).`,
+            `${apiErrorMessage(e, "No llegó la respuesta del servidor.")} No se pudo confirmar si el pago quedó registrado: vuelve a presionar «Confirmar» con el mismo monto y método (si ya se registró no se duplica).`,
           );
           return;
         }
@@ -239,15 +315,19 @@ export default function SaleDetail() {
         // el que ya entró (p. ej. "excede el saldo pendiente").
         if (previous) {
           try {
-            if (await pendingPaymentWentThrough()) {
-              paymentRegistered("El pago anterior sí quedó registrado.");
+            const fresh = await pendingPaymentWentThrough();
+            if (fresh) {
+              paymentRegistered("El pago anterior sí quedó registrado", attempt, fresh);
               return;
             }
           } catch {
             // Sin cambios: se muestra el rechazo.
           }
         }
+        // Con el rechazo no quedó nada registrado con esa llave: el siguiente
+        // envío lleva una nueva.
         paymentAttemptRef.current = null;
+        setPaymentInDoubt(null);
         setPaymentNeedsShift(apiErrorCode(e) === SALE_ERROR_CODES.noOpenSession && hasPermission("sales_pos"));
         setPaymentError(apiErrorMessage(e, "Error al registrar el pago"));
       }
@@ -340,10 +420,17 @@ export default function SaleDetail() {
           <Button
             mode="contained"
             onPress={() => {
+              const attempt = paymentAttemptRef.current;
               setPaymentNeedsShift(false);
+              if (attempt) {
+                // El abono sin confirmar se vuelve a mandar igual.
+                setPaymentAmount(String(centsToAmount(attempt.amountCents)));
+                setPaymentMethod(attempt.method);
+                setPaymentInDoubt({ amountCents: attempt.amountCents, method: attempt.method });
+              }
               setPaymentError(
-                paymentAttemptRef.current
-                  ? "No se confirmó si el último pago quedó registrado: si lo vuelves a mandar no se duplica."
+                attempt
+                  ? `No se confirmó si el último pago (${fmt(centsToAmount(attempt.amountCents))} en ${paymentMethodLabel(attempt.method)}) quedó registrado: si lo vuelves a mandar no se duplica.`
                   : "",
               );
               setShowPaymentDialog(true);
@@ -501,7 +588,7 @@ export default function SaleDetail() {
                   setPaymentAmount(t);
                   if (paymentError) setPaymentError("");
                 }}
-                editable={!savingPayment}
+                editable={!savingPayment && !paymentInDoubt}
                 keyboardType="decimal-pad"
               />
               <AmountPreview value={paymentAmount} label="Se registrará" />
@@ -517,7 +604,7 @@ export default function SaleDetail() {
                       key={val}
                       style={{ flexDirection: "row", alignItems: "center" }}
                     >
-                      <RadioButton value={val} />
+                      <RadioButton value={val} disabled={savingPayment || !!paymentInDoubt} />
                       <Text>{label}</Text>
                     </View>
                   ))}
@@ -537,6 +624,18 @@ export default function SaleDetail() {
               />
               {!!paymentError && (
                 <Text style={styles.modalError}>{paymentError}</Text>
+              )}
+              {paymentInDoubt && (
+                <Button
+                  mode="outlined"
+                  icon="pencil-outline"
+                  compact
+                  onPress={releasePaymentInDoubt}
+                  disabled={savingPayment}
+                  style={{ alignSelf: "flex-start", marginTop: 8 }}
+                >
+                  Cambiar monto o método
+                </Button>
               )}
               {paymentNeedsShift && (
                 <Button
