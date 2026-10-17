@@ -79,6 +79,7 @@ const pathLabels: Record<string, string> = {
   "/administration/current-location": "Esta sucursal",
   "/home/purchases/formv2": "Nueva compra",
   "/home/adjustment/form": "Nuevo ajuste",
+  "/home/roles/form": "Nuevo rol",
   "/inventory/adjustment/form": "Nuevo ajuste",
   "/home/transfers/formv2": "Nueva solicitud",
   "/inventory/weekly-inventory/form": "Nuevo inventario",
