@@ -71,9 +71,14 @@ export const adjustmentStatus = lookup({
   cancelled: { label: "Cancelado", tone: "danger" },
 });
 
+/**
+ * Producción y envasado. "Pendiente" es lo guardado para después (no mueve
+ * inventario). En empaque y Empacada son del flujo anterior: ya nada llega a
+ * ellos, se conservan para leer órdenes viejas.
+ */
 export const productionStatus = lookup({
-  draft: { label: "Borrador", tone: "neutral" },
-  completed: { label: "Producción terminada", tone: "success" },
+  draft: { label: "Pendiente", tone: "warning" },
+  completed: { label: "Registrada", tone: "success" },
   packaging: { label: "En empaque", tone: "info" },
   packed: { label: "Empacada", tone: "success" },
   cancelled: { label: "Cancelada", tone: "danger" },
