@@ -6,6 +6,7 @@
  * se abre sola.
  */
 
+import AppMenu from "@/components/App/AppMenu";
 import AppUpload, { type UploadedFile } from "@/components/Form/AppUpload";
 import QuantityField from "@/components/Production/QuantityField";
 import { tokens } from "@/constants/tokens";
@@ -15,7 +16,6 @@ import { formatQuantity } from "@/utils/format";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useState } from "react";
 import { Image, Platform, Pressable, Text, TextInput, View } from "react-native";
-import { Menu } from "react-native-paper";
 import { MANUAL_REASONS, PHOTO_REASONS, REASONS, type Direction, type ReasonCode } from "./adjustmentFormat";
 import {
   captureAbbr,
@@ -127,7 +127,7 @@ export default function AdjustmentLineRow({ line, check, showProblems, onChange,
             accessibilityLabel={isCount ? `${countQuestion(line)} de ${line.name}` : `Cantidad de ${line.name}`}
           />
           {canChooseUnit && (
-            <Menu
+            <AppMenu
               visible={unitMenu}
               onDismiss={() => setUnitMenu(false)}
               contentStyle={{ backgroundColor: colors.surface }}
@@ -144,7 +144,7 @@ export default function AdjustmentLineRow({ line, check, showProblems, onChange,
               }
             >
               {line.units.map((unit) => (
-                <Menu.Item
+                <AppMenu.Item
                   key={unit.id}
                   title={`${unit.name} (${unit.abbreviation})`}
                   leadingIcon={unit.id === line.captureUnitId ? "check" : undefined}
@@ -155,7 +155,7 @@ export default function AdjustmentLineRow({ line, check, showProblems, onChange,
                   }}
                 />
               ))}
-            </Menu>
+            </AppMenu>
           )}
         </View>
         {problemAt("quantity") ? (
