@@ -1,6 +1,5 @@
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useThemedStyles } from "@/hooks/useThemedStyles";
 import dayjs, { Dayjs } from "dayjs";
 import React from "react";
 import { View } from "react-native";
@@ -10,7 +9,8 @@ import { CalendarDate } from "react-native-paper-dates/lib/typescript/Date/Calen
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import MakeForm from "./AppForm/hoc";
 import ReadonlyText from "./AppForm/ReadonlyText";
-import { useInputPaperTheme } from "./AppInput";
+import { useFieldInputProps } from "./AppInput";
+import { formatDate, parseLocalDate, toLocalDateString } from "@/utils/dates";
 
 interface AppDatePickerProps {
   value?: string;
@@ -22,19 +22,7 @@ interface AppDatePickerProps {
 
 export default function AppDatePicker(props: AppDatePickerProps) {
   const { colors } = useTheme();
-  const paperTheme = useInputPaperTheme();
-  const styles = useThemedStyles((c) => ({
-    container: {
-      marginVertical: tokens.spacing[2],
-    },
-    input: {
-      backgroundColor: c.surface,
-    },
-    inputContent: {
-      ...tokens.typography.body,
-      color: c.text,
-    },
-  }));
+  const fieldProps = useFieldInputProps();
 
   const [time, setTime] = React.useState({
     hours: 0,
@@ -42,6 +30,11 @@ export default function AppDatePicker(props: AppDatePickerProps) {
   });
 
   const [date, setDate] = React.useState<CalendarDate>(undefined);
+  // Se muestra "Hoy, 17 oct 2026" en vez de "2026-10-17" (el valor sigue
+  // siendo YYYY-MM-DD).
+  const shownValue = props.value
+    ? `${props.value === toLocalDateString() ? "Hoy, " : ""}${formatDate(props.value)}`
+    : "";
   const [open, setOpen] = React.useState(false);
 
   const readonly = props.readonly || false;
@@ -68,25 +61,19 @@ export default function AppDatePicker(props: AppDatePickerProps) {
   return (
     <SafeAreaProvider>
       {readonly ? (
-        <ReadonlyText text={props.value || ""} />
+        <ReadonlyText text={props.value ? formatDate(props.value) : ""} />
       ) : (
-        <View style={styles.container}>
-          <TouchableRipple onPress={() => setOpen(true)}>
+        <View>
+          <TouchableRipple onPress={() => setOpen(true)} borderless style={{ borderRadius: tokens.radius.md }}>
             <View pointerEvents="none">
               <TextInput
                 readOnly
-                value={props.value || ""}
+                value={shownValue}
                 mode="outlined"
                 label={props.label}
                 placeholder={props.placeholder || "Selecciona una fecha"}
-                right={<TextInput.Icon icon="calendar" />}
-                theme={paperTheme}
-                outlineColor={colors.border}
-                activeOutlineColor={colors.primary}
-                textColor={colors.text}
-                placeholderTextColor={colors.textMuted}
-                style={styles.input}
-                contentStyle={styles.inputContent}
+                right={<TextInput.Icon icon="calendar-blank-outline" color={colors.textSecondary} />}
+                {...fieldProps}
               />
             </View>
           </TouchableRipple>
@@ -94,7 +81,7 @@ export default function AppDatePicker(props: AppDatePickerProps) {
             visible={open}
             onDismiss={onDismissSingle}
             onConfirm={onConfirmSingle}
-            date={date}
+            date={date ?? (props.value ? parseLocalDate(props.value) : undefined)}
             mode="single"
             locale="es"
             label="Seleccionar fecha"

@@ -16,7 +16,10 @@ function MakeForm<TProps extends Record<string, any>>(
       showError = true,
       errorStyle,
       containerStyle,
-      required = false,
+      // Ya no se pinta (ver types.ts); se saca para no pasarlo al campo.
+      required: _required = false,
+      optional = false,
+      hint,
       ...restProps
     } = props;
 
@@ -90,7 +93,7 @@ function MakeForm<TProps extends Record<string, any>>(
           return (
             <View style={[styles.container, containerStyle]}>
               {label && options?.label !== false && (
-                <InputLabel required={required} label={label} />
+                <InputLabel label={label} optional={optional} />
               )}
 
               <WrappedComponent
@@ -98,9 +101,11 @@ function MakeForm<TProps extends Record<string, any>>(
                 {...injectedProps}
               />
 
-              {showError && hasError && (
+              {showError && hasError ? (
                 <FieldError message={meta.error} style={errorStyle} />
-              )}
+              ) : hint && !readonly ? (
+                <FieldHint text={hint} />
+              ) : null}
             </View>
           );
         }}
@@ -116,33 +121,51 @@ function FieldError(props: { message?: string; style?: object }) {
   return <Text style={[styles.errorText, props.style]}>{props.message}</Text>;
 }
 
-export function InputLabel(props: { label: string; required: boolean }) {
+function FieldHint(props: { text: string }) {
+  const styles = useThemedStyles(makeStyles);
+  return <Text style={styles.hint}>{props.text}</Text>;
+}
+
+/**
+ * Etiqueta de un campo. Lo obligatorio es lo normal: no lleva asterisco, y
+ * los campos que se pueden dejar vacíos dicen «(opcional)».
+ */
+export function InputLabel(props: { label: string; required?: boolean; optional?: boolean }) {
   const styles = useThemedStyles(makeStyles);
   return (
     <Text style={styles.label}>
-      {props.required && <Text style={styles.required}>* </Text>}
       {props.label}
+      {props.optional && <Text style={styles.optional}> (opcional)</Text>}
     </Text>
   );
 }
 
 const makeStyles = themedStyles((c) => ({
   container: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   label: {
-    marginBottom: 8,
-    fontSize: 16,
-    fontWeight: "bold",
+    marginBottom: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600",
     color: c.textSecondary,
   },
-  required: {
-    color: c.error,
+  optional: {
+    fontWeight: "400",
+    color: c.textMuted,
   },
   errorText: {
     color: c.error,
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6,
+  },
+  hint: {
+    color: c.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6,
   },
 }));
 

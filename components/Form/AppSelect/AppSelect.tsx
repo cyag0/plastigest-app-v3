@@ -5,6 +5,7 @@ import React from "react";
 import { Text, View } from "react-native";
 import { TouchableRipple } from "react-native-paper";
 import SelectDropdown from "react-native-select-dropdown";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import MakeForm from "../AppForm/hoc";
 import ReadonlyText from "../AppForm/ReadonlyText";
 
@@ -122,7 +123,7 @@ export default function AppSelect(props: AppSelectProps) {
               >
                 {buttonText}
               </Text>
-              <Text style={styles.chevron}>{"▾"}</Text>
+              <MaterialCommunityIcons name="chevron-down" size={20} color={colors.textSecondary} />
             </View>
           )}
           renderItem={(item, index, isSelected) => {
@@ -170,7 +171,7 @@ export default function AppSelect(props: AppSelectProps) {
               >
                 {buttonText}
               </Text>
-              <Text style={styles.chevron}>{"▾"}</Text>
+              <MaterialCommunityIcons name="chevron-down" size={20} color={colors.textSecondary} />
             </View>
           </TouchableRipple>
         )}
@@ -208,7 +209,6 @@ export const FormSelectSimple = MakeForm(AppSelect);
 const makeStyles = themedStyles((c) => ({
   container: {
     minHeight: 48,
-    marginVertical: tokens.spacing[2],
   },
 
   // --- Button (the visible closed state) ---

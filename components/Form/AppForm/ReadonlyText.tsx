@@ -7,16 +7,20 @@ interface ReadonlyTextProps {
   textStyle?: object;
 }
 
+/** Valor de un campo en modo solo lectura (la etiqueta ya va en gris arriba). */
 export default function ReadonlyText(props: ReadonlyTextProps) {
   const { colors } = useTheme();
+  const empty = !props.text || props.text === "null";
   return (
     <Text
       style={{
-        color: colors.textSecondary,
+        color: empty ? colors.textMuted : colors.text,
+        fontSize: 15,
+        lineHeight: 22,
         ...props.textStyle,
       }}
     >
-      {props.text && props.text !== "null" ? props.text : "—"}
+      {empty ? "—" : props.text}
     </Text>
   );
 }

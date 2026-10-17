@@ -7,7 +7,15 @@ export interface FormFieldProps {
   showError?: boolean;
   errorStyle?: object;
   containerStyle?: object;
+  /**
+   * Campo obligatorio. Ya no se pinta un asterisco: lo obligatorio es lo
+   * normal y se marcan los opcionales (ver `optional`).
+   */
   required?: boolean;
+  /** Agrega «(opcional)» junto a la etiqueta. */
+  optional?: boolean;
+  /** Ayuda corta debajo del campo (se oculta mientras hay un error). */
+  hint?: string;
   onChange?: (value: any) => void;
 }
 
