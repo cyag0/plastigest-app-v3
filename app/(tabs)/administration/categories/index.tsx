@@ -1,7 +1,6 @@
 import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
-import palette from "@/constants/palette";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -17,9 +16,7 @@ export default function CategoriesIndex() {
       key: "is_active",
       width: 100,
       align: "center",
-      render: (_, item) => (
-<ActiveBadge active={!!item.is_active} feminine />
-      ),
+      render: (_, item) => <ActiveBadge active={!!item.is_active} feminine />,
     },
   ];
 
@@ -37,9 +34,7 @@ export default function CategoriesIndex() {
               {item.description || "Sin descripción"}
             </AppList.Description>
           ),
-          right: (
-<ActiveBadge active={!!item.is_active} feminine />
-          ),
+          right: <ActiveBadge active={!!item.is_active} feminine />,
           bottom: [
             {
               label: "Creado el",

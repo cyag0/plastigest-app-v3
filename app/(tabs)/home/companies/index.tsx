@@ -1,3 +1,4 @@
+import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PermissionGate from "@/components/App/PermissionGate";
@@ -6,10 +7,11 @@ import FilterModal from "@/components/Feedback/Modal/FilterModal";
 import palette from "@/constants/palette";
 import { generateCrudMenu } from "@/utils/routes";
 import Services from "@/utils/services";
+import { formatPhone } from "@/utils/phone";
 import { Href, useRouter } from "expo-router";
 import * as React from "react";
 import { StyleSheet } from "react-native";
-import { Avatar, Chip } from "react-native-paper";
+import { Avatar } from "react-native-paper";
 
 interface CompanyIndexScreenProps {
   route?: Href;
@@ -25,21 +27,13 @@ export default function CompaniesIndexScreen(props: CompanyIndexScreenProps) {
     { title: "Nombre", dataIndex: "name", key: "name", width: 200 },
     { title: "Razón Social", dataIndex: "business_name", key: "business_name", width: 220 },
     { title: "Email", dataIndex: "email", key: "email", width: 200 },
-    { title: "Teléfono", dataIndex: "phone", key: "phone", width: 140 },
+    { title: "Teléfono", dataIndex: "phone", key: "phone", width: 140, render: (value) => formatPhone(value) },
     {
       title: "Estado",
       key: "is_active",
       width: 100,
       align: "center",
-      render: (_, item) => (
-        <Chip
-          style={{ backgroundColor: item.is_active ? palette.primary : palette.surfaceMuted }}
-          textStyle={{ color: "white" }}
-          compact
-        >
-          {item.is_active ? "Activa" : "Inactiva"}
-        </Chip>
-      ),
+      render: (_, item) => <ActiveBadge active={!!item.is_active} feminine />,
     },
   ];
 
@@ -60,20 +54,10 @@ export default function CompaniesIndexScreen(props: CompanyIndexScreenProps) {
               style={styles.avatar}
             />
           ),
-          right: (
-            <Chip
-              style={{
-                backgroundColor: item.is_active ? palette.primary : palette.surfaceMuted,
-              }}
-              textStyle={{ color: "white" }}
-              compact
-            >
-              {item.is_active ? "Activa" : "Inactiva"}
-            </Chip>
-          ),
+          right: <ActiveBadge active={!!item.is_active} feminine />,
           bottom: [
             ...(item.email ? [{ label: "Email", value: item.email }] : []),
-            ...(item.phone ? [{ label: "Tel", value: item.phone }] : []),
+            ...(item.phone ? [{ label: "Tel", value: formatPhone(item.phone) }] : []),
           ],
         })}
         searchPlaceholder="Buscar compañías..."

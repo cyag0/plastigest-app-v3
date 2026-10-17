@@ -1,9 +1,12 @@
 import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import IconLabel from "@/components/App/IconLabel";
 import PermissionGate from "@/components/App/PermissionGate";
+import StatusBadge from "@/components/App/StatusBadge";
 import SaleStats from "@/components/Dashboard/SaleStats";
 import palette from "@/constants/palette";
+import { type StatusInfo, paymentMethod, paymentStatus, saleStatus } from "@/constants/statuses";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
@@ -14,6 +17,31 @@ import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Text } from "react-native-paper";
 import { SceneMap, TabView } from "react-native-tab-view";
+
+/**
+ * Un solo estado por venta. Casi todas están cerradas, así que "Cerrada" en
+ * cada renglón no dice nada (y junto a "Pagado" eran dos badges verdes): se
+ * muestra "Cancelada" si se canceló y, si no, cómo va el pago.
+ */
+function saleRowStatus(sale: any): StatusInfo {
+  if (sale.status === "cancelled") return saleStatus(sale.status);
+  return paymentStatus(sale.payment_status);
+}
+
+/** Lo mismo en la tarjeta, que no tiene encabezado: el parcial lleva lo abonado. */
+function cardStatus(sale: any): StatusInfo {
+  if (sale.status === "cancelled") return saleStatus(sale.status);
+  const info = paymentStatus(sale.payment_status);
+  if (sale.payment_status === "partial") {
+    const paid = new Intl.NumberFormat("es-MX", {
+      style: "currency",
+      currency: "MXN",
+    }).format(sale.paid_amount || 0);
+    return { ...info, label: `Parcial · ${paid}` };
+  }
+  if (sale.payment_status === "pending") return { ...info, label: "Pendiente de pago" };
+  return info;
+}
 
 export default function SalesIndex() {
   const navigation = router;
@@ -53,116 +81,6 @@ export default function SalesIndex() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "closed":
-        return palette.primary;
-      case "cancelled":
-        return palette.textMuted;
-      default:
-        return "#6E6B5E";
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "closed":
-        return "check-circle";
-      case "cancelled":
-        return "close-circle";
-      default:
-        return "help-circle";
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case "closed":
-        return "Cerrada";
-      case "cancelled":
-        return "Cancelada";
-      default:
-        return status;
-    }
-  };
-
-  const getPaymentMethodIcon = (method: string) => {
-    switch (method) {
-      case "cash":
-        return "cash";
-      case "card":
-        return "credit-card";
-      case "transfer":
-        return "bank-transfer";
-      case "credit":
-        return "account-clock";
-      case "mixed":
-        return "swap-horizontal";
-      default:
-        return "cash";
-    }
-  };
-
-  const getPaymentMethodLabel = (method: string) => {
-    switch (method) {
-      case "cash":
-        return "Efectivo";
-      case "card":
-        return "Tarjeta";
-      case "transfer":
-        return "Transferencia";
-      case "credit":
-        return "Crédito";
-      case "mixed":
-        return "Mixto";
-      default:
-        return method || "-";
-    }
-  };
-
-  const getPaymentMethodColor = (method: string) => {
-    switch (method) {
-      case "cash":
-        return "#3F8A3A";
-      case "card":
-        return "#1565C0";
-      case "transfer":
-        return "#6D4C41";
-      case "credit":
-        return "#7B1FA2";
-      case "mixed":
-        return "#00838F";
-      default:
-        return "#607D8B";
-    }
-  };
-
-  const getPaymentStatusLabel = (status?: string) => {
-    switch (status) {
-      case "paid":
-        return "Pagado";
-      case "partial":
-        return "Parcial";
-      case "pending":
-        return "Pendiente";
-      default:
-        return status || "-";
-    }
-  };
-
-  const getPaymentStatusColor = (status?: string) => {
-    switch (status) {
-      case "paid":
-        return "#3F8A3A";
-      case "partial":
-        return "#9A6210";
-      case "pending":
-        return "#B9412C";
-      default:
-        return "#607D8B";
-    }
-  };
-
   const columns = useMemo<AppListColumn<any>[]>(
     () => [
       {
@@ -182,69 +100,13 @@ export default function SalesIndex() {
         title: "Estado",
         key: "status",
         width: 150,
-        render: (_, sale) => (
-          <View
-            style={{
-              alignSelf: "flex-start",
-              backgroundColor: getStatusColor(sale.status),
-              borderRadius: 999,
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-            }}
-          >
-            <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
-              {getStatusLabel(sale.status)}
-            </Text>
-          </View>
-        ),
+        render: (_, sale) => <StatusBadge {...saleRowStatus(sale)} />,
       },
       {
         title: "Pago",
         key: "payment_method",
         width: 150,
-        render: (_, sale) => (
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-              alignSelf: "flex-start",
-              backgroundColor: getPaymentMethodColor(sale.payment_method),
-              borderRadius: 999,
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-            }}
-          >
-            <MaterialCommunityIcons
-              name={getPaymentMethodIcon(sale.payment_method)}
-              size={13}
-              color="#fff"
-            />
-            <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
-              {getPaymentMethodLabel(sale.payment_method)}
-            </Text>
-          </View>
-        ),
-      },
-      {
-        title: "Estado pago",
-        key: "payment_status",
-        width: 150,
-        render: (_, sale) => (
-          <View
-            style={{
-              alignSelf: "flex-start",
-              backgroundColor: getPaymentStatusColor(sale.payment_status),
-              borderRadius: 999,
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-            }}
-          >
-            <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
-              {getPaymentStatusLabel(sale.payment_status)}
-            </Text>
-          </View>
-        ),
+        render: (_, sale) => <IconLabel {...paymentMethod(sale.payment_method)} />,
       },
       {
         title: "Total",
@@ -289,7 +151,7 @@ export default function SalesIndex() {
             },
             {
               label: "Método de pago",
-              value: getPaymentMethodLabel(sale.payment_method),
+              value: paymentMethod(sale.payment_method).label,
             },
           ],
           description: (
@@ -334,43 +196,12 @@ export default function SalesIndex() {
                 </Text>
               </View>
 
-              {/* Estado de pago */}
-              {sale.payment_status && (
+              {(sale.status === "cancelled" || sale.payment_status) && (
                 <View style={{ marginTop: 4 }}>
-                  <Text
-                    variant="bodySmall"
-                    style={{
-                      color:
-                        sale.payment_status === "paid"
-                          ? palette.success
-                          : sale.payment_status === "partial"
-                            ? palette.warning
-                            : palette.error,
-                      fontWeight: "600",
-                    }}
-                  >
-                    {sale.payment_status === "paid"
-                      ? "✓ Pagado"
-                      : sale.payment_status === "partial"
-                        ? `Parcial: ${new Intl.NumberFormat("es-MX", {
-                            style: "currency",
-                            currency: "MXN",
-                          }).format(sale.paid_amount || 0)}`
-                        : "Pendiente de pago"}
-                  </Text>
+                  <StatusBadge {...cardStatus(sale)} />
                 </View>
               )}
             </View>
-          ),
-          right: (
-            <AppList.Description
-              style={{
-                color: getStatusColor(sale.status),
-                fontWeight: "bold",
-              }}
-            >
-              {getStatusLabel(sale.status)}
-            </AppList.Description>
           ),
         })}
         menu={{
@@ -479,15 +310,5 @@ const styles = StyleSheet.create({
   },
   rightContent: {
     alignItems: "flex-end" as const,
-  },
-  statusBadge: {
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: "bold" as const,
   },
 });

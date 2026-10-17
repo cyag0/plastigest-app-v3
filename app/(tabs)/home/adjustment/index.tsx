@@ -3,6 +3,7 @@ import { formatQuantity } from "@/utils/format";
 import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import IconLabel from "@/components/App/IconLabel";
 import PermissionGate from "@/components/App/PermissionGate";
 import palette from "@/constants/palette";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
@@ -58,34 +59,15 @@ const tableColumns: AppListColumn<InventoryAdjustmentItem>[] = [
     title: "Tipo",
     key: "direction",
     width: 170,
+    // Tipo y razón son atributos del ajuste, no estados: texto con ícono.
     render: (_, item) => {
       const isIn = item.direction === "in";
 
       return (
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 6,
-            alignSelf: "flex-start",
-            backgroundColor: isIn ? palette.success : palette.error,
-            borderRadius: 999,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-          }}
-        >
-          <MaterialCommunityIcons
-            name={isIn ? "arrow-up-bold-circle" : "arrow-down-bold-circle"}
-            size={14}
-            color="#fff"
-          />
-          <Text
-            variant="labelSmall"
-            style={{ color: "#fff", fontWeight: "700" }}
-          >
-            {isIn ? "Entrada" : "Salida"}
-          </Text>
-        </View>
+        <IconLabel
+          icon={isIn ? "arrow-up-bold-circle" : "arrow-down-bold-circle"}
+          label={isIn ? "Entrada" : "Salida"}
+        />
       );
     },
   },
@@ -102,37 +84,12 @@ const tableColumns: AppListColumn<InventoryAdjustmentItem>[] = [
     key: "reason",
     dataIndex: "reason_code_label",
     width: 220,
-    render: (value, item) => {
-      const reasonCode = item.reason_code || "";
-      const reasonBadge = getReasonBadgeStyle(reasonCode);
-
-      return (
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 6,
-            alignSelf: "flex-start",
-            backgroundColor: reasonBadge.backgroundColor,
-            borderRadius: 999,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-          }}
-        >
-          <MaterialCommunityIcons
-            name={getReasonIcon(reasonCode)}
-            size={15}
-            color="#fff"
-          />
-          <Text
-            variant="labelSmall"
-            style={{ color: "#fff", fontWeight: "700" }}
-          >
-            {reasonText(item, value || item.reason_code || "-")}
-          </Text>
-        </View>
-      );
-    },
+    render: (value, item) => (
+      <IconLabel
+        icon={getReasonIcon(item.reason_code || "")}
+        label={reasonText(item, value || item.reason_code || "-")}
+      />
+    ),
   },
   {
     title: "Fecha",
@@ -259,24 +216,5 @@ function getReasonIcon(reasonCode: string) {
       return "check-circle-outline";
     default:
       return "information-outline";
-  }
-}
-
-function getReasonBadgeStyle(reasonCode: string) {
-  switch (reasonCode) {
-    case "count_diff":
-      return { backgroundColor: "#6E6B5E" };
-    case "damage":
-      return { backgroundColor: "#9A6210" };
-    case "loss":
-      return { backgroundColor: "#B9412C" };
-    case "expiry":
-      return { backgroundColor: "#9A3412" };
-    case "theft":
-      return { backgroundColor: "#7F1D1D" };
-    case "found":
-      return { backgroundColor: "#3F8A3A" };
-    default:
-      return { backgroundColor: "#57564B" };
   }
 }

@@ -1,7 +1,8 @@
 import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
-import AppChip, { ChipVariant } from "@/components/App/Chip";
+import AppChip from "@/components/App/Chip";
+import IconLabel from "@/components/App/IconLabel";
 import PermissionGate from "@/components/App/PermissionGate";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -18,11 +19,18 @@ import { Pressable, Text, View } from "react-native";
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TYPE_META: Record<string, { label: string; variant: ChipVariant }> = {
-  income: { label: "Ingreso", variant: "success" },
-  expense: { label: "Egreso", variant: "error" },
-  adjustment: { label: "Ajuste", variant: "info" },
+// El tipo es un atributo (no un estado): ícono y texto, sin color. El monto
+// ya lleva el signo y el color.
+const TYPE_META: Record<string, { label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
+  income: { label: "Ingreso", icon: "arrow-down-circle-outline" },
+  expense: { label: "Egreso", icon: "arrow-up-circle-outline" },
+  adjustment: { label: "Ajuste", icon: "tune-variant" },
 };
+
+function MovementType({ type }: { type: string }) {
+  const meta = TYPE_META[type];
+  return <IconLabel icon={meta?.icon ?? "swap-vertical"} label={meta?.label ?? type} />;
+}
 
 /**
  * Concepto para mostrar. Los movimientos guardados antes llevaban el id
@@ -195,14 +203,7 @@ export default function CashMovementsIndex() {
       key: "type",
       width: 110,
       align: "center",
-      render: (_, item) => {
-        const meta = TYPE_META[item.type];
-        return (
-          <AppChip size="sm" variant={meta?.variant ?? "default"}>
-            {meta?.label ?? item.type}
-          </AppChip>
-        );
-      },
+      render: (_, item) => <MovementType type={item.type} />,
     },
     { title: "Concepto", key: "concept", width: 260, render: (_, item) => displayConcept(item.concept) },
     {
@@ -272,7 +273,6 @@ export default function CashMovementsIndex() {
           },
         ]}
         renderCard={({ item }) => {
-          const meta = TYPE_META[item.type];
           return {
             title: displayConcept(item.concept),
             description: item.notes || undefined,
@@ -287,9 +287,7 @@ export default function CashMovementsIndex() {
                 >
                   {signedMoney(item)}
                 </Text>
-                <AppChip size="sm" variant={meta?.variant ?? "default"}>
-                  {meta?.label ?? item.type}
-                </AppChip>
+                <MovementType type={item.type} />
               </View>
             ),
             // Sin etiquetas ("Fecha", "Método"…): el dato se entiende solo.

@@ -1,26 +1,24 @@
 import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
-import type { Palette } from "@/constants/palette";
+import StatusBadge from "@/components/App/StatusBadge";
+import { salesOrderStatus } from "@/constants/statuses";
 import { useTheme } from "@/contexts/ThemeContext";
 import Services from "@/utils/services";
 import { kioskOrderLabel } from "@/utils/services/kioskOrders";
 import { router } from "expo-router";
 import { View } from "react-native";
-import { Chip, Text } from "react-native-paper";
+import { Text } from "react-native-paper";
 
 /**
- * Estados del pedido (SalesOrderStatus del backend) con su color del tema.
+ * Estados del pedido (SalesOrderStatus del backend) para el filtro; la
+ * etiqueta y el tono del badge salen de salesOrderStatus.
  * Antes la lista los pedía a sales-orders/initial-data, que además bajaba
  * todo el catálogo y los clientes, y ahora pide permiso de crear pedidos.
  */
-const STATUSES: { value: string; label: string; color: (c: Palette) => string }[] = [
-  { value: "pending", label: "Pendiente", color: (c) => c.textSecondary },
-  { value: "preparing", label: "Preparando", color: (c) => c.warning },
-  { value: "in_transit", label: "En tránsito", color: (c) => c.info },
-  { value: "delivered", label: "Entregado", color: (c) => c.success },
-  { value: "cancelled", label: "Cancelado", color: (c) => c.error },
-];
+const STATUSES = ["pending", "preparing", "in_transit", "delivered", "cancelled"].map(
+  (value) => ({ value, label: salesOrderStatus(value).label }),
+);
 
 /** "Pedido del kiosko 7 · Juan", "Juan" o null. */
 function orderCustomer(order: any): string | null {
@@ -33,11 +31,6 @@ function orderCustomer(order: any): string | null {
 export default function SalesOrdersIndex() {
   const navigation = router;
   const { colors } = useTheme();
-
-  const statusColor = (value?: string) =>
-    STATUSES.find((s) => s.value === value)?.color(colors) ?? colors.textSecondary;
-  const statusLabel = (order: any) =>
-    order?.status_label || STATUSES.find((s) => s.value === order?.status)?.label || order?.status || "—";
 
   return (
     <PermissionGate permission="sales_orders_list">
@@ -81,15 +74,7 @@ export default function SalesOrdersIndex() {
               <Text variant="bodyLarge" style={{ fontWeight: "600", flex: 1 }}>
                 {order.order_number}
               </Text>
-              <Chip
-                compact
-                style={{
-                  backgroundColor: statusColor(order.status) + "22",
-                }}
-                textStyle={{ color: statusColor(order.status), fontSize: 12 }}
-              >
-                {statusLabel(order)}
-              </Chip>
+              <StatusBadge {...salesOrderStatus(order.status)} />
             </View>
           ),
           description: (
@@ -165,15 +150,7 @@ export default function SalesOrdersIndex() {
             dataIndex: "status",
             key: "status",
             width: 130,
-            render: (value: string, order: any) => (
-              <Chip
-                compact
-                style={{ backgroundColor: statusColor(value) + "22" }}
-                textStyle={{ color: statusColor(value), fontSize: 12 }}
-              >
-                {statusLabel(order)}
-              </Chip>
-            ),
+            render: (value: string) => <StatusBadge {...salesOrderStatus(value)} />,
           },
           {
             title: "Cliente",

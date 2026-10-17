@@ -1,4 +1,6 @@
 import { formatDate, formatDateTime } from "@/utils/dates";
+import IconLabel from "@/components/App/IconLabel";
+import StatusBadge from "@/components/App/StatusBadge";
 import RecordLoadError, {
   recordLoadProblem,
   type RecordLoadProblem,
@@ -13,6 +15,7 @@ import {
   SALE_ERROR_CODES,
 } from "@/components/Pos/saleErrors";
 import palette from "@/constants/palette";
+import { paymentMethod as paymentMethodInfo, paymentStatus, saleStatus } from "@/constants/statuses";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
@@ -23,6 +26,7 @@ import { printSaleTicket } from "@/utils/printDocument";
 import { newClientRequestId } from "@/utils/requestId";
 import { errorMessageOf } from "@/utils/errorNotice";
 import Services from "@/utils/services";
+import { formatPhone } from "@/utils/phone";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams, useNavigation, usePreventRemove } from "expo-router";
 import React, { useLayoutEffect, useRef, useState } from "react";
@@ -50,24 +54,6 @@ const fmt = (value: number) =>
   }).format(value);
 
 const toNum = (v: any) => parseFloat(v ?? 0) || 0;
-
-const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
-  closed:    { color: "#3F8A3A", icon: "check-circle", label: "Cerrada" },
-  cancelled: { color: "#B9412C", icon: "close-circle", label: "Cancelada" },
-};
-
-const PM_CONFIG: Record<string, { icon: string; label: string }> = {
-  cash:     { icon: "cash",          label: "Efectivo" },
-  card:     { icon: "credit-card",   label: "Tarjeta" },
-  transfer: { icon: "bank-transfer", label: "Transferencia" },
-  credit:   { icon: "account-clock", label: "Crédito" },
-};
-
-const PS_CONFIG: Record<string, { color: string; label: string }> = {
-  paid:    { color: "#3F8A3A", label: "Pagado" },
-  partial: { color: "#C47F12", label: "Pago Parcial" },
-  pending: { color: "#B9412C", label: "Pendiente" },
-};
 
 /**
  * Métodos de un abono. Sin "Crédito": un abono es dinero que sí entró; a
@@ -379,23 +365,6 @@ export default function SaleDetail() {
   const pending = total - paid;
   const paidPct = total > 0 ? Math.min((paid / total) * 100, 100) : 0;
 
-  const status =
-    STATUS_CONFIG[sale.status] ?? {
-      color: "#6E6B5E",
-      icon: "help-circle",
-      label: sale.status_label || sale.status,
-    };
-  const pmConfig =
-    PM_CONFIG[sale.payment_method] ?? {
-      icon: "cash",
-      label: sale.payment_method,
-    };
-  const psConfig =
-    PS_CONFIG[sale.payment_status] ?? {
-      color: "#6E6B5E",
-      label: sale.payment_status,
-    };
-
   const discount = toNum(sale.discount);
   const tax = toNum(sale.tax);
   const cancelled = sale.status === "cancelled";
@@ -420,8 +389,9 @@ export default function SaleDetail() {
           <Text style={styles.docTitle} selectable>
             {sale.sale_number}
           </Text>
-          <View style={[styles.pill, { backgroundColor: status.color + "1F" }]}>
-            <Text style={[styles.pillText, { color: status.color }]}>{status.label}</Text>
+          {/* El View centra el badge con el folio (suelto se alinearía arriba). */}
+          <View>
+            <StatusBadge {...saleStatus(sale.status)} />
           </View>
         </View>
         <Text style={styles.docMeta}>{meta.join(" · ")}</Text>
@@ -430,12 +400,17 @@ export default function SaleDetail() {
       {/* ── Total y pago ── */}
       <View style={styles.totalBlock}>
         <Text style={[styles.bigTotal, cancelled && styles.struck]}>{fmt(total)}</Text>
-        <Text style={styles.docMeta}>
-          {pmConfig.label}
-          {" · "}
-          <Text style={{ color: psConfig.color, fontWeight: "600" }}>{psConfig.label}</Text>
-          {pending > 0 && !cancelled ? ` · faltan ${fmt(pending)}` : ""}
-        </Text>
+        <View style={styles.paymentLine}>
+          <View>
+            <IconLabel {...paymentMethodInfo(sale.payment_method)} />
+          </View>
+          {!!sale.payment_status && (
+            <View>
+              <StatusBadge {...paymentStatus(sale.payment_status)} />
+            </View>
+          )}
+          {pending > 0 && !cancelled && <Text style={styles.docMeta}>faltan {fmt(pending)}</Text>}
+        </View>
         {pending > 0 && !cancelled && (
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: `${paidPct}%` as any, backgroundColor: palette.primary }]} />
@@ -508,9 +483,9 @@ export default function SaleDetail() {
           <View style={styles.group}>
             {payments.map((p, i) => (
               <View key={`p${i}`} style={[styles.line, i > 0 && styles.lineDivider]}>
-                <MaterialCommunityIcons name={(PM_CONFIG[p.method]?.icon ?? "cash") as any} size={18} color={palette.textSecondary} />
+                <MaterialCommunityIcons name={paymentMethodInfo(p.method).icon} size={18} color={palette.textSecondary} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.lineTitle}>{PM_CONFIG[p.method]?.label ?? p.method}</Text>
+                  <Text style={styles.lineTitle}>{paymentMethodInfo(p.method).label}</Text>
                   {p.method === "cash" && p.tendered != null && p.tendered > p.amount && (
                     <Text style={styles.lineMeta}>
                       Recibido {fmt(p.tendered)} · cambio {fmt(p.change ?? 0)}
@@ -522,9 +497,9 @@ export default function SaleDetail() {
             ))}
             {(sale.payment_history ?? []).map((payment: any, i: number) => (
               <View key={`h${i}`} style={[styles.line, (payments.length > 0 || i > 0) && styles.lineDivider]}>
-                <MaterialCommunityIcons name={(PM_CONFIG[payment.payment_method]?.icon ?? "cash") as any} size={18} color={palette.textSecondary} />
+                <MaterialCommunityIcons name={paymentMethodInfo(payment.payment_method).icon} size={18} color={palette.textSecondary} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.lineTitle}>{PM_CONFIG[payment.payment_method]?.label ?? payment.payment_method}</Text>
+                  <Text style={styles.lineTitle}>{paymentMethodInfo(payment.payment_method).label}</Text>
                   <Text style={styles.lineMeta}>
                     {formatDateTime(payment.date)}
                     {payment.notes ? ` · ${payment.notes}` : ""}
@@ -542,7 +517,7 @@ export default function SaleDetail() {
         <>
           <Text style={styles.groupTitle}>Cliente</Text>
           <Text style={styles.plain}>
-            {[sale.content.customer_name, sale.content.customer_phone, sale.content.customer_email].filter(Boolean).join(" · ")}
+            {[sale.content.customer_name, formatPhone(sale.content.customer_phone), sale.content.customer_email].filter(Boolean).join(" · ")}
           </Text>
         </>
       )}
@@ -719,8 +694,8 @@ const styles = StyleSheet.create({
   docTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
   docTitle: { fontSize: 22, fontWeight: "700", color: palette.text, letterSpacing: -0.3 },
   docMeta: { fontSize: 13, color: palette.textSecondary, lineHeight: 19 },
-  pill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
-  pillText: { fontSize: 12, fontWeight: "600" },
+  // Método y estado de pago; IconLabel y el badge van en un View para centrarse en la fila.
+  paymentLine: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
   totalBlock: { gap: 4, marginTop: 10, marginBottom: 8 },
   bigTotal: { fontSize: 36, lineHeight: 42, fontWeight: "700", color: palette.text, letterSpacing: -0.8, fontVariant: ["tabular-nums"] },
   struck: { textDecorationLine: "line-through", color: palette.textMuted },

@@ -1,5 +1,5 @@
-import type { VariantMatchMap } from "@/components/App/StatusBadge";
 import StatusBadge from "@/components/App/StatusBadge";
+import { transferStatus } from "@/constants/statuses";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { notifyError } from "@/utils/errorNotice";
@@ -14,13 +14,6 @@ interface TransferWizardStatusCardProps {
   maxStep: number;
   onSelectStep?: (step: number) => void;
 }
-
-const STATUS_MATCH: VariantMatchMap = {
-  success: ["completed", "closed"],
-  warning: ["pending", "ordered"],
-  info: ["approved", "in_transit"],
-  error: ["rejected", "cancelled"],
-};
 
 const STEP_LABELS = ["Aprobación", "Envío", "Recepción", "Resumen"];
 
@@ -112,11 +105,7 @@ export function TransferWizardStatusCard({
             </Text>
             <Text style={styles.statusSubtitle}>{theme.subtitle}</Text>
           </View>
-          <StatusBadge
-            value={transfer.status}
-            label={transfer.status_label || transfer.status}
-            match={STATUS_MATCH}
-          />
+          <StatusBadge {...transferStatus(transfer.status)} />
         </View>
 
         <View style={styles.printRow}>

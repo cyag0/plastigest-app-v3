@@ -1,5 +1,9 @@
 import { formatDate } from "@/utils/dates";
+import IconLabel from "@/components/App/IconLabel";
+import StatusBadge, { toneColors } from "@/components/App/StatusBadge";
 import palette from "@/constants/palette";
+import { paymentMethod, purchaseStatus } from "@/constants/statuses";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
@@ -54,27 +58,27 @@ interface ReceiveRow {
   error: string | null;
 }
 
-// ── Status config ─────────────────────────────────────────────────────────────
-const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
-  draft:      { color: "#C47F12", icon: "file-document-edit-outline",  label: "Borrador" },
-  ordered:    { color: "#2F6F7E", icon: "cart-check",                   label: "Pedido" },
-  in_transit: { color: "#7A6A8C", icon: "truck-delivery",              label: "En Tránsito" },
-  received:   { color: "#3F8A3A", icon: "package-variant-closed-check", label: "Recibido" },
-  cancelled:  { color: "#B9412C", icon: "close-circle-outline",         label: "Cancelado" },
-};
-
+// ── Estado ────────────────────────────────────────────────────────────────────
+// Etiqueta y tono: purchaseStatus. Aquí solo el ícono de cada paso del progreso.
 const FLOW_STEPS = ["draft", "ordered", "in_transit", "received"] as const;
 
-const PAYMENT_METHOD_CONFIG: Record<string, { icon: string; label: string }> = {
-  cash:     { icon: "cash",            label: "Efectivo" },
-  card:     { icon: "credit-card",     label: "Tarjeta" },
-  transfer: { icon: "bank-transfer",   label: "Transferencia" },
-  other:    { icon: "dots-horizontal", label: "Otro" },
+const STEP_ICONS: Record<(typeof FLOW_STEPS)[number], keyof typeof MaterialCommunityIcons.glyphMap> = {
+  draft:      "file-document-edit-outline",
+  ordered:    "cart-check",
+  in_transit: "truck-delivery",
+  received:   "package-variant-closed-check",
 };
+
+/** Método de pago de la compra: "Otro" solo existe en compras. */
+const purchasePaymentMethod = (value: string) =>
+  value === "other"
+    ? { label: "Otro", icon: "dots-horizontal" as const }
+    : paymentMethod(value);
 
 export default function PurchaseDetailScreen() {
   const { id } = useLocalSearchParams();
   const alerts = useAlerts();
+  const { colors } = useTheme();
   // Confirmar, marcar en tránsito, recibir y cancelar piden purchases_update.
   const canUpdate = useCan().can("purchases_update");
   const [purchase, setPurchase] = useState<any>(null);
@@ -328,12 +332,9 @@ export default function PurchaseDetailScreen() {
     );
   }
 
-  const status =
-    STATUS_CONFIG[purchase.status] ?? {
-      color: "#6E6B5E",
-      icon: "help-circle",
-      label: purchase.status,
-    };
+  const status = purchaseStatus(purchase.status);
+  // Color del estado para lo que no es badge (el aviso de cancelada).
+  const statusColor = toneColors(colors, status.tone).fg;
   const total = toNum(purchase.total);
   const isCancelled = purchase.status === "cancelled";
   const currentStepIndex = FLOW_STEPS.indexOf(purchase.status as any);
@@ -344,93 +345,60 @@ export default function PurchaseDetailScreen() {
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
     >
-      {/* ── Header con estado ── */}
-      <Surface style={[styles.card, { backgroundColor: status.color }]} elevation={4}>
-        <View style={styles.headerTop}>
-          <View style={{ flex: 1 }}>
-            <Text variant="labelMedium" style={styles.purchaseLabel}>
-              COMPRA
-            </Text>
-            <Text variant="headlineMedium" style={styles.purchaseNumber}>
-              {purchase.purchase_number || `#${purchase.id}`}
-            </Text>
-            <View style={styles.row}>
-              <MaterialCommunityIcons
-                name="store-outline"
-                size={14}
-                color="rgba(255,255,255,0.8)"
-              />
-              <Text variant="bodySmall" style={styles.headerMeta}>
-                {purchase.supplier_name || purchase.supplier?.name || "Sin proveedor"}
-              </Text>
-            </View>
-            <View style={styles.row}>
-              <MaterialCommunityIcons
-                name="calendar-outline"
-                size={14}
-                color="rgba(255,255,255,0.8)"
-              />
-              <Text variant="bodySmall" style={styles.headerMeta}>
-                {formatDate(purchase.purchase_date, "long")}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.statusBadge}>
-            <MaterialCommunityIcons
-              name={status.icon as any}
-              size={32}
-              color="rgba(255,255,255,0.95)"
-            />
-            <Text variant="labelMedium" style={styles.statusText}>
-              {status.label}
-            </Text>
+      {/* ── Encabezado: folio, estado y datos (sin tarjeta de color) ── */}
+      <View style={[styles.header, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View style={styles.headerTitleRow}>
+          <Text style={[styles.headerTitle, { color: colors.text }]} selectable>
+            {purchase.purchase_number || `#${purchase.id}`}
+          </Text>
+          {/* El View centra el badge con el folio (suelto se alinearía arriba). */}
+          <View>
+            <StatusBadge {...status} />
           </View>
         </View>
+        <View style={styles.row}>
+          <MaterialCommunityIcons name="store-outline" size={14} color={colors.textMuted} />
+          <Text style={[styles.headerMeta, { color: colors.textSecondary }]}>
+            {purchase.supplier_name || purchase.supplier?.name || "Sin proveedor"}
+          </Text>
+        </View>
+        <View style={styles.row}>
+          <MaterialCommunityIcons name="calendar-outline" size={14} color={colors.textMuted} />
+          <Text style={[styles.headerMeta, { color: colors.textSecondary }]}>
+            {formatDate(purchase.purchase_date, "long")}
+          </Text>
+        </View>
 
-        <Divider
-          style={{ backgroundColor: "rgba(255,255,255,0.3)", marginVertical: 16 }}
-        />
+        <View style={[styles.headerDivider, { backgroundColor: colors.border }]} />
 
         <View style={styles.totalRow}>
-          <Text variant="titleSmall" style={{ color: "rgba(255,255,255,0.8)" }}>
+          <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
             Total de compra
           </Text>
-          <Text variant="headlineMedium" style={styles.totalValue}>
+          <Text style={[styles.totalValue, { color: colors.text }]}>
             {fmt(total)}
           </Text>
         </View>
 
-        {purchase.payment_method && (() => {
-          const pm = PAYMENT_METHOD_CONFIG[purchase.payment_method];
-          return (
-            <View style={[styles.row, { marginTop: 10 }]}>
-              <MaterialCommunityIcons
-                name={(pm?.icon ?? "help-circle") as any}
-                size={15}
-                color="rgba(255,255,255,0.8)"
-              />
-              <Text variant="bodySmall" style={{ color: "rgba(255,255,255,0.85)" }}>
-                {pm?.label ?? purchase.payment_method}
-              </Text>
-            </View>
-          );
-        })()}
-      </Surface>
+        {!!purchase.payment_method && (
+          <IconLabel {...purchasePaymentMethod(purchase.payment_method)} />
+        )}
+      </View>
 
       {/* ── Timeline de progreso ── */}
       {!isCancelled && (
-        <Surface style={styles.card} elevation={1}>
+        <Surface style={[styles.card, { backgroundColor: colors.surface }]} elevation={1}>
           <Text variant="titleMedium" style={styles.sectionTitle}>
             Progreso
           </Text>
           <View style={{ marginTop: 16 }}>
             {FLOW_STEPS.map((key, index) => {
-              const cfg = STATUS_CONFIG[key];
               const isActive = key === purchase.status;
               const isCompleted = index < currentStepIndex;
               const isLast = index === FLOW_STEPS.length - 1;
-              const dotColor =
-                isActive || isCompleted ? status.color : "#E6E1D5";
+              const reached = isActive || isCompleted;
+              // Un solo acento para el avance: el color del estado ya va en el badge.
+              const dotColor = reached ? colors.primary : colors.border;
 
               return (
                 <View key={key} style={styles.timelineItem}>
@@ -442,9 +410,9 @@ export default function PurchaseDetailScreen() {
                       ]}
                     >
                       <MaterialCommunityIcons
-                        name={(isCompleted ? "check" : cfg.icon) as any}
+                        name={isCompleted ? "check" : STEP_ICONS[key]}
                         size={14}
-                        color="white"
+                        color={reached ? colors.primaryForeground : colors.textMuted}
                       />
                     </View>
                     {!isLast && (
@@ -453,8 +421,8 @@ export default function PurchaseDetailScreen() {
                           styles.timelineLine,
                           {
                             backgroundColor: isCompleted
-                              ? status.color
-                              : "#E6E1D5",
+                              ? colors.primary
+                              : colors.border,
                           },
                         ]}
                       />
@@ -465,15 +433,14 @@ export default function PurchaseDetailScreen() {
                       variant="bodyMedium"
                       style={{
                         fontWeight: isActive ? "700" : "400",
-                        color:
-                          isActive || isCompleted ? palette.text : "#A39F92",
+                        color: reached ? colors.text : colors.textMuted,
                       }}
                     >
-                      {cfg.label}
+                      {purchaseStatus(key).label}
                     </Text>
                     <Text
                       variant="bodySmall"
-                      style={{ color: "#A39F92", fontSize: 11 }}
+                      style={{ color: colors.textMuted, fontSize: 11 }}
                     >
                       {isActive
                         ? "Estado actual"
@@ -482,11 +449,11 @@ export default function PurchaseDetailScreen() {
                           : "Pendiente"}
                     </Text>
                   </View>
-                  {(isActive || isCompleted) && (
+                  {reached && (
                     <MaterialCommunityIcons
                       name="check-circle"
                       size={18}
-                      color={status.color}
+                      color={colors.primary}
                     />
                   )}
                 </View>
@@ -501,19 +468,19 @@ export default function PurchaseDetailScreen() {
         <Surface
           style={[
             styles.card,
-            { flexDirection: "row", alignItems: "center", gap: 12 },
+            { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surface },
           ]}
           elevation={1}
         >
-          <MaterialCommunityIcons name="close-circle" size={32} color="#B9412C" />
+          <MaterialCommunityIcons name="close-circle" size={32} color={statusColor} />
           <View>
             <Text
               variant="titleMedium"
-              style={{ fontWeight: "700", color: "#B9412C" }}
+              style={{ fontWeight: "700", color: statusColor }}
             >
-              Compra Cancelada
+              Compra cancelada
             </Text>
-            <Text variant="bodySmall" style={{ color: "#A39F92" }}>
+            <Text variant="bodySmall" style={{ color: colors.textMuted }}>
               Esta compra fue cancelada
             </Text>
           </View>
@@ -821,15 +788,15 @@ const styles = StyleSheet.create({
   center:  { flex: 1, justifyContent: "center", alignItems: "center" },
   card:    { backgroundColor: "white", borderRadius: 18, padding: 20 },
 
-  // Header
-  headerTop:      { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  purchaseLabel:  { color: "rgba(255,255,255,0.75)", letterSpacing: 2, fontSize: 11 },
-  purchaseNumber: { color: "white", fontWeight: "bold", marginBottom: 10 },
-  headerMeta:     { color: "rgba(255,255,255,0.85)", fontSize: 13 },
-  statusBadge:    { alignItems: "center", gap: 4, paddingLeft: 12 },
-  statusText:     { color: "rgba(255,255,255,0.9)", fontWeight: "700", textAlign: "center" },
+  // Encabezado: superficie lisa; el estado va en el badge (colores en línea, del tema).
+  header:         { borderRadius: 12, borderWidth: 1, padding: 16, gap: 6 },
+  headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 2 },
+  headerTitle:    { fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
+  headerMeta:     { fontSize: 13, flexShrink: 1 },
+  headerDivider:  { height: 1, marginVertical: 8 },
   totalRow:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  totalValue:     { color: "white", fontWeight: "bold" },
+  totalLabel:     { fontSize: 14, fontWeight: "500" },
+  totalValue:     { fontSize: 22, fontWeight: "700", fontVariant: ["tabular-nums"] },
 
   // Common
   row:           { flexDirection: "row", alignItems: "center", gap: 8 },

@@ -1,3 +1,4 @@
+import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PermissionGate from "@/components/App/PermissionGate";
@@ -83,30 +84,7 @@ const FORMULAS_COLUMNS: AppListColumn<any>[] = [
     key: "is_active",
     width: 130,
     align: "center",
-    render: (value: any) => {
-      const isActive = !!value;
-      return (
-        <View
-          style={{
-            backgroundColor: isActive ? palette.success + "22" : palette.surface,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-            borderRadius: 999,
-            alignSelf: "center",
-          }}
-        >
-          <Text
-            style={{
-              color: isActive ? palette.success : palette.textSecondary,
-              fontSize: 11,
-              fontWeight: "700",
-            }}
-          >
-            {isActive ? "Activa" : "Inactiva"}
-          </Text>
-        </View>
-      );
-    },
+    render: (value: any) => <ActiveBadge active={!!value} feminine />,
   },
   {
     title: "Descripción",
@@ -181,26 +159,7 @@ export default function FormulasIndex() {
               <MaterialCommunityIcons name="flask" size={26} color={palette.accent} />
             </View>
           ),
-          right: (
-            <View
-              style={{
-                backgroundColor: item.is_active ? palette.success + "22" : palette.surface,
-                paddingHorizontal: 8,
-                paddingVertical: 4,
-                borderRadius: 999,
-              }}
-            >
-              <Text
-                style={{
-                  color: item.is_active ? palette.success : palette.textSecondary,
-                  fontSize: 11,
-                  fontWeight: "600",
-                }}
-              >
-                {item.is_active ? "Activa" : "Inactiva"}
-              </Text>
-            </View>
-          ),
+          right: <ActiveBadge active={!!item.is_active} feminine />,
         })}
         onItemPress={(item: any) =>
           router.push(`/(tabs)/home/production/formulas/form?id=${item.id}` as any)

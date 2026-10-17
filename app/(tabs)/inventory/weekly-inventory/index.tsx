@@ -1,10 +1,12 @@
 import AppList, { FilterConfig } from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import StatusBadge from "@/components/App/StatusBadge";
 import AppModal, { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import palette from "@/constants/palette";
+import { inventoryCountStatus } from "@/constants/statuses";
 import { AlertsDialogs, AlertsProvider } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
@@ -18,20 +20,6 @@ import { ProgressChart } from "react-native-chart-kit";
 import { Text } from "react-native-paper";
 import * as Yup from "yup";
 import { toLocalDateString, formatDate } from "@/utils/dates";
-
-const statusLabels: Record<string, string> = {
-  planning: "Planificación",
-  counting: "Contando",
-  completed: "Completado",
-  cancelled: "Cancelado",
-};
-
-const statusColors: Record<string, string> = {
-  planning: palette.textSecondary,
-  counting: palette.warning,
-  completed: palette.success,
-  cancelled: palette.textMuted,
-};
 
 const inventoryColumns: AppListColumn<App.Entities.InventoryCount.InventoryCount>[] = [
   {
@@ -52,21 +40,7 @@ const inventoryColumns: AppListColumn<App.Entities.InventoryCount.InventoryCount
     dataIndex: "status",
     key: "status",
     width: 130,
-    render: (value) => (
-      <View
-        style={{
-          backgroundColor: statusColors[value] || palette.textSecondary,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 12,
-          alignSelf: "flex-start",
-        }}
-      >
-        <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "bold", fontSize: 10 }}>
-          {statusLabels[value] || value}
-        </Text>
-      </View>
-    ),
+    render: (value) => <StatusBadge {...inventoryCountStatus(value)} />,
   },
   {
     title: "Usuario",
@@ -197,22 +171,7 @@ export default function InventoryIndex() {
                   marginBottom: 4,
                 }}
               >
-                <View
-                  style={{
-                    backgroundColor:
-                      statusColors[item.status] || palette.textSecondary,
-                    paddingHorizontal: 8,
-                    paddingVertical: 4,
-                    borderRadius: 12,
-                  }}
-                >
-                  <Text
-                    variant="labelSmall"
-                    style={{ color: "#fff", fontWeight: "bold", fontSize: 8 }}
-                  >
-                    {statusLabels[item.status] || item.status}
-                  </Text>
-                </View>
+                <StatusBadge {...inventoryCountStatus(item.status)} />
               </View>
             ),
             left: (

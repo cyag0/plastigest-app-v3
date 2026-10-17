@@ -3,10 +3,11 @@ import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
+import { formatPhone } from "@/utils/phone";
 import { useRouter } from "expo-router";
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Chip, Text } from "react-native-paper";
+import { View } from "react-native";
+import { Text } from "react-native-paper";
 
 export default function ClientsIndex() {
   const router = useRouter();
@@ -21,7 +22,7 @@ export default function ClientsIndex() {
     },
     { title: "RFC", dataIndex: "rfc", key: "rfc", width: 140 },
     { title: "Email", dataIndex: "email", key: "email", width: 200 },
-    { title: "Teléfono", dataIndex: "phone", key: "phone", width: 140 },
+    { title: "Teléfono", dataIndex: "phone", key: "phone", width: 140, render: (value) => formatPhone(value) },
     {
       title: "Estado",
       key: "is_active",
@@ -65,29 +66,7 @@ export default function ClientsIndex() {
                 }}
               >
                 <AppList.Title>{item.name}</AppList.Title>
-                <Chip
-                  mode="flat"
-                  style={[
-                    styles.statusChip,
-                    {
-                      backgroundColor: item.is_active
-                        ? "transparent" as any
-                        : palette.surfaceMuted,
-                      borderColor: item.is_active
-                        ? palette.primary
-                        : palette.borderStrong,
-                    },
-                  ]}
-                  textStyle={[
-                    styles.statusText,
-                    {
-                      color: item.is_active ? "#3F8A3A" : palette.textMuted,
-                    },
-                  ]}
-                  compact
-                >
-                  {item.is_active ? "ACTIVO" : "INACTIVO"}
-                </Chip>
+                <ActiveBadge active={!!item.is_active} />
               </View>
             ),
             description: (
@@ -112,17 +91,12 @@ export default function ClientsIndex() {
                 )}
               </>
             ),
-            subtitle: item.email ? `📧 ${item.email}` : undefined,
-            bottomContent: (
-              <View style={styles.bottomContent}>
-                {item.phone && (
-                  <Text style={styles.contactText}>📞 {item.phone}</Text>
-                )}
-                {item.company_name && (
-                  <Text style={styles.companyText}>🏢 {item.company_name}</Text>
-                )}
-              </View>
-            ),
+            // Teléfono y correo en la línea de datos (antes iban en
+            // subtitle/bottomContent, que la lista no dibuja).
+            bottom: [
+              ...(item.phone ? [{ label: "Tel", value: formatPhone(item.phone) }] : []),
+              ...(item.email ? [{ label: "", value: item.email }] : []),
+            ],
           };
         }}
         onItemPress={(entity: any) => {
@@ -142,32 +116,3 @@ export default function ClientsIndex() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  statusChip: {
-    borderWidth: 1,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  bottomContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#F0EDE4",
-  },
-  contactText: {
-    fontSize: 12,
-    color: "#66635A",
-    flex: 1,
-  },
-  companyText: {
-    fontSize: 12,
-    color: "#66635A",
-    flex: 1,
-    textAlign: "right",
-  },
-});

@@ -82,10 +82,11 @@ const VARIANT_COLORS: Record<
 > = {
   default: { bg: palette.surfaceMuted, fg: palette.text },
   primary: { bg: palette.primarySoft, fg: palette.primary },
-  success: { bg: palette.successSoft, fg: palette.success },
-  warning: { bg: palette.warningSoft, fg: palette.warning },
-  error: { bg: palette.errorSoft, fg: palette.error },
-  info: { bg: palette.infoSoft, fg: palette.info },
+  // Texto *Strong: los colores de estado sobre su fondo suave no contrastan.
+  success: { bg: palette.successSoft, fg: palette.successStrong },
+  warning: { bg: palette.warningSoft, fg: palette.warningStrong },
+  error: { bg: palette.errorSoft, fg: palette.errorStrong },
+  info: { bg: palette.infoSoft, fg: palette.infoStrong },
 };
 
 const SIZE = {

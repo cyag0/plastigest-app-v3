@@ -1,6 +1,6 @@
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
-import AppChip from "@/components/App/Chip";
+import StatusBadge, { type StatusBadgeProps } from "@/components/App/StatusBadge";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import Services from "@/utils/services";
@@ -14,26 +14,20 @@ import { Avatar } from "react-native-paper";
  * Corto en la tarjeta (en celular el chip sólido con el nombre del cajero
  * dejaba al nombre de la caja una letra por renglón); en la tabla, con quién.
  */
-function StatusChip({ item, withCashier = false }: { item: App.Entities.CashRegister; withCashier?: boolean }) {
-  if (!item.is_active) {
-    return (
-      <AppChip size="sm" variant="default">
-        Inactiva
-      </AppChip>
-    );
-  }
+function registerStatus(item: App.Entities.CashRegister, withCashier: boolean): StatusBadgeProps {
+  if (!item.is_active) return { label: "Inactiva", tone: "neutral" };
   if (item.open_session) {
-    return (
-      <AppChip size="sm" variant="warning" icon="account-clock">
-        {withCashier ? `Turno: ${item.open_session.user_name ?? "abierto"}` : "En turno"}
-      </AppChip>
-    );
+    return {
+      label: withCashier ? `Turno: ${item.open_session.user_name ?? "abierto"}` : "En turno",
+      tone: "info",
+      icon: "account-clock",
+    };
   }
-  return (
-    <AppChip size="sm" variant="success">
-      Libre
-    </AppChip>
-  );
+  return { label: "Libre", tone: "success" };
+}
+
+function RegisterStatus({ item, withCashier = false }: { item: App.Entities.CashRegister; withCashier?: boolean }) {
+  return <StatusBadge {...registerStatus(item, withCashier)} />;
 }
 
 const BASE = "/(tabs)/administration/cash-registers";
@@ -57,7 +51,7 @@ export default function CashRegistersIndexScreen() {
       key: "status",
       width: 180,
       align: "center",
-      render: (_, item) => <StatusChip item={item} withCashier />,
+      render: (_, item) => <RegisterStatus item={item} withCashier />,
     },
   ];
 
@@ -74,7 +68,7 @@ export default function CashRegistersIndexScreen() {
         title: item.name,
         description: branchScope ? item.code : `${item.code} · ${item.location_name ?? ""}`,
         left: <Avatar.Icon size={40} icon="cash-register" style={styles.avatar} />,
-        right: <StatusChip item={item} />,
+        right: <RegisterStatus item={item} />,
         bottom: item.open_session
           ? [{ label: "Turno de", value: item.open_session.user_name ?? "alguien" }]
           : [],

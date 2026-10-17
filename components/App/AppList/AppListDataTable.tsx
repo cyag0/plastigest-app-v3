@@ -1,12 +1,21 @@
-import palette from "@/constants/palette";
+import type { Palette } from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import * as React from "react";
-import { LayoutChangeEvent, ScrollView, StyleSheet, View } from "react-native";
-import { Text } from "react-native-paper";
+import {
+  LayoutChangeEvent,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 export type AppListColumn<T> = {
   title: React.ReactNode;
   dataIndex?: keyof T | string;
   key?: string;
+  /** Ancho base: las columnas se reparten el ancho disponible en proporción. */
   width?: number;
   align?: "left" | "center" | "right";
   render?: (value: any, record: T, index: number) => React.ReactNode;
@@ -15,23 +24,24 @@ export type AppListColumn<T> = {
 interface AppListDataTableProps<T extends { id: number | string }> {
   data: T[];
   columns: AppListColumn<T>[];
-  actionColumnTitle?: React.ReactNode;
-  actionColumnWidth?: number;
+  /** El menú ⋮ de la fila (ver, editar, eliminar…). */
   renderActionsCell: (item: T, index: number) => React.ReactNode;
   onRowPress?: (item: T) => void;
 }
 
 const DEFAULT_COLUMN_WIDTH = 180;
-const DEFAULT_ACTION_COLUMN_WIDTH = 220;
+/** Solo cabe el botón ⋮: las acciones van en su menú, como en las tarjetas. */
+const ACTIONS_WIDTH = 52;
+/**
+ * Cuánto se puede encoger una columna antes de desplazar la tabla a los
+ * lados (el texto se recorta con "…").
+ */
+const MIN_SCALE = 0.8;
 
 function getValueByPath<T>(record: T, dataIndex?: keyof T | string) {
   if (!dataIndex) return undefined;
 
-  if (typeof dataIndex !== "string") {
-    return (record as any)[dataIndex];
-  }
-
-  if (!dataIndex.includes(".")) {
+  if (typeof dataIndex !== "string" || !dataIndex.includes(".")) {
     return (record as any)[dataIndex];
   }
 
@@ -40,76 +50,82 @@ function getValueByPath<T>(record: T, dataIndex?: keyof T | string) {
     .reduce<any>((acc, key) => (acc == null ? acc : acc[key]), record as any);
 }
 
-function renderCellValue(value: any) {
-  if (React.isValidElement(value)) {
-    return value;
-  }
-
-  if (value === null || value === undefined || value === "") {
-    return <Text style={styles.cellText}>-</Text>;
-  }
-
-  return (
-    <Text numberOfLines={1} ellipsizeMode="tail" style={styles.cellText}>
-      {String(value)}
-    </Text>
-  );
-}
-
 function getCellAlignment(align: AppListColumn<any>["align"]) {
   if (align === "right") return "flex-end";
   if (align === "center") return "center";
   return "flex-start";
 }
 
+/**
+ * Tabla de AppList (web en pantalla ancha). Filas blancas con divisores,
+ * encabezado discreto, fila resaltada al pasar el mouse y un solo menú ⋮ por
+ * fila. Las columnas llenan el ancho; si no caben, se encogen un poco y luego
+ * la tabla se desplaza a los lados.
+ */
 export default function AppListDataTable<T extends { id: number | string }>({
   data,
   columns,
-  actionColumnTitle = "Acciones",
-  actionColumnWidth = DEFAULT_ACTION_COLUMN_WIDTH,
   renderActionsCell,
   onRowPress,
 }: AppListDataTableProps<T>) {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const [containerWidth, setContainerWidth] = React.useState(0);
 
   const handleLayout = (event: LayoutChangeEvent) => {
     setContainerWidth(event.nativeEvent.layout.width);
   };
 
-  const totalColumnsWidth = columns.reduce(
-    (acc, column) => acc + (column.width || DEFAULT_COLUMN_WIDTH),
-    0,
-  );
-  const totalWidth = totalColumnsWidth + actionColumnWidth;
+  const baseWidth = (col: AppListColumn<any>) => col.width || DEFAULT_COLUMN_WIDTH;
+  const totalBase = columns.reduce((acc, col) => acc + baseWidth(col), 0);
+  // El borde de la tabla (1 px por lado) no cuenta como espacio útil.
+  const available = containerWidth - 2 - ACTIONS_WIDTH;
+  const scale = containerWidth > 0 ? Math.max(MIN_SCALE, available / totalBase) : 1;
+  const colWidth = (col: AppListColumn<any>) => Math.floor(baseWidth(col) * scale);
+  const rowWidth = columns.reduce((acc, col) => acc + colWidth(col), 0) + ACTIONS_WIDTH;
 
-  // Cuando el contenido cabe en pantalla, escalar columnas para llenar el ancho.
-  const scaleFactor =
-    containerWidth > 0 && totalWidth < containerWidth
-      ? containerWidth / totalWidth
-      : 1;
+  const renderCell = (column: AppListColumn<T>, item: T, rowIndex: number) => {
+    const value = getValueByPath(item, column.dataIndex);
+    const rendered = column.render ? column.render(value, item, rowIndex) : value;
 
-  const colWidth = (col: AppListColumn<any>) =>
-    Math.floor((col.width || DEFAULT_COLUMN_WIDTH) * scaleFactor);
-  const actWidth = Math.floor(actionColumnWidth * scaleFactor);
-  const effectiveColumnsWidth = columns.reduce((acc, col) => acc + colWidth(col), 0);
-  const effectiveTotal = effectiveColumnsWidth + actWidth;
+    // En fila: así el badge (que fija su propio alignSelf) respeta la
+    // alineación de la columna.
+    if (React.isValidElement(rendered)) {
+      return (
+        <View style={[styles.cellRow, { justifyContent: getCellAlignment(column.align) }]}>
+          {rendered}
+        </View>
+      );
+    }
+
+    const empty = rendered === null || rendered === undefined || rendered === "";
+    return (
+      <Text
+        numberOfLines={1}
+        ellipsizeMode="tail"
+        style={[
+          styles.cellText,
+          empty && styles.cellEmpty,
+          // Montos y cantidades alineados por dígito.
+          column.align === "right" && styles.numeric,
+        ]}
+      >
+        {empty ? "—" : String(rendered)}
+      </Text>
+    );
+  };
 
   return (
     <View style={styles.wrapper} onLayout={handleLayout}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator
-        contentContainerStyle={[styles.tableLayout, { minWidth: totalWidth, width: effectiveTotal || totalWidth }]}
-      >
-        {/* Tabla principal (columnas) */}
-        <View style={styles.mainTable}>
-          <View style={[styles.headerRow, { width: effectiveColumnsWidth }]}>
+      <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={{ width: rowWidth }}>
+        <View style={{ width: rowWidth }}>
+          <View style={styles.headerRow}>
             {columns.map((column, columnIndex) => (
               <View
                 key={column.key || String(column.dataIndex || columnIndex)}
                 style={[
-                  styles.headerCell,
-                  { width: colWidth(column) },
+                  styles.cell,
+                  { width: colWidth(column), alignItems: getCellAlignment(column.align) },
                 ]}
               >
                 <Text numberOfLines={1} style={styles.headerText}>
@@ -117,77 +133,36 @@ export default function AppListDataTable<T extends { id: number | string }>({
                 </Text>
               </View>
             ))}
+            <View style={{ width: ACTIONS_WIDTH }} />
           </View>
 
           {data.map((item, rowIndex) => (
-            <View
+            <Pressable
               key={String(item.id)}
-              style={[
+              onPress={onRowPress ? () => onRowPress(item) : undefined}
+              disabled={!onRowPress}
+              style={(state) => [
                 styles.dataRow,
-                { width: effectiveColumnsWidth },
-                onRowPress ? styles.rowPressable : null,
+                onRowPress && styles.rowPressable,
+                rowIndex === data.length - 1 && styles.lastRow,
+                // `hovered` solo existe en web (react-native-web).
+                (state as { hovered?: boolean }).hovered && onRowPress && styles.rowHovered,
+                state.pressed && onRowPress && styles.rowHovered,
               ]}
-              onTouchEnd={onRowPress ? () => onRowPress(item) : undefined}
             >
-              {columns.map((column, columnIndex) => {
-                const value = getValueByPath(item, column.dataIndex);
-                const rendered = column.render
-                  ? column.render(value, item, rowIndex)
-                  : value;
-
-                return (
-                  <View
-                    key={
-                      (column.key ||
-                        String(column.dataIndex || columnIndex)) +
-                      "-" +
-                      String(item.id)
-                    }
-                    style={[
-                      styles.dataCell,
-                      { width: colWidth(column) },
-                      { alignItems: getCellAlignment(column.align) as any },
-                    ]}
-                  >
-                    {renderCellValue(rendered)}
-                  </View>
-                );
-              })}
-            </View>
-          ))}
-        </View>
-
-        {/* Columna de Acciones (siempre visible, alineada con las filas) */}
-        <View
-          style={[styles.actionsColumn, { width: actWidth }]}
-        >
-          <View
-            style={[
-              styles.headerRow,
-              styles.actionsHeader,
-              { width: actWidth },
-            ]}
-          >
-            <View style={[styles.headerCell, { width: actWidth }]}>
-              <Text numberOfLines={1} style={styles.headerText}>
-                {actionColumnTitle}
-              </Text>
-            </View>
-          </View>
-
-          {data.map((item, rowIndex) => (
-            <View
-              key={`actions-${item.id}`}
-              style={[styles.dataRow, { width: actWidth }]}
-            >
-              <View
-                style={[styles.dataCell, { width: actWidth }]}
-              >
-                <View style={styles.actionsCell}>
-                  {renderActionsCell(item, rowIndex)}
+              {columns.map((column, columnIndex) => (
+                <View
+                  key={(column.key || String(column.dataIndex || columnIndex)) + "-" + String(item.id)}
+                  style={[
+                    styles.cell,
+                    { width: colWidth(column), alignItems: getCellAlignment(column.align) },
+                  ]}
+                >
+                  {renderCell(column, item, rowIndex)}
                 </View>
-              </View>
-            </View>
+              ))}
+              <View style={styles.actionsCell}>{renderActionsCell(item, rowIndex)}</View>
+            </Pressable>
           ))}
         </View>
       </ScrollView>
@@ -195,78 +170,67 @@ export default function AppListDataTable<T extends { id: number | string }>({
   );
 }
 
-const styles = StyleSheet.create({
-  wrapper: {
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: palette.background,
-  },
-  tableLayout: {
-    flexDirection: "row",
-    alignItems: "stretch",
-  },
-  mainTable: {
-    flexDirection: "column",
-  },
-  mainTableScrollContent: {
-    minWidth: "100%",
-  },
-  actionsColumn: {
-    borderLeftWidth: 1,
-    borderLeftColor: palette.border,
-    backgroundColor: palette.background,
-    flexDirection: "column",
-  },
-  actionsHeader: {
-    borderLeftWidth: 0,
-  },
-  headerRow: {
-    flexDirection: "row",
-    backgroundColor: palette.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.border,
-    height: 48,
-    alignItems: "center",
-  },
-  headerCell: {
-    paddingHorizontal: 12,
-    justifyContent: "center",
-  },
-  headerText: {
-    color: palette.textSecondary,
-    fontWeight: "700",
-    fontSize: 13,
-  },
-  dataRow: {
-    flexDirection: "row",
-    minHeight: 56,
-    height: 56,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.border,
-    backgroundColor: palette.background,
-  },
-  rowPressable: {
-    // placeholder para que quede explícito que se puede presionar
-  },
-  dataCell: {
-    paddingHorizontal: 12,
-    justifyContent: "center",
-  },
-  cellContainer: {
-    width: "100%",
-    justifyContent: "center",
-  },
-  cellText: {
-    color: palette.textSecondary,
-    fontSize: 13,
-  },
-  actionsCell: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-start",
-    gap: 2,
-  },
-});
+const makeStyles = (c: Palette) =>
+  StyleSheet.create({
+    wrapper: {
+      borderWidth: 1,
+      borderColor: c.border,
+      borderRadius: 12,
+      overflow: "hidden",
+      backgroundColor: c.surface,
+    },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      height: 40,
+      backgroundColor: c.surfaceMuted,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    headerText: {
+      color: c.textSecondary,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    dataRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      minHeight: 52,
+      backgroundColor: c.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    rowPressable: Platform.OS === "web" ? ({ cursor: "pointer" } as object) : {},
+    lastRow: {
+      borderBottomWidth: 0,
+    },
+    rowHovered: {
+      backgroundColor: c.surfaceMuted,
+    },
+    cell: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      justifyContent: "center",
+    },
+    cellRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      alignSelf: "stretch",
+    },
+    cellText: {
+      color: c.text,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    cellEmpty: {
+      color: c.textMuted,
+    },
+    numeric: {
+      fontVariant: ["tabular-nums"],
+    },
+    actionsCell: {
+      width: ACTIONS_WIDTH,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+  });

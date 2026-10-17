@@ -2,9 +2,10 @@ import { formatDate } from "@/utils/dates";
 import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
 import AppList from "@/components/App/AppList/AppList";
 import type { AppListColumn } from "@/components/App/AppList/AppListDataTable";
-import type { VariantMatchMap } from "@/components/App/StatusBadge";
+import IconLabel from "@/components/App/IconLabel";
 import StatusBadge from "@/components/App/StatusBadge";
 import palette from "@/constants/palette";
+import { transferStatus } from "@/constants/statuses";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
@@ -13,27 +14,18 @@ import transferService from "@/utils/services/transferService";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { View } from "react-native";
-import { Badge, IconButton, Text } from "react-native-paper";
+import { Text } from "react-native-paper";
 
 /**
- * Quién pidió, visto desde la sucursal actual: "YO SOLICITE" si la mercancía
- * llega aquí (la sucursal actual es el destino), "ME SOLICITARON" si sale de
- * aquí.
+ * Quién pidió, visto desde la sucursal actual: "Yo solicité" si la mercancía
+ * llega aquí (la sucursal actual es el destino), "Me solicitaron" si sale de
+ * aquí. Es un atributo, no un estado.
  */
-function DirectionBadge({ isSent }: { isSent: boolean }) {
-  return (
-    <View
-      style={[
-        styles.directionBadge,
-        {
-          backgroundColor: isSent ? palette.blue : palette.error,
-        },
-      ]}
-    >
-      <Text style={styles.directionBadgeText}>
-        {isSent ? "YO SOLICITE" : "ME SOLICITARON"}
-      </Text>
-    </View>
+function Direction({ incoming }: { incoming: boolean }) {
+  return incoming ? (
+    <IconLabel icon="arrow-down-bold-circle-outline" label="Yo solicité" />
+  ) : (
+    <IconLabel icon="arrow-up-bold-circle-outline" label="Me solicitaron" />
   );
 }
 
@@ -92,65 +84,23 @@ export default function PendingTransfersScreen() {
     }
   };
 
-  
-
-  const getStatusInfo = (status: string) => {
-    const statusMap: Record<
-      string,
-      { icon: string; color: string; label: string }
-    > = {
-      pending: {
-        icon: "clock-outline",
-        color: palette.warning,
-        label: "Pendiente",
-      },
-      approved: {
-        icon: "check-circle-outline",
-        color: palette.info,
-        label: "Aprobada",
-      },
-      in_transit: {
-        icon: "truck-delivery-outline",
-        color: palette.primary,
-        label: "En Tránsito",
-      },
-    };
-
-    return (
-      statusMap[status] || {
-        icon: "help-circle-outline",
-        color: palette.textSecondary,
-        label: status,
-      }
-    );
-  };
-
-  const statusVariantMatch: VariantMatchMap = {
-    success: ["approved"],
-    warning: "pending",
-    info: "in_transit",
-  };
-
   const columns: AppListColumn<InventoryTransfer>[] = [
     {
       title: "Folio",
       key: "transfer_number",
-      width: 160,
+      width: 210,
       render: (_, item) => item.transfer_number || `#${item.id}`,
     },
     {
       title: "Dirección",
       key: "direction",
-      width: 200,
-      render: (_, item) => {
-        const isSent = item.to_location_id === location.id;
-        return <DirectionBadge isSent={isSent} />;
-      },
+      width: 150,
+      render: (_, item) => <Direction incoming={item.to_location_id === location.id} />,
     },
     {
       title: "Ubicación",
       key: "location_name",
-      width: 250,
+      width: 220,
       render: (_, item) =>
         item.from_location_id === location.id
           ? item.to_location?.name || "N/A"
@@ -159,41 +109,32 @@ export default function PendingTransfersScreen() {
     {
       title: "Solicitante",
       key: "requester_name",
-      width: 200,
+      width: 170,
       render: (_, item) => item.requested_by_user?.name || "N/A",
     },
     {
       title: "Estado",
       key: "status",
-      width: 170,
-      render: (_, item) => {
-        const statusInfo = getStatusInfo(item.status);
-        return (
-          <StatusBadge
-            value={item.status}
-            label={statusInfo.label}
-            match={statusVariantMatch as any}
-          />
-        );
-      },
+      width: 130,
+      render: (_, item) => <StatusBadge {...transferStatus(item.status)} />,
     },
     {
       title: "Fecha",
       key: "requested_at",
-      width: 140,
+      width: 120,
       render: (_, item) => formatDate(item.requested_at || ""),
     },
     {
       title: "Productos",
       key: "products_count",
-      width: 120,
+      width: 100,
       align: "center",
       render: (_, item) => item.details?.length || 0,
     },
     {
       title: "Total",
       key: "total_cost",
-      width: 140,
+      width: 120,
       align: "right",
       render: (_, item) =>
         item.total_cost ? `$${(item.total_cost as number).toFixed(2)}` : "-",
@@ -241,62 +182,23 @@ export default function PendingTransfersScreen() {
         columns={columns}
         actionColumnWidth={200}
         renderCard={({ item }) => {
-          const statusInfo = getStatusInfo(item.status);
           const isSent = item.from_location_id === location.id;
           const isReceived = item.to_location_id === location.id;
 
           return {
             title: `${item.transfer_number || `#${item.id}`}`,
-            subtitle: isSent
+            // Antes en subtitle, que la lista no dibuja.
+            description: isSent
               ? `Destino: ${item.to_location?.name || "N/A"}`
               : `Desde: ${item.from_location?.name || "N/A"}`,
-            left: (
-              <View style={styles.statusIconContainer}>
-                <IconButton
-                  icon={statusInfo.icon}
-                  size={24}
-                  iconColor={statusInfo.color}
-                  style={{ margin: 0 }}
-                />
-                {isSent && (
-                  <Badge
-                    size={16}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      right: 0,
-                      backgroundColor: palette.primary,
-                    }}
-                  >
-                    ↑
-                  </Badge>
-                )}
-                {isReceived && (
-                  <Badge
-                    size={16}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      right: 0,
-                      backgroundColor: palette.success,
-                    }}
-                  >
-                    ↓
-                  </Badge>
-                )}
-              </View>
-            ),
+            // Sin ícono a la izquierda: estado y dirección ya van a la derecha.
             right: (
               <View style={styles.rightContent}>
                 {/* Igual que la columna "Dirección": por sucursal, no por
-                    usuario (antes decía "ME SOLICITARON" si la pidió un
+                    usuario (antes decía "Me solicitaron" si la pidió un
                     compañero de la misma sucursal). */}
-                <DirectionBadge isSent={isReceived} />
-                <StatusBadge
-                  value={item.status}
-                  label={statusInfo.label}
-                  match={statusVariantMatch as any}
-                />
+                <Direction incoming={isReceived} />
+                <StatusBadge {...transferStatus(item.status)} />
                 <Text style={styles.dateText}>
                   {formatDate(item.requested_at || "")}
                 </Text>
@@ -351,15 +253,6 @@ export default function PendingTransfersScreen() {
 }
 
 const styles = {
-  statusIconContainer: {
-    justifyContent: "center" as const,
-    alignItems: "center" as const,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: palette.surface,
-    shadowColor: "transparent",
-  },
   rightContent: {
     alignItems: "flex-end" as const,
     gap: 4,
@@ -368,17 +261,5 @@ const styles = {
     fontSize: 12,
     color: palette.textSecondary,
     fontWeight: "500" as const,
-  },
-  directionBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    alignSelf: "flex-start" as const,
-  },
-  directionBadgeText: {
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "700" as const,
-    letterSpacing: 0.2,
   },
 };

@@ -195,7 +195,7 @@ export default function ProductionDetail() {
                 })}
               </Text>
             </View>
-            <ProductionStatusBadge status={order.status} size="medium" />
+            <ProductionStatusBadge status={order.status} />
           </View>
 
           <Divider style={{ marginVertical: 12, backgroundColor: palette.border }} />

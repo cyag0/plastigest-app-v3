@@ -58,6 +58,12 @@ const lightPalette = {
   errorSoft: "#F8E2DC",
   info: "#2F6F7E",
   infoSoft: "#DFEDF0",
+  // Texto sobre el fondo *Soft (badges de estado): los de arriba no llegan a
+  // 4.5:1 de contraste en letra chica (el ocre queda en 2.9:1).
+  successStrong: "#2F6B2B",
+  warningStrong: "#8A5A0C",
+  errorStrong: "#96331F",
+  infoStrong: "#265E6B",
 
   // --- Gráficas (de la misma familia) ---
   chart1: "#4F7A3A",
@@ -124,6 +130,11 @@ const darkPalette = {
   errorSoft: "rgba(224, 122, 98, 0.16)",
   info: "#7FB4C2",
   infoSoft: "rgba(127, 180, 194, 0.16)",
+  // En oscuro los colores de estado ya contrastan sobre su fondo suave.
+  successStrong: "#8FC56E",
+  warningStrong: "#E3A646",
+  errorStrong: "#E07A62",
+  infoStrong: "#7FB4C2",
 
   // --- Gráficas ---
   chart1: "#9CC47F",

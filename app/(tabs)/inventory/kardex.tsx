@@ -1,6 +1,7 @@
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { FilterConfig } from "@/components/App/AppList/AppListFilter";
+import IconLabel from "@/components/App/IconLabel";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -12,7 +13,7 @@ import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
-import { Button, Icon, Text } from "react-native-paper";
+import { Button, Text } from "react-native-paper";
 
 type Movement = App.Entities.StockMovement;
 
@@ -110,13 +111,10 @@ export default function KardexScreen() {
     );
   };
 
+  // El motivo es un atributo: ícono y texto sin color (la entrada o salida ya
+  // se ve en la cantidad). El backend manda el nombre del ícono (MDI).
   const reasonCell = (item: Movement) => (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-      <Icon source={item.reason_icon} size={16} color={item.direction === "in" ? colors.success : colors.error} />
-      <Text variant="bodySmall" style={{ color: colors.text }}>
-        {item.reason_label}
-      </Text>
-    </View>
+    <IconLabel icon={item.reason_icon as any} label={item.reason_label} />
   );
 
   const columns = useMemo<AppListColumn<Movement>[]>(

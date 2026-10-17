@@ -1,4 +1,5 @@
 import { formatDate } from "@/utils/dates";
+import StatusBadge, { toneColors } from "@/components/App/StatusBadge";
 import AmountPreview from "@/components/Pos/AmountPreview";
 import OpenShiftModal from "@/components/Pos/OpenShiftModal";
 import { createFollowUpTask } from "@/components/Tasks/taskQueries";
@@ -9,7 +10,9 @@ import {
   SALE_ERROR_CODES,
 } from "@/components/Pos/saleErrors";
 import palette from "@/constants/palette";
+import { paymentStatus, saleStatus, salesOrderStatus } from "@/constants/statuses";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
@@ -34,12 +37,12 @@ import {
   Text,
 } from "react-native-paper";
 
-const STATUS_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
-  pending:    { color: "#6E6B5E", icon: "clock-outline",         label: "Pendiente" },
-  preparing:  { color: "#C47F12", icon: "progress-clock",        label: "Preparando" },
-  in_transit: { color: "#2F6F7E", icon: "truck-delivery",        label: "En tránsito" },
-  delivered:  { color: "#3F8A3A", icon: "check-circle-outline",  label: "Entregado" },
-  cancelled:  { color: "#B9412C", icon: "close-circle-outline",  label: "Cancelado" },
+/** Ícono de cada paso del progreso (etiqueta y tono: salesOrderStatus). */
+const STEP_ICONS: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = {
+  pending:    "clock-outline",
+  preparing:  "progress-clock",
+  in_transit: "truck-delivery",
+  delivered:  "check-circle-outline",
 };
 
 const FLOW_DELIVERY = ["pending", "preparing", "in_transit", "delivered"] as const;
@@ -77,6 +80,7 @@ export default function SalesOrderDetail() {
   const params = useLocalSearchParams();
   const id = params.id as string;
   const alerts = useAlerts();
+  const { colors } = useTheme();
   const { hasPermission } = useAuth();
   const { can, canAccessRoute } = useCan();
   // Preparar, enviar, entregar, cobrar y cancelar piden sales_orders_update.
@@ -301,10 +305,13 @@ export default function SalesOrderDetail() {
 
   const hasAnyAction = canPrepare || canShip || canDeliver || canCancel || canCheckout;
 
-  const statusCfg   = STATUS_CONFIG[status] ?? { color: palette.primary, icon: "help-circle", label: status };
-  const statusColor = statusCfg.color;
-  const statusIcon  = statusCfg.icon;
-  const statusLabel = order.status_label || statusCfg.label;
+  const statusInfo  = salesOrderStatus(status);
+  // Color del estado para lo que no es badge (el aviso de cancelado).
+  const statusColor = toneColors(colors, statusInfo.tone).fg;
+  // Cobro: el pedido queda cobrado cuando ya tiene su venta.
+  const chargeStatus = order.sale_id
+    ? { ...paymentStatus("paid"), label: "Cobrado" }
+    : { ...paymentStatus("pending"), label: "Pendiente de pago" };
   // "Pedido del kiosko 7": el número que el cliente dijo en caja.
   const kioskTicket =
     order.channel === "kiosk" && order.ticket_number != null ? kioskOrderLabel(order.ticket_number) : null;
@@ -319,110 +326,99 @@ export default function SalesOrderDetail() {
         showsVerticalScrollIndicator={false}
       >
 
-        {/* ── Colored header ── */}
-        <Surface style={[styles.card, { backgroundColor: statusColor }]} elevation={4}>
-          <View style={styles.headerTop}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.orderLabel}>PEDIDO</Text>
-              <Text style={styles.orderNumber}>{order.order_number}</Text>
-              <View style={styles.row}>
-                <MaterialCommunityIcons name="account" size={14} color="rgba(255,255,255,0.8)" />
-                <Text style={styles.headerMeta} numberOfLines={1}>
-                  {order.customer_name || order.customer?.name || "Sin cliente"}
-                </Text>
-              </View>
-              <View style={styles.row}>
-                <MaterialCommunityIcons
-                  name={isDelivery ? "truck-delivery" : "storefront-outline"}
-                  size={14}
-                  color="rgba(255,255,255,0.8)"
-                />
-                <Text style={styles.headerMeta}>
-                  {order.service_mode_label ?? serviceMode}
-                  {kioskTicket ? ` · ${kioskTicket}` : order.channel_label ? ` · ${order.channel_label}` : ""}
-                </Text>
-              </View>
-              <View style={styles.row}>
-                <MaterialCommunityIcons name="calendar-outline" size={14} color="rgba(255,255,255,0.8)" />
-                <Text style={styles.headerMeta}>{formatDate(order.order_date)}</Text>
-              </View>
-              {!!order.location && (
-                <View style={styles.row}>
-                  <MaterialCommunityIcons name="map-marker" size={14} color="rgba(255,255,255,0.8)" />
-                  <Text style={styles.headerMeta}>{order.location.name}</Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.statusBadge}>
-              <MaterialCommunityIcons name={statusIcon as any} size={32} color="rgba(255,255,255,0.95)" />
-              <Text style={styles.statusText}>{statusLabel}</Text>
+        {/* ── Encabezado: folio, estado y datos (sin tarjeta de color) ── */}
+        <View style={[styles.header, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.headerTitleRow}>
+            <Text style={[styles.orderNumber, { color: colors.text }]} selectable>{order.order_number}</Text>
+            {/* El View centra el badge con el folio (suelto se alinearía arriba). */}
+            <View>
+              <StatusBadge {...statusInfo} />
             </View>
           </View>
-
-          <Divider style={{ backgroundColor: "rgba(255,255,255,0.3)", marginVertical: 16 }} />
-
-          <View style={styles.totalRow}>
-            <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 13 }}>Total del pedido</Text>
-            <Text style={styles.totalValue}>{fmt(toNum(order.total_amount))}</Text>
-          </View>
-          <View style={[styles.row, { marginTop: 10 }]}>
-            <MaterialCommunityIcons
-              name={order.sale_id ? "check-circle" : "clock-outline"}
-              size={15}
-              color="rgba(255,255,255,0.8)"
-            />
-            <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 13 }}>
-              {order.sale_id ? "Cobrado" : "Pendiente de pago"}
+          <View style={styles.row}>
+            <MaterialCommunityIcons name="account" size={14} color={colors.textMuted} />
+            <Text style={[styles.headerMeta, { color: colors.textSecondary }]} numberOfLines={1}>
+              {order.customer_name || order.customer?.name || "Sin cliente"}
             </Text>
           </View>
+          <View style={styles.row}>
+            <MaterialCommunityIcons
+              name={isDelivery ? "truck-delivery" : "storefront-outline"}
+              size={14}
+              color={colors.textMuted}
+            />
+            <Text style={[styles.headerMeta, { color: colors.textSecondary }]}>
+              {order.service_mode_label ?? serviceMode}
+              {kioskTicket ? ` · ${kioskTicket}` : order.channel_label ? ` · ${order.channel_label}` : ""}
+            </Text>
+          </View>
+          <View style={styles.row}>
+            <MaterialCommunityIcons name="calendar-outline" size={14} color={colors.textMuted} />
+            <Text style={[styles.headerMeta, { color: colors.textSecondary }]}>{formatDate(order.order_date)}</Text>
+          </View>
+          {!!order.location && (
+            <View style={styles.row}>
+              <MaterialCommunityIcons name="map-marker" size={14} color={colors.textMuted} />
+              <Text style={[styles.headerMeta, { color: colors.textSecondary }]}>{order.location.name}</Text>
+            </View>
+          )}
+
+          <View style={[styles.headerDivider, { backgroundColor: colors.border }]} />
+
+          <View style={styles.totalRow}>
+            <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>Total del pedido</Text>
+            <Text style={[styles.totalValue, { color: colors.text }]}>{fmt(toNum(order.total_amount))}</Text>
+          </View>
+          <StatusBadge {...chargeStatus} />
           {!!order.promised_at && (
-            <View style={[styles.row, { marginTop: 6 }]}>
-              <MaterialCommunityIcons name="clock-alert-outline" size={15} color="rgba(255,255,255,0.8)" />
-              <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 13 }}>
+            <View style={styles.row}>
+              <MaterialCommunityIcons name="clock-alert-outline" size={14} color={colors.textMuted} />
+              <Text style={[styles.headerMeta, { color: colors.textSecondary }]}>
                 Entregar antes de: {order.promised_at}
               </Text>
             </View>
           )}
-        </Surface>
+        </View>
 
         {/* ── Timeline vertical ── */}
         {!isCancelled && (
-          <Surface style={styles.card} elevation={1}>
+          <Surface style={[styles.card, { backgroundColor: colors.surface }]} elevation={1}>
             <Text variant="titleMedium" style={styles.sectionTitle}>Progreso</Text>
             <View style={{ marginTop: 16 }}>
               {flowSteps.map((key, index) => {
-                const cfg = STATUS_CONFIG[key] ?? { color: "#D3CCBC", icon: "help-circle", label: key };
                 const isActive    = key === status;
                 const isCompleted = index < activeStepIndex;
                 const isLast      = index === flowSteps.length - 1;
-                const dotColor    = isActive || isCompleted ? statusColor : "#E6E1D5";
+                const reached     = isActive || isCompleted;
+                // Un solo acento para el avance: el color del estado ya va en el badge.
+                const dotColor    = reached ? colors.primary : colors.border;
                 return (
                   <View key={key} style={styles.timelineItem}>
                     <View style={styles.timelineLeft}>
                       <View style={[styles.timelineDot, { backgroundColor: dotColor, borderColor: dotColor }]}>
                         <MaterialCommunityIcons
-                          name={(isCompleted ? "check" : cfg.icon) as any}
+                          name={isCompleted ? "check" : STEP_ICONS[key]}
                           size={14}
-                          color="white"
+                          color={reached ? colors.primaryForeground : colors.textMuted}
                         />
                       </View>
                       {!isLast && (
-                        <View style={[styles.timelineLine, { backgroundColor: isCompleted ? statusColor : "#E6E1D5" }]} />
+                        <View style={[styles.timelineLine, { backgroundColor: isCompleted ? colors.primary : colors.border }]} />
                       )}
                     </View>
                     <View style={styles.timelineContent}>
                       <Text
                         variant="bodyMedium"
-                        style={{ fontWeight: isActive ? "700" : "400", color: isActive || isCompleted ? "#1a1a1a" : "#A39F92" }}
+                        style={{ fontWeight: isActive ? "700" : "400", color: reached ? colors.text : colors.textMuted }}
                       >
-                        {cfg.label}
+                        {salesOrderStatus(key).label}
                       </Text>
-                      <Text variant="bodySmall" style={{ color: "#A39F92", fontSize: 11 }}>
+                      <Text variant="bodySmall" style={{ color: colors.textMuted, fontSize: 11 }}>
                         {isActive ? "Estado actual" : isCompleted ? "Completado" : "Pendiente"}
                       </Text>
                     </View>
-                    {(isActive || isCompleted) && (
-                      <MaterialCommunityIcons name="check-circle" size={18} color={statusColor} />
+                    {reached && (
+                      <MaterialCommunityIcons name="check-circle" size={18} color={colors.primary} />
                     )}
                   </View>
                 );
@@ -433,11 +429,14 @@ export default function SalesOrderDetail() {
 
         {/* ── Cancelado banner ── */}
         {isCancelled && (
-          <Surface style={[styles.card, { flexDirection: "row", alignItems: "center", gap: 12 }]} elevation={1}>
-            <MaterialCommunityIcons name="close-circle" size={32} color="#B9412C" />
+          <Surface
+            style={[styles.card, { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surface }]}
+            elevation={1}
+          >
+            <MaterialCommunityIcons name="close-circle" size={32} color={statusColor} />
             <View>
-              <Text variant="titleMedium" style={{ fontWeight: "700", color: "#B9412C" }}>Pedido cancelado</Text>
-              <Text variant="bodySmall" style={{ color: "#A39F92" }}>Este pedido fue cancelado</Text>
+              <Text variant="titleMedium" style={{ fontWeight: "700", color: statusColor }}>Pedido cancelado</Text>
+              <Text variant="bodySmall" style={{ color: colors.textMuted }}>Este pedido fue cancelado</Text>
             </View>
           </Surface>
         )}
@@ -532,20 +531,18 @@ export default function SalesOrderDetail() {
 
         {/* ── Venta vinculada ── */}
         {!!order.sale && (
-          <Surface style={styles.card} elevation={1}>
+          <Surface style={[styles.card, { backgroundColor: colors.surface }]} elevation={1}>
             <View style={[styles.row, { marginBottom: 8 }]}>
-              <MaterialCommunityIcons name="receipt" size={18} color="#3F8A3A" />
+              <MaterialCommunityIcons name="receipt" size={18} color={colors.primary} />
               <Text variant="titleMedium" style={styles.sectionTitle}>Venta vinculada</Text>
             </View>
-            <View style={[styles.productItem, { backgroundColor: "#f0fdf4" }]}>
-              <MaterialCommunityIcons name="receipt" size={28} color="#3F8A3A" />
-              <View style={{ flex: 1 }}>
-                <Text variant="bodyLarge" style={{ fontWeight: "700", color: "#3F8A3A" }}>
+            <View style={[styles.productItem, { backgroundColor: colors.background }]}>
+              <MaterialCommunityIcons name="receipt" size={28} color={colors.textSecondary} />
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text variant="bodyLarge" style={{ fontWeight: "700", color: colors.text }}>
                   {order.sale.sale_number ?? `Venta #${order.sale.id}`}
                 </Text>
-                <Text variant="bodySmall" style={{ color: "#3F8A3A", opacity: 0.8 }}>
-                  {order.sale.status}
-                </Text>
+                <StatusBadge {...saleStatus(order.sale.status)} />
               </View>
               {canAccessRoute(`/home/sales/${order.sale.id}`) && (
                 <Button mode="text" compact onPress={() => router.push(`/home/sales/${order.sale.id}`)}>
@@ -760,15 +757,15 @@ export default function SalesOrderDetail() {
 const styles = StyleSheet.create({
   center:  { flex: 1, justifyContent: "center", alignItems: "center" },
   card:    { backgroundColor: "white", borderRadius: 18, padding: 20 },
-  // Header
-  headerTop:   { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  orderLabel:  { color: "rgba(255,255,255,0.75)", letterSpacing: 2, fontSize: 11, fontWeight: "700" },
-  orderNumber: { color: "white", fontWeight: "bold", fontSize: 24, marginBottom: 10 },
-  headerMeta:  { color: "rgba(255,255,255,0.85)", fontSize: 13, flexShrink: 1 },
-  statusBadge: { alignItems: "center", gap: 4, paddingLeft: 12 },
-  statusText:  { color: "rgba(255,255,255,0.9)", fontWeight: "700", textAlign: "center", fontSize: 12 },
-  totalRow:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  totalValue:  { color: "white", fontWeight: "bold", fontSize: 22 },
+  // Encabezado: superficie lisa; el estado va en el badge (colores en línea, del tema).
+  header:         { borderRadius: 12, borderWidth: 1, padding: 16, gap: 6 },
+  headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 2 },
+  orderNumber:    { fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
+  headerMeta:     { fontSize: 13, flexShrink: 1 },
+  headerDivider:  { height: 1, marginVertical: 8 },
+  totalRow:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  totalLabel:     { fontSize: 14, fontWeight: "500" },
+  totalValue:     { fontSize: 22, fontWeight: "700", fontVariant: ["tabular-nums"] },
   // Common
   row:           { flexDirection: "row", alignItems: "center", gap: 8 },
   sectionTitle:  { fontWeight: "700" },

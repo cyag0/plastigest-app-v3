@@ -2,11 +2,13 @@ import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PermissionGate from "@/components/App/PermissionGate";
+import StatusBadge from "@/components/App/StatusBadge";
 import PurchaseStats from "@/components/Dashboard/PurchaseStats";
 import CreatePurchaseModal, {
   CreatePurchaseModalRef,
 } from "@/components/Views/POSV2/Components/CreatePurchaseModal";
 import palette from "@/constants/palette";
+import { purchaseStatus } from "@/constants/statuses";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
@@ -56,54 +58,6 @@ const apiMessage = (error: any, fallback: string): string => {
   }
   const data = error?.response?.data;
   return data?.message || data?.error || fallback;
-};
-
-// Helper function to get status configuration
-const getStatusConfig = (status: string) => {
-  switch (status) {
-    case "draft":
-      return {
-        label: "BORRADOR",
-        backgroundColor: palette.warning + "20",
-        borderColor: palette.warning,
-        textColor: palette.textSecondary,
-      };
-    case "ordered":
-      return {
-        label: "PEDIDO",
-        backgroundColor: palette.info + "20",
-        borderColor: palette.accent,
-        textColor: palette.textSecondary,
-      };
-    case "in_transit":
-      return {
-        label: "EN TRANSPORTE",
-        backgroundColor: palette.accent + "20",
-        borderColor: palette.accent,
-        textColor: palette.textSecondary,
-      };
-    case "received":
-      return {
-        label: "RECIBIDO",
-        backgroundColor: palette.success + "20",
-        borderColor: palette.success,
-        textColor: palette.textSecondary,
-      };
-    case "cancelled":
-      return {
-        label: "CANCELADO",
-        backgroundColor: palette.error + "20",
-        borderColor: palette.error,
-        textColor: palette.textSecondary,
-      };
-    default:
-      return {
-        label: "DESCONOCIDO",
-        backgroundColor: palette.surface,
-        borderColor: palette.border,
-        textColor: palette.textSecondary,
-      };
-  }
 };
 
 export default function PurchasesIndex() {
@@ -158,25 +112,7 @@ export default function PurchasesIndex() {
         title: "Estado",
         key: "status",
         width: 170,
-        render: (_, item) => {
-          const statusConfig = getStatusConfig(item.status);
-
-          return (
-            <View
-              style={{
-                alignSelf: "flex-start",
-                backgroundColor: statusConfig.borderColor,
-                borderRadius: 999,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-              }}
-            >
-              <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
-                {statusConfig.label}
-              </Text>
-            </View>
-          );
-        },
+        render: (_, item) => <StatusBadge {...purchaseStatus(item.status)} />,
       },
       {
         title: "Método",
@@ -251,31 +187,12 @@ export default function PurchasesIndex() {
         ]}
         showAppBar={false}
         renderCard={({ item }: { item: any }) => {
-          const statusConfig = getStatusConfig(item.status);
-
           return {
             title: `Compra ${purchaseLabel(item)}`,
             description: `Proveedor: ${item.supplier_name || item.supplier?.name || "Sin proveedor"}`,
             right: (
               <View style={styles.rightContent}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    {
-                      backgroundColor: statusConfig.backgroundColor,
-                      borderColor: statusConfig.borderColor,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusText,
-                      { color: statusConfig.textColor },
-                    ]}
-                  >
-                    {statusConfig.label}
-                  </Text>
-                </View>
+                <StatusBadge {...purchaseStatus(item.status)} />
               </View>
             ),
             bottom: [
@@ -448,16 +365,6 @@ const styles = StyleSheet.create({
     color: palette.primary,
     fontWeight: "700",
     fontSize: 16,
-  },
-  statusBadge: {
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: "bold",
   },
 });
 

@@ -1,6 +1,7 @@
 import AppBar from "@/components/App/AppBar";
 import AppChip from "@/components/App/Chip";
 import EmptyState from "@/components/App/EmptyState";
+import StatusBadge from "@/components/App/StatusBadge";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -168,14 +169,13 @@ export default function UsersListScreen({ scope: requestedScope }: { scope: User
     let access: React.ReactNode;
     if (scope === "location") {
       const role = u.location_role?.role_name;
+      // El rol es una etiqueta; "Sin rol" es un pendiente (estado).
       access = role ? (
         <AppChip size="sm" variant="primary">
           {role}
         </AppChip>
       ) : (
-        <AppChip size="sm" variant="warning" icon="alert-outline">
-          Sin rol
-        </AppChip>
+        <StatusBadge label="Sin rol" tone="warning" icon="alert-outline" />
       );
     } else if (scope === "global") {
       const companies = (u.companies ?? []).map((c) => c.name).join(", ");

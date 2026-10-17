@@ -1,14 +1,14 @@
+import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import FilterModal from "@/components/Feedback/Modal/FilterModal";
-import palette from "@/constants/palette";
+import AppChip from "@/components/App/Chip";
 import PermissionGate from "@/components/App/PermissionGate";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import * as React from "react";
 import { View } from "react-native";
-import { Chip } from "react-native-paper";
 
 /** Total de permisos del rol (el índice manda solo los primeros 10 nombres). */
 function permissionsCount(item: any): number {
@@ -34,17 +34,7 @@ export default function RolesListScreen() {
       key: "is_active",
       width: 100,
       align: "center",
-      render: (_, item) => (
-        <Chip
-          style={{
-            backgroundColor: item.is_active ? palette.primary : palette.surfaceMuted,
-          }}
-          textStyle={{ color: item.is_active ? "white" : palette.textMuted }}
-          compact
-        >
-          {item.is_active ? "Activo" : "Inactivo"}
-        </Chip>
-      ),
+      render: (_, item) => <ActiveBadge active={!!item.is_active} />,
     },
   ];
 
@@ -63,65 +53,27 @@ export default function RolesListScreen() {
                 style={{
                   flexDirection: "row",
                   flexWrap: "wrap",
-                  maxHeight: 60, // Limita la altura para máximo 2 filas
+                  gap: 4,
+                  marginTop: 4,
+                  maxHeight: 44, // Máximo 2 filas de chips
                   overflow: "hidden",
                 }}
               >
+                {/* Permisos: etiquetas, no estados */}
                 {item.permissions?.slice(0, 8).map((permission: string) => (
-                  <Chip
-                    key={permission}
-                    style={{
-                      backgroundColor: palette.surface,
-                      marginRight: 4,
-                      marginTop: 4,
-                      padding: 0,
-                    }}
-                    textStyle={{
-                      color: palette.textSecondary,
-                      fontSize: 10,
-                      lineHeight: 10,
-                    }}
-                  >
+                  <AppChip key={permission} size="sm">
                     {permission}
-                  </Chip>
+                  </AppChip>
                 ))}
                 {permissionsCount(item) > 8 && (
-                  <Chip
-                    style={{
-                      backgroundColor: palette.primary,
-                      marginRight: 4,
-                      marginTop: 4,
-                      padding: 0,
-                    }}
-                    textStyle={{
-                      color: "white",
-                      fontSize: 10,
-                      lineHeight: 10,
-                      fontWeight: "bold",
-                    }}
-                  >
+                  <AppChip size="sm" variant="primary">
                     +{permissionsCount(item) - 8}
-                  </Chip>
+                  </AppChip>
                 )}
               </View>
             </React.Fragment>
           ),
-          right: (
-            <React.Fragment>
-              <Chip
-                style={{
-                  backgroundColor: item.is_active
-                    ? palette.primary
-                    : palette.surfaceMuted,
-                  marginBottom: 4,
-                }}
-                textStyle={{ color: "white" }}
-                compact
-              >
-                {item.is_active ? "Activo" : "Inactivo"}
-              </Chip>
-            </React.Fragment>
-          ),
+          right: <ActiveBadge active={!!item.is_active} />,
         })}
         onItemPress={(entity) => {
           navigation.push("/(tabs)/home/roles/" + entity.id);

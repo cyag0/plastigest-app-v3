@@ -20,6 +20,7 @@ import { router } from "expo-router";
 import * as React from "react";
 import { useCallback, useEffect, useState } from "react";
 import {
+  Platform,
   RefreshControl,
   ScrollView,
   View,
@@ -302,7 +303,9 @@ interface AppListProps<T> {
   // Vista de tabla para tablet/desktop
   columns?: AppListColumn<T>[];
   tabletBreakpoint?: number;
+  /** @deprecated La tabla ya solo lleva el menú ⋮ (ancho fijo, sin título). */
   actionColumnTitle?: string;
+  /** @deprecated La tabla ya solo lleva el menú ⋮ (ancho fijo, sin título). */
   actionColumnWidth?: number;
 
   /**
@@ -344,8 +347,6 @@ function AppList<T extends { id: number | string }>({
   columnGap = 12,
   columns = [],
   tabletBreakpoint = 768,
-  actionColumnTitle = "Acciones",
-  actionColumnWidth = 220,
   permissionPrefix,
   permissions,
 }: AppListProps<T>) {
@@ -363,7 +364,15 @@ function AppList<T extends { id: number | string }>({
   const alerts = useAlerts();
   const navigation = useNavigation();
   const { width } = useWindowDimensions();
-  const shouldUseDataTable = width >= tabletBreakpoint && columns.length > 0;
+  const isWide = width >= tabletBreakpoint;
+  // Tabla solo en web con pantalla ancha (mouse, muchas columnas). En la app
+  // (tableta, teléfono acostado) van las tarjetas del teléfono en columnas:
+  // se tocan mejor y no hay que desplazarse a los lados.
+  const shouldUseDataTable = Platform.OS === "web" && isWide && columns.length > 0;
+  const cardColumns =
+    Platform.OS !== "web" && isWide && numColumns === 1
+      ? Math.min(3, Math.max(2, Math.floor(width / 380)))
+      : 1;
   const { colors } = useTheme();
   const styles = useThemedStyles(makeAppListStyles);
 
@@ -597,17 +606,76 @@ function AppList<T extends { id: number | string }>({
     }
   };
 
+  // Contenido de un renglón (título, descripción, derecha, menú y la línea de
+  // datos). Igual en la lista del teléfono y en las tarjetas de la tableta.
+  const renderRow = (item: T, index: number) => {
+    const cardProps = renderCard({ item, index });
+    const showView = allowRead && getMenuFlag(menu?.showView, item, true);
+    const showEdit = allowUpdate && getMenuFlag(menu?.showEdit, item, true);
+    const showDelete = allowDelete && getMenuFlag(menu?.showDelete, item, true);
+    const hasBottom = cardProps.bottom && cardProps.bottom.length > 0;
+
+    return (
+      <View style={styles.listCardInner}>
+        <View style={styles.cardMain}>
+          {cardProps.left && (
+            <View style={styles.cardLeft}>{cardProps.left}</View>
+          )}
+          <View style={styles.cardCenter}>
+            {cardProps.title && (
+              <AppListTitle>{cardProps.title}</AppListTitle>
+            )}
+            {cardProps.description && (
+              <AppListDescription>
+                {cardProps.description}
+              </AppListDescription>
+            )}
+          </View>
+          {cardProps.right && (
+            <View style={styles.cardRight}>{cardProps.right}</View>
+          )}
+          <ItemMenu
+            item={item}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onViewDetails={handleItemPress}
+            showView={showView}
+            showEdit={showEdit}
+            showDelete={showDelete}
+            customActions={menu?.customActions}
+          />
+        </View>
+
+        {hasBottom && (
+          <Text style={styles.bottomLine}>
+            {cardProps.bottom!.map((b, idx) => (
+              <Text key={idx}>
+                {idx > 0 ? "  ·  " : ""}
+                {!!b.label && <Text style={styles.bottomLabel}>{b.label} </Text>}
+                <Text style={styles.bottomValue}>{b.value.toString()}</Text>
+              </Text>
+            ))}
+          </Text>
+        )}
+      </View>
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
         <SearchBarComponent onChangeText={setSearchQuery} value={searchQuery} placeholder={searchPlaceholder} />
 
         {/* Barra de filtros */}
-        <AppListFilterBar
-          filters={filters}
-          values={activeFilters}
-          onChange={handleFilterChange}
-        />
+        {filters.length > 0 && (
+          <View style={styles.filtersRow}>
+            <AppListFilterBar
+              filters={filters}
+              values={activeFilters}
+              onChange={handleFilterChange}
+            />
+          </View>
+        )}
 
         <SkeletonListLoader />
       </View>
@@ -619,11 +687,15 @@ function AppList<T extends { id: number | string }>({
       <SearchBarComponent onChangeText={setSearchQuery} value={searchQuery} placeholder={searchPlaceholder} />
 
       {/* Barra de filtros */}
-      <AppListFilterBar
-        filters={filters}
-        values={activeFilters}
-        onChange={handleFilterChange}
-      />
+      {filters.length > 0 && (
+        <View style={styles.filtersRow}>
+          <AppListFilterBar
+            filters={filters}
+            values={activeFilters}
+            onChange={handleFilterChange}
+          />
+        </View>
+      )}
 
       {data.length === 0 ? (
         <View style={styles.centerContainer}>
@@ -632,12 +704,11 @@ function AppList<T extends { id: number | string }>({
       ) : (
         <>
           <ScrollView
+            style={[styles.scroll, filters.length > 0 && styles.scrollAfterFilters]}
             contentContainerStyle={
-              shouldUseDataTable
-                ? styles.tableScrollContainer
-                : numColumns > 1
-                  ? styles.scrollContainerGrid
-                  : styles.scrollContainer
+              numColumns > 1 && !shouldUseDataTable
+                ? styles.scrollContainerGrid
+                : styles.scrollContainer
             }
             refreshControl={
               <RefreshControl
@@ -651,220 +722,81 @@ function AppList<T extends { id: number | string }>({
               <AppListDataTable<T>
                 data={data || []}
                 columns={columns}
-                actionColumnTitle={actionColumnTitle}
-                actionColumnWidth={actionColumnWidth}
                 onRowPress={allowRead ? handleItemPress : undefined}
-                renderActionsCell={(item) => {
-                  const showView = allowRead && getMenuFlag(menu?.showView, item, true);
-                  const showEdit = allowUpdate && getMenuFlag(menu?.showEdit, item, true);
-                  const showDelete = allowDelete && getMenuFlag(menu?.showDelete, item, true);
-
-                  return (
-                    <View style={styles.tableActionsRow}>
-                      {showView && (
-                        <IconButton
-                          icon="eye-outline"
-                          size={18}
-                          iconColor={colors.textSecondary}
-                          onPress={() => handleItemPress(item)}
-                          style={styles.tableActionButton}
-                        />
-                      )}
-                      {showEdit && (
-                        <IconButton
-                          icon="pencil-outline"
-                          size={18}
-                          iconColor={colors.primary}
-                          onPress={() => handleEdit(item)}
-                          style={styles.tableActionButton}
-                        />
-                      )}
-                      {showDelete && (
-                        <IconButton
-                          icon="delete-outline"
-                          size={18}
-                          iconColor={colors.error}
-                          onPress={() => handleDelete(item)}
-                          style={styles.tableActionButton}
-                        />
-                      )}
-
-                      {menu?.customActions && menu.customActions.length > 0 && (
-                        <ItemMenu
-                          item={item}
-                          onEdit={handleEdit}
-                          onDelete={handleDelete}
-                          onViewDetails={handleItemPress}
-                          showView={showView}
-                          showEdit={showEdit}
-                          showDelete={showDelete}
-                          customActions={menu.customActions}
-                        />
-                      )}
-                    </View>
-                  );
-                }}
+                renderActionsCell={(item) => (
+                  // Un solo menú ⋮ por fila, como en las tarjetas (antes ojo,
+                  // lápiz y bote de colores en cada renglón).
+                  <ItemMenu
+                    item={item}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onViewDetails={handleItemPress}
+                    showView={allowRead && getMenuFlag(menu?.showView, item, true)}
+                    showEdit={allowUpdate && getMenuFlag(menu?.showEdit, item, true)}
+                    showDelete={allowDelete && getMenuFlag(menu?.showDelete, item, true)}
+                    customActions={menu?.customActions}
+                  />
+                )}
               />
-            ) : numColumns > 1 ? (
-              // Grid layout
-              <View style={styles.gridContainer}>
-                {(data || []).map((item, index) => {
-                  const cardProps = renderCard({ item, index });
-
-                  const showView = allowRead && getMenuFlag(menu?.showView, item, true);
-                  const showEdit = allowUpdate && getMenuFlag(menu?.showEdit, item, true);
-                  const showDelete = allowDelete && getMenuFlag(menu?.showDelete, item, true);
-
-                  return (
-                    <View key={item.id} style={styles.gridItem}>
-                      <AppListCard>
-                        <View
-                          style={[
-                            styles.cardMain,
-                            {
-                              flexDirection: "column",
-                              alignItems: "flex-start",
-                              gap: 8,
-                            },
-                          ]}
-                        >
-                          {cardProps.left && (
-                            <View
-                              style={[
-                                styles.cardLeft,
-                                { alignSelf: "center", marginBottom: 8 },
-                              ]}
-                            >
-                              {cardProps.left}
-                            </View>
-                          )}
-
-                          <View style={[styles.cardCenter, { width: "100%" }]}>
-                            {cardProps.title && (
-                              <AppListTitle>{cardProps.title}</AppListTitle>
-                            )}
-
-                            {cardProps.description && (
-                              <AppListDescription>
-                                {cardProps.description}
-                              </AppListDescription>
-                            )}
-                          </View>
-
-                          {cardProps.right && (
-                            <View
-                              style={[
-                                styles.cardRight,
-                                { alignSelf: "flex-end" },
-                              ]}
-                            >
-                              {cardProps.right}
-                            </View>
-                          )}
-
-                          <ItemMenu
-                            item={item}
-                            onEdit={handleEdit}
-                            onDelete={handleDelete}
-                            onViewDetails={handleItemPress}
-                            showView={showView}
-                            showEdit={showEdit}
-                            showDelete={showDelete}
-                            customActions={menu?.customActions}
-                          />
-                        </View>
-                      </AppListCard>
-                    </View>
-                  );
-                })}
+            ) : cardColumns > 1 ? (
+              // Las tarjetas del teléfono en columnas (tableta): cada renglón
+              // de la lista en su propia tarjeta, a la misma altura por fila.
+              <View style={styles.cardGrid}>
+                {(data || []).map((item, index) => (
+                  <View
+                    key={item.id}
+                    style={[styles.cardGridCell, { width: `${100 / cardColumns}%` }]}
+                  >
+                    <TouchableRipple
+                      onPress={() => handleItemPress(item)}
+                      disabled={!allowRead}
+                      style={styles.gridCard}
+                    >
+                      {renderRow(item, index)}
+                    </TouchableRipple>
+                  </View>
+                ))}
               </View>
             ) : (
               // Una sola lista con separadores (antes, una tarjeta con sombra
               // por renglón: mucho ruido para leer muchos registros).
               <View style={styles.listGroup}>
-              {(data || []).map((item, index) => {
-                const cardProps = renderCard({ item, index });
-                const showView = allowRead && getMenuFlag(menu?.showView, item, true);
-                const showEdit = allowUpdate && getMenuFlag(menu?.showEdit, item, true);
-                const showDelete = allowDelete && getMenuFlag(menu?.showDelete, item, true);
-                const hasBottom = cardProps.bottom && cardProps.bottom.length > 0;
-
-                return (
-                  <TouchableRipple
-                    key={item.id}
-                    onPress={() => handleItemPress(item)}
-                    disabled={!allowRead}
-                    style={[styles.listCard, index > 0 && styles.listCardDivider]}
-                  >
-                    <View style={styles.listCardInner}>
-                      <View style={styles.cardMain}>
-                        {cardProps.left && (
-                          <View style={styles.cardLeft}>{cardProps.left}</View>
-                        )}
-                        <View style={styles.cardCenter}>
-                          {cardProps.title && (
-                            <AppListTitle>{cardProps.title}</AppListTitle>
-                          )}
-                          {cardProps.description && (
-                            <AppListDescription>
-                              {cardProps.description}
-                            </AppListDescription>
-                          )}
-                        </View>
-                        {cardProps.right && (
-                          <View style={styles.cardRight}>{cardProps.right}</View>
-                        )}
-                        <ItemMenu
-                          item={item}
-                          onEdit={handleEdit}
-                          onDelete={handleDelete}
-                          onViewDetails={handleItemPress}
-                          showView={showView}
-                          showEdit={showEdit}
-                          showDelete={showDelete}
-                          customActions={menu?.customActions}
-                        />
-                      </View>
-
-                      {hasBottom && (
-                        <Text style={styles.bottomLine}>
-                          {cardProps.bottom!.map((b, idx) => (
-                            <Text key={idx}>
-                              {idx > 0 ? "  ·  " : ""}
-                              {!!b.label && <Text style={styles.bottomLabel}>{b.label} </Text>}
-                              <Text style={styles.bottomValue}>{b.value.toString()}</Text>
-                            </Text>
-                          ))}
-                        </Text>
-                      )}
-                    </View>
-                  </TouchableRipple>
-                );
-              })}
+              {(data || []).map((item, index) => (
+                <TouchableRipple
+                  key={item.id}
+                  onPress={() => handleItemPress(item)}
+                  disabled={!allowRead}
+                  style={[styles.listCard, index > 0 && styles.listCardDivider]}
+                >
+                  {renderRow(item, index)}
+                </TouchableRipple>
+              ))}
               </View>
             )}
           </ScrollView>
 
-          {/* Controles de paginación */}
+          {/* Controles de paginación: en el teléfono el texto arriba de los
+              botones; en tableta y web todo en un renglón. */}
           {pagination && (
             <View
               style={[
                 styles.paginationContainer,
-                { marginBottom: 16 },
+                isWide && styles.paginationContainerWide,
               ]}
             >
               <Text variant="bodySmall" style={styles.paginationText}>
-                Mostrando {pagination.from ?? 0} - {pagination.to ?? 0} de{" "}
-                {pagination.total ?? 0} elementos
+                Mostrando {pagination.from ?? 0}–{pagination.to ?? 0} de{" "}
+                {(pagination.total ?? 0).toLocaleString("es-MX")} elementos
               </Text>
 
               {pagination.last_page > 1 && (
                 <View style={styles.paginationControls}>
                   <IconButton
                     icon="chevron-left"
-                    size={20}
+                    size={18}
                     disabled={currentPage <= 1}
                     onPress={() => handlePageChange(currentPage - 1)}
+                    style={styles.paginationArrow}
                   />
 
                   {buildPageItems(currentPage, pagination.last_page).map(
@@ -903,9 +835,10 @@ function AppList<T extends { id: number | string }>({
 
                   <IconButton
                     icon="chevron-right"
-                    size={20}
+                    size={18}
                     disabled={currentPage >= pagination.last_page}
                     onPress={() => handlePageChange(currentPage + 1)}
+                    style={styles.paginationArrow}
                   />
                 </View>
               )}
@@ -975,13 +908,24 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
       alignItems: "center",
       backgroundColor: c.background,
     },
-    scrollContainer: {
-      padding: tokens.spacing[3],
-      paddingBottom: tokens.spacing[6],
-      gap: tokens.spacing[2],
+    // La separación con el buscador va en el ScrollView y no en su
+    // contenido: si no, se desplazaba con la lista y los renglones quedaban
+    // pegados al buscador al hacer scroll.
+    scroll: {
+      marginTop: tokens.spacing[3],
     },
-    tableScrollContainer: {
-      padding: 16,
+    // La barra de filtros ya deja 8 abajo.
+    scrollAfterFilters: {
+      marginTop: tokens.spacing[1],
+    },
+    // Mismo margen lateral que el buscador y los filtros (16), para que la
+    // lista quede alineada con ellos.
+    scrollContainer: {
+      paddingHorizontal: tokens.spacing[4],
+      paddingBottom: tokens.spacing[4],
+    },
+    filtersRow: {
+      marginTop: tokens.spacing[2],
     },
     scrollContainerGrid: {
       padding: 0,
@@ -1021,6 +965,26 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
     },
     listCard: {
       backgroundColor: c.surface,
+    },
+    // Cuadrícula de tarjetas (tableta): el margen negativo compensa el
+    // relleno lateral de cada celda, que hace de separación entre columnas;
+    // así las tarjetas de las orillas quedan alineadas con el buscador.
+    cardGrid: {
+      flexDirection: "row" as const,
+      flexWrap: "wrap" as const,
+      marginHorizontal: -6,
+      rowGap: 12,
+    },
+    cardGridCell: {
+      paddingHorizontal: 6,
+    },
+    gridCard: {
+      flex: 1,
+      backgroundColor: c.surface,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+      overflow: "hidden" as const,
     },
     listCardDivider: {
       borderTopWidth: 1,
@@ -1092,19 +1056,33 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
     },
     paginationContainer: {
       alignItems: "center" as const,
-      marginTop: 16,
-      gap: 8,
+      paddingHorizontal: tokens.spacing[4],
+      paddingTop: tokens.spacing[1],
+      paddingBottom: tokens.spacing[2],
+      gap: 2,
+    },
+    // Tableta y web: el texto a la izquierda y los botones a la derecha.
+    paginationContainerWide: {
+      flexDirection: "row" as const,
+      justifyContent: "space-between" as const,
+      paddingVertical: tokens.spacing[2],
+      gap: tokens.spacing[3],
     },
     paginationControls: {
       flexDirection: "row" as const,
       alignItems: "center" as const,
-      gap: 4,
+      gap: 2,
+    },
+    paginationArrow: {
+      margin: 0,
+      width: 32,
+      height: 32,
     },
     paginationPageButton: {
-      minWidth: 36,
-      height: 36,
-      paddingHorizontal: 8,
-      borderRadius: 18,
+      minWidth: 32,
+      height: 32,
+      paddingHorizontal: 6,
+      borderRadius: 16,
       alignItems: "center" as const,
       justifyContent: "center" as const,
     },
@@ -1124,13 +1102,6 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
     paginationEllipsis: {
       color: c.textSecondary,
       paddingHorizontal: 4,
-    },
-    tableActionsRow: {
-      flexDirection: "row" as const,
-      alignItems: "center" as const,
-    },
-    tableActionButton: {
-      margin: 0,
     },
     fab: {
       position: "absolute" as const,

@@ -2,36 +2,34 @@ import { formatMoney } from "@/utils/format";
 import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import type { AppListColumn } from "@/components/App/AppList/AppListDataTable";
-import type { VariantMatchMap } from "@/components/App/StatusBadge";
+import IconLabel from "@/components/App/IconLabel";
 import StatusBadge from "@/components/App/StatusBadge";
 import palette from "@/constants/palette";
+import { transferStatus } from "@/constants/statuses";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useCan } from "@/hooks/useCan";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import transferService from "@/utils/services/transferService";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import { View } from "react-native";
-import { Badge, IconButton, Text } from "react-native-paper";
+import { Text } from "react-native-paper";
 
-function DirectionBadge({ isSent }: { isSent: boolean }) {
-  return (
-    <View
-      style={[
-        styles.directionBadge,
-        {
-          backgroundColor: isSent ? palette.blue : palette.primary,
-        },
-      ]}
-    >
-      <Text style={styles.directionBadgeText}>{isSent ? "ENVIADO" : "RECIBIDO"}</Text>
-    </View>
+/** Dirección desde la sucursal actual: es un atributo, no un estado. */
+function Direction({ isSent }: { isSent: boolean }) {
+  return isSent ? (
+    <IconLabel icon="arrow-up-bold-circle-outline" label="Enviada" />
+  ) : (
+    <IconLabel icon="arrow-down-bold-circle-outline" label="Recibida" />
   );
 }
 
 export default function HistoryTransfersScreen() {
   const router = useRouter();
   const auth = useAuth();
+  const { colors } = useTheme();
   // Abrir una transferencia pide transfers_read.
   const canRead = useCan().can("transfers_read");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -55,64 +53,26 @@ export default function HistoryTransfersScreen() {
     );
   }
 
-  
-
-  const getStatusInfo = (status: string) => {
-    const statusMap: Record<
-      string,
-      { icon: string; color: string; label: string }
-    > = {
-      completed: {
-        icon: "check-circle",
-        color: palette.success,
-        label: "Completada",
-      },
-      rejected: {
-        icon: "close-circle",
-        color: palette.error,
-        label: "Rechazada",
-      },
-      cancelled: {
-        icon: "cancel",
-        color: palette.textSecondary,
-        label: "Cancelada",
-      },
-    };
-
-    return (
-      statusMap[status] || {
-        icon: "help-circle-outline",
-        color: palette.textSecondary,
-        label: status,
-      }
-    );
-  };
-
-  const statusVariantMatch: VariantMatchMap = {
-    success: ["completed"],
-    error: ["rejected", "cancelled"],
-  };
-
   const columns: AppListColumn<InventoryTransfer>[] = [
     {
       title: "Folio",
       key: "transfer_number",
-      width: 160,
+      width: 200,
       render: (_, item) => item.transfer_number || `#${item.id}`,
     },
     {
       title: "Dirección",
       key: "direction",
-      width: 200,
+      width: 140,
       render: (_, item) => {
         const isSent = item.from_location_id === location.id;
-        return <DirectionBadge isSent={isSent} />;
+        return <Direction isSent={isSent} />;
       },
     },
     {
       title: "Ubicación",
       key: "location_name",
-      width: 250,
+      width: 240,
       render: (_, item) =>
         item.from_location_id === location.id
           ? item.to_location?.name || "N/A"
@@ -121,36 +81,27 @@ export default function HistoryTransfersScreen() {
     {
       title: "Estado",
       key: "status",
-      width: 170,
-      render: (_, item) => {
-        const statusInfo = getStatusInfo(item.status);
-        return (
-          <StatusBadge
-            value={item.status}
-            label={statusInfo.label}
-            match={statusVariantMatch as any}
-          />
-        );
-      },
+      width: 130,
+      render: (_, item) => <StatusBadge {...transferStatus(item.status)} />,
     },
     {
       title: "Fecha",
       key: "received_at",
-      width: 140,
+      width: 120,
       render: (_, item) =>
         formatDate(item.received_at || item.requested_at || ""),
     },
     {
       title: "Productos",
       key: "products_count",
-      width: 120,
+      width: 100,
       align: "center",
       render: (_, item) => item.details?.length || 0,
     },
     {
       title: "Total",
       key: "total_cost",
-      width: 140,
+      width: 120,
       align: "right",
       render: (_, item) =>
         item.total_cost ? formatMoney(item.total_cost) : "-",
@@ -184,7 +135,7 @@ export default function HistoryTransfersScreen() {
           },
           {
             // Desde la sucursal actual: "sent" = salió de aquí, "received" =
-            // llegó aquí (igual que las insignias ENVIADO / RECIBIDO).
+            // llegó aquí (igual que la columna Enviada / Recibida).
             type: "simple",
             name: "direction",
             label: "Dirección",
@@ -199,68 +150,32 @@ export default function HistoryTransfersScreen() {
         columns={columns}
         actionColumnWidth={100}
         renderCard={({ item }) => {
-          const statusInfo = getStatusInfo(item.status);
           const isSent = item.from_location_id === location.id;
           const isReceived = item.to_location_id === location.id;
 
           return {
             title: `${item.transfer_number || `#${item.id}`}`,
-            subtitle: isSent
+            // Antes en subtitle, que la lista no dibuja.
+            description: isSent
               ? `Destino: ${item.to_location?.name || "N/A"}`
               : `Desde: ${item.from_location?.name || "N/A"}`,
+            // Solo la dirección, sin color: el estado ya va en el badge.
             left: (
-              <View style={styles.statusIconContainer}>
-                <IconButton
-                  icon={statusInfo.icon}
-                  size={24}
-                  iconColor={statusInfo.color}
-                  style={{ margin: 0 }}
-                />
-                {isSent && (
-                  <Badge
-                    size={16}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      right: 0,
-                      backgroundColor: palette.primary,
-                    }}
-                  >
-                    ↑
-                  </Badge>
-                )}
-                {isReceived && (
-                  <Badge
-                    size={16}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      right: 0,
-                      backgroundColor: palette.success,
-                    }}
-                  >
-                    ↓
-                  </Badge>
-                )}
-              </View>
+              <MaterialCommunityIcons
+                name={
+                  isSent
+                    ? "arrow-up-bold-circle-outline"
+                    : isReceived
+                      ? "arrow-down-bold-circle-outline"
+                      : "swap-horizontal"
+                }
+                size={24}
+                color={colors.textMuted}
+              />
             ),
             right: (
               <View style={styles.rightContent}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    {
-                      backgroundColor: statusInfo.color + "20",
-                      borderColor: statusInfo.color,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[styles.statusText, { color: statusInfo.color }]}
-                  >
-                    {statusInfo.label.toUpperCase()}
-                  </Text>
-                </View>
+                <StatusBadge {...transferStatus(item.status)} />
                 <Text style={styles.dateText}>
                   {formatDate(item.received_at || item.requested_at || "")}
                 </Text>
@@ -305,39 +220,9 @@ export default function HistoryTransfersScreen() {
 }
 
 const styles = {
-  statusIconContainer: {
-    justifyContent: "center" as const,
-    alignItems: "center" as const,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: palette.surface,
-    shadowColor: "transparent",
-  },
-  directionBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    alignSelf: "flex-start" as const,
-  },
-  directionBadgeText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "600" as const,
-  },
   rightContent: {
     alignItems: "flex-end" as const,
     gap: 4,
-  },
-  statusBadge: {
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: "bold" as const,
   },
   dateText: {
     fontSize: 12,

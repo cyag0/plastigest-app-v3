@@ -1,6 +1,9 @@
 import { formatDate } from "@/utils/dates";
+import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import IconLabel from "@/components/App/IconLabel";
+import StatusBadge from "@/components/App/StatusBadge";
 import PrintLabelsModal from "@/components/Products/PrintLabelsModal";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -139,23 +142,12 @@ export default function ProductsByTypeIndex() {
         const type = item.inventory_type;
         if (!type) return "-";
 
+        // El tipo es un atributo, no un estado: texto con su ícono.
         return (
-          <View
-            style={{
-              alignSelf: "flex-start",
-              backgroundColor: (type.color || palette.primary) + "20",
-              borderRadius: 999,
-              paddingHorizontal: 10,
-              paddingVertical: 4,
-            }}
-          >
-            <Text
-              variant="labelSmall"
-              style={{ color: type.color || palette.primary, fontWeight: "700" }}
-            >
-              {type.name}
-            </Text>
-          </View>
+          <IconLabel
+            icon={(type.icon || "shape-outline") as any}
+            label={type.name}
+          />
         );
       },
     },
@@ -163,21 +155,7 @@ export default function ProductsByTypeIndex() {
       title: "Estado",
       key: "is_active",
       width: 110,
-      render: (_, item) => (
-        <View
-          style={{
-            alignSelf: "flex-start",
-            backgroundColor: item.is_active ? "#3F8A3A" : "#B9412C",
-            borderRadius: 999,
-            paddingHorizontal: 10,
-            paddingVertical: 4,
-          }}
-        >
-          <Text variant="labelSmall" style={{ color: "#fff", fontWeight: "700" }}>
-            {item.is_active ? "Activo" : "Inactivo"}
-          </Text>
-        </View>
-      ),
+      render: (_, item) => <ActiveBadge active={!!item.is_active} />,
     },
     {
       title: "Stock",
@@ -393,26 +371,10 @@ export default function ProductsByTypeIndex() {
                   item.current_stock !== undefined &&
                   item.current_stock <= (item.minimum_stock || 0) &&
                   item.minimum_stock > 0 && (
-                    <AppList.Description
-                      style={{
-                        fontWeight: "bold",
-                        color: palette.warning,
-                      }}
-                    >
-                      Stock bajo
-                    </AppList.Description>
+                    <StatusBadge label="Stock bajo" tone="warning" />
                   )}
 
-                {item.sale_price && (
-                  <AppList.Description
-                    style={{
-                      fontWeight: "bold",
-                      color: item.is_active ? palette.success : palette.error,
-                    }}
-                  >
-                    {item.is_active ? "Activo" : "Inactivo"}
-                  </AppList.Description>
-                )}
+                {item.sale_price && <ActiveBadge active={!!item.is_active} />}
               </View>
             </View>
           ),

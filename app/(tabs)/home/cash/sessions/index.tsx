@@ -1,6 +1,8 @@
 import { formatDateTime, formatTime } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import AppChip from "@/components/App/Chip";
+import StatusBadge from "@/components/App/StatusBadge";
+import { cashSessionStatus } from "@/constants/statuses";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCan } from "@/hooks/useCan";
 import { formatMoney } from "@/utils/format";
@@ -35,15 +37,13 @@ function DifferenceChip({ value }: { value: number | null | undefined }) {
   );
 }
 
-function StatusChip({ status }: { status: Session["status"] }) {
-  return status === "open" ? (
-    <AppChip size="sm" variant="warning" icon="clock-outline">
-      Abierto
-    </AppChip>
-  ) : (
-    <AppChip size="sm" variant="default">
-      Cerrado
-    </AppChip>
+/** El turno abierto lleva reloj: sigue corriendo. */
+function SessionStatus({ status }: { status: Session["status"] }) {
+  return (
+    <StatusBadge
+      {...cashSessionStatus(status)}
+      icon={status === "open" ? "clock-outline" : undefined}
+    />
   );
 }
 
@@ -92,7 +92,7 @@ export default function CashSessionsIndex() {
         { key: "cash_register_name", title: "Caja", width: 110, render: (_, item) => item.cash_register_name ?? "—" },
         { key: "user_name", title: "Cajero", width: 140, render: (_, item) => item.user_name ?? "—" },
         { key: "location_name", title: "Sucursal", width: 140, render: (_, item) => item.location_name ?? "—" },
-        { key: "status", title: "Estado", width: 100, render: (_, item) => <StatusChip status={item.status} /> },
+        { key: "status", title: "Estado", width: 100, render: (_, item) => <SessionStatus status={item.status} /> },
         { key: "expected_cash", title: "Esperado", width: 110, render: (_, item) => (item.expected_cash == null ? "—" : formatMoney(item.expected_cash)) },
         {
           key: "difference",
@@ -106,7 +106,7 @@ export default function CashSessionsIndex() {
         description: shiftTime(item),
         right: (
           <View style={{ alignItems: "flex-end", gap: 4 }}>
-            <StatusChip status={item.status} />
+            <SessionStatus status={item.status} />
             <DifferenceChip value={item.status === "closed" ? item.difference : null} />
           </View>
         ),

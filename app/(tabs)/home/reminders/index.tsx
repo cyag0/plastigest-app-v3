@@ -1,6 +1,7 @@
 import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
+import StatusBadge, { type BadgeTone } from "@/components/App/StatusBadge";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -9,7 +10,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import { View } from "react-native";
-import { Text, Chip } from "react-native-paper";
+import { Text } from "react-native-paper";
 
 export default function RemindersIndex() {
   const navigation = router;
@@ -54,6 +55,14 @@ export default function RemindersIndex() {
       if (reminder.days_until_due <= 7) return `En ${reminder.days_until_due} días`;
     }
     return "Pendiente";
+  };
+
+  // Mismo criterio que getStatusColor, con los tonos de constants/statuses.ts.
+  const getStatusTone = (reminder: App.Entities.Reminder): BadgeTone => {
+    if (reminder.status === "completed") return "success";
+    if (reminder.is_overdue) return "danger";
+    if (reminder.days_until_due != null && reminder.days_until_due <= 3) return "warning";
+    return "neutral";
   };
 
   
@@ -148,20 +157,10 @@ export default function RemindersIndex() {
                 flexWrap: "wrap",
               }}
             >
-              <Chip
-                mode="flat"
-                compact
-                style={{
-                  backgroundColor: getStatusColor(reminder) + "20",
-                }}
-                textStyle={{
-                  color: getStatusColor(reminder),
-                  fontSize: 11,
-                  fontWeight: "600",
-                }}
-              >
-                {getStatusLabel(reminder)}
-              </Chip>
+              <StatusBadge
+                label={getStatusLabel(reminder)}
+                tone={getStatusTone(reminder)}
+              />
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                 <MaterialCommunityIcons
                   name="calendar"
