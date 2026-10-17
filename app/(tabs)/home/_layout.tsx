@@ -209,24 +209,6 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
-        name="sales/form"
-        options={{
-          title: "Nueva Venta",
-        }}
-      />
-      <Stack.Screen
-        name="sales/formv2"
-        options={{
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
-        name="sales/[id]/edit"
-        options={{
-          title: "Editar Venta",
-        }}
-      />
-      <Stack.Screen
         name="sales/[id]/index"
         options={{
           title: "Ver Venta",

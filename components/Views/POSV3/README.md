@@ -88,7 +88,7 @@ interface CartProps {
   onUnitChange: (itemId: number, unitId: number) => void;           // Cambio de unidad
   onRemoveItem: (itemId: number) => void;         // Eliminar item
   onClearCart?: () => void;                       // Limpiar carrito
-  onFinish?: () => void;                          // Finalizar compra/venta
+  onFinish?: () => void;                          // Finalizar compra/transferencia
   isScreen?: boolean;                             // Si se muestra como pantalla completa
   showFooter?: boolean;                           // Mostrar footer con total y botón
   children?: React.ReactNode;                     // Contenido adicional
@@ -188,7 +188,7 @@ Cart re-renderiza con nuevos items
 ### Ventajas de este Enfoque
 
 1. **Testabilidad** - Fácil testear componentes con props específicas
-2. **Reutilización** - Mismo componente para ventas y compras
+2. **Reutilización** - Mismo componente para compras y transferencias (las ventas van en el punto de venta y el kiosko)
 3. **Flexibilidad** - El padre decide cómo manejar el estado
 4. **Predictibilidad** - No hay "magia" de estado interno
 5. **Debugging** - Más fácil rastrear cambios de estado

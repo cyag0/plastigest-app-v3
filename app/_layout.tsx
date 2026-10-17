@@ -25,7 +25,6 @@ import {
   PaperProvider,
 } from "react-native-paper";
 import { es, registerTranslation } from "react-native-paper-dates";
-import PermissionsOverlay from "@/components/Debug/PermissionsOverlay";
 import React, { useEffect } from "react";
 import { Platform, StatusBar, View } from "react-native";
 
@@ -225,7 +224,6 @@ function ThemedApp() {
               </View>
               {/* Equipo en modo kiosko: siempre de vuelta a /kiosk. */}
               <KioskModeGate />
-              {__DEV__ && <PermissionsOverlay />}
             </NavigationHandler>
             {/* Renderizar los dialogs (ConfirmDialog, AlertSnackbar) al
                 FINAL del arbol, pero DENTRO de <AlertsProvider> para que

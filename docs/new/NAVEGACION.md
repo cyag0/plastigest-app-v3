@@ -416,7 +416,7 @@ Ejemplo: /(tabs)/inventory/products/123/edit
 |--------|------------|------------|----------|-------------|
 | **Producción** | `/(tabs)/home/production` | `/production/form` | `/production/[id]` | `/production/[id]/edit` |
 | **Compras** | `/(tabs)/home/purchases` | `/purchases/form` | `/purchases/[id]` | N/A |
-| **Ventas** | `/(tabs)/home/sales` | `/sales/form` | `/sales/[id]` | `/sales/[id]/edit` |
+| **Ventas** | `/(tabs)/home/sales` | Punto de venta `/(stacks)/pos` o kiosko `/(stacks)/kiosk` | `/sales/[id]` | N/A |
 | **Peticiones** | `/(tabs)/home/petitions` | `/petitions/form` | `/petitions/[id]` | N/A |
 | **Recibos** | `/(tabs)/home/receipts` | N/A | `/receipts/[id]` | N/A |
 | **Envíos** | `/(tabs)/home/shipments` | N/A | `/shipments/[id]` | N/A |
@@ -530,25 +530,21 @@ En pantallas > 768px:
 ```
 1. Login → Seleccionar Empresa → Seleccionar Ubicación
    ↓
-2. Tab "Inicio" → Sección "Ventas" → Botón "Nueva Venta"
-   Ruta: /(tabs)/home/sales/form
+2. Inicio → "Punto de venta"
+   Ruta: /(stacks)/pos
+   (o el kiosko de autoservicio, /(stacks)/kiosk, que se cobra en el punto de venta)
    ↓
-3. Llenar formulario de venta:
-   - Seleccionar cliente
-   - Agregar productos
-   - Definir cantidades
-   - Aplicar descuentos (opcional)
-   - Seleccionar método de pago
+3. Agregar productos, cobrar y confirmar
    ↓
-4. Guardar venta
+4. La venta aparece en Ventas: /(tabs)/home/sales (solo lista y detalle)
    ↓
-5. Redirige a: /(tabs)/home/sales/[id] (Detalle de la venta)
-   ↓
-6. Opciones:
-   - Imprimir ticket
-   - Editar venta → /(tabs)/home/sales/[id]/edit
-   - Volver a lista → /(tabs)/home/sales
-   - Nueva venta → /(tabs)/home/sales/form
+5. Detalle /(tabs)/home/sales/[id]:
+   - Imprimir ticket o PDF
+   - Registrar pagos pendientes
+   - Cancelar venta
+
+Ventas ya no tiene formulario propio: la venta "antigua" (sales/formv2,
+el carrito compartido con compras) se retiró.
 ```
 
 ---

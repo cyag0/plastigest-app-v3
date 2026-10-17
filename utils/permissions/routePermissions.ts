@@ -203,9 +203,6 @@ export const ROUTE_PERMISSIONS: Readonly<Record<string, RouteRule>> = {
   "(tabs)/home/sales-orders/[id]": "sales_orders_read",
   "(tabs)/home/sales/index": "sales_list",
   "(tabs)/home/sales/[id]": "sales_read",
-  "(tabs)/home/sales/formv2/index": "sales_create",
-  "(tabs)/home/sales/formv2/scanner": "sales_create",
-  "(tabs)/home/sales/formv2/SaleContext": "sales_create",
   "(tabs)/home/transfers-menu/index": "transfers_list",
   "(tabs)/home/transfers/[id]/index": "transfers_read",
   "(tabs)/home/transfers/formv2/index": "transfers_create",
@@ -253,7 +250,6 @@ export const ROUTE_PERMISSIONS: Readonly<Record<string, RouteRule>> = {
   // padre bloquea la carpeta completa, incluido lo que monta su layout (el
   // provider del formulario carga catálogos al abrirse).
   "(tabs)/home/purchases/formv2": "purchases_create",
-  "(tabs)/home/sales/formv2": "sales_create",
 };
 
 // ─── Resolver y comparar ───────────────────────────────────────────────────
@@ -408,7 +404,7 @@ function matchSegments(
 
 /**
  * Busca la pantalla de un href en el mapa. Gana la ruta más específica:
- * "/home/sales/formv2" es formv2/index, no sales/[id]. Los parámetros
+ * "/home/purchases/formv2" es formv2/index, no purchases/[id]. Los parámetros
  * incluyen los segmentos dinámicos y el query ("?id=").
  */
 export function matchRoute(

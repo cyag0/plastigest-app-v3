@@ -144,11 +144,9 @@ Dashboard principal con acceso rápido a todas las operaciones del negocio.
 #### 3. Ventas
 - **Rutas**:
   - `/(tabs)/home/sales` - Lista de ventas
-  - `/(tabs)/home/sales/form` - Nueva venta
-  - `/(tabs)/home/sales/formv2` - Formulario alternativo
-  - `/(tabs)/home/sales/POS` - Punto de venta
   - `/(tabs)/home/sales/[id]` - Ver venta
-  - `/(tabs)/home/sales/[id]/edit` - Editar venta
+  - `/(stacks)/pos` - Punto de venta (donde se registran las ventas)
+  - `/(stacks)/kiosk` - Kiosko de autoservicio (se cobra en el punto de venta)
 - **Propósito**: Sistema de ventas y punto de venta (POS)
 - **Funcionalidad**:
   - Registro de ventas

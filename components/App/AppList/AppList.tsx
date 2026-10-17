@@ -25,6 +25,7 @@ import {
   ScrollView,
   View,
   useWindowDimensions,
+  type LayoutChangeEvent,
 } from "react-native";
 import {
   IconButton,
@@ -369,9 +370,17 @@ function AppList<T extends { id: number | string }>({
   // (tableta, teléfono acostado) van las tarjetas del teléfono en columnas:
   // se tocan mejor y no hay que desplazarse a los lados.
   const shouldUseDataTable = Platform.OS === "web" && isWide && columns.length > 0;
+  // Las columnas de tarjetas salen del ancho de la lista y no del de la
+  // ventana: junto a un panel lateral (Caja) la lista es más angosta. Antes de
+  // medirla, el de la ventana (a pantalla completa es el mismo).
+  const [listWidth, setListWidth] = useState<number | null>(null);
+  const onContainerLayout = useCallback(
+    (e: LayoutChangeEvent) => setListWidth(e.nativeEvent.layout.width),
+    [],
+  );
   const cardColumns =
     Platform.OS !== "web" && isWide && numColumns === 1
-      ? Math.min(3, Math.max(2, Math.floor(width / 380)))
+      ? Math.min(3, Math.max(1, Math.floor((listWidth ?? width) / 380)))
       : 1;
   const { colors } = useTheme();
   const styles = useThemedStyles(makeAppListStyles);
@@ -663,7 +672,7 @@ function AppList<T extends { id: number | string }>({
 
   if (loading) {
     return (
-      <View style={styles.container}>
+      <View style={styles.container} onLayout={onContainerLayout}>
         <SearchBarComponent onChangeText={setSearchQuery} value={searchQuery} placeholder={searchPlaceholder} />
 
         {/* Barra de filtros */}
@@ -683,7 +692,7 @@ function AppList<T extends { id: number | string }>({
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={onContainerLayout}>
       <SearchBarComponent onChangeText={setSearchQuery} value={searchQuery} placeholder={searchPlaceholder} />
 
       {/* Barra de filtros */}
