@@ -1,17 +1,24 @@
-import { goBack } from "@/utils/navigation";
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
 import palette from "@/constants/palette";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { formatMoney } from "@/utils/format";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation, useRouter } from "expo-router";
 import React, { useEffect, useMemo } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Button } from "react-native-paper";
-import { usePurchase } from "./PurchaseContext";
+import { useBackToPurchaseForm, usePurchase } from "./PurchaseContext";
 
 function CartHeaderButton({ count, onPress }: { count: number; onPress: () => void }) {
   return (
-    <TouchableOpacity onPress={onPress} style={cartBtnStyles.btn} activeOpacity={0.7}>
+    <TouchableOpacity
+      onPress={onPress}
+      style={cartBtnStyles.btn}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel="Ver carrito"
+    >
       <MaterialCommunityIcons name="cart-outline" size={24} color={palette.text} />
       {count > 0 && (
         <View style={cartBtnStyles.badge}>
@@ -56,6 +63,27 @@ export default function ProductosScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { isMobile } = useResponsive();
+  const backToForm = useBackToPurchaseForm();
+  const barStyles = useThemedStyles((colors) => ({
+    bar: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      backgroundColor: colors.surface,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    summary: { flex: 1, minWidth: 0 },
+    count: { fontSize: 13, color: colors.textSecondary },
+    total: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: colors.text,
+      fontVariant: ["tabular-nums"],
+    },
+  }));
 
   // Safety net: if we arrive here with a supplier but no products loaded yet, fetch now.
   useEffect(() => {
@@ -94,6 +122,7 @@ export default function ProductosScreen() {
   }, [selectedProducts, products]);
 
   const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const cartTotal = cartItems.reduce((sum, item) => sum + item.total, 0);
 
   useEffect(() => {
     if (!isMobile) return;
@@ -109,17 +138,37 @@ export default function ProductosScreen() {
 
   return (
     <View style={styles.container}>
-      <ListProducts
-        loading={loading}
-        categories={categories}
-        products={products}
-        selectedProducts={selectedProducts}
-        onAddProduct={handleAddProduct}
-        onRemoveProduct={handleRemoveProduct}
-        onItemChange={handleItemChange}
-        canEditItems={canEditLines}
-        canRemoveItems={canRemoveLines}
-      />
+      <View style={styles.productsSection}>
+        <ListProducts
+          loading={loading}
+          categories={categories}
+          products={products}
+          selectedProducts={selectedProducts}
+          onAddProduct={handleAddProduct}
+          onRemoveProduct={handleRemoveProduct}
+          onItemChange={handleItemChange}
+          canEditItems={canEditLines}
+          canRemoveItems={canRemoveLines}
+        />
+
+        {/* En el celular no hay carrito al lado: esta barra regresa a la
+            compra, donde se revisa y se confirma. */}
+        {isMobile && (
+          <View style={barStyles.bar}>
+            <View style={barStyles.summary}>
+              <Text style={barStyles.count}>
+                {cartItems.length === 0
+                  ? "Sin productos"
+                  : `${cartItems.length} ${cartItems.length === 1 ? "producto" : "productos"}`}
+              </Text>
+              <Text style={barStyles.total}>{formatMoney(cartTotal)}</Text>
+            </View>
+            <Button mode="contained" onPress={backToForm} icon="check">
+              Listo
+            </Button>
+          </View>
+        )}
+      </View>
 
       {/* Carrito lateral — solo desktop */}
       {!isMobile && (
@@ -135,11 +184,11 @@ export default function ProductosScreen() {
             <View style={{ padding: 16 }}>
               <Button
                 mode="contained"
-                onPress={() => goBack()}
+                onPress={backToForm}
                 style={{ marginTop: 8 }}
                 icon="arrow-left"
               >
-                Volver al formulario
+                Volver a la compra
               </Button>
             </View>
           </Cart>
@@ -153,6 +202,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     flexDirection: "row",
+  },
+  productsSection: {
+    flex: 1,
   },
   cartSection: {
     minWidth: 300,

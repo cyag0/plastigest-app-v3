@@ -227,6 +227,7 @@ const Services = {
         payment_method?: string;
         /** ¿El dinero salió de la caja? Solo entonces se registra egreso. */
         paid_from_cash?: boolean;
+        notes?: string;
       },
     ) {
       const response = await axiosClient.post(

@@ -2,11 +2,12 @@ import { Cart } from "@/components/Views/POSV3/components";
 import React from "react";
 import { View } from "react-native";
 import { Button } from "react-native-paper";
-import { usePurchase } from "./PurchaseContext";
+import { useBackToPurchaseForm, usePurchase } from "./PurchaseContext";
 
 export default function CarritoScreen() {
   const { cartItems, handleRemoveProduct, handleItemChange, canEditLines, canRemoveLines } =
     usePurchase();
+  const backToForm = useBackToPurchaseForm();
 
   return (
     <View style={{ flex: 1 }}>
@@ -19,7 +20,11 @@ export default function CarritoScreen() {
         isScreen
       >
         <View style={{ padding: 16 }}>
-          <Button mode="contained">Finalizar Compra</Button>
+          {/* Se confirma en el formulario (proveedor, fecha y forma de pago);
+              antes este botón no hacía nada. */}
+          <Button mode="contained" onPress={backToForm} icon="arrow-right">
+            Revisar y confirmar
+          </Button>
         </View>
       </Cart>
     </View>

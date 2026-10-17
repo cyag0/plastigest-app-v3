@@ -4,9 +4,6 @@ import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PermissionGate from "@/components/App/PermissionGate";
 import StatusBadge from "@/components/App/StatusBadge";
 import PurchaseStats from "@/components/Dashboard/PurchaseStats";
-import CreatePurchaseModal, {
-  CreatePurchaseModalRef,
-} from "@/components/Views/POSV2/Components/CreatePurchaseModal";
 import palette from "@/constants/palette";
 import { purchaseStatus } from "@/constants/statuses";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
@@ -19,7 +16,7 @@ import {
   createCrudService,
 } from "@/utils/services/crudService";
 import { useRouter } from "expo-router";
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Text } from "react-native-paper";
 import { SceneMap, TabView } from "react-native-tab-view";
@@ -71,7 +68,6 @@ export default function PurchasesIndex() {
     { key: "stats", title: "Estadísticas" },
   ]);
 
-  const modalRef = useRef<CreatePurchaseModalRef>(null);
   // Remonta la lista después de eliminar un borrador para que desaparezca.
   const [listKey, setListKey] = useState(0);
 
@@ -238,8 +234,12 @@ export default function PurchasesIndex() {
             },
           ],
         }}
+        // El formulario pide proveedor, fecha y forma de pago; el borrador
+        // se crea con el primer producto. Antes un modal pedía lo mismo,
+        // creaba un borrador vacío y abría productos sin forma de llegar a
+        // confirmar en el celular.
         onPressCreate={() => {
-          modalRef.current?.show();
+          router.push("/(tabs)/home/purchases/formv2?new=1" as any);
         }}
         fabLabel="Nueva Compra"
         columns={columns}
@@ -289,14 +289,6 @@ export default function PurchasesIndex() {
         onIndexChange={setIndex}
         initialLayout={{ width: layout.width }}
         renderTabBar={() => null}
-      />
-
-      <CreatePurchaseModal
-        ref={modalRef}
-        onSuccess={(purchaseId) => {
-          // El modal ya navega automáticamente a productos
-          console.log("Purchase created with ID:", purchaseId);
-        }}
       />
     </View>
     </PermissionGate>

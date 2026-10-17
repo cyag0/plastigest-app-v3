@@ -8,7 +8,7 @@ import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import Services from "@/utils/services";
 import { parseQuantity } from "@/utils/format";
-import { useGlobalSearchParams } from "expo-router";
+import { router, useGlobalSearchParams, useNavigation } from "expo-router";
 import React, {
   createContext,
   useContext,
@@ -48,6 +48,25 @@ interface ConfirmPurchaseData {
   document_number?: string;
   payment_method?: string;
   paid_from_cash?: boolean;
+  notes?: string;
+}
+
+/**
+ * Regresa al formulario de la compra (la primera pantalla de formv2), que es
+ * donde se confirma. Antes la compra nueva abría directo en productos: en el
+ * celular "atrás" salía a la lista y no había forma de llegar a confirmar.
+ */
+export function useBackToPurchaseForm() {
+  const navigation = useNavigation();
+  return () => {
+    const state = navigation.getState();
+    // Productos y carrito se abren encima del formulario: se cierran.
+    if (state?.routes?.[0]?.name === "index" && (state.index ?? 0) > 0) {
+      (navigation as any).popToTop();
+    } else {
+      router.replace("/(tabs)/home/purchases/formv2" as any);
+    }
+  };
 }
 
 interface PurchaseContextType {
@@ -751,11 +770,18 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
 
   // La compra que se abrió desde la lista ("Editar" → formv2?id=…). Se lee
   // una vez: al pasar a productos o al carrito la ruta ya no trae el id.
-  const { id: routeId } = useGlobalSearchParams<{ id?: string }>();
+  const { id: routeId, new: routeNew } = useGlobalSearchParams<{
+    id?: string;
+    new?: string;
+  }>();
   const [routePurchaseId] = useState<number | null>(() => {
     const parsed = parseInt(String(routeId ?? ""), 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
   });
+  // "Nueva compra" (formv2?new=1) arranca vacía: el borrador se crea con el
+  // primer producto. Sin id ni new se retoma el último borrador (lo que
+  // arma Reabastecimiento).
+  const [startsEmpty] = useState(() => !routePurchaseId && routeNew === "1");
 
   const [cart] = useState(() =>
     createPurchaseCart({
@@ -774,7 +800,9 @@ export function PurchaseProvider({ children }: PurchaseProviderProps) {
   }, []);
 
   async function fetchData() {
-    const res = await cart.loadDraft(routePurchaseId);
+    const res = startsEmpty
+      ? { supplier_id: null, header: null }
+      : await cart.loadDraft(routePurchaseId);
 
     // Cargar datos del formulario usando formRef (si todavía no se monta,
     // arranca con getDraftHeader()).

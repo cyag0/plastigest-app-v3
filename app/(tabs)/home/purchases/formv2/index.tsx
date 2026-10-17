@@ -1,5 +1,6 @@
 import { formatMoney, formatQuantity } from "@/utils/format";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
+import { FormInput } from "@/components/Form/AppInput";
 import AppDependency from "@/components/Form/AppDependency";
 import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormProSelect } from "@/components/Form/AppProSelect";
@@ -27,7 +28,13 @@ interface PurchasesFormProps {
 
 function CartHeaderButton({ count, onPress }: { count: number; onPress: () => void }) {
   return (
-    <TouchableOpacity onPress={onPress} style={cartBtnStyles.btn} activeOpacity={0.7}>
+    <TouchableOpacity
+      onPress={onPress}
+      style={cartBtnStyles.btn}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel="Ver carrito"
+    >
       <MaterialCommunityIcons name="cart-outline" size={24} color={palette.text} />
       {count > 0 && (
         <View style={cartBtnStyles.badge}>
@@ -131,6 +138,7 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
         payment_method: paymentMethod,
         paid_from_cash:
           paymentMethod === "cash" && values.get("paid_from_cash")?.toString() !== "0",
+        notes: values.get("notes")?.toString() ?? "",
       });
       // Ya había una confirmación en curso (doble toque).
       if (!confirmed) return false;
@@ -272,6 +280,14 @@ export default function PurchaseFormScreen(props: PurchasesFormProps) {
             return <PurchasesContent supplier_id={value} />;
           }}
         </AppDependency>
+
+        <FormInput
+          name="notes"
+          label="Notas (opcional)"
+          placeholder="Observaciones de la compra"
+          multiline
+          numberOfLines={3}
+        />
       </View>
     </AppForm>
   );

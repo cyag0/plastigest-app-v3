@@ -1,7 +1,7 @@
 import { goBack } from "@/utils/navigation";
 import AppBar from "@/components/App/AppBar";
 import { routeGuardLayout } from "@/components/App/RoutePermissionGuard";
-import { Stack, usePathname, useRouter } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import React from "react";
 import { View } from "react-native";
 import { PurchaseProvider } from "./PurchaseContext";
@@ -11,12 +11,13 @@ import { PurchaseProvider } from "./PurchaseContext";
 const screenLayout = routeGuardLayout("(tabs)/home/purchases/formv2");
 
 function StackContent() {
-  const router = useRouter();
   const pathname = usePathname();
 
+  // Desde el formulario se sale de la compra (a la lista o a donde se abrió,
+  // como Reabastecimiento); desde productos o el carrito se vuelve a él.
   const handleBack = () => {
     if (pathname.endsWith("/formv2")) {
-      router.replace("/(tabs)/home/purchases/index" as any);
+      goBack("/(tabs)/home/purchases");
     } else {
       goBack();
     }
@@ -35,7 +36,6 @@ function StackContent() {
             <AppBar
               title={options.title || route.name}
               showSearchButton={false}
-              showBackButton={!pathname.endsWith("/formv2")}
               onBack={handleBack}
               rightActions={
                 screenRight ? (
