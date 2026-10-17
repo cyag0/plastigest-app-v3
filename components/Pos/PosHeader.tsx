@@ -27,9 +27,20 @@ interface Props {
   onKioskOrders?: () => void;
 }
 
+/**
+ * Colores de la barra: verde de marca en claro; en oscuro un verde tenue,
+ * porque una franja verde claro de lado a lado deslumbra.
+ */
+function useBarColors() {
+  const { colors, mode } = useTheme();
+  return mode === "dark"
+    ? { bg: colors.primarySoft, fg: colors.text }
+    : { bg: colors.primary, fg: colors.primaryForeground };
+}
+
 /** Encabezado del POS: sucursal · caja · cajero · hora. */
 export default function PosHeader({ locationName, registerName, cashierName, compact, onCloseShift, onExit, onPrintShift, ticketWidth, onToggleTicketWidth, onRefreshCatalog, kioskPending, onKioskOrders }: Props) {
-  const { colors } = useTheme();
+  const bar = useBarColors();
   const styles = useThemedStyles(makeStyles);
   const [now, setNow] = useState(new Date());
   const [menu, setMenu] = useState(false);
@@ -42,8 +53,8 @@ export default function PosHeader({ locationName, registerName, cashierName, com
   const time = now.toLocaleTimeString("es-MX", { hour: "numeric", minute: "2-digit" });
 
   return (
-    <View style={styles.bar}>
-      <IconButton icon="arrow-left" iconColor={colors.primaryForeground} size={20} onPress={onExit} />
+    <View style={[styles.bar, { backgroundColor: bar.bg }]}>
+      <IconButton icon="arrow-left" iconColor={bar.fg} size={20} onPress={onExit} />
       {compact ? (
         // Celular: la sucursal de la caja también se ve (el turno puede ser
         // de otra sucursal que la seleccionada en la app).
@@ -52,7 +63,7 @@ export default function PosHeader({ locationName, registerName, cashierName, com
             <>
               <Item icon="cash-register" text={registerName} strong />
               {locationName ? (
-                <Text style={styles.compactSub} numberOfLines={1}>
+                <Text style={[styles.compactSub, { color: bar.fg }]} numberOfLines={1}>
                   {locationName}
                 </Text>
               ) : null}
@@ -70,12 +81,12 @@ export default function PosHeader({ locationName, registerName, cashierName, com
         </View>
       )}
       {onKioskOrders && <KioskOrdersButton count={kioskPending ?? 0} compact={compact} onPress={onKioskOrders} />}
-      <Text style={styles.time}>{time}</Text>
+      <Text style={[styles.time, { color: bar.fg }]}>{time}</Text>
       <Menu
         visible={menu}
         onDismiss={() => setMenu(false)}
         anchorPosition="bottom"
-        anchor={<IconButton icon="dots-vertical" iconColor={colors.primaryForeground} onPress={() => setMenu(true)} />}
+        anchor={<IconButton icon="dots-vertical" iconColor={bar.fg} onPress={() => setMenu(true)} />}
       >
         {onRefreshCatalog && (
           <Menu.Item leadingIcon="refresh" title="Actualizar productos" onPress={() => { setMenu(false); onRefreshCatalog(); }} />
@@ -100,23 +111,23 @@ export default function PosHeader({ locationName, registerName, cashierName, com
 }
 
 function Item({ icon, text, strong }: { icon: string; text?: string; strong?: boolean }) {
-  const { colors } = useTheme();
+  const bar = useBarColors();
   const styles = useThemedStyles(makeStyles);
   if (!text) return null;
   return (
     <View style={styles.item}>
-      <MaterialCommunityIcons name={icon as any} size={16} color={colors.primaryForeground} />
-      <Text style={[styles.text, strong && { fontWeight: "700" }]} numberOfLines={1}>{text}</Text>
+      <MaterialCommunityIcons name={icon as any} size={16} color={bar.fg} />
+      <Text style={[styles.text, { color: bar.fg }, strong && { fontWeight: "700" }]} numberOfLines={1}>{text}</Text>
     </View>
   );
 }
 
-const makeStyles = themedStyles((c) => ({
+const makeStyles = themedStyles(() => ({
   compactInfo: { flex: 1, minWidth: 0, justifyContent: "center", paddingVertical: 4 },
-  compactSub: { color: c.primaryForeground, opacity: 0.85, fontSize: 12, marginLeft: 22 },
-  bar: { flexDirection: "row", alignItems: "center", backgroundColor: c.primary, paddingRight: 4, minHeight: 52 },
+  compactSub: { opacity: 0.85, fontSize: 12, marginLeft: 22 },
+  bar: { flexDirection: "row", alignItems: "center", paddingRight: 4, minHeight: 52 },
   info: { flex: 1, flexDirection: "row", gap: 20, alignItems: "center", flexWrap: "wrap" },
   item: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 260 },
-  text: { color: c.primaryForeground, fontSize: 15 },
-  time: { color: c.primaryForeground, fontSize: 15, fontWeight: "600", marginRight: 4 },
+  text: { fontSize: 15 },
+  time: { fontSize: 15, fontWeight: "600", marginRight: 4 },
 }));

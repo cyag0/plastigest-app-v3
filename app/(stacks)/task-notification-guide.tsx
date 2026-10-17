@@ -300,7 +300,9 @@ function UsersBlock({
 
 export default function TaskNotificationGuideScreen() {
   const alerts = useAlerts();
-  const { colors } = useTheme();
+  const { colors, mode } = useTheme();
+  // En oscuro el encabezado va en verde tenue: lleno de verde claro deslumbra.
+  const softHero = mode === "dark";
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const {
@@ -505,19 +507,19 @@ export default function TaskNotificationGuideScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.hero}>
-          <View style={styles.heroIcon}>
+        <View style={[styles.hero, softHero && { backgroundColor: colors.primarySoft }]}>
+          <View style={[styles.heroIcon, softHero && { backgroundColor: colors.primarySoft }]}>
             <MaterialCommunityIcons
               name="bell-check-outline"
               size={34}
-              color={colors.primaryForeground}
+              color={softHero ? colors.primary : colors.primaryForeground}
             />
           </View>
           <View style={styles.heroCopy}>
-            <Text variant="headlineSmall" style={styles.heroTitle}>
+            <Text variant="headlineSmall" style={[styles.heroTitle, softHero && { color: colors.text }]}>
               Tareas y notificaciones
             </Text>
-            <Text variant="bodyMedium" style={styles.heroText}>
+            <Text variant="bodyMedium" style={[styles.heroText, softHero && { color: colors.textSecondary }]}>
               Guía operativa para saber qué se genera, cuándo se activa y qué
               usuarios de la sucursal actual reciben cada aviso.
             </Text>
