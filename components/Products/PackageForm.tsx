@@ -25,7 +25,7 @@ import CodeField from "@/components/Products/CodeField";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { goBack } from "@/utils/navigation";
 import Services from "@/utils/services";
-import { useLocalSearchParams, useNavigation } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useFormikContext } from "formik";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { TextInput } from "react-native-paper";
@@ -117,14 +117,6 @@ export default function PackageForm({ id, readonly, unitsOfProductType = true }:
   const packageId = id || (params.id ? parseInt(params.id as string) : undefined);
   const formRef = useRef<AppFormRef<PackageFormData>>(null);
   const { company } = useSelectedCompany();
-
-  // En el teléfono el título va en la barra (en web, la ruta de migas).
-  const navigation = useNavigation();
-  useEffect(() => {
-    navigation.setOptions({
-      title: readonly ? "Paquete" : packageId ? "Editar paquete" : "Nuevo paquete",
-    });
-  }, [navigation, readonly, packageId]);
 
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [product, setProduct] = useState<Product | null>(null);

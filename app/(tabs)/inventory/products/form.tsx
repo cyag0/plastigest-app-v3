@@ -17,7 +17,7 @@ import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { formatQuantity } from "@/utils/format";
 import { goBack } from "@/utils/navigation";
 import Services from "@/utils/services";
-import { useLocalSearchParams, useNavigation } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useFormikContext } from "formik";
 import React, { useEffect, useMemo, useRef } from "react";
 import * as Yup from "yup";
@@ -139,18 +139,6 @@ export default function ProductsForm(props: ProductsFormProps) {
   // El tipo elegido decide qué partes aplican (proveedor, presentación).
   const typeOf = (value: unknown) =>
     value ? inventoryTypesById[Number(value)] : undefined;
-
-  // En el teléfono el título va en la barra (en web, la ruta de migas).
-  const navigation = useNavigation();
-  useEffect(() => {
-    navigation.setOptions({
-      title: props.readonly
-        ? "Producto"
-        : productId
-          ? "Editar producto"
-          : "Nuevo producto",
-    });
-  }, [navigation, props.readonly, productId]);
 
   useEffect(() => {
     setTimeout(() => {
