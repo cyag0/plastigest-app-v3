@@ -25,6 +25,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "react-native-paper";
 
 export default function PackScreen() {
@@ -33,6 +34,8 @@ export default function PackScreen() {
   const alerts = useAlerts();
   const { user } = useAuth();
   const { colors } = useTheme();
+  // La barra de abajo no queda debajo de la barra de gestos del teléfono.
+  const insets = useSafeAreaInsets();
 
   const [data, setData] = useState<App.Entities.ProductionInitialData | null>(null);
   const [problem, setProblem] = useState<RecordLoadProblem | null>(null);
@@ -201,7 +204,7 @@ export default function PackScreen() {
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
         <View style={styles.footerInner}>
           <Button mode="outlined" onPress={() => goBack("/(tabs)/home/production")} style={{ flex: 1 }}>
             Cancelar

@@ -27,6 +27,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "react-native-paper";
 
 interface Line {
@@ -48,6 +49,8 @@ export default function ProcessForm() {
   const { can } = useCan();
   const canSave = can(id ? "formulas_update" : "formulas_create");
   const canEditProducts = can("products_update");
+  // La barra de abajo no queda debajo de la barra de gestos del teléfono.
+  const insets = useSafeAreaInsets();
 
   const [loaded, setLoaded] = useState(!id);
   const [problem, setProblem] = useState<RecordLoadProblem | null>(null);
@@ -311,7 +314,7 @@ export default function ProcessForm() {
         )}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
         <View style={styles.footerInner}>
           <Button mode="outlined" onPress={() => goBack("/(tabs)/home/production/formulas")} style={{ flex: 1 }}>
             {canSave ? "Cancelar" : "Volver"}

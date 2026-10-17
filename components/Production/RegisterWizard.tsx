@@ -30,6 +30,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Platform, Pressable, ScrollView, type ScrollViewInstance, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button, Modal, Portal } from "react-native-paper";
 import PresentationPacker, { type LeftoverAction } from "./PresentationPacker";
 import ProductPickerSheet, { type PickedProduct } from "./ProductPickerSheet";
@@ -79,6 +80,8 @@ export default function RegisterWizard({ orderId }: { orderId?: number }) {
   const { can } = useCan();
   const styles = useStyles();
   const scroll = useRef<ScrollViewInstance>(null);
+  // La barra de abajo no queda debajo de la barra de gestos del teléfono.
+  const insets = useSafeAreaInsets();
 
   const [data, setData] = useState<App.Entities.ProductionInitialData | null>(null);
   const [problem, setProblem] = useState<RecordLoadProblem | null>(null);
@@ -617,7 +620,7 @@ export default function RegisterWizard({ orderId }: { orderId?: number }) {
       </ScrollView>
 
       {step > 0 && (
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
           <View style={styles.footerInner}>
             {step < 3 ? (
               <>
