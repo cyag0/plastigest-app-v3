@@ -1,641 +1,287 @@
-import { formatQuantity } from "@/utils/format";
-import { goBack } from "@/utils/navigation";
-import AppForm, {
-  AppFormRef,
-  useAppForm,
-} from "@/components/Form/AppForm/AppForm";
-import { FormDatePicker } from "@/components/Form/AppDatePicker";
-import AppUpload, { UploadedFile } from "@/components/Form/AppUpload";
-import { FormInput } from "@/components/Form/AppInput";
-import { FormNumeric } from "@/components/Form/AppNumeric";
-import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
-import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
-import { useSelectedLocation } from "@/hooks/useSelectedLocation";
-import Services from "@/utils/services";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useFormikContext } from "formik";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, ScrollView } from "react-native";
-import { Button, Card, Divider, IconButton, Text, Chip } from "react-native-paper";
-import * as Yup from "yup";
-import { toLocalDateString } from "@/utils/dates";
+/**
+ * Registrar un ajuste de inventario en una sola pantalla, como Procesos y
+ * Compras: dónde se aplica y cuándo pasó, los productos (cada uno con qué
+ * pasó y cuánto) y la barra de abajo con la acción concreta ("Registrar
+ * salida de 3 pz").
+ *
+ * Antes se pedía "Dirección" y "Razón" por separado (se podía registrar un
+ * "Encontrado" como salida y la razón arrancaba en "Otro"), "Diferencia de
+ * conteo" obligaba a hacer la resta a mano, se podía guardar una salida
+ * mayor a la existencia (el servidor respondía 422) y "Crear" era un botón
+ * chico y gris al final.
+ *
+ * Cada producto es un ajuste (POST inventory-adjustments, multipart con
+ * details[i][...] y las fotos en details[i][evidence][]).
+ */
+
+import { ListGroup, ListRow, ListSection, ListValueRow } from "@/components/App/ListGroup";
+import AdjustmentLineRow from "@/components/Adjustments/AdjustmentLineRow";
+import { checkLine, lineDetail, submitLabel, type DraftLine } from "@/components/Adjustments/adjustmentLine";
+import { createAdjustments, loadProductForAdjustment } from "@/components/Adjustments/adjustmentRequests";
+import { FORM_MAX_WIDTH, FormFooter } from "@/components/Form/FormLayout";
+import ProductPickerSheet, { type PickedProduct } from "@/components/Production/ProductPickerSheet";
+import { shortName } from "@/components/Production/productionFormat";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
+import { useAlerts } from "@/hooks/useAlerts";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { formatDate, parseLocalDate, toLocalDateString } from "@/utils/dates";
+import { errorMessageOf } from "@/utils/errorNotice";
+import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
+import { goBack } from "@/utils/navigation";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useNavigation, usePathname } from "expo-router";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  type ScrollViewInstance,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { Button } from "react-native-paper";
+import { DatePickerModal } from "react-native-paper-dates";
 
-interface AdjustmentFormProps {
-  id?: number;
-  readonly?: boolean;
+/** "Hoy, 17 oct 2026" · "Ayer, 16 oct 2026" · "14 oct 2026". */
+function dateText(value: string): string {
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (value === toLocalDateString(today)) return `Hoy, ${formatDate(value)}`;
+  if (value === toLocalDateString(yesterday)) return `Ayer, ${formatDate(value)}`;
+  return formatDate(value);
 }
 
-interface AdjustmentDetailItem {
-  product_id: number;
-  direction: "in" | "out";
-  quantity: string;
-  unit_id?: number;
-  reason_code: string;
-  notes?: string;
-  evidence?: UploadedFile[];
-  previous_stock?: number;
-  new_stock?: number;
-}
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 
-interface AdjustmentFormData {
-  location_id: number;
-  applied_at: string;
-  notes: string;
-  details: AdjustmentDetailItem[];
-}
-
-export default function AdjustmentForm(props: AdjustmentFormProps) {
-  const readonly = props.readonly || false;
-
-  const router = useRouter();
-  const { selectedLocation } = useSelectedLocation();
-  const formRef = useRef<AppFormRef<AdjustmentFormData>>(null);
-
-  // AppForm vuelve a llamar loadInitialValues() —y por tanto resetForm()— cada
-  // vez que cambia la REFERENCIA de initialValues. Con un objeto literal inline
-  // eso pasaba en cada render del componente, así que los productos que ya
-  // habías agregado se borraban solos. Se memoiza para que la referencia sea
-  // estable (mismo patrón que UserFormShared).
-  const initialValues = useMemo(
-    () => ({
-      location_id: selectedLocation?.id || 0,
-      applied_at: toLocalDateString(),
-      notes: "",
-      details: [
-        {
-          product_id: 0,
-          direction: "out" as const,
-          quantity: "0",
-          unit_id: undefined,
-          reason_code: "other",
-          notes: undefined,
-          evidence: [],
-        },
-      ],
-    }),
-    [selectedLocation?.id]
-  );
-
-  return (
-    <AppForm
-      readonly={props.readonly}
-      id={props.id}
-      ref={formRef}
-      showButtons={!readonly}
-      api={Services.inventoryAdjustments}
-      initialValues={initialValues}
-      validationSchema={Yup.object().shape({
-        location_id: Yup.number().required("La sucursal es obligatoria"),
-        applied_at: Yup.string().required("La fecha es obligatoria"),
-        details: Yup.array()
-          .of(
-            Yup.object().shape({
-              product_id: Yup.number().required("El producto es obligatorio"),
-              direction: Yup.string().oneOf(["in", "out"]).required("La dirección es obligatoria"),
-              quantity: Yup.number()
-                .min(0.01, "La cantidad debe ser al menos 0.01")
-                .required("La cantidad es obligatoria"),
-              unit_id: Yup.number().required("La unidad es obligatoria"),
-              reason_code: Yup.string()
-                .oneOf(["loss", "damage", "count_diff", "expiry", "theft", "found", "other"])
-                .required("La razón del detalle es obligatoria"),
-            })
-          )
-          .min(1, "Debe agregar al menos un producto al ajuste"),
-      })}
-      onSuccess={() => {
-        goBack();
-      }}
-    >
-      <FormDatePicker name="applied_at" label="Fecha del ajuste" required />
-
-     {/*  <FormInput
-        name="notes"
-        label="Notas"
-        placeholder="Observaciones adicionales"
-        multiline
-        numberOfLines={3}
-      /> */}
-
-      <Divider style={{ marginVertical: 16 }} />
-
-      <ProductsList />
-    </AppForm>
-  );
-}
-
-function ProductsList() {
+export default function AdjustmentForm() {
+  const navigation = useNavigation();
+  const pathname = usePathname();
+  // También se abre desde Inventario (inventory/adjustment/form).
+  const listRoute = pathname.startsWith("/inventory") ? "/(tabs)/inventory/adjustment" : "/(tabs)/home/adjustment";
+  const alerts = useAlerts();
   const { colors } = useTheme();
-  const styles = useThemedStyles(makeStyles);
-  const form = useFormikContext<AdjustmentFormData>();
-  const formContext = useAppForm();
+  const { location } = useAuth();
+  // Un doble toque en "Registrar" no manda dos veces los mismos ajustes.
+  const { submitting, run } = useSubmitGuard();
+  const narrow = useWindowDimensions().width < 520;
 
-  // details puede no existir todavía: AppForm arranca formik con {} y solo
-  // aplica los initialValues dentro de un useEffect, y "Resetear" también deja
-  // los values vacíos. Sin esta guarda, agregar un producto reventaba con
-  // "can't access property Symbol.iterator, form.values.details is undefined".
-  const products = Array.isArray(form.values.details) ? form.values.details : [];
+  const today = toLocalDateString();
+  const [date, setDate] = useState(today);
+  const [dateOpen, setDateOpen] = useState(false);
+  const [lines, setLines] = useState<DraftLine[]>([]);
+  const [picker, setPicker] = useState(false);
+  // Se intentó registrar: se marcan los renglones con lo que falta.
+  const [attempted, setAttempted] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
 
-  function handleAddProduct() {
-    const newProduct: AdjustmentDetailItem = {
-      product_id: 0,
-      direction: "out",
-      quantity: "0",
-      unit_id: undefined,
-      reason_code: "other",
-      notes: undefined,
-      evidence: [],
-    };
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: "Nuevo ajuste" });
+  }, [navigation]);
 
-    form.setFieldValue("details", [...products, newProduct]);
+  const styles = useThemedStyles((c) => ({
+    screen: { flex: 1, backgroundColor: c.background },
+    content: { padding: 16, paddingBottom: 32, gap: 22, maxWidth: FORM_MAX_WIDTH, width: "100%", alignSelf: "center" },
+    selectRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 16,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+    },
+    rowLabel: { fontSize: 14, lineHeight: 20, color: c.textSecondary },
+    rowValue: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1 },
+    rowValueText: { fontSize: 14, lineHeight: 20, fontWeight: "500", color: c.text, textAlign: "right", flexShrink: 1 },
+    hint: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+  }));
+
+  const checks = useMemo(() => lines.map(checkLine), [lines]);
+
+  const change = (productId: number, patch: Partial<DraftLine>) => {
+    setServerError(null);
+    setLines((rows) => rows.map((row) => (row.productId === productId ? { ...row, ...patch } : row)));
+  };
+
+  const remove = (productId: number) => {
+    setServerError(null);
+    setLines((rows) => rows.filter((row) => row.productId !== productId));
+  };
+
+  const addProduct = (product: PickedProduct) => {
+    setServerError(null);
+    setLines((rows) => [
+      ...rows,
+      {
+        productId: product.id,
+        name: product.name,
+        code: product.code ?? null,
+        unitId: product.unit_id,
+        unitAbbr: product.unit_abbreviation ?? "",
+        unitType: null,
+        stock: product.stock,
+        units: [],
+        captureUnitId: product.unit_id,
+        reason: null,
+        direction: null,
+        qty: "",
+        notes: "",
+        photos: [],
+        showNotes: false,
+        showPhotos: false,
+      },
+    ]);
+    // El renglón nuevo queda abajo: en el teléfono se baja a verlo.
+    setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 150);
+    // La existencia al momento y las unidades en que se puede capturar.
+    loadProductForAdjustment(product.id, product.unit_id).then((info) => {
+      if (!info) return;
+      setLines((rows) =>
+        rows.map((row) =>
+          row.productId === product.id
+            ? { ...row, stock: info.stock, unitType: info.unitType, code: row.code ?? info.code, units: info.units }
+            : row,
+        ),
+      );
+    });
+  };
+
+  const problems = lines.map((line, index) => ({ line, problem: checks[index].problem })).filter((row) => row.problem);
+
+  // Lo que dice la barra: el error del servidor o, después de intentar, lo que falta.
+  let note: string | null = serverError;
+  if (!note && attempted) {
+    if (lines.length === 0) note = "Agrega al menos un producto.";
+    else if (problems.length === 1)
+      note = `${shortName(problems[0].line.name)}: ${lowerFirst(problems[0].problem!.message)}`;
+    else if (problems.length > 1) note = `Revisa los ${problems.length} productos marcados.`;
   }
 
-  function handleRemoveProduct(index: number) {
-    const updatedProducts = [...products];
-    updatedProducts.splice(index, 1);
-    form.setFieldValue("details", updatedProducts);
-  }
+  const submit = () =>
+    run(async () => {
+      setAttempted(true);
+      setServerError(null);
+      if (lines.length === 0 || problems.length > 0) return;
+      try {
+        const form = await objectToFormDataWithNestedInputsAsync({
+          applied_at: date,
+          details: lines.map((line, index) => lineDetail(line, checks[index])),
+        });
+        await createAdjustments(form);
+        alerts.success(lines.length === 1 ? "Ajuste registrado" : `${lines.length} ajustes registrados`);
+        goBack(listRoute);
+      } catch (error) {
+        setServerError(errorMessageOf(error, "No se pudo registrar el ajuste. Inténtalo de nuevo."));
+      }
+    });
 
   return (
-    <ScrollView>
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 16,
-        }}
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView
+        ref={scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
       >
-        <Text variant="titleMedium" style={{ fontWeight: "bold" }}>
-          Productos ({products.length})
-        </Text>
-      </View>
+        <ListGroup inset={14}>
+          <ListValueRow label="Se aplica en" value={location?.name ?? "Sin sucursal"} />
+          <Pressable
+            onPress={() => setDateOpen(true)}
+            style={({ pressed }) => [styles.selectRow, pressed && { backgroundColor: colors.surfaceMuted }]}
+            accessibilityRole="button"
+            accessibilityLabel={`¿Cuándo pasó? ${dateText(date)}. Cambiar`}
+          >
+            <Text style={styles.rowLabel}>¿Cuándo pasó?</Text>
+            <View style={styles.rowValue}>
+              <Text style={styles.rowValueText}>{dateText(date)}</Text>
+              <MaterialCommunityIcons name="chevron-down" size={18} color={colors.textMuted} />
+            </View>
+          </Pressable>
+        </ListGroup>
 
-      {products.length === 0 && (
-        <Card style={styles.emptyCard}>
-          <Card.Content>
-            <Text style={{ textAlign: "center", opacity: 0.6 }}>
-              No hay productos agregados
-            </Text>
-          </Card.Content>
-        </Card>
-      )}
+        <ListSection title="Productos" count={lines.length || undefined}>
+          <ListGroup inset={14}>
+            {lines.map((line, index) => (
+              <AdjustmentLineRow
+                key={line.productId}
+                line={line}
+                check={checks[index]}
+                showProblems={attempted}
+                onChange={(patch) => change(line.productId, patch)}
+                onRemove={() => remove(line.productId)}
+              />
+            ))}
+            <ListRow
+              icon="plus"
+              iconColor={colors.primary}
+              title="Agregar producto"
+              onPress={() => setPicker(true)}
+              chevron={false}
+            />
+          </ListGroup>
+          {lines.length === 0 && (
+            <Text style={styles.hint}>Búscalo por nombre o código; también puedes escanearlo.</Text>
+          )}
+        </ListSection>
+      </ScrollView>
 
-      {products.map((product, index) => (
-        <ProductCard
-          key={index}
-          product={product}
-          index={index}
-          onRemove={() => handleRemoveProduct(index)}
-        />
-      ))}
-
-      {!formContext.readonly && (
+      <FormFooter note={note}>
+        {/* En el teléfono "Cancelar" ocupa solo lo suyo: así cabe la acción
+            completa ("Registrar salida de 3 pz"), que con el reparto de
+            siempre se cortaba. */}
+        <Button
+          mode="outlined"
+          onPress={() => goBack(listRoute)}
+          disabled={submitting}
+          compact={narrow}
+          style={narrow ? undefined : { flex: 1 }}
+        >
+          Cancelar
+        </Button>
         <Button
           mode="contained"
-          onPress={handleAddProduct}
-          icon="plus"
-          buttonColor={colors.primary}
-          style={{ marginTop: 8, marginBottom: 24 }}
+          onPress={submit}
+          loading={submitting}
+          disabled={submitting}
+          compact={narrow}
+          style={{ flex: narrow ? 1 : 1.4 }}
         >
-          Agregar producto
+          {submitLabel(lines, checks)}
         </Button>
-      )}
-    </ScrollView>
+      </FormFooter>
+
+      <ProductPickerSheet
+        visible={picker}
+        onDismiss={() => setPicker(false)}
+        title="Agregar producto"
+        params={{}}
+        excludeIds={lines.map((line) => line.productId)}
+        onSelect={addProduct}
+      />
+
+      {/* Solo hoy o días pasados: el servidor rechaza una fecha futura. */}
+      <DatePickerModal
+        locale="es"
+        mode="single"
+        visible={dateOpen}
+        onDismiss={() => setDateOpen(false)}
+        date={parseLocalDate(date)}
+        validRange={{ endDate: new Date() }}
+        label="¿Cuándo pasó?"
+        saveLabel="Listo"
+        onConfirm={({ date: picked }) => {
+          setDateOpen(false);
+          if (picked) {
+            setServerError(null);
+            setDate(toLocalDateString(picked));
+          }
+        }}
+      />
+    </KeyboardAvoidingView>
   );
 }
-
-interface ProductCardProps {
-  product: AdjustmentDetailItem;
-  index: number;
-  onRemove: () => void;
-}
-
-function ProductCard({ index, onRemove }: ProductCardProps) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(makeStyles);
-  const form = useFormikContext<AdjustmentFormData>();
-  const [productData, setProductData] = useState<any>(null);
-  const [availableUnits, setAvailableUnits] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const formContext = useAppForm();
-
-  // Mismo motivo que en ProductsList: details puede estar vacío en el primer
-  // render o después de "Resetear", así que nunca se indexa directo.
-  const detail = form.values.details?.[index];
-  const productId = detail?.product_id;
-  const direction = detail?.direction || "out";
-
-  // Cargar datos del producto cuando cambia el product_id
-  useEffect(() => {
-    const loadProductData = async () => {
-      if (!productId || productId === 0) {
-        setProductData(null);
-        setAvailableUnits([]);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        const response = await Services.products.show(Number(productId));
-        const product = response.data.data;
-
-        setProductData(product);
-
-        const productUnitId = Number(product.unit_id || product.unit?.id || 0);
-        // Traer solo unidades compatibles con la unidad del producto.
-        const groupedUnitsResponse = await Services.home.unidades.getGroupedByBase({
-          unit_id: productUnitId,
-        });
-        const groupedUnits = groupedUnitsResponse?.data || {};
-
-        let compatibleUnits: any[] = [];
-        const groups = Object.values(groupedUnits);
-        if (groups.length > 0 && Array.isArray(groups[0])) {
-          compatibleUnits = groups[0] as any[];
-        }
-
-        // Fallback por tipo si no hay conversiones configuradas por base.
-        if (compatibleUnits.length === 0 && product?.unit?.unit_type) {
-          const groupedByTypeResponse = await Services.home.unidades.getGroupedByType();
-          const groupedByType = groupedByTypeResponse?.data || {};
-          compatibleUnits = groupedByType[product.unit.unit_type] || [];
-        }
-
-        // Fallback para endpoints antiguos
-        if (compatibleUnits.length === 0 && Array.isArray(product.available_units)) {
-          compatibleUnits = product.available_units;
-        }
-
-        setAvailableUnits(compatibleUnits);
-
-        // Auto-seleccionar unidad base del producto cuando cambia el producto
-        const defaultUnit = compatibleUnits.find((u: any) => Number(u.id) === productUnitId) || compatibleUnits[0];
-        if (defaultUnit?.id) {
-          form.setFieldValue(`details.${index}.unit_id`, Number(defaultUnit.id));
-        }
-      } catch (error) {
-        console.error("Error loading product:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadProductData();
-  }, [productId]);
-
-  const quantity = parseFloat(detail?.quantity || "0");
-  const selectedUnitId = detail?.unit_id;
-  const currentStock = productData?.current_stock || 0;
-  const selectedUnit = availableUnits.find((u) => u.id === selectedUnitId);
-  const baseUnit = productData?.unit;
-
-  // Calcular cantidad en unidad base
-  let quantityInBaseUnit = quantity;
-  if (selectedUnit && baseUnit) {
-    if (selectedUnit.base_unit_id !== null) {
-      const factor = parseFloat(selectedUnit.factor_to_base || 1);
-      quantityInBaseUnit = quantity * factor;
-    }
-  }
-
-  const resultingStock = direction === "in" 
-    ? currentStock + quantityInBaseUnit 
-    : currentStock - quantityInBaseUnit;
-
-  return (
-    <Card style={styles.productCard}>
-      <Card.Content>
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 12,
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
-            <MaterialCommunityIcons
-              name="package-variant"
-              size={20}
-              color={colors.primary}
-            />
-            <Text variant="titleSmall" style={{ fontWeight: "bold" }}>
-              Producto #{index + 1}
-            </Text>
-            {loading && (
-              <Text variant="bodySmall" style={{ color: colors.primary }}>
-                Cargando...
-              </Text>
-            )}
-          </View>
-          {!formContext.readonly && (
-            <IconButton
-              icon="delete"
-              size={20}
-              iconColor={colors.error}
-              onPress={onRemove}
-            />
-          )}
-        </View>
-
-        {/* Selector de dirección (in/out) */}
-        {!formContext.readonly && (
-          <View style={{ marginBottom: 12, gap: 8 }}>
-            <Text variant="labelSmall">Dirección</Text>
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <Chip
-                selected={direction === "out"}
-                onPress={() => form.setFieldValue(`details.${index}.direction`, "out")}
-                icon="arrow-down"
-                mode={direction === "out" ? "flat" : "outlined"}
-                style={{ flex: 1 }}
-              >
-                Salida (disminuye)
-              </Chip>
-              <Chip
-                selected={direction === "in"}
-                onPress={() => form.setFieldValue(`details.${index}.direction`, "in")}
-                icon="arrow-up"
-                mode={direction === "in" ? "flat" : "outlined"}
-                style={{ flex: 1 }}
-              >
-                Entrada (aumenta)
-              </Chip>
-            </View>
-          </View>
-        )}
-
-        {/* Producto */}
-        <FormProSelect
-          name={`details.${index}.product_id`}
-          label="Producto"
-          model="products"
-          placeholder="Seleccione un producto"
-          required
-        />
-
-        {/* Unidad */}
-        <FormSelectSimple
-          name={`details.${index}.unit_id`}
-          label="Unidad"
-          required
-          data={availableUnits.map((unit) => ({
-            label: `${unit.name} (${unit.abbreviation})`,
-            value: unit.id.toString(),
-          }))}
-          disabled={loading || availableUnits.length === 0}
-        />
-
-        {/* Cantidad con controles + / - */}
-
-        <FormSelectSimple
-          name={`details.${index}.reason_code`}
-          label="Razón del producto"
-          required
-          data={[
-            { label: "Pérdida", value: "loss" },
-            { label: "Daño", value: "damage" },
-            { label: "Diferencia de Conteo", value: "count_diff" },
-            { label: "Vencimiento", value: "expiry" },
-            { label: "Robo", value: "theft" },
-            { label: "Encontrado", value: "found" },
-            { label: "Otro", value: "other" },
-          ]}
-        />
-        <View
-          style={{
-            flex: 1,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-          }}
-        >
-          {!formContext.readonly && (
-            <IconButton
-              icon="minus"
-              size={24}
-              onPress={() => {
-                const currentQuantity = parseFloat(
-                  form.values.details?.[index]?.quantity || "0"
-                );
-                if (currentQuantity > 0) {
-                  form.setFieldValue(
-                    `details.${index}.quantity`,
-                    (currentQuantity - 1).toString()
-                  );
-                }
-              }}
-            />
-          )}
-          <View style={{ flex: 1 }}>
-            <FormNumeric
-              name={`details.${index}.quantity`}
-              label="Cantidad"
-              keyboardType="numeric"
-              dense
-              onChange={(value) => {
-                const numValue = parseFloat(value || "0");
-                if (numValue >= 0) {
-                  form.setFieldValue(`details.${index}.quantity`, value);
-                }
-              }}
-            />
-          </View>
-          {!formContext.readonly && (
-            <IconButton
-              icon="plus"
-              size={24}
-              onPress={() => {
-                const currentQuantity = parseFloat(
-                  form.values.details?.[index]?.quantity || "0"
-                );
-                form.setFieldValue(
-                  `details.${index}.quantity`,
-                  (currentQuantity + 1).toString()
-                );
-              }}
-            />
-          )}
-        </View>
-
-        {/* Notas del detalle */}
-        <FormInput
-          name={`details.${index}.notes`}
-          label="Notas"
-          placeholder="Comentarios adicionales"
-          multiline
-          numberOfLines={2}
-        />
-
-        {!formContext.readonly && (
-          <View style={{ marginTop: 8 }}>
-            <AppUpload
-              label="Evidencias del producto"
-              placeholder="Subir imágenes para este producto"
-              value={detail?.evidence || []}
-              onChange={(files: UploadedFile[]) => form.setFieldValue(`details.${index}.evidence`, files)}
-              multiple
-              maxFiles={6}
-              accept="images"
-            />
-          </View>
-        )}
-
-        {/* Información de stock */}
-        {productData && !formContext.readonly && (
-          <View
-            style={{
-              backgroundColor:
-                resultingStock < 0 
-                  ? colors.error + "15" 
-                  : colors.primary + "10",
-              padding: 12,
-              borderRadius: 8,
-              marginTop: 12,
-              gap: 8,
-              borderWidth: 1,
-              borderColor: resultingStock < 0 ? colors.error + "30" : colors.primary + "30",
-            }}
-          >
-            <View
-              style={{ flexDirection: "row", justifyContent: "space-between" }}
-            >
-              <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
-                Stock actual:
-              </Text>
-              <Text
-                variant="bodyMedium"
-                style={{ fontWeight: "bold", color: colors.textSecondary }}
-              >
-                {currentStock} {baseUnit?.abbreviation || "unidades"}
-              </Text>
-            </View>
-
-            <Divider style={{ marginVertical: 4 }} />
-
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
-                Stock resultante:
-              </Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                <MaterialCommunityIcons
-                  name={direction === "in" ? "arrow-up" : "arrow-down"}
-                  size={16}
-                  color={direction === "in" ? colors.primary : colors.error}
-                />
-                <Text
-                  variant="bodyMedium"
-                  style={{
-                    fontWeight: "bold",
-                    color: resultingStock < 0 ? colors.error : colors.primary,
-                    fontSize: 16,
-                  }}
-                >
-                  {formatQuantity(resultingStock, baseUnit?.abbreviation || "unidades")}
-                </Text>
-              </View>
-            </View>
-
-            {resultingStock < 0 && direction === "out" && (
-              <View
-                style={{
-                  backgroundColor: colors.error + "20",
-                  padding: 8,
-                  borderRadius: 6,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="alert-circle"
-                  size={20}
-                  color={colors.error}
-                />
-                <Text
-                  variant="bodySmall"
-                  style={{ color: colors.error, fontWeight: "bold", flex: 1 }}
-                >
-                  El stock resultante será negativo
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* Vista readonly */}
-        {formContext.readonly && detail?.previous_stock !== undefined && (
-          <View
-            style={{
-              backgroundColor: "transparent" as any,
-              padding: 12,
-              borderRadius: 8,
-              marginTop: 12,
-              gap: 8,
-              borderWidth: 1,
-              borderColor: colors.primary + "30",
-            }}
-          >
-            <Text
-              variant="titleSmall"
-              style={{
-                color: colors.primary,
-                fontWeight: "bold",
-                marginBottom: 4,
-              }}
-            >
-              Información del Ajuste
-            </Text>
-            <Divider style={{ marginVertical: 4 }} />
-
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
-                Stock anterior:
-              </Text>
-              <Text
-                variant="bodyMedium"
-                style={{ fontWeight: "bold", color: colors.textSecondary }}
-              >
-                {detail?.previous_stock}
-              </Text>
-            </View>
-
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
-                Stock nuevo:
-              </Text>
-              <Text
-                variant="bodyMedium"
-                style={{ fontWeight: "bold", color: colors.textSecondary }}
-              >
-                {detail?.new_stock}
-              </Text>
-            </View>
-          </View>
-        )}
-      </Card.Content>
-    </Card>
-  );
-}
-
-const makeStyles = themedStyles((c) => ({
-  productCard: {
-    marginBottom: 16,
-    backgroundColor: c.surface,
-    elevation: 2,
-  },
-  emptyCard: {
-    padding: 24,
-    backgroundColor: c.surfaceMuted,
-  },
-}));
