@@ -9,7 +9,7 @@
  * (companies_list); a la empresa propia no le cambia nada desactivarla.
  */
 
-import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
+import AppForm, { AppFormRef, useAppForm } from "@/components/Form/AppForm/AppForm";
 import MakeForm from "@/components/Form/AppForm/hoc";
 import AppInput, { FormInput } from "@/components/Form/AppInput";
 import { FormPhoneInput } from "@/components/Form/AppPhoneInput";
@@ -95,17 +95,10 @@ interface CompaniesProps {
 
 export default function CompaniesForm(props: CompaniesProps) {
   const formRef = useRef<AppFormRef<Company>>(null);
-  const navigation = useNavigation();
   const { can } = useCan();
   const isEditing = !!props.id;
   // Ver y administrar todas las empresas es del administrador del sistema.
   const managesAll = can("companies_list");
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: props.readonly ? "Empresa" : isEditing ? "Editar empresa" : "Nueva empresa",
-    });
-  }, [navigation, props.readonly, isEditing]);
 
   return (
     <AppForm
@@ -128,6 +121,29 @@ export default function CompaniesForm(props: CompaniesProps) {
       successMessage={isEditing ? "Cambios guardados" : "Empresa guardada"}
       onSuccess={() => goBack()}
     >
+      <CompanyFields isEditing={isEditing} showActive={isEditing && managesAll} />
+    </AppForm>
+  );
+}
+
+/**
+ * Los campos. Van dentro de AppForm para saber si está en solo lectura
+ * (también después de tocar «Editar»): ahí sobra «(opcional)» y el título es
+ * «Empresa».
+ */
+function CompanyFields({ isEditing, showActive }: { isEditing: boolean; showActive: boolean }) {
+  const { readonly } = useAppForm();
+  const optional = !readonly;
+  const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: readonly ? "Empresa" : isEditing ? "Editar empresa" : "Nueva empresa",
+    });
+  }, [navigation, readonly, isEditing]);
+
+  return (
+    <>
       <FormInput
         name="name"
         label="Nombre"
@@ -147,12 +163,12 @@ export default function CompaniesForm(props: CompaniesProps) {
             autoCorrect={false}
             maxLength={LIMITS.email}
           />
-          <FormPhoneInput name="phone" label="Teléfono" optional />
+          <FormPhoneInput name="phone" label="Teléfono" optional={optional} />
         </FormRow>
         <FormInput
           name="address"
           label="Dirección"
-          optional
+          optional={optional}
           placeholder="Av. México #210, Puerto Vallarta, Jalisco"
           multiline
           maxLength={LIMITS.address}
@@ -177,7 +193,7 @@ export default function CompaniesForm(props: CompaniesProps) {
         </FormRow>
       </FormSection>
 
-      {isEditing && managesAll && <FormSwitch name="is_active" text="Activa" />}
-    </AppForm>
+      {showActive && <FormSwitch name="is_active" text="Activa" />}
+    </>
   );
 }
