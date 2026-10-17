@@ -1,12 +1,13 @@
 import AmountPreview from "@/components/Pos/AmountPreview";
 import { apiErrorMessage } from "@/components/Pos/saleErrors";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { parseMoney } from "@/utils/format";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, ScrollView, TextInput, View } from "react-native";
 import { ActivityIndicator, Button, Text } from "react-native-paper";
 
 interface Props {
@@ -24,6 +25,8 @@ interface Props {
  * el fondo inicial (el efectivo con el que empieza).
  */
 export default function OpenShiftView({ locationName, onOpened, onCancel }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [registers, setRegisters] = useState<App.Entities.CashRegister[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<number | null>(null);
@@ -73,7 +76,7 @@ export default function OpenShiftView({ locationName, onOpened, onCancel }: Prop
   return (
     <ScrollView contentContainerStyle={[styles.container, onCancel && styles.containerEmbedded]} keyboardShouldPersistTaps="handled">
       <View style={styles.card}>
-        <MaterialCommunityIcons name="cash-register" size={44} color={palette.primary} style={{ alignSelf: "center" }} />
+        <MaterialCommunityIcons name="cash-register" size={44} color={colors.primary} style={{ alignSelf: "center" }} />
         <Text variant="headlineSmall" style={styles.title}>Abrir turno</Text>
         <Text style={styles.subtitle}>{locationName}</Text>
 
@@ -105,8 +108,8 @@ export default function OpenShiftView({ locationName, onOpened, onCancel }: Prop
                     style={[styles.register, active && styles.registerActive, busy && styles.registerBusy]}
                   >
                     <View style={styles.registerTop}>
-                      <Text style={[styles.registerName, active && { color: palette.primaryHover }]}>{r.name}</Text>
-                      {active && <MaterialCommunityIcons name="check-circle" size={18} color={palette.primary} />}
+                      <Text style={[styles.registerName, active && { color: colors.primaryHover }]}>{r.name}</Text>
+                      {active && <MaterialCommunityIcons name="check-circle" size={18} color={colors.primary} />}
                     </View>
                     <Text style={styles.registerMeta}>
                       {busy ? `En uso: ${r.open_session?.user_name ?? "otro cajero"}` : r.code}
@@ -128,7 +131,7 @@ export default function OpenShiftView({ locationName, onOpened, onCancel }: Prop
               onChangeText={setAmount}
               keyboardType="decimal-pad"
               placeholder="0.00"
-              placeholderTextColor={palette.textMuted}
+              placeholderTextColor={colors.textMuted}
               style={styles.amount}
               onSubmitEditing={open}
             />
@@ -151,24 +154,24 @@ export default function OpenShiftView({ locationName, onOpened, onCancel }: Prop
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: palette.background },
+const makeStyles = themedStyles((c) => ({
+  container: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: c.background },
   containerEmbedded: { backgroundColor: "transparent" },
   cancel: { marginTop: 6 },
-  card: { width: "100%", maxWidth: 460, backgroundColor: palette.surface, borderRadius: 16, padding: 24, alignItems: "stretch", borderWidth: 1, borderColor: palette.border },
-  title: { textAlign: "center", fontWeight: "700", marginTop: 8, color: palette.text },
-  subtitle: { textAlign: "center", color: palette.textSecondary, marginBottom: 16 },
-  label: { color: palette.textSecondary, marginTop: 12, marginBottom: 6, fontWeight: "600" },
+  card: { width: "100%", maxWidth: 460, backgroundColor: c.surface, borderRadius: 16, padding: 24, alignItems: "stretch", borderWidth: 1, borderColor: c.border },
+  title: { textAlign: "center", fontWeight: "700", marginTop: 8, color: c.text },
+  subtitle: { textAlign: "center", color: c.textSecondary, marginBottom: 16 },
+  label: { color: c.textSecondary, marginTop: 12, marginBottom: 6, fontWeight: "600" },
   registers: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  register: { flexGrow: 1, minWidth: 130, padding: 12, borderRadius: 10, borderWidth: 1.5, borderColor: palette.border },
-  registerActive: { borderColor: palette.primary, backgroundColor: palette.primarySoft },
+  register: { flexGrow: 1, minWidth: 130, padding: 12, borderRadius: 10, borderWidth: 1.5, borderColor: c.border },
+  registerActive: { borderColor: c.primary, backgroundColor: c.primarySoft },
   registerBusy: { opacity: 0.5 },
   registerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 },
-  registerName: { fontWeight: "700", color: palette.text },
-  hint: { color: palette.textSecondary, fontSize: 13, marginTop: 8 },
-  registerMeta: { fontSize: 12, color: palette.textSecondary },
-  amount: { borderWidth: 1, borderColor: palette.border, borderRadius: 10, padding: 12, fontSize: 22, color: palette.text },
-  error: { color: palette.error, marginTop: 10 },
-  empty: { color: palette.textSecondary, textAlign: "center", marginVertical: 16 },
+  registerName: { fontWeight: "700", color: c.text },
+  hint: { color: c.textSecondary, fontSize: 13, marginTop: 8 },
+  registerMeta: { fontSize: 12, color: c.textSecondary },
+  amount: { borderWidth: 1, borderColor: c.border, borderRadius: 10, padding: 12, fontSize: 22, color: c.text },
+  error: { color: c.error, marginTop: 10 },
+  empty: { color: c.textSecondary, textAlign: "center", marginVertical: 16 },
   button: { marginTop: 18, borderRadius: 10 },
-});
+}));

@@ -1,8 +1,8 @@
 import OpenShiftView from "@/components/Pos/OpenShiftView";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import React from "react";
-import { Modal, StyleSheet, View } from "react-native";
+import { Modal, View } from "react-native";
 
 interface Props {
   visible: boolean;
@@ -19,6 +19,9 @@ interface Props {
  */
 export default function OpenShiftModal({ visible, onClose, onOpened }: Props) {
   const { location } = useAuth();
+  const styles = useThemedStyles((c) => ({
+    overlay: { flex: 1, backgroundColor: c.overlay },
+  }));
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -29,7 +32,3 @@ export default function OpenShiftModal({ visible, onClose, onOpened }: Props) {
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: palette.overlay },
-});

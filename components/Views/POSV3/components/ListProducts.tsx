@@ -1,9 +1,10 @@
 import AppChip from "@/components/App/Chip";
 import EmptyState from "@/components/App/EmptyState";
 import SearchInput from "@/components/App/SearchInput";
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useDebounce } from "@/hooks/useDebounce";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { formatUnitPrice } from "@/utils/format";
 import { unitDisplayPrice, unitRatio } from "@/utils/saleUnits";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -20,7 +21,6 @@ import {
   Image,
   LayoutChangeEvent,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -83,6 +83,8 @@ const ProductCard = React.memo(
     onRemoveProduct,
     onItemChange,
   }: ProductCardProps) => {
+    const { colors } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [showUnitMenu, setShowUnitMenu] = useState(false);
 
     // Unidad por defecto: la del producto. Antes era available_units[0], que
@@ -147,7 +149,7 @@ const ProductCard = React.memo(
 
     const inStock = item.current_stock && item.current_stock > 0;
     const stockVariant: "success" | "error" = inStock ? "success" : "error";
-    const stockColor = inStock ? palette.success : palette.error;
+    const stockColor = inStock ? colors.success : colors.error;
 
     // Obtener la unidad base para mostrar con el stock
     const baseUnit = item.available_units?.find((u) => u.id === item.unit_id);
@@ -183,7 +185,7 @@ const ProductCard = React.memo(
               <MaterialCommunityIcons
                 name={showUnitMenu ? "chevron-up" : "chevron-down"}
                 size={16}
-                color={palette.textSecondary}
+                color={colors.textSecondary}
               />
             </TouchableOpacity>
           }
@@ -225,7 +227,7 @@ const ProductCard = React.memo(
             <MaterialCommunityIcons
               name="minus"
               size={16}
-              color={palette.textSecondary}
+              color={colors.textSecondary}
             />
           </TouchableOpacity>
         )}
@@ -239,7 +241,7 @@ const ProductCard = React.memo(
             }}
             activeOpacity={0.7}
           >
-            <MaterialCommunityIcons name="plus" size={16} color="#fff" />
+            <MaterialCommunityIcons name="plus" size={16} color={colors.primaryForeground} />
           </TouchableOpacity>
         )}
       </View>
@@ -255,7 +257,7 @@ const ProductCard = React.memo(
         }}
         activeOpacity={0.7}
       >
-        <MaterialCommunityIcons name="cart-plus" size={16} color="#fff" />
+        <MaterialCommunityIcons name="cart-plus" size={16} color={colors.primaryForeground} />
         <Text style={styles.addButtonText}>Agregar</Text>
       </TouchableOpacity>
     );
@@ -276,7 +278,7 @@ const ProductCard = React.memo(
                   <MaterialCommunityIcons
                     name="package-variant"
                     size={20}
-                    color={palette.textMuted}
+                    color={colors.textMuted}
                   />
                 </View>
               )}
@@ -349,7 +351,7 @@ const ProductCard = React.memo(
                 <MaterialCommunityIcons
                   name="package-variant"
                   size={32}
-                  color={palette.textMuted}
+                  color={colors.textMuted}
                 />
               </View>
             )}
@@ -499,6 +501,8 @@ const ListProducts = React.forwardRef<ListProductsHandle, ListProductsProps>(fun
   canEditItems = true,
   canRemoveItems = true,
 }: ListProductsProps, ref) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [ownQuery, setOwnQuery] = useState("");
   const isControlledSearch = controlledQuery !== undefined;
   const searchQuery = isControlledSearch ? controlledQuery : ownQuery;
@@ -675,7 +679,7 @@ const ListProducts = React.forwardRef<ListProductsHandle, ListProductsProps>(fun
       <MaterialCommunityIcons
         name={isCompactMode ? "view-agenda" : "view-grid-outline"}
         size={14}
-        color={isCompactMode ? "#fff" : palette.textSecondary}
+        color={isCompactMode ? colors.primaryForeground : colors.textSecondary}
       />
       <Text
         style={[
@@ -809,7 +813,7 @@ const ListProducts = React.forwardRef<ListProductsHandle, ListProductsProps>(fun
             <MaterialCommunityIcons
               name="loading"
               size={32}
-              color={palette.textMuted}
+              color={colors.textMuted}
             />
             <Text style={styles.loadingText}>Cargando productos...</Text>
           </View>
@@ -859,17 +863,17 @@ const ListProducts = React.forwardRef<ListProductsHandle, ListProductsProps>(fun
 
 export default ListProducts;
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
   },
 
   // --- Toolbar ---
   toolbar: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+    borderBottomColor: c.border,
     paddingBottom: tokens.spacing[2],
   },
   filtersRow: {
@@ -882,7 +886,7 @@ const styles = StyleSheet.create({
   },
   countText: {
     ...tokens.typography.caption,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     flexShrink: 0,
   },
   stockFilterScroll: {
@@ -915,20 +919,20 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: palette.border,
-    backgroundColor: palette.surface,
+    borderColor: c.border,
+    backgroundColor: c.surface,
     flexShrink: 0,
   },
   viewModeButtonActive: {
-    backgroundColor: palette.primary,
-    borderColor: palette.primary,
+    backgroundColor: c.primary,
+    borderColor: c.primary,
   },
   viewModeButtonText: {
     ...tokens.typography.micro,
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
   viewModeButtonTextActive: {
-    color: "#fff",
+    color: c.primaryForeground,
   },
 
   // --- Products container ---
@@ -943,7 +947,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     ...tokens.typography.body,
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
   gridContent: {
     padding: tokens.spacing[3],
@@ -954,10 +958,10 @@ const styles = StyleSheet.create({
   card: {
     flex: 1,
     margin: tokens.spacing[2],
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.lg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     overflow: "hidden",
     ...tokens.shadow.sm,
   },
@@ -965,7 +969,7 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 128,
     position: "relative",
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
   },
   image: {
     width: "100%",
@@ -974,7 +978,7 @@ const styles = StyleSheet.create({
   imagePlaceholderLarge: {
     width: "100%",
     height: "100%",
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -988,10 +992,10 @@ const styles = StyleSheet.create({
   compactCard: {
     marginHorizontal: tokens.spacing[2],
     marginVertical: tokens.spacing[1],
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     ...tokens.shadow.xs,
   },
   compactRow: {
@@ -1005,7 +1009,7 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: tokens.radius.md,
     overflow: "hidden",
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
   },
   compactImage: {
     width: "100%",
@@ -1014,7 +1018,7 @@ const styles = StyleSheet.create({
   imagePlaceholder: {
     width: "100%",
     height: "100%",
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -1070,16 +1074,16 @@ const styles = StyleSheet.create({
   },
   code: {
     ...tokens.typography.micro,
-    color: palette.textMuted,
+    color: c.textMuted,
   },
   name: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     minHeight: 20,
   },
   price: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "700",
   },
   stockDot: {
@@ -1098,13 +1102,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
     paddingVertical: 8,
     borderRadius: tokens.radius.md,
   },
   addButtonText: {
     ...tokens.typography.bodyMd,
-    color: "#fff",
+    color: c.primaryForeground,
     fontWeight: "600",
   },
 
@@ -1116,7 +1120,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   quantityButton: {
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     width: 32,
     height: 32,
     borderRadius: tokens.radius.md,
@@ -1124,12 +1128,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   quantityButtonPrimary: {
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
   },
   quantityText: {
     ...tokens.typography.bodyMd,
     fontWeight: "700",
-    color: palette.text,
+    color: c.text,
     minWidth: 28,
     textAlign: "center",
     fontVariant: ["tabular-nums"],
@@ -1143,24 +1147,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: tokens.spacing[2] + 2,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     borderRadius: tokens.radius.md,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     gap: 4,
   },
   unitSelectorText: {
     ...tokens.typography.micro,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
     flex: 1,
   },
   unitMenu: {
     marginTop: 4,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.md,
     ...tokens.shadow.md,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     // Z-index alto para superponerse a las cards de productos
     // sin verse transparente. Importante: el Menu de Paper se
     // renderiza en un portal, por lo que el zIndex debe estar
@@ -1169,7 +1173,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   unitMenuItemTextSelected: {
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "600",
   },
-});
+}));

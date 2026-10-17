@@ -1,7 +1,8 @@
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Modal, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Modal, Pressable, TextInput, View } from "react-native";
 import { IconButton, Text } from "react-native-paper";
 
 export interface PosCustomer {
@@ -27,6 +28,16 @@ const SEARCH_DEBOUNCE_MS = 300;
  * "Público en general" y se le avisa en vez de mostrar la lista vacía.
  */
 export default function CustomerPicker({ visible, onClose, onSelect }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles((c) => ({
+    overlay: { flex: 1, backgroundColor: c.overlay, alignItems: "center", justifyContent: "center", padding: 16 },
+    card: { width: "100%", maxWidth: 440, backgroundColor: c.surface, borderRadius: 14, overflow: "hidden" },
+    bar: { flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: c.border, paddingLeft: 14 },
+    input: { flex: 1, fontSize: 16, paddingVertical: 12, color: c.text },
+    row: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+    name: { color: c.text, fontSize: 15 },
+    notice: { color: c.textSecondary, fontSize: 14, paddingHorizontal: 16, paddingVertical: 14 },
+  }));
   const [customers, setCustomers] = useState<PosCustomer[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
@@ -88,12 +99,12 @@ export default function CustomerPicker({ visible, onClose, onSelect }: Props) {
               value={query}
               onChangeText={setQuery}
               placeholder="Buscar cliente"
-              placeholderTextColor={palette.textMuted}
+              placeholderTextColor={colors.textMuted}
               autoFocus
               editable={!forbidden}
               style={styles.input}
             />
-            {loading && <ActivityIndicator size="small" color={palette.primary} />}
+            {loading && <ActivityIndicator size="small" color={colors.primary} />}
             <IconButton icon="close" onPress={onClose} />
           </View>
           <Pressable onPress={() => pick(null)} style={styles.row}>
@@ -129,13 +140,3 @@ export default function CustomerPicker({ visible, onClose, onSelect }: Props) {
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: palette.overlay, alignItems: "center", justifyContent: "center", padding: 16 },
-  card: { width: "100%", maxWidth: 440, backgroundColor: palette.surface, borderRadius: 14, overflow: "hidden" },
-  bar: { flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: palette.border, paddingLeft: 14 },
-  input: { flex: 1, fontSize: 16, paddingVertical: 12, color: palette.text },
-  row: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: palette.border },
-  name: { color: palette.text, fontSize: 15 },
-  notice: { color: palette.textSecondary, fontSize: 14, paddingHorizontal: 16, paddingVertical: 14 },
-});

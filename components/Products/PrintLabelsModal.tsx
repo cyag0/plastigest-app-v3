@@ -1,7 +1,8 @@
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import {
   Button,
   Dialog,
@@ -26,6 +27,8 @@ export default function PrintLabelsModal({
   productName,
   loading = false,
 }: PrintLabelsModalProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [quantity, setQuantity] = useState("1");
   const [error, setError] = useState("");
 
@@ -60,7 +63,7 @@ export default function PrintLabelsModal({
             <Ionicons
               name="barcode-outline"
               size={24}
-              color={palette.primary}
+              color={colors.primary}
             />
             <Text style={styles.titleText}>Imprimir Etiquetas</Text>
           </View>
@@ -111,7 +114,7 @@ export default function PrintLabelsModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   titleContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -126,15 +129,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginBottom: 16,
     // `textPrimary` no existe en la paleta (el color quedaba indefinido).
-    color: palette.text,
+    color: c.text,
   },
   input: {
     marginBottom: 8,
   },
   hint: {
     fontSize: 12,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginTop: 8,
     lineHeight: 18,
   },
-});
+}));

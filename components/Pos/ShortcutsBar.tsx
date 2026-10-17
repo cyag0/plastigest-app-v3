@@ -1,6 +1,6 @@
-import palette from "@/constants/palette";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Text } from "react-native-paper";
 
 const KEYS: [string, string][] = [
@@ -14,6 +14,7 @@ const KEYS: [string, string][] = [
 
 /** Pie con los atajos de teclado (solo escritorio). */
 export default function ShortcutsBar() {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.bar}>
       {KEYS.map(([k, label]) => (
@@ -26,9 +27,9 @@ export default function ShortcutsBar() {
   );
 }
 
-const styles = StyleSheet.create({
-  bar: { flexDirection: "row", gap: 18, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: palette.surfaceMuted, borderTopWidth: 1, borderTopColor: palette.border },
+const makeStyles = themedStyles((c) => ({
+  bar: { flexDirection: "row", gap: 18, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: c.surfaceMuted, borderTopWidth: 1, borderTopColor: c.border },
   item: { flexDirection: "row", alignItems: "center", gap: 6 },
-  key: { fontSize: 12, fontWeight: "700", color: palette.text, backgroundColor: palette.surface, borderWidth: 1, borderColor: palette.borderStrong, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1 },
-  label: { fontSize: 13, color: palette.textSecondary },
-});
+  key: { fontSize: 12, fontWeight: "700", color: c.text, backgroundColor: c.surface, borderWidth: 1, borderColor: c.borderStrong, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1 },
+  label: { fontSize: 13, color: c.textSecondary },
+}));

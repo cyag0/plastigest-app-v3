@@ -1,10 +1,11 @@
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { allowsDecimalQuantity, formatMoney, lineCents, PosLine } from "@/hooks/usePosCart";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { parseMoney, parseQuantity } from "@/utils/format";
 import { centsToAmount } from "@/utils/money";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import { FlatList, Pressable, StyleSheet, TextInput, type TextInputInstance, View } from "react-native";
+import { FlatList, Pressable, TextInput, type TextInputInstance, View } from "react-native";
 import { IconButton, Text } from "react-native-paper";
 
 interface Props {
@@ -37,6 +38,8 @@ const formatQuantity = (n: number) => String(Math.round(n * 1000) / 1000);
 /** Carrito: tabla en escritorio, lista compacta en celular. */
 const CartTable = forwardRef<CartTableRef, Props>(function CartTable(props, ref) {
   const { lines, selectedKey, canEditPrice, compact } = props;
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const inputs = useRef<Record<string, TextInputInstance | null>>({});
 
   useImperativeHandle(ref, () => ({
@@ -46,7 +49,7 @@ const CartTable = forwardRef<CartTableRef, Props>(function CartTable(props, ref)
   if (lines.length === 0) {
     return (
       <View style={styles.empty}>
-        <MaterialCommunityIcons name="barcode-scan" size={48} color={palette.textMuted} />
+        <MaterialCommunityIcons name="barcode-scan" size={48} color={colors.textMuted} />
         <Text style={styles.emptyText}>
           {compact
             ? "Escanea o busca un producto para empezar"
@@ -99,7 +102,7 @@ const CartTable = forwardRef<CartTableRef, Props>(function CartTable(props, ref)
                 </View>
                 {qty}
                 <Text style={styles.total}>{formatMoney(total)}</Text>
-                <IconButton icon="trash-can-outline" size={18} iconColor={palette.error} onPress={() => props.onRemove(line.key)} />
+                <IconButton icon="trash-can-outline" size={18} iconColor={colors.error} onPress={() => props.onRemove(line.key)} />
               </Pressable>
             );
           }
@@ -121,7 +124,7 @@ const CartTable = forwardRef<CartTableRef, Props>(function CartTable(props, ref)
               )}
               <Text style={[styles.cell, styles.colTotal, styles.total]}>{formatMoney(total)}</Text>
               <View style={styles.colActions}>
-                <IconButton icon="trash-can-outline" size={18} iconColor={palette.error} onPress={() => props.onRemove(line.key)} />
+                <IconButton icon="trash-can-outline" size={18} iconColor={colors.error} onPress={() => props.onRemove(line.key)} />
               </View>
             </Pressable>
           );
@@ -149,6 +152,7 @@ const QuantityInput = forwardRef<TextInputInstance, QuantityInputProps>(function
   { value, allowDecimal, onFocus, onCommit },
   ref,
 ) {
+  const styles = useThemedStyles(makeStyles);
   const [focused, setFocused] = useState(false);
   const [text, setText] = useState(formatQuantity(value));
   // Enter seguido del blur que provoca cerrar el teclado: aplicar una vez.
@@ -201,6 +205,7 @@ const QuantityInput = forwardRef<TextInputInstance, QuantityInputProps>(function
 
 /** Precio/descuento editable (solo escritorio, con permiso sales_discount). */
 function MoneyInput({ value, onChange, style }: { value: number; onChange: (v: number) => void; style: any }) {
+  const styles = useThemedStyles(makeStyles);
   const [focused, setFocused] = useState(false);
   const [text, setText] = useState(value.toFixed(2));
   const committedRef = useRef<string | null>(null);
@@ -240,25 +245,25 @@ function MoneyInput({ value, onChange, style }: { value: number; onChange: (v: n
 
 export default CartTable;
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, padding: 32 },
-  emptyText: { color: palette.textSecondary, textAlign: "center" },
-  row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, minHeight: 54, borderBottomWidth: 1, borderBottomColor: palette.border },
-  head: { minHeight: 36, backgroundColor: palette.surfaceMuted },
-  th: { fontSize: 12, fontWeight: "700", color: palette.textSecondary },
-  cell: { fontSize: 15, color: palette.text },
+  emptyText: { color: c.textSecondary, textAlign: "center" },
+  row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, minHeight: 54, borderBottomWidth: 1, borderBottomColor: c.border },
+  head: { minHeight: 36, backgroundColor: c.surfaceMuted },
+  th: { fontSize: 12, fontWeight: "700", color: c.textSecondary },
+  cell: { fontSize: 15, color: c.text },
   colName: { flex: 1, paddingRight: 8 },
   colQty: { width: 140, alignItems: "center" },
   colPrice: { width: 100, textAlign: "right" as const, alignItems: "flex-end" },
   colTotal: { width: 110, textAlign: "right" as const },
   colActions: { width: 44, alignItems: "flex-end" },
-  selected: { backgroundColor: palette.primarySoft },
-  name: { fontSize: 15, color: palette.text },
-  meta: { fontSize: 12, color: palette.textSecondary },
-  total: { fontWeight: "700", color: palette.text },
-  qtyBox: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: palette.border, borderRadius: 8 },
+  selected: { backgroundColor: c.primarySoft },
+  name: { fontSize: 15, color: c.text },
+  meta: { fontSize: 12, color: c.textSecondary },
+  total: { fontWeight: "700", color: c.text },
+  qtyBox: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: c.border, borderRadius: 8 },
   qtyBtn: { margin: 0 },
-  qtyInput: { width: 44, textAlign: "center", fontSize: 15, paddingVertical: 4, color: palette.text },
-  moneyInput: { width: 84, textAlign: "right", borderWidth: 1, borderColor: palette.border, borderRadius: 6, paddingVertical: 4, paddingHorizontal: 6, color: palette.text },
-  card: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderBottomWidth: 1, borderBottomColor: palette.border },
-});
+  qtyInput: { width: 44, textAlign: "center", fontSize: 15, paddingVertical: 4, color: c.text },
+  moneyInput: { width: 84, textAlign: "right", borderWidth: 1, borderColor: c.border, borderRadius: 6, paddingVertical: 4, paddingHorizontal: 6, color: c.text },
+  card: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+}));

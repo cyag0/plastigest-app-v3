@@ -1,8 +1,9 @@
-import palette from "@/constants/palette";
 import { KioskOrdersButton } from "@/components/Pos/KioskOrdersPanel";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { IconButton, Menu, Text } from "react-native-paper";
 
 interface Props {
@@ -28,6 +29,8 @@ interface Props {
 
 /** Encabezado del POS: sucursal · caja · cajero · hora. */
 export default function PosHeader({ locationName, registerName, cashierName, compact, onCloseShift, onExit, onPrintShift, ticketWidth, onToggleTicketWidth, onRefreshCatalog, kioskPending, onKioskOrders }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [now, setNow] = useState(new Date());
   const [menu, setMenu] = useState(false);
 
@@ -40,7 +43,7 @@ export default function PosHeader({ locationName, registerName, cashierName, com
 
   return (
     <View style={styles.bar}>
-      <IconButton icon="arrow-left" iconColor={palette.textInverse} size={20} onPress={onExit} />
+      <IconButton icon="arrow-left" iconColor={colors.primaryForeground} size={20} onPress={onExit} />
       {compact ? (
         // Celular: la sucursal de la caja también se ve (el turno puede ser
         // de otra sucursal que la seleccionada en la app).
@@ -72,7 +75,7 @@ export default function PosHeader({ locationName, registerName, cashierName, com
         visible={menu}
         onDismiss={() => setMenu(false)}
         anchorPosition="bottom"
-        anchor={<IconButton icon="dots-vertical" iconColor={palette.textInverse} onPress={() => setMenu(true)} />}
+        anchor={<IconButton icon="dots-vertical" iconColor={colors.primaryForeground} onPress={() => setMenu(true)} />}
       >
         {onRefreshCatalog && (
           <Menu.Item leadingIcon="refresh" title="Actualizar productos" onPress={() => { setMenu(false); onRefreshCatalog(); }} />
@@ -97,21 +100,23 @@ export default function PosHeader({ locationName, registerName, cashierName, com
 }
 
 function Item({ icon, text, strong }: { icon: string; text?: string; strong?: boolean }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   if (!text) return null;
   return (
     <View style={styles.item}>
-      <MaterialCommunityIcons name={icon as any} size={16} color={palette.textInverse} />
+      <MaterialCommunityIcons name={icon as any} size={16} color={colors.primaryForeground} />
       <Text style={[styles.text, strong && { fontWeight: "700" }]} numberOfLines={1}>{text}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   compactInfo: { flex: 1, minWidth: 0, justifyContent: "center", paddingVertical: 4 },
-  compactSub: { color: palette.textInverse, opacity: 0.85, fontSize: 12, marginLeft: 22 },
-  bar: { flexDirection: "row", alignItems: "center", backgroundColor: palette.primary, paddingRight: 4, minHeight: 52 },
+  compactSub: { color: c.primaryForeground, opacity: 0.85, fontSize: 12, marginLeft: 22 },
+  bar: { flexDirection: "row", alignItems: "center", backgroundColor: c.primary, paddingRight: 4, minHeight: 52 },
   info: { flex: 1, flexDirection: "row", gap: 20, alignItems: "center", flexWrap: "wrap" },
   item: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 260 },
-  text: { color: palette.textInverse, fontSize: 15 },
-  time: { color: palette.textInverse, fontSize: 15, fontWeight: "600", marginRight: 4 },
-});
+  text: { color: c.primaryForeground, fontSize: 15 },
+  time: { color: c.primaryForeground, fontSize: 15, fontWeight: "600", marginRight: 4 },
+}));

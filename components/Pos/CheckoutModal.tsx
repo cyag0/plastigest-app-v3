@@ -1,13 +1,14 @@
 import AmountPreview from "@/components/Pos/AmountPreview";
 import { apiErrorMessage, isOutcomeUnknown } from "@/components/Pos/saleErrors";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { CheckoutMethod, formatMoney } from "@/hooks/usePosCart";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { amountToCents, centsToAmount } from "@/utils/money";
 import { printSaleTicket } from "@/utils/printDocument";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Modal, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { ActivityIndicator, Modal, Platform, Pressable, TextInput, View } from "react-native";
 import { Button, Text } from "react-native-paper";
 
 export type { CheckoutMethod } from "@/hooks/usePosCart";
@@ -84,6 +85,8 @@ export default function CheckoutModal({
   onDiscard,
   onDone,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [method, setMethod] = useState<CheckoutMethod>(initialMethod);
   const [received, setReceived] = useState("");
   const [mixedCash, setMixedCash] = useState("");
@@ -254,7 +257,7 @@ export default function CheckoutModal({
         <View style={styles.card}>
           {result ? (
             <View style={styles.done}>
-              <MaterialCommunityIcons name="check-circle" size={56} color={palette.success} />
+              <MaterialCommunityIcons name="check-circle" size={56} color={colors.success} />
               <Text variant="titleLarge" style={styles.doneTitle}>Venta registrada</Text>
               <Text style={styles.doneMeta}>{result.sale_number} · {formatMoney(result.total)}</Text>
               {mismatch && (
@@ -287,7 +290,7 @@ export default function CheckoutModal({
             </View>
           ) : phase === "verifying" ? (
             <View style={styles.done}>
-              <ActivityIndicator size="large" color={palette.primary} />
+              <ActivityIndicator size="large" color={colors.primary} />
               <Text variant="titleMedium" style={styles.doneTitle}>Verificando el cobro…</Text>
               <Text style={styles.hint}>
                 No llegó la respuesta del servidor. Revisando si la venta quedó registrada; no cobres de nuevo todavía.
@@ -295,7 +298,7 @@ export default function CheckoutModal({
             </View>
           ) : phase === "unverified" || phase === "discard" ? (
             <View style={styles.done}>
-              <MaterialCommunityIcons name="alert-circle-outline" size={52} color={palette.warning} />
+              <MaterialCommunityIcons name="alert-circle-outline" size={52} color={colors.warning} />
               <Text variant="titleMedium" style={styles.doneTitle}>No se sabe si la venta se registró</Text>
               {phase === "unverified" ? (
                 <>
@@ -313,7 +316,7 @@ export default function CheckoutModal({
                   >
                     Verificar de nuevo
                   </Button>
-                  <Button mode="text" textColor={palette.error} onPress={() => setPhase("discard")} disabled={saving} style={styles.secondary}>
+                  <Button mode="text" textColor={colors.error} onPress={() => setPhase("discard")} disabled={saving} style={styles.secondary}>
                     Descartar esta venta
                   </Button>
                 </>
@@ -327,7 +330,7 @@ export default function CheckoutModal({
                     <Button mode="outlined" onPress={() => setPhase("unverified")} style={{ flex: 1 }}>
                       Volver
                     </Button>
-                    <Button mode="contained" buttonColor={palette.error} onPress={onDiscard} style={{ flex: 1 }}>
+                    <Button mode="contained" buttonColor={colors.error} onPress={onDiscard} style={{ flex: 1 }}>
                       Descartar
                     </Button>
                   </View>
@@ -349,8 +352,8 @@ export default function CheckoutModal({
                     disabled={formDisabled}
                     style={[styles.method, method === m.key && styles.methodActive]}
                   >
-                    <MaterialCommunityIcons name={m.icon as any} size={22} color={method === m.key ? palette.primary : palette.textSecondary} />
-                    <Text style={[styles.methodText, method === m.key && { color: palette.primary }]}>{m.label}</Text>
+                    <MaterialCommunityIcons name={m.icon as any} size={22} color={method === m.key ? colors.primary : colors.textSecondary} />
+                    <Text style={[styles.methodText, method === m.key && { color: colors.primary }]}>{m.label}</Text>
                   </Pressable>
                 ))}
               </View>
@@ -363,7 +366,7 @@ export default function CheckoutModal({
                     onChangeText={setReceived}
                     placeholder={total.toFixed(2)}
                     keyboardType="decimal-pad"
-                    placeholderTextColor={palette.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     autoFocus
                     editable={!formDisabled}
                     onSubmitEditing={confirm}
@@ -373,7 +376,7 @@ export default function CheckoutModal({
                   {receivedValid && (
                     <View style={styles.row}>
                       <Text style={styles.label}>Cambio</Text>
-                      <Text style={[styles.change, changeCents < 0 && { color: palette.error }]}>
+                      <Text style={[styles.change, changeCents < 0 && { color: colors.error }]}>
                         {changeCents < 0 ? `Faltan ${formatMoney(centsToAmount(-changeCents))}` : formatMoney(centsToAmount(changeCents))}
                       </Text>
                     </View>
@@ -391,7 +394,7 @@ export default function CheckoutModal({
                     onChangeText={setMixedCash}
                     placeholder="0.00"
                     keyboardType="decimal-pad"
-                    placeholderTextColor={palette.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     autoFocus
                     editable={!formDisabled}
                     onSubmitEditing={confirm}
@@ -433,33 +436,33 @@ export default function CheckoutModal({
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: palette.overlay, alignItems: "center", justifyContent: "center", padding: 16 },
-  card: { width: "100%", maxWidth: 460, backgroundColor: palette.surface, borderRadius: 16, padding: 20 },
+const makeStyles = themedStyles((c) => ({
+  overlay: { flex: 1, backgroundColor: c.overlay, alignItems: "center", justifyContent: "center", padding: 16 },
+  card: { width: "100%", maxWidth: 460, backgroundColor: c.surface, borderRadius: 16, padding: 20 },
   header: { alignItems: "center", marginBottom: 12 },
-  totalLabel: { color: palette.textSecondary },
-  total: { fontSize: 36, fontWeight: "800", color: palette.text },
+  totalLabel: { color: c.textSecondary },
+  total: { fontSize: 36, fontWeight: "800", color: c.text },
   methods: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  method: { flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: palette.border, gap: 4 },
-  methodActive: { borderColor: palette.primary, backgroundColor: palette.primarySoft },
-  methodText: { fontWeight: "600", color: palette.textSecondary },
-  label: { color: palette.textSecondary, fontWeight: "600", marginTop: 8 },
-  input: { borderWidth: 1, borderColor: palette.border, borderRadius: 10, padding: 12, fontSize: 24, marginTop: 6, color: palette.text },
+  method: { flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 10, borderWidth: 1.5, borderColor: c.border, gap: 4 },
+  methodActive: { borderColor: c.primary, backgroundColor: c.primarySoft },
+  methodText: { fontWeight: "600", color: c.textSecondary },
+  label: { color: c.textSecondary, fontWeight: "600", marginTop: 8 },
+  input: { borderWidth: 1, borderColor: c.border, borderRadius: 10, padding: 12, fontSize: 24, marginTop: 6, color: c.text },
   row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 },
-  change: { fontSize: 24, fontWeight: "700", color: palette.success },
-  hint: { color: palette.textSecondary, textAlign: "center", marginVertical: 16, lineHeight: 20 },
-  notice: { color: palette.text, marginTop: 10, lineHeight: 20 },
-  error: { color: palette.error, marginTop: 10 },
+  change: { fontSize: 24, fontWeight: "700", color: c.success },
+  hint: { color: c.textSecondary, textAlign: "center", marginVertical: 16, lineHeight: 20 },
+  notice: { color: c.text, marginTop: 10, lineHeight: 20 },
+  error: { color: c.error, marginTop: 10 },
   actions: { flexDirection: "row", gap: 8, marginTop: 18, alignSelf: "stretch" },
   primary: { marginTop: 18, borderRadius: 10, alignSelf: "stretch" },
   secondary: { marginTop: 8, alignSelf: "stretch" },
   done: { alignItems: "center", paddingVertical: 8 },
-  doneTitle: { fontWeight: "700", marginTop: 8, color: palette.text, textAlign: "center" },
-  doneMeta: { color: palette.textSecondary },
-  mismatch: { color: palette.warning, marginTop: 12, textAlign: "center", lineHeight: 20 },
+  doneTitle: { fontWeight: "700", marginTop: 8, color: c.text, textAlign: "center" },
+  doneMeta: { color: c.textSecondary },
+  mismatch: { color: c.warning, marginTop: 12, textAlign: "center", lineHeight: 20 },
   printButton: { alignSelf: "stretch", marginTop: 16 },
-  printError: { color: palette.error, marginTop: 6, textAlign: "center" },
-  changeBox: { alignItems: "center", marginTop: 16, padding: 16, borderRadius: 12, backgroundColor: palette.successSoft, alignSelf: "stretch" },
-  changeLabel: { color: palette.textSecondary },
-  changeValue: { fontSize: 42, fontWeight: "800", color: palette.success },
-});
+  printError: { color: c.error, marginTop: 6, textAlign: "center" },
+  changeBox: { alignItems: "center", marginTop: 16, padding: 16, borderRadius: 12, backgroundColor: c.successSoft, alignSelf: "stretch" },
+  changeLabel: { color: c.textSecondary },
+  changeValue: { fontSize: 42, fontWeight: "800", color: c.success },
+}));

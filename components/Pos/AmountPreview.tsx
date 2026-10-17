@@ -1,7 +1,7 @@
-import palette from "@/constants/palette";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { formatMoney, parseMoney } from "@/utils/format";
 import React from "react";
-import { StyleProp, StyleSheet, TextStyle } from "react-native";
+import { StyleProp, TextStyle } from "react-native";
 import { Text } from "react-native-paper";
 
 interface Props {
@@ -18,6 +18,12 @@ interface Props {
  * "1.500,50" no pasan sin que el usuario lo vea antes de guardar.
  */
 export default function AmountPreview({ value, label = "Se registrará", style }: Props) {
+  const styles = useThemedStyles((c) => ({
+    text: { fontSize: 13, color: c.textSecondary, marginTop: 4 },
+    amount: { fontWeight: "700", color: c.text },
+    error: { color: c.error },
+  }));
+
   if (value.trim() === "") return null;
 
   const amount = parseMoney(value);
@@ -38,9 +44,3 @@ export default function AmountPreview({ value, label = "Se registrará", style }
     </Text>
   );
 }
-
-const styles = StyleSheet.create({
-  text: { fontSize: 13, color: palette.textSecondary, marginTop: 4 },
-  amount: { fontWeight: "700", color: palette.text },
-  error: { color: palette.error },
-});

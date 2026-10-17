@@ -13,8 +13,8 @@ import { apiErrorCode, apiErrorMessage, SALE_ERROR_CODES } from "@/components/Po
 import ShortcutsBar from "@/components/Pos/ShortcutsBar";
 import SimpleSearchModal from "@/components/Pos/SimpleSearchModal";
 import SummaryPanel from "@/components/Pos/SummaryPanel";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { CheckoutMethod, formatMoney, PosCatalogChange, posCartStorageKey, usePosCart } from "@/hooks/usePosCart";
 import { usePosCatalog } from "@/hooks/usePosCatalog";
@@ -22,6 +22,7 @@ import { usePosHotkeys } from "@/hooks/usePosHotkeys";
 import { usePosKioskOrders } from "@/hooks/usePosKioskOrders";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { formatQuantity } from "@/utils/format";
 import { getTicketWidth, printShiftTicket, setTicketWidth } from "@/utils/printDocument";
 import Services from "@/utils/services";
@@ -29,7 +30,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
+import { AppState, Platform, Pressable, View } from "react-native";
 import { ActivityIndicator, Button, Text } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -73,6 +74,7 @@ export default function PosScreen() {
   const { user, hasPermission, selectedCompany } = useAuth();
   const { selectedLocation, selectLocation } = useSelectedLocation();
   const { isMobile } = useResponsive();
+  const styles = useThemedStyles(makeStyles);
   const compact = isMobile || Platform.OS !== "web";
 
   const [session, setSession] = useState<Session | null>(null);
@@ -247,6 +249,8 @@ function PosRegister({
   onShiftClosed,
   onSessionLost,
 }: RegisterProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const alerts = useAlerts();
   const catalog = usePosCatalog();
   // Un carrito guardado por cajero, sucursal y turno.
@@ -517,7 +521,7 @@ function PosRegister({
 
   const searchBar = (
     <Pressable onPress={() => setSearchOpen(true)} style={styles.search} accessibilityRole="search">
-      <MaterialCommunityIcons name="magnify" size={22} color={palette.textSecondary} />
+      <MaterialCommunityIcons name="magnify" size={22} color={colors.textSecondary} />
       <Text style={styles.searchText}>{compact ? "Buscar producto…" : "Escanear código o buscar producto…"}</Text>
       {!compact && <Text style={styles.key}>F2</Text>}
     </Pressable>
@@ -541,14 +545,14 @@ function PosRegister({
         <View style={{ flex: 1 }}>
           <View style={styles.mobileSearch}>{searchBar}</View>
           <Pressable onPress={() => setCustomerOpen(true)} style={styles.mobileCustomer}>
-            <MaterialCommunityIcons name="account-outline" size={16} color={palette.textSecondary} />
-            <Text style={{ color: palette.textSecondary }}>Cliente: {customer?.name ?? "Público en general"}</Text>
+            <MaterialCommunityIcons name="account-outline" size={16} color={colors.textSecondary} />
+            <Text style={{ color: colors.textSecondary }}>Cliente: {customer?.name ?? "Público en general"}</Text>
           </Pressable>
           <KioskLinkTag {...kiosk.tagProps} />
           {cartTable}
           <View style={styles.bottomBar}>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: palette.textSecondary }}>{cart.totals.items} art.</Text>
+              <Text style={{ color: colors.textSecondary }}>{cart.totals.items} art.</Text>
               <Text style={styles.bottomTotal}>{formatMoney(cart.totals.total)}</Text>
             </View>
             <Button
@@ -677,20 +681,21 @@ function PosRegister({
 }
 
 function Centered({ children }: { children: React.ReactNode }) {
+  const styles = useThemedStyles(makeStyles);
   return <View style={styles.centered}>{children}</View>;
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.background },
+const makeStyles = themedStyles((c) => ({
+  screen: { flex: 1, backgroundColor: c.background },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 8 },
   desktop: { flex: 1, flexDirection: "row" },
-  main: { flex: 1, backgroundColor: palette.surface },
-  desktopSearch: { padding: 12, borderBottomWidth: 1, borderBottomColor: palette.border },
-  search: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: palette.borderStrong, backgroundColor: palette.surface },
-  searchText: { flex: 1, color: palette.textMuted, fontSize: 16 },
-  key: { fontSize: 12, fontWeight: "700", color: palette.textSecondary, borderWidth: 1, borderColor: palette.border, borderRadius: 4, paddingHorizontal: 6 },
-  mobileSearch: { padding: 12, backgroundColor: palette.surface },
-  mobileCustomer: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingBottom: 8, backgroundColor: palette.surface },
-  bottomBar: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, backgroundColor: palette.surface, borderTopWidth: 1, borderTopColor: palette.border },
-  bottomTotal: { fontSize: 24, fontWeight: "800", color: palette.text },
-});
+  main: { flex: 1, backgroundColor: c.surface },
+  desktopSearch: { padding: 12, borderBottomWidth: 1, borderBottomColor: c.border },
+  search: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, height: 48, borderRadius: 10, borderWidth: 1.5, borderColor: c.borderStrong, backgroundColor: c.surface },
+  searchText: { flex: 1, color: c.textMuted, fontSize: 16 },
+  key: { fontSize: 12, fontWeight: "700", color: c.textSecondary, borderWidth: 1, borderColor: c.border, borderRadius: 4, paddingHorizontal: 6 },
+  mobileSearch: { padding: 12, backgroundColor: c.surface },
+  mobileCustomer: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingBottom: 8, backgroundColor: c.surface },
+  bottomBar: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, backgroundColor: c.surface, borderTopWidth: 1, borderTopColor: c.border },
+  bottomTotal: { fontSize: 24, fontWeight: "800", color: c.text },
+}));

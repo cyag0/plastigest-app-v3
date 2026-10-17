@@ -1,8 +1,9 @@
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { formatDateTime, toLocalDateString } from "@/utils/dates";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { Button, Text } from "react-native-paper";
 
 interface Props {
@@ -20,6 +21,8 @@ interface Props {
  * se avisa desde el inicio y se ofrecen las dos salidas.
  */
 export default function OtherLocationShift({ session, currentLocationName, switching, onSwitch, onCloseShift }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const where = session.location_name ?? "otra sucursal";
   const register = session.cash_register_name ?? "Caja";
   // Abierto desde otro día: casi siempre un turno que se olvidó cerrar.
@@ -28,7 +31,7 @@ export default function OtherLocationShift({ session, currentLocationName, switc
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.card}>
-        <MaterialCommunityIcons name="store-alert-outline" size={40} color={palette.warning} />
+        <MaterialCommunityIcons name="store-alert-outline" size={40} color={colors.warning} />
         <Text variant="titleLarge" style={styles.title}>Tu turno está abierto en otra sucursal</Text>
         <Text style={styles.body}>
           {register} · {where}
@@ -60,12 +63,12 @@ export default function OtherLocationShift({ session, currentLocationName, switc
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: palette.background },
-  card: { width: "100%", maxWidth: 460, backgroundColor: palette.surface, borderRadius: 16, padding: 24, borderWidth: 1, borderColor: palette.border, alignItems: "stretch" },
-  title: { fontWeight: "700", color: palette.text, marginTop: 12, marginBottom: 8 },
-  body: { color: palette.textSecondary, lineHeight: 21, marginBottom: 8 },
-  warning: { color: palette.warning, lineHeight: 21, marginBottom: 8 },
+const makeStyles = themedStyles((c) => ({
+  container: { flexGrow: 1, alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: c.background },
+  card: { width: "100%", maxWidth: 460, backgroundColor: c.surface, borderRadius: 16, padding: 24, borderWidth: 1, borderColor: c.border, alignItems: "stretch" },
+  title: { fontWeight: "700", color: c.text, marginTop: 12, marginBottom: 8 },
+  body: { color: c.textSecondary, lineHeight: 21, marginBottom: 8 },
+  warning: { color: c.warning, lineHeight: 21, marginBottom: 8 },
   button: { marginTop: 10, borderRadius: 10 },
   buttonContent: { height: 46 },
-});
+}));

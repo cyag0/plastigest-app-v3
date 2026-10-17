@@ -1,5 +1,5 @@
 import EmptyState from "@/components/App/EmptyState";
-import palette, { type Palette } from "@/constants/palette";
+import type { Palette } from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
@@ -76,16 +76,14 @@ interface CartProps {
   /** Número junto al título. Por defecto, la suma de las cantidades. */
   count?: number;
   /**
-   * Colores del tema (modo oscuro) en lugar de la paleta clara fija. Por
-   * defecto no: Ventas y Transferencias le meten contenido (forma de pago,
-   * notas) con la paleta fija y sin fondo propio, que en un carrito oscuro
-   * no se leería.
+   * @deprecated El carrito ya sigue siempre el tema (modo oscuro); se acepta
+   * para no romper a quien lo pasa.
    */
   themed?: boolean;
   children?: React.ReactNode;
 }
 
-/** Estilos y colores con que se pinta el carrito (tema o paleta fija). */
+/** Estilos y colores del tema con que se pinta el carrito. */
 interface CartLook {
   styles: ReturnType<typeof makeStyles>;
   colors: Palette;
@@ -160,9 +158,6 @@ function CartPriceField({
   look: CartLook;
   onPriceChange: (itemId: number | string, price: number) => void;
 }) {
-  // Los colores del renglón donde va: antes eran siempre los del tema y, en
-  // un carrito con la paleta fija, en modo oscuro el «/kg» quedaba crema
-  // sobre blanco.
   const { styles } = look;
   const [focused, setFocused] = useState(false);
   const [text, setText] = useState("");
@@ -463,19 +458,13 @@ export default function Cart({
   onPriceChange,
   title = "Carrito",
   count,
-  themed = false,
   children,
 }: CartProps) {
-  // Con `themed` el carrito sigue el modo oscuro, como lo que la compra le
-  // mete adentro (datos y botones del tema). Antes era siempre la paleta
-  // clara fija y eso quedaba crema sobre blanco.
-  const { colors: themeColors } = useTheme();
-  const themedSheet = useThemedStyles(makeStyles);
-  const look = useMemo<CartLook>(
-    () => (themed ? { styles: themedSheet, colors: themeColors } : fixedLook),
-    [themed, themedSheet, themeColors],
-  );
-  const { styles, colors } = look;
+  // Sigue el tema, como lo que le meten adentro (datos y botones de la compra
+  // o la transferencia).
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const look = useMemo<CartLook>(() => ({ styles, colors }), [styles, colors]);
   const cartTotal = items.reduce((sum, item) => sum + item.total, 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
   const priceChange = canEditPrice ? onPriceChange : undefined;
@@ -907,11 +896,3 @@ const makeStyles = themedStyles((c) => ({
     fontWeight: "700",
   },
 }));
-
-// Ventas y Transferencias: la paleta clara fija, como siempre. Sin
-// StyleSheet.create, que devuelve el mismo objeto y no acepta el tipo de
-// themedStyles.
-const fixedLook: CartLook = {
-  styles: makeStyles(palette),
-  colors: palette,
-};

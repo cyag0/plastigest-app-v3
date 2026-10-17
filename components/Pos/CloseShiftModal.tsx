@@ -1,13 +1,14 @@
 import AmountPreview from "@/components/Pos/AmountPreview";
 import { apiErrorMessage } from "@/components/Pos/saleErrors";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { formatMoney } from "@/hooks/usePosCart";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { parseMoney } from "@/utils/format";
 import { amountToCents, centsToAmount } from "@/utils/money";
 import Services from "@/utils/services";
 import React, { useEffect, useState } from "react";
-import { Modal, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Modal, ScrollView, TextInput, View } from "react-native";
 import { ActivityIndicator, Button, Text } from "react-native-paper";
 
 interface Props {
@@ -29,6 +30,8 @@ const METHOD_LABELS: Record<string, string> = { cash: "Efectivo", card: "Tarjeta
  * diferencia se pide confirmar antes de cerrar (Enter ya no lo cierra solo).
  */
 export default function CloseShiftModal({ visible, sessionId, onClose, onClosed }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [summary, setSummary] = useState<App.Entities.CashRegisterSessionSummary | null>(null);
   const [counted, setCounted] = useState("");
   const [notes, setNotes] = useState("");
@@ -107,7 +110,7 @@ export default function CloseShiftModal({ visible, sessionId, onClose, onClosed 
               <Row
                 label={difference > 0 ? "Sobrante" : "Faltante"}
                 value={formatMoney(Math.abs(difference))}
-                color={palette.error}
+                color={colors.error}
                 strong
               />
               <Text style={styles.confirmText}>
@@ -137,7 +140,7 @@ export default function CloseShiftModal({ visible, sessionId, onClose, onClosed 
                     }}
                     keyboardType="decimal-pad"
                     placeholder="0.00"
-                    placeholderTextColor={palette.textMuted}
+                    placeholderTextColor={colors.textMuted}
                     autoFocus
                     editable={!saving}
                     style={styles.input}
@@ -148,7 +151,7 @@ export default function CloseShiftModal({ visible, sessionId, onClose, onClosed 
                     <Row
                       label={difference === 0 ? "Cuadra" : difference > 0 ? "Sobrante" : "Faltante"}
                       value={formatMoney(Math.abs(difference))}
-                      color={difference === 0 ? palette.success : palette.error}
+                      color={difference === 0 ? colors.success : colors.error}
                       strong
                     />
                   )}
@@ -185,6 +188,7 @@ export default function CloseShiftModal({ visible, sessionId, onClose, onClosed 
 }
 
 function Row({ label, value, strong, color }: { label: string; value: string; strong?: boolean; color?: string }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.row}>
       <Text style={[styles.rowLabel, strong && styles.strong]}>{label}</Text>
@@ -193,19 +197,19 @@ function Row({ label, value, strong, color }: { label: string; value: string; st
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: palette.overlay, alignItems: "center", justifyContent: "center", padding: 16 },
-  card: { width: "100%", maxWidth: 440, backgroundColor: palette.surface, borderRadius: 16, padding: 20 },
-  title: { fontWeight: "700", marginBottom: 12, color: palette.text },
+const makeStyles = themedStyles((c) => ({
+  overlay: { flex: 1, backgroundColor: c.overlay, alignItems: "center", justifyContent: "center", padding: 16 },
+  card: { width: "100%", maxWidth: 440, backgroundColor: c.surface, borderRadius: 16, padding: 20 },
+  title: { fontWeight: "700", marginBottom: 12, color: c.text },
   row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4 },
-  rowLabel: { color: palette.textSecondary },
-  rowValue: { color: palette.text, fontWeight: "600" },
-  strong: { fontWeight: "800", color: palette.text, fontSize: 16 },
-  divider: { height: 1, backgroundColor: palette.border, marginVertical: 8 },
-  label: { color: palette.textSecondary, fontWeight: "600", marginTop: 12 },
-  input: { borderWidth: 1, borderColor: palette.border, borderRadius: 10, padding: 12, fontSize: 20, marginTop: 6, color: palette.text },
+  rowLabel: { color: c.textSecondary },
+  rowValue: { color: c.text, fontWeight: "600" },
+  strong: { fontWeight: "800", color: c.text, fontSize: 16 },
+  divider: { height: 1, backgroundColor: c.border, marginVertical: 8 },
+  label: { color: c.textSecondary, fontWeight: "600", marginTop: 12 },
+  input: { borderWidth: 1, borderColor: c.border, borderRadius: 10, padding: 12, fontSize: 20, marginTop: 6, color: c.text },
   notes: { fontSize: 15, minHeight: 60 },
-  confirmText: { color: palette.text, marginTop: 12, lineHeight: 20 },
-  error: { color: palette.error, marginTop: 10 },
+  confirmText: { color: c.text, marginTop: 12, lineHeight: 20 },
+  error: { color: c.error, marginTop: 10 },
   actions: { flexDirection: "row", gap: 8, marginTop: 16 },
-});
+}));

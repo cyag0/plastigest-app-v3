@@ -1,10 +1,11 @@
 import { SafeAreaView } from "react-native-safe-area-context";
 import BarcodeScanner, { BarcodeScannerRef } from "@/components/Form/BarcodeScanner";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { formatMoney } from "@/hooks/usePosCart";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, Modal, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { FlatList, Modal, Pressable, TextInput, View } from "react-native";
 import { IconButton, Text } from "react-native-paper";
 
 type Item = App.Entities.PosCatalogItem;
@@ -23,6 +24,18 @@ interface Props {
  * códigos de barras.
  */
 export default function SimpleSearchModal({ visible, onClose, search, findByCode, onSelect }: Props) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles((c) => ({
+    container: { flex: 1, backgroundColor: c.surface },
+    bar: { flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: c.border, paddingRight: 4 },
+    input: { flex: 1, fontSize: 18, paddingVertical: 14, color: c.text },
+    separator: { height: 1, backgroundColor: c.border },
+    row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+    name: { fontSize: 16, color: c.text },
+    meta: { fontSize: 12, color: c.textSecondary, marginTop: 2 },
+    price: { fontSize: 16, fontWeight: "700", color: c.text },
+    empty: { textAlign: "center", color: c.textSecondary, padding: 32 },
+  }));
   const [query, setQuery] = useState("");
   const scanner = useRef<BarcodeScannerRef>(null);
   const results = useMemo(() => search(query, 40), [search, query]);
@@ -51,7 +64,7 @@ export default function SimpleSearchModal({ visible, onClose, search, findByCode
             value={query}
             onChangeText={setQuery}
             placeholder="Buscar producto o código"
-            placeholderTextColor={palette.textMuted}
+            placeholderTextColor={colors.textMuted}
             autoFocus
             returnKeyType="search"
             onSubmitEditing={submit}
@@ -77,7 +90,7 @@ export default function SimpleSearchModal({ visible, onClose, search, findByCode
                   </Text>
                 </View>
                 <Text style={styles.price}>{formatMoney(item.price)}</Text>
-                <MaterialCommunityIcons name="plus-circle" size={26} color={out ? palette.textMuted : palette.primary} />
+                <MaterialCommunityIcons name="plus-circle" size={26} color={out ? colors.textMuted : colors.primary} />
               </Pressable>
             );
           }}
@@ -95,15 +108,3 @@ export default function SimpleSearchModal({ visible, onClose, search, findByCode
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: palette.surface },
-  bar: { flexDirection: "row", alignItems: "center", borderBottomWidth: 1, borderBottomColor: palette.border, paddingRight: 4 },
-  input: { flex: 1, fontSize: 18, paddingVertical: 14, color: palette.text },
-  separator: { height: 1, backgroundColor: palette.border },
-  row: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
-  name: { fontSize: 16, color: palette.text },
-  meta: { fontSize: 12, color: palette.textSecondary, marginTop: 2 },
-  price: { fontSize: 16, fontWeight: "700", color: palette.text },
-  empty: { textAlign: "center", color: palette.textSecondary, padding: 32 },
-});

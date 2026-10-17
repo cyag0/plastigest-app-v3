@@ -1,6 +1,6 @@
-import palette from "@/constants/palette";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { Button, Divider, IconButton, Text } from "react-native-paper";
 
 interface CartItem {
@@ -33,6 +33,7 @@ export default function TicketView({
   readonly = false,
   type = "purchases",
 }: TicketViewProps) {
+  const styles = useThemedStyles(makeStyles);
   const title = type === "sales" ? "Resumen de Venta" : "Resumen de Compra";
   const emptyMessage =
     type === "sales"
@@ -218,11 +219,11 @@ export default function TicketView({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   ticketContainer: {
     flex: 1,
     marginTop: 24,
-    backgroundColor: "white",
+    backgroundColor: c.surface,
     padding: 0,
   },
   ticketContent: {
@@ -237,7 +238,7 @@ const styles = StyleSheet.create({
   },
   ticketTitle: {
     fontWeight: "bold",
-    color: palette.primary,
+    color: c.primary,
   },
   headerActions: {
     flexDirection: "row",
@@ -265,7 +266,7 @@ const styles = StyleSheet.create({
   },
   emptyMessage: {
     textAlign: "center",
-    color: "#66635A",
+    color: c.textSecondary,
     fontSize: 16,
     marginBottom: 24,
   },
@@ -288,7 +289,7 @@ const styles = StyleSheet.create({
   },
   itemCode: {
     fontSize: 12,
-    color: "#66635A",
+    color: c.textSecondary,
   },
   itemDetails: {
     flexDirection: "row",
@@ -300,22 +301,22 @@ const styles = StyleSheet.create({
   },
   itemQuantity: {
     fontSize: 14,
-    color: "#66635A",
+    color: c.textSecondary,
   },
   itemTotal: {
     fontSize: 16,
     fontWeight: "bold",
-    color: palette.primary,
+    color: c.primary,
   },
   stockInfo: {
     marginTop: 8,
     padding: 8,
-    backgroundColor: "#f0f8ff",
+    backgroundColor: c.infoSoft,
     borderRadius: 6,
   },
   stockText: {
     fontSize: 12,
-    color: "#66635A",
+    color: c.textSecondary,
     marginBottom: 2,
   },
   itemDivider: {
@@ -332,7 +333,7 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 14,
-    color: "#66635A",
+    color: c.textSecondary,
   },
   summaryValue: {
     fontSize: 14,
@@ -348,7 +349,7 @@ const styles = StyleSheet.create({
   totalValue: {
     fontSize: 20,
     fontWeight: "bold",
-    color: palette.primary,
+    color: c.primary,
   },
   ticketFooter: {
     marginTop: 16,
@@ -359,4 +360,4 @@ const styles = StyleSheet.create({
   editButton: {
     width: "100%",
   },
-});
+}));
