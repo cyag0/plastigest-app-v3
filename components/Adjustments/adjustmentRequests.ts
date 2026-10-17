@@ -6,8 +6,7 @@
 
 import axiosClient from "@/utils/axios";
 import Services from "@/utils/services";
-import { useEffect, useState } from "react";
-import { rememberUnitAbbreviations, type AdjustmentRecord } from "./adjustmentFormat";
+import type { AdjustmentRecord } from "./adjustmentFormat";
 
 const BASE = "/auth/admin/inventory-adjustments";
 
@@ -97,41 +96,4 @@ export async function loadProductForAdjustment(
   } catch {
     return null;
   }
-}
-
-// Una sola carga por sesión (null mientras no haya una en curso o si falló).
-let abbreviationsLoad: Promise<boolean> | null = null;
-
-/**
- * Carga las abreviaturas de las unidades ("pz", "kg") para mostrar las
- * cantidades de los ajustes: el recurso no las trae. Devuelve true cuando ya
- * están (la pantalla vuelve a pintarse). grouped-by-base no pide permiso de
- * unidades, así que sirve a quien solo ve inventario.
- */
-export function useUnitAbbreviations(): boolean {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    if (!abbreviationsLoad) {
-      abbreviationsLoad = axiosClient
-        .get("/auth/admin/units/grouped-by-base", { silent: true })
-        .then((response) => {
-          const groups = (response.data as any)?.data ?? {};
-          const rows = Object.values(groups).flat() as any[];
-          rememberUnitAbbreviations(rows.map((u) => [Number(u.id), String(u.abbreviation ?? "")]));
-          return true;
-        })
-        .catch(() => {
-          abbreviationsLoad = null;
-          return false;
-        });
-    }
-    abbreviationsLoad.then((ok) => {
-      if (alive && ok) setReady(true);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-  return ready;
 }

@@ -27,7 +27,6 @@ import {
   type OriginType,
   type ReasonCode,
 } from "@/components/Adjustments/adjustmentFormat";
-import { useUnitAbbreviations } from "@/components/Adjustments/adjustmentRequests";
 import { dateRangeFilter } from "@/constants/listFilters";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCan } from "@/hooks/useCan";
@@ -116,8 +115,6 @@ export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
   // Quien entra a todas las sucursales las ve juntas (y cada renglón dice cuál).
   const locationFilter = useLocationFilter();
   const showLocation = !!locationFilter;
-  // "pz", "kg": el recurso trae la unidad sin abreviatura (se vuelve a pintar al llegar).
-  useUnitAbbreviations();
 
   useLayoutEffect(() => {
     navigation.setOptions({ title: "Ajustes de inventario" });

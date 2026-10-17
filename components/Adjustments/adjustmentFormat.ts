@@ -43,7 +43,6 @@ export interface AdjustmentRecord {
   direction: Direction;
   /** En la unidad del producto. */
   quantity: number;
-  unit_id?: number | null;
   unit?: { id: number; name?: string | null; code?: string | null; abbreviation?: string | null } | null;
   previous_stock?: number | null;
   new_stock?: number | null;
@@ -117,28 +116,9 @@ export const originOf = (a: AdjustmentRecord): OriginType => a.origin?.type ?? "
 
 // ─── Cantidades ─────────────────────────────────────────────────────────────
 
-// Abreviaturas por id de unidad. El recurso de ajustes manda la unidad con
-// `code` (columna que no existe: siempre null) y el nombre ("Pieza"), sin la
-// abreviatura; useUnitAbbreviations (adjustmentRequests) las llena una vez.
-const knownAbbreviations = new Map<number, string>();
-
-export function rememberUnitAbbreviations(entries: Array<[number, string]>): void {
-  for (const [id, abbreviation] of entries) {
-    if (abbreviation) knownAbbreviations.set(id, abbreviation);
-  }
-}
-
-/** Abreviatura de la unidad ("pz"); si no se conoce, su nombre. */
-export const unitOf = (a: Pick<AdjustmentRecord, "unit" | "unit_id">): string => {
-  const id = a.unit?.id ?? a.unit_id;
-  return (
-    a.unit?.abbreviation ||
-    a.unit?.code ||
-    (id != null ? knownAbbreviations.get(Number(id)) : undefined) ||
-    a.unit?.name ||
-    ""
-  );
-};
+/** Abreviatura de la unidad ("pz"); si no viene, su nombre. */
+export const unitOf = (a: Pick<AdjustmentRecord, "unit">): string =>
+  a.unit?.abbreviation || a.unit?.code || a.unit?.name || "";
 
 /** "−3 pz" · "+2 kg" (signo menos de verdad, no guion). */
 export const signedQuantity = (a: AdjustmentRecord): string =>

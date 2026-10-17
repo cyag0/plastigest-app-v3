@@ -29,7 +29,7 @@ import {
   unitOf,
   type AdjustmentRecord,
 } from "@/components/Adjustments/adjustmentFormat";
-import { fetchAdjustment, useUnitAbbreviations } from "@/components/Adjustments/adjustmentRequests";
+import { fetchAdjustment } from "@/components/Adjustments/adjustmentRequests";
 import EvidenceViewer from "@/components/Adjustments/EvidenceViewer";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -84,8 +84,6 @@ export default function AdjustmentDetailScreen() {
   const [problem, setProblem] = useState<RecordLoadProblem | null>(null);
   const [photo, setPhoto] = useState<number | null>(null);
   const loaded = useRef(false);
-  // "pz", "kg": el recurso trae la unidad sin abreviatura.
-  useUnitAbbreviations();
 
   const load = useCallback(async () => {
     if (!Number.isInteger(id) || id <= 0) {
@@ -318,9 +316,7 @@ export default function AdjustmentDetailScreen() {
             )}
             {!!record.created_by_user?.name && <ListValueRow label="Registró" value={record.created_by_user.name} />}
             {!!record.location?.name && <ListValueRow label="Sucursal" value={record.location.name} />}
-            {!!(record.product?.code || record.product?.sku) && (
-              <ListValueRow label="Código" value={(record.product?.code || record.product?.sku)!} />
-            )}
+            {!!record.product?.code && <ListValueRow label="Código" value={record.product.code} />}
           </ListGroup>
         </ListSection>
 
