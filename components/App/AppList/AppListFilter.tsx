@@ -351,8 +351,10 @@ export default function AppListFilterBar({
       };
     }
 
+    // Sin valor, la etiqueta de la opción vacía ("Todas" en Sucursal,
+    // Categoría…), como en el selector.
     if (!value || (Array.isArray(value) && value.length === 0)) {
-      return "Todos";
+      return filter.options?.find((opt) => opt.value === "")?.label ?? "Todos";
     }
 
     if (filter.type === "simple") {

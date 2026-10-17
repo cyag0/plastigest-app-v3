@@ -1,12 +1,41 @@
 import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import { FilterConfig } from "@/components/App/AppList/AppListFilter";
 import { useCan } from "@/hooks/useCan";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
+
+// Los mismos tipos que el formulario de la unidad.
+const FILTERS: FilterConfig[] = [
+  {
+    type: "simple",
+    name: "unit_type",
+    label: "Tipo",
+    options: [
+      { label: "Todos", value: "" },
+      { label: "Cantidad (piezas)", value: "quantity" },
+      { label: "Peso (kg, g)", value: "mass" },
+      { label: "Volumen (L, ml)", value: "volume" },
+      { label: "Longitud (m, cm)", value: "length" },
+    ],
+  },
+  {
+    // Las del sistema las comparten todas las empresas; las otras las creó
+    // la empresa.
+    type: "simple",
+    name: "origin",
+    label: "Origen",
+    options: [
+      { label: "Todas", value: "" },
+      { label: "Del sistema", value: "system" },
+      { label: "De la empresa", value: "company" },
+    ],
+  },
+];
 
 export default function UnidadesScreen() {
   const router = useRouter();
@@ -50,6 +79,7 @@ export default function UnidadesScreen() {
         service={Services.home.unidades}
         permissionPrefix="units"
         columns={columns}
+        filters={FILTERS}
         renderCard={({ item }) => ({
           title: `${item.name} (${item.abbreviation})`,
           description: item.description,

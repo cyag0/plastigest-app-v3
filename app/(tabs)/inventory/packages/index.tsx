@@ -1,8 +1,11 @@
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import { FilterConfig } from "@/components/App/AppList/AppListFilter";
 import PrintLabelsModal from "@/components/Products/PrintLabelsModal";
+import { activeFilter } from "@/constants/listFilters";
 import palette from "@/constants/palette";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCategoryFilter } from "@/hooks/useListFilters";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import axios from "@/utils/axios";
@@ -19,6 +22,10 @@ export default function InventoryPackagesIndex() {
   const alerts = useAlerts();
   const { company, availableCompanies, selectCompany, isLoading } =
     useSelectedCompany();
+
+  // Categoría del producto del empaque (si se pueden listar categorías).
+  const categoryFilter = useCategoryFilter();
+  const filters: FilterConfig[] = [activeFilter(), ...(categoryFilter ? [categoryFilter] : [])];
 
   const [printModalVisible, setPrintModalVisible] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
@@ -140,6 +147,7 @@ export default function InventoryPackagesIndex() {
         // Paquetes usan los permisos de productos (ProductPackageController).
         permissionPrefix="products"
         columns={columns}
+        filters={filters}
         renderCard={({ item }: { item: any }) => ({
           title: item.package_name,
           description: (

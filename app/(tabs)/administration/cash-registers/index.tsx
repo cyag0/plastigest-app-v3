@@ -1,8 +1,10 @@
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import { FilterConfig } from "@/components/App/AppList/AppListFilter";
 import StatusBadge, { type StatusBadgeProps } from "@/components/App/StatusBadge";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLocationFilter } from "@/hooks/useListFilters";
 import Services from "@/utils/services";
 import { router, useLocalSearchParams } from "expo-router";
 import * as React from "react";
@@ -30,6 +32,19 @@ function RegisterStatus({ item, withCashier = false }: { item: App.Entities.Cash
   return <StatusBadge {...registerStatus(item, withCashier)} />;
 }
 
+/** Los mismos estados que el badge de cada caja. */
+const STATUS_FILTER: FilterConfig = {
+  type: "simple",
+  name: "status",
+  label: "Estado",
+  options: [
+    { label: "Todas", value: "" },
+    { label: "Libres", value: "free" },
+    { label: "En turno", value: "in_session" },
+    { label: "Inactivas", value: "inactive" },
+  ],
+};
+
 const BASE = "/(tabs)/administration/cash-registers";
 
 export default function CashRegistersIndexScreen() {
@@ -39,6 +54,9 @@ export default function CashRegistersIndexScreen() {
   const branchScope = scope === "location";
   const suffix = branchScope ? "?scope=location" : "";
   const { location } = useAuth();
+  // En «Esta sucursal» todas son de la misma: ahí no se ofrece.
+  const locationFilter = useLocationFilter();
+  const filters = [STATUS_FILTER, ...(!branchScope && locationFilter ? [locationFilter] : [])];
 
   const columns: AppListColumn<App.Entities.CashRegister>[] = [
     { title: "Código", dataIndex: "code", key: "code", width: 110 },
@@ -63,6 +81,7 @@ export default function CashRegistersIndexScreen() {
       // abrir el detalle no se ofrecen (cash_registers_create/update/delete/read).
       permissionPrefix="cash_registers"
       defaultFilters={branchScope ? { current_location: 1 } : undefined}
+      filters={filters}
       columns={columns}
       renderCard={({ item }) => ({
         title: item.name,

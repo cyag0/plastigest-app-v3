@@ -1,6 +1,7 @@
 import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import { activeFilter } from "@/constants/listFilters";
 import PermissionGate from "@/components/App/PermissionGate";
 import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import FilterModal from "@/components/Feedback/Modal/FilterModal";
@@ -44,6 +45,7 @@ export default function CompaniesIndexScreen(props: CompanyIndexScreenProps) {
         service={Services.admin.companies}
         permissionPrefix="companies"
         columns={columns}
+        filters={[activeFilter(true)]}
         renderCard={({ item }) => ({
           title: item.name,
           description: item.business_name,

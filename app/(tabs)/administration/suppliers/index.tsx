@@ -1,6 +1,7 @@
 import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import { activeFilter } from "@/constants/listFilters";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
 import { formatPhone } from "@/utils/phone";
@@ -39,6 +40,7 @@ export default function SuppliersIndex() {
         service={Services.suppliers}
         permissionPrefix="suppliers"
         columns={columns}
+        filters={[activeFilter()]}
         renderCard={({ item }: { item: any }) => {
           console.log("Rendering supplier item:", item);
 

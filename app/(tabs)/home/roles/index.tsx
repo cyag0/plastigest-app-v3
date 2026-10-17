@@ -1,6 +1,7 @@
 import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import { activeFilter } from "@/constants/listFilters";
 import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import FilterModal from "@/components/Feedback/Modal/FilterModal";
 import AppChip from "@/components/App/Chip";
@@ -44,6 +45,7 @@ export default function RolesListScreen() {
         title="Roles"
         service={Services.admin.roles}
         columns={columns}
+        filters={[activeFilter()]}
         renderCard={({ item }) => ({
           title: item.name,
           description: (

@@ -1,6 +1,7 @@
 import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import { activeFilter } from "@/constants/listFilters";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -27,6 +28,7 @@ export default function CategoriesIndex() {
         service={Services.categories}
         permissionPrefix="categories"
         columns={columns}
+        filters={[activeFilter(true)]}
         renderCard={({ item }: { item: any }) => ({
           title: item.name,
           description: (

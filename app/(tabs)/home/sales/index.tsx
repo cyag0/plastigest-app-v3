@@ -2,14 +2,17 @@ import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import IconLabel from "@/components/App/IconLabel";
+import { FilterConfig } from "@/components/App/AppList/AppListFilter";
 import PermissionGate from "@/components/App/PermissionGate";
 import StatusBadge from "@/components/App/StatusBadge";
 import SaleStats from "@/components/Dashboard/SaleStats";
+import { dateRangeFilter } from "@/constants/listFilters";
 import palette from "@/constants/palette";
 import { type StatusInfo, paymentMethod, paymentStatus, saleStatus } from "@/constants/statuses";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
+import { useLocationFilter } from "@/hooks/useListFilters";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -43,6 +46,36 @@ function cardStatus(sale: any): StatusInfo {
   return info;
 }
 
+/**
+ * «Estado» filtra lo mismo que se ve en cada renglón: Cancelada o, si no,
+ * cómo va el pago (el backend excluye las canceladas de los estados de pago).
+ */
+const STATUS_FILTER: FilterConfig = {
+  type: "simple",
+  name: "status",
+  label: "Estado",
+  options: [
+    { label: "Todas", value: "" },
+    { label: "Pagadas", value: "paid" },
+    { label: "Pago parcial", value: "partial" },
+    { label: "Pendientes de pago", value: "pending" },
+    { label: "Canceladas", value: "cancelled" },
+  ],
+};
+
+const PAYMENT_METHOD_FILTER: FilterConfig = {
+  type: "simple",
+  name: "payment_method",
+  label: "Pago",
+  options: [
+    { label: "Todos", value: "" },
+    ...["cash", "card", "transfer", "mixed", "credit"].map((value) => ({
+      label: paymentMethod(value).label,
+      value,
+    })),
+  ],
+};
+
 export default function SalesIndex() {
   const navigation = router;
   const layout = useWindowDimensions();
@@ -51,6 +84,17 @@ export default function SalesIndex() {
   const { can } = useCan();
   // Las estadísticas y el PDF piden sales_read (la lista, sales_list).
   const canReadSales = can("sales_read");
+  // Quien entra a todas las sucursales ve aquí las ventas de todas.
+  const locationFilter = useLocationFilter();
+  const filters = useMemo<FilterConfig[]>(
+    () => [
+      STATUS_FILTER,
+      PAYMENT_METHOD_FILTER,
+      dateRangeFilter,
+      ...(locationFilter ? [locationFilter] : []),
+    ],
+    [locationFilter],
+  );
   const routes = useMemo(
     () =>
       canReadSales
@@ -219,10 +263,11 @@ export default function SalesIndex() {
           ],
         }}
         searchPlaceholder="Buscar ventas..."
+        filters={filters}
         columns={columns}
       />
     ),
-    [navigation, columns, canReadSales],
+    [navigation, columns, canReadSales, filters],
   );
 
   const renderStatsRoute = useMemo(() => () => <SaleStats />, []);

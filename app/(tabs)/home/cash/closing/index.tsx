@@ -1,11 +1,13 @@
 import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import AppChip from "@/components/App/Chip";
+import { dateRangeFilter } from "@/constants/listFilters";
 import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
+import { useLocationFilter } from "@/hooks/useListFilters";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { formatMoney } from "@/utils/format";
 import { shortLocationName } from "@/utils/locations";
@@ -42,6 +44,7 @@ export default function CashClosingIndex() {
   const alerts = useAlerts();
   const { selectedCompany } = useAuth();
   const { can, canAccessRoute } = useCan();
+  const locationFilter = useLocationFilter();
   const { downloadPdfFromApi } = usePdfDownload({
     onError: (error) =>
       alerts.error(errorMessageOf(error, "No se pudo descargar el PDF. Inténtalo de nuevo.")),
@@ -81,6 +84,7 @@ export default function CashClosingIndex() {
       // CashClosingController usa el prefijo cash_movements: abrir el cierre
       // pide cash_movements_read.
       permissionPrefix="cash_movements"
+      filters={[dateRangeFilter, ...(locationFilter ? [locationFilter] : [])]}
       columns={[
         {
           key: "closing_date",
