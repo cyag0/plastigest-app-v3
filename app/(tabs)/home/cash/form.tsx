@@ -4,6 +4,7 @@ import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
 import AmountPreview from "@/components/Pos/AmountPreview";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { parseMoney } from "@/utils/format";
 import { roundMoney } from "@/utils/money";
@@ -65,6 +66,7 @@ function AmountFieldPreview() {
 }
 
 export default function CashMovementForm() {
+  const { colors } = useTheme();
   const params = useLocalSearchParams();
   const movementId = params.id ? parseInt(params.id as string) : undefined;
   const alerts = useAlerts();
@@ -119,7 +121,7 @@ export default function CashMovementForm() {
       validationSchema={validationSchema}
       onSubmit={save}
     >
-     <View style={{ backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 } }}>
+     <View style={{ backgroundColor: colors.surface, padding: 24, shadowOffset: { width: 0, height: 0 } }}>
        <FormSelectSimple name="type" label="Tipo" data={TYPE_OPTIONS} />
       <FormInput
         name="concept"

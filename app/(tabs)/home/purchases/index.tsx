@@ -4,7 +4,6 @@ import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import PermissionGate from "@/components/App/PermissionGate";
 import StatusBadge from "@/components/App/StatusBadge";
 import PurchaseStats from "@/components/Dashboard/PurchaseStats";
-import palette from "@/constants/palette";
 import { purchaseStatus } from "@/constants/statuses";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -15,9 +14,11 @@ import {
   IndexParams,
   createCrudService,
 } from "@/utils/services/crudService";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Pressable, View, useWindowDimensions } from "react-native";
 import { Text } from "react-native-paper";
 import { SceneMap, TabView } from "react-native-tab-view";
 
@@ -58,6 +59,8 @@ const apiMessage = (error: any, fallback: string): string => {
 };
 
 export default function PurchasesIndex() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const layout = useWindowDimensions();
   const alerts = useAlerts();
@@ -228,7 +231,7 @@ export default function PurchasesIndex() {
             {
               title: isDownloading ? "Descargando..." : "Imprimir PDF",
               icon: "file-pdf-box",
-              color: palette.primary,
+              color: colors.primary,
               show: () => can("purchases_read"),
               onPress: handleDownloadPdf,
             },
@@ -245,7 +248,7 @@ export default function PurchasesIndex() {
         columns={columns}
       />
     ),
-    [router, columns, listKey, can],
+    [router, columns, listKey, can, colors, styles],
   );
 
   const renderStatsRoute = useMemo(() => () => <PurchaseStats />, []);
@@ -295,16 +298,16 @@ export default function PurchasesIndex() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     backgroundColor: "transparent" as any,
   },
   tabsContainer: {
     flexDirection: "row",
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderBottomWidth: 2,
-    borderBottomColor: palette.border,
+    borderBottomColor: c.border,
   },
   tab: {
     flex: 1,
@@ -316,15 +319,15 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
   },
   tabActive: {
-    borderBottomColor: palette.primary,
+    borderBottomColor: c.primary,
   },
   tabText: {
     fontSize: 15,
     fontWeight: "600",
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
   tabTextActive: {
-    color: palette.primary,
+    color: c.primary,
   },
   rightContent: {
     alignItems: "flex-end",
@@ -337,7 +340,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cardTitleText: {
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
     fontSize: 14,
     flex: 1,
@@ -349,16 +352,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   supplierText: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontSize: 12,
     flex: 1,
   },
   amountText: {
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "700",
     fontSize: 16,
   },
-});
+}));
 
 // Mismo folio que muestra el detalle (PUR000051); el número de documento del
 // proveedor o el id sólo si la compra no tiene folio.

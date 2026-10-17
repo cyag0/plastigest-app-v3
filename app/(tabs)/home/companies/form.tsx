@@ -3,7 +3,6 @@ import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormPhoneInput } from "@/components/Form/AppPhoneInput";
-import palette from "@/constants/palette";
 import Services from "@/utils/services";
 import { phoneSchema } from "@/utils/phone";
 import { useRouter } from "expo-router";

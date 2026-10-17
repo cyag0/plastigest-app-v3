@@ -1,10 +1,11 @@
 import { formatDate } from "@/utils/dates";
-import palette from "@/constants/palette";
 import Services from "@/utils/services";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, ScrollView, View } from "react-native";
 import { Chip, Surface, Text } from "react-native-paper";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,6 +40,8 @@ function InfoRow({
   color?: string;
   icon?: string;
 }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.infoRow}>
       <View style={styles.infoLabelWrap}>
@@ -46,7 +49,7 @@ function InfoRow({
           <MaterialCommunityIcons
             name={icon as any}
             size={14}
-            color={color ?? palette.textSecondary}
+            color={color ?? colors.textSecondary}
             style={{ marginRight: 6 }}
           />
         )}
@@ -62,6 +65,8 @@ function InfoRow({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function CashClosingDetail() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { id } = useLocalSearchParams<{ id: string }>();
   const [item, setItem] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -77,7 +82,7 @@ export default function CashClosingDetail() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator color={palette.primary} />
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
@@ -85,7 +90,7 @@ export default function CashClosingDetail() {
   if (!item) {
     return (
       <View style={styles.centered}>
-        <Text style={{ color: palette.textSecondary }}>
+        <Text style={{ color: colors.textSecondary }}>
           No se encontró el cierre.
         </Text>
       </View>
@@ -94,7 +99,7 @@ export default function CashClosingDetail() {
 
   const diff = parseFloat(item.difference ?? "0");
   const diffColor =
-    diff === 0 ? palette.success : diff > 0 ? palette.blue : palette.error;
+    diff === 0 ? colors.success : diff > 0 ? colors.info : colors.error;
 
   return (
     <ScrollView
@@ -113,8 +118,8 @@ export default function CashClosingDetail() {
           <View style={styles.headerRight}>
             <Chip
               compact
-              style={{ backgroundColor: `${palette.primary}20` }}
-              textStyle={{ color: palette.primary, fontSize: 12 }}
+              style={{ backgroundColor: `${colors.primary}20` }}
+              textStyle={{ color: colors.primary, fontSize: 12 }}
             >
               {item.status ?? "closed"}
             </Chip>
@@ -129,8 +134,8 @@ export default function CashClosingDetail() {
               {
                 color:
                   parseFloat(item.expected_balance) >= 0
-                    ? palette.success
-                    : palette.error,
+                    ? colors.success
+                    : colors.error,
               },
             ]}
           >
@@ -163,13 +168,13 @@ export default function CashClosingDetail() {
         <InfoRow
           label="Ingresos"
           value={formatCurrency(item.total_income)}
-          color={palette.success}
+          color={colors.success}
           icon="arrow-down-circle"
         />
         <InfoRow
           label="Egresos"
           value={formatCurrency(item.total_expense)}
-          color={palette.error}
+          color={colors.error}
           icon="arrow-up-circle"
         />
         <View style={styles.divider} />
@@ -178,8 +183,8 @@ export default function CashClosingDetail() {
           value={formatCurrency(item.expected_balance)}
           color={
             parseFloat(item.expected_balance) >= 0
-              ? palette.success
-              : palette.error
+              ? colors.success
+              : colors.error
           }
           icon="calculator"
         />
@@ -260,14 +265,14 @@ export default function CashClosingDetail() {
 // Styles
 // ─────────────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   scroll: { flex: 1, backgroundColor: "transparent" as any },
   container: { padding: 16, gap: 12, paddingBottom: 32, maxWidth: 600, width: "100%", alignSelf: "center" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
   headerCard: {
     borderRadius: 14,
     padding: 18,
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
     elevation: 3,
   },
   headerTop: {
@@ -279,36 +284,38 @@ const styles = StyleSheet.create({
   headerDate: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#fff",
+    color: c.primaryForeground,
   },
   headerLocation: {
     fontSize: 13,
-    color: "rgba(255,255,255,0.75)",
+    color: c.primaryForeground,
+    opacity: 0.75,
     marginTop: 2,
   },
   headerRight: { alignItems: "flex-end" },
   balanceBig: { alignItems: "center", marginVertical: 8 },
   balanceBigLabel: {
     fontSize: 12,
-    color: "rgba(255,255,255,0.75)",
+    color: c.primaryForeground,
+    opacity: 0.75,
     marginBottom: 4,
   },
   balanceBigValue: {
     fontSize: 30,
     fontWeight: "800",
-    color: "#fff",
+    color: c.primaryForeground,
   },
   diffChipWrap: { alignItems: "center", marginTop: 10 },
   section: {
     borderRadius: 12,
     padding: 16,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     elevation: 1,
   },
   sectionTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: palette.text,
+    color: c.text,
     marginBottom: 12,
   },
   infoRow: {
@@ -318,16 +325,16 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   infoLabelWrap: { flexDirection: "row", alignItems: "center" },
-  infoLabel: { fontSize: 13, color: palette.textSecondary },
-  infoValue: { fontSize: 13, fontWeight: "600", color: palette.text },
+  infoLabel: { fontSize: 13, color: c.textSecondary },
+  infoValue: { fontSize: 13, fontWeight: "600", color: c.text },
   divider: {
     height: 1,
-    backgroundColor: palette.border,
+    backgroundColor: c.border,
     marginVertical: 8,
   },
   notesText: {
     fontSize: 13,
-    color: palette.text,
+    color: c.text,
     lineHeight: 20,
   },
-});
+}));

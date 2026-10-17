@@ -5,13 +5,12 @@ import { activeFilter } from "@/constants/listFilters";
 import PermissionGate from "@/components/App/PermissionGate";
 import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import FilterModal from "@/components/Feedback/Modal/FilterModal";
-import palette from "@/constants/palette";
 import { generateCrudMenu } from "@/utils/routes";
 import Services from "@/utils/services";
 import { formatPhone } from "@/utils/phone";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { Href, useRouter } from "expo-router";
 import * as React from "react";
-import { StyleSheet } from "react-native";
 import { Avatar } from "react-native-paper";
 
 interface CompanyIndexScreenProps {
@@ -19,6 +18,7 @@ interface CompanyIndexScreenProps {
 }
 
 export default function CompaniesIndexScreen(props: CompanyIndexScreenProps) {
+  const styles = useThemedStyles(makeStyles);
   const navigation = useRouter();
   const modalRef = React.useRef<AppModalRef>(null);
 
@@ -71,8 +71,8 @@ export default function CompaniesIndexScreen(props: CompanyIndexScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   avatar: {
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
   },
-});
+}));

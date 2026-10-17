@@ -5,9 +5,9 @@ import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import IconLabel from "@/components/App/IconLabel";
 import PermissionGate from "@/components/App/PermissionGate";
-import palette from "@/constants/palette";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
+import { useTheme } from "@/contexts/ThemeContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Href, useRouter } from "expo-router";
 import React from "react";
@@ -100,6 +100,7 @@ const tableColumns: AppListColumn<InventoryAdjustmentItem>[] = [
 ];
 
 export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
+  const { colors } = useTheme();
   const router = useRouter();
   const { selectedLocation, isLoadingLocations } = useSelectedLocation();
 
@@ -170,7 +171,7 @@ export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
               <MaterialCommunityIcons
                 name={isIncrease ? "arrow-up-circle" : "arrow-down-circle"}
                 size={32}
-                color={isIncrease ? palette.success : palette.error}
+                color={isIncrease ? colors.success : colors.error}
               />
             </View>
           ),

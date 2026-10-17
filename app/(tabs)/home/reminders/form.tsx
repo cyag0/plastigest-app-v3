@@ -2,16 +2,16 @@ import { toLocalDateString } from "@/utils/dates";
 import { parseMoney } from "@/utils/format";
 import { goBack } from "@/utils/navigation";
 import AppSelect from "@/components/Form/AppSelect";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import Services from "@/utils/services";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import {
   ActivityIndicator,
   Button,
@@ -39,6 +39,7 @@ export default function ReminderForm(props: ReminderFormProps) {
   const { canUpdate } = useCan();
   const readOnly = !!reminderId && !canUpdate("reminders");
   const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -236,7 +237,7 @@ export default function ReminderForm(props: ReminderFormProps) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={palette.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={{ marginTop: 16 }}>Cargando recordatorio...</Text>
       </View>
     );
@@ -279,7 +280,7 @@ export default function ReminderForm(props: ReminderFormProps) {
               />
               <Text
                 variant="bodySmall"
-                style={{ color: palette.textSecondary, marginTop: 4 }}
+                style={{ color: colors.textSecondary, marginTop: 4 }}
               >
                 El recordatorio solo será visible para el usuario seleccionado
               </Text>
@@ -345,7 +346,7 @@ export default function ReminderForm(props: ReminderFormProps) {
               <MaterialCommunityIcons
                 name="refresh"
                 size={24}
-                color={palette.primary}
+                color={colors.primary}
               />
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 Recurrencia
@@ -357,7 +358,7 @@ export default function ReminderForm(props: ReminderFormProps) {
                 <Text variant="bodyLarge">Recordatorio Recurrente</Text>
                 <Text
                   variant="bodySmall"
-                  style={{ color: palette.textSecondary }}
+                  style={{ color: colors.textSecondary }}
                 >
                   Se creará automáticamente el siguiente
                 </Text>
@@ -406,7 +407,7 @@ export default function ReminderForm(props: ReminderFormProps) {
               <MaterialCommunityIcons
                 name="bell-ring"
                 size={24}
-                color={palette.primary}
+                color={colors.primary}
               />
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 Notificaciones
@@ -418,7 +419,7 @@ export default function ReminderForm(props: ReminderFormProps) {
                 <Text variant="bodyLarge">Activar Notificaciones</Text>
                 <Text
                   variant="bodySmall"
-                  style={{ color: palette.textSecondary }}
+                  style={{ color: colors.textSecondary }}
                 >
                   Recibe alertas antes de la fecha
                 </Text>
@@ -453,11 +454,11 @@ export default function ReminderForm(props: ReminderFormProps) {
                 <MaterialCommunityIcons
                   name="map-marker"
                   size={16}
-                  color={palette.textSecondary}
+                  color={colors.textSecondary}
                 />
                 <Text
                   variant="bodySmall"
-                  style={{ color: palette.textSecondary }}
+                  style={{ color: colors.textSecondary }}
                 >
                   Ubicación: {location.name}
                 </Text>
@@ -493,7 +494,7 @@ export default function ReminderForm(props: ReminderFormProps) {
               style={styles.button}
               loading={saving}
               disabled={saving}
-              buttonColor={palette.primary}
+              buttonColor={colors.primary}
             >
               {reminderId ? "Actualizar" : "Guardar"}
             </Button>
@@ -504,9 +505,9 @@ export default function ReminderForm(props: ReminderFormProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   fieldLabel: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginBottom: 6,
   },
   container: {
@@ -520,12 +521,12 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent" as any,
   },
   card: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     marginBottom: 16,
   },
   input: {
     marginBottom: 16,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -568,4 +569,4 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
   },
-});
+}));

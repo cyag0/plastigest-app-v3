@@ -1,8 +1,8 @@
 import { formatQuantity } from "@/utils/format";
 import { formatDate } from "@/utils/dates";
-import palette from "@/constants/palette";
 import axios from "@/utils/axios";
 import { errorMessageOf } from "@/utils/errorNotice";
+import { useTheme } from "@/contexts/ThemeContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
@@ -52,6 +52,7 @@ interface InventoryAdjustmentDetail {
 }
 
 export default function AdjustmentDetailScreen() {
+  const { colors } = useTheme();
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = useMemo(() => {
     const rawId = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -114,7 +115,7 @@ export default function AdjustmentDetailScreen() {
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12,  }}>
-      <Card style={{backgroundColor: "white", maxWidth: "600px", alignSelf: "center", width: "100%", padding: 24, shadowOffset: { width: 0, height: 0 }}}>
+      <Card style={{backgroundColor: colors.surface, maxWidth: "600px", alignSelf: "center", width: "100%", padding: 24, shadowOffset: { width: 0, height: 0 }}}>
         <Card.Content style={{ gap: 12 }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <Text variant="titleMedium" style={{ fontWeight: "700" }}>
@@ -123,7 +124,7 @@ export default function AdjustmentDetailScreen() {
             <MaterialCommunityIcons
               name={isIncrease ? "arrow-up-circle" : "arrow-down-circle"}
               size={28}
-              color={isIncrease ? palette.success : palette.error}
+              color={isIncrease ? colors.success : colors.error}
             />
           </View>
 
@@ -165,7 +166,7 @@ export default function AdjustmentDetailScreen() {
                           borderRadius: 10,
                           overflow: "hidden",
                           borderWidth: 1,
-                          borderColor: "#E5E5E5",
+                          borderColor: colors.border,
                         }}
                       >
                         <Image source={{ uri }} style={{ width: "100%", height: "100%" }} />
@@ -183,9 +184,10 @@ export default function AdjustmentDetailScreen() {
 }
 
 function Row({ label, value }: { label: string; value: string }) {
+  const { colors } = useTheme();
   return (
     <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
-      <Text variant="bodyMedium" style={{ color: palette.textSecondary }}>
+      <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
         {label}
       </Text>
       <Text variant="bodyMedium" style={{ fontWeight: "600", flexShrink: 1, textAlign: "right" }}>

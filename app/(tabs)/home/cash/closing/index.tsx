@@ -2,7 +2,6 @@ import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList/AppList";
 import AppChip from "@/components/App/Chip";
 import { dateRangeFilter } from "@/constants/listFilters";
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -16,9 +15,11 @@ import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Text } from "react-native-paper";
 import { errorMessageOf } from "@/utils/errorNotice";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -41,6 +42,8 @@ const formatCurrency = (value: number | string) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function CashClosingIndex() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const alerts = useAlerts();
   const { selectedCompany } = useAuth();
   const { can, canAccessRoute } = useCan();
@@ -67,7 +70,7 @@ export default function CashClosingIndex() {
       {/* Esta lista es histórica: ya nadie hace el cierre diario y vacía no
           decía por qué. */}
       <View style={styles.note}>
-        <MaterialCommunityIcons name="information-outline" size={18} color={palette.info} />
+        <MaterialCommunityIcons name="information-outline" size={18} color={colors.info} />
         <Text style={styles.noteText}>
           El corte ahora se hace al cerrar cada turno de caja. Aquí quedan los cierres diarios de antes.
         </Text>
@@ -153,7 +156,7 @@ export default function CashClosingIndex() {
           description: [location, `${item.movements_count ?? 0} movimientos`].filter(Boolean).join(" · "),
           right: (
             <View style={{ alignItems: "flex-end", gap: 4 }}>
-              <Text style={{ fontWeight: "700", color: palette.text }}>
+              <Text style={{ fontWeight: "700", color: colors.text }}>
                 {formatCurrency(item.expected_balance ?? 0)}
               </Text>
               {item.difference != null &&
@@ -179,7 +182,7 @@ export default function CashClosingIndex() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   note: {
     flexDirection: "row",
     alignItems: "center",
@@ -188,16 +191,16 @@ const styles = StyleSheet.create({
     marginTop: tokens.spacing[3],
     padding: tokens.spacing[3],
     borderRadius: tokens.radius.md,
-    backgroundColor: palette.infoSoft,
+    backgroundColor: c.infoSoft,
   },
   noteText: {
     ...tokens.typography.caption,
-    color: palette.text,
+    color: c.text,
     flex: 1,
   },
   noteLink: {
     ...tokens.typography.caption,
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "700",
   },
-});
+}));

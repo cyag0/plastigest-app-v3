@@ -7,17 +7,18 @@ import PermissionGate from "@/components/App/PermissionGate";
 import StatusBadge from "@/components/App/StatusBadge";
 import SaleStats from "@/components/Dashboard/SaleStats";
 import { dateRangeFilter } from "@/constants/listFilters";
-import palette from "@/constants/palette";
 import { type StatusInfo, paymentMethod, paymentStatus, saleStatus } from "@/constants/statuses";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { useLocationFilter } from "@/hooks/useListFilters";
 import Services from "@/utils/services";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useMemo, useState } from "react";
-import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Pressable, View, useWindowDimensions } from "react-native";
 import { Text } from "react-native-paper";
 import { SceneMap, TabView } from "react-native-tab-view";
 
@@ -77,6 +78,8 @@ const PAYMENT_METHOD_FILTER: FilterConfig = {
 };
 
 export default function SalesIndex() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const navigation = router;
   const layout = useWindowDimensions();
   const alerts = useAlerts();
@@ -215,11 +218,11 @@ export default function SalesIndex() {
                   <MaterialCommunityIcons
                     name="package-variant"
                     size={14}
-                    color={palette.textSecondary}
+                    color={colors.textSecondary}
                   />
                   <Text
                     variant="bodySmall"
-                    style={{ color: palette.textSecondary }}
+                    style={{ color: colors.textSecondary }}
                   >
                     {sale.details?.length || 0}{" "}
                     {sale.details?.length === 1 ? "producto" : "productos"}
@@ -228,7 +231,7 @@ export default function SalesIndex() {
 
                 <Text
                   variant="titleSmall"
-                  style={{ fontWeight: "bold", color: palette.primary }}
+                  style={{ fontWeight: "bold", color: colors.primary }}
                 >
                   {new Intl.NumberFormat("es-MX", {
                     style: "currency",
@@ -256,7 +259,7 @@ export default function SalesIndex() {
             {
               title: isDownloading ? "Descargando..." : "Imprimir PDF",
               icon: "file-pdf-box",
-              color: palette.primary,
+              color: colors.primary,
               show: () => canReadSales,
               onPress: handleDownloadPdf,
             },
@@ -267,7 +270,7 @@ export default function SalesIndex() {
         columns={columns}
       />
     ),
-    [navigation, columns, canReadSales, filters],
+    [navigation, columns, canReadSales, filters, colors],
   );
 
   const renderStatsRoute = useMemo(() => () => <SaleStats />, []);
@@ -319,16 +322,16 @@ export default function SalesIndex() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     backgroundColor: "transparent" as any,
   },
   tabsContainer: {
     flexDirection: "row",
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderBottomWidth: 2,
-    borderBottomColor: palette.border,
+    borderBottomColor: c.border,
   },
   tab: {
     flex: 1,
@@ -340,17 +343,17 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
   },
   tabActive: {
-    borderBottomColor: palette.primary,
+    borderBottomColor: c.primary,
   },
   tabText: {
     fontSize: 15,
     fontWeight: "600",
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
   tabTextActive: {
-    color: palette.primary,
+    color: c.primary,
   },
   rightContent: {
     alignItems: "flex-end" as const,
   },
-});
+}));

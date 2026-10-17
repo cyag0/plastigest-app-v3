@@ -14,7 +14,6 @@ import {
   isOutcomeUnknown,
   SALE_ERROR_CODES,
 } from "@/components/Pos/saleErrors";
-import palette from "@/constants/palette";
 import { paymentMethod as paymentMethodInfo, paymentStatus, saleStatus } from "@/constants/statuses";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -27,6 +26,8 @@ import { newClientRequestId } from "@/utils/requestId";
 import { errorMessageOf } from "@/utils/errorNotice";
 import Services from "@/utils/services";
 import { formatPhone } from "@/utils/phone";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams, useNavigation, usePreventRemove } from "expo-router";
 import React, { useLayoutEffect, useRef, useState } from "react";
@@ -34,7 +35,6 @@ import {
   Image,
   Modal,
   ScrollView,
-  StyleSheet,
   TextInput,
   View,
 } from "react-native";
@@ -80,6 +80,7 @@ const VERIFY_DELAY_MS = 1500;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function TotalRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.totalRowLine}>
       <Text style={[styles.totalLabel, strong && styles.totalStrong]}>{label}</Text>
@@ -89,6 +90,8 @@ function TotalRow({ label, value, strong }: { label: string; value: string; stro
 }
 
 export default function SaleDetail() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const params = useLocalSearchParams();
   const navigation = useNavigation();
 
@@ -413,7 +416,7 @@ export default function SaleDetail() {
         </View>
         {pending > 0 && !cancelled && (
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${paidPct}%` as any, backgroundColor: palette.primary }]} />
+            <View style={[styles.progressFill, { width: `${paidPct}%` as any, backgroundColor: colors.primary }]} />
           </View>
         )}
         {canUpdateSale && sale.payment_status !== "paid" && !cancelled && (
@@ -436,7 +439,7 @@ export default function SaleDetail() {
               setShowPaymentDialog(true);
             }}
             icon="cash-plus"
-            buttonColor={palette.primary}
+            buttonColor={colors.primary}
             style={styles.inlineButton}
           >
             Registrar pago
@@ -483,7 +486,7 @@ export default function SaleDetail() {
           <View style={styles.group}>
             {payments.map((p, i) => (
               <View key={`p${i}`} style={[styles.line, i > 0 && styles.lineDivider]}>
-                <MaterialCommunityIcons name={paymentMethodInfo(p.method).icon} size={18} color={palette.textSecondary} />
+                <MaterialCommunityIcons name={paymentMethodInfo(p.method).icon} size={18} color={colors.textSecondary} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.lineTitle}>{paymentMethodInfo(p.method).label}</Text>
                   {p.method === "cash" && p.tendered != null && p.tendered > p.amount && (
@@ -497,7 +500,7 @@ export default function SaleDetail() {
             ))}
             {(sale.payment_history ?? []).map((payment: any, i: number) => (
               <View key={`h${i}`} style={[styles.line, (payments.length > 0 || i > 0) && styles.lineDivider]}>
-                <MaterialCommunityIcons name={paymentMethodInfo(payment.payment_method).icon} size={18} color={palette.textSecondary} />
+                <MaterialCommunityIcons name={paymentMethodInfo(payment.payment_method).icon} size={18} color={colors.textSecondary} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.lineTitle}>{paymentMethodInfo(payment.payment_method).label}</Text>
                   <Text style={styles.lineMeta}>
@@ -545,7 +548,7 @@ export default function SaleDetail() {
           Reimprimir ticket
         </Button>
         {canUpdateSale && sale.can_cancel && (
-          <Button mode="text" onPress={handleCancel} icon="close-circle-outline" textColor={palette.error}>
+          <Button mode="text" onPress={handleCancel} icon="close-circle-outline" textColor={colors.error}>
             Cancelar venta
           </Button>
         )}
@@ -574,7 +577,7 @@ export default function SaleDetail() {
             >
               <Text variant="bodyMedium" style={{ marginBottom: 16 }}>
                 Saldo pendiente:{" "}
-                <Text style={{ fontWeight: "bold", color: "#B9412C" }}>
+                <Text style={{ fontWeight: "bold", color: colors.error }}>
                   {fmt(toNum(sale?.total) - toNum(sale?.paid_amount))}
                 </Text>
               </Text>
@@ -583,6 +586,7 @@ export default function SaleDetail() {
               <TextInput
                 style={[styles.input, { marginBottom: 0 }]}
                 placeholder="0.00"
+                placeholderTextColor={colors.textMuted}
                 value={paymentAmount}
                 onChangeText={(t) => {
                   setPaymentAmount(t);
@@ -617,6 +621,7 @@ export default function SaleDetail() {
               <TextInput
                 style={[styles.input, { minHeight: 72, textAlignVertical: "top" }]}
                 placeholder="Notas adicionales..."
+                placeholderTextColor={colors.textMuted}
                 value={paymentNotes}
                 onChangeText={setPaymentNotes}
                 multiline
@@ -660,7 +665,7 @@ export default function SaleDetail() {
               <Button
                 mode="contained"
                 onPress={handleAddPayment}
-                buttonColor={palette.primary}
+                buttonColor={colors.primary}
                 loading={savingPayment}
                 disabled={savingPayment}
               >
@@ -685,77 +690,77 @@ export default function SaleDetail() {
   );
 }
 
-const styles = StyleSheet.create({
-  scroll:   { flex: 1, backgroundColor: palette.background },
+const makeStyles = themedStyles((c) => ({
+  scroll:   { flex: 1, backgroundColor: c.background },
   content:  { padding: 16, gap: 10, paddingBottom: 32, maxWidth: 760, width: "100%", alignSelf: "center" },
 
   // Documento: encabezado y total sin tarjetas.
   docHeader: { gap: 4, marginTop: 4 },
   docTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
-  docTitle: { fontSize: 22, fontWeight: "700", color: palette.text, letterSpacing: -0.3 },
-  docMeta: { fontSize: 13, color: palette.textSecondary, lineHeight: 19 },
+  docTitle: { fontSize: 22, fontWeight: "700", color: c.text, letterSpacing: -0.3 },
+  docMeta: { fontSize: 13, color: c.textSecondary, lineHeight: 19 },
   // Método y estado de pago; IconLabel y el badge van en un View para centrarse en la fila.
   paymentLine: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 },
   totalBlock: { gap: 4, marginTop: 10, marginBottom: 8 },
-  bigTotal: { fontSize: 36, lineHeight: 42, fontWeight: "700", color: palette.text, letterSpacing: -0.8, fontVariant: ["tabular-nums"] },
-  struck: { textDecorationLine: "line-through", color: palette.textMuted },
+  bigTotal: { fontSize: 36, lineHeight: 42, fontWeight: "700", color: c.text, letterSpacing: -0.8, fontVariant: ["tabular-nums"] },
+  struck: { textDecorationLine: "line-through", color: c.textMuted },
   inlineButton: { alignSelf: "flex-start", marginTop: 8, borderRadius: 10 },
 
   // Listas agrupadas con separadores.
-  groupTitle: { fontSize: 14, fontWeight: "600", color: palette.textSecondary, marginTop: 10 },
-  group: { backgroundColor: palette.surface, borderRadius: 12, borderWidth: 1, borderColor: palette.border, overflow: "hidden" },
+  groupTitle: { fontSize: 14, fontWeight: "600", color: c.textSecondary, marginTop: 10 },
+  group: { backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border, overflow: "hidden" },
   line: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
-  lineDivider: { borderTopWidth: 1, borderTopColor: palette.border },
-  lineTitle: { fontSize: 15, fontWeight: "500", color: palette.text },
-  lineMeta: { fontSize: 13, color: palette.textSecondary, marginTop: 2 },
-  lineAmount: { fontSize: 15, fontWeight: "600", color: palette.text, fontVariant: ["tabular-nums"] },
-  thumb: { width: 40, height: 40, borderRadius: 8, backgroundColor: palette.surfaceMuted },
-  totals: { paddingHorizontal: 14, paddingVertical: 10, gap: 4, backgroundColor: palette.surfaceMuted },
+  lineDivider: { borderTopWidth: 1, borderTopColor: c.border },
+  lineTitle: { fontSize: 15, fontWeight: "500", color: c.text },
+  lineMeta: { fontSize: 13, color: c.textSecondary, marginTop: 2 },
+  lineAmount: { fontSize: 15, fontWeight: "600", color: c.text, fontVariant: ["tabular-nums"] },
+  thumb: { width: 40, height: 40, borderRadius: 8, backgroundColor: c.surfaceMuted },
+  totals: { paddingHorizontal: 14, paddingVertical: 10, gap: 4, backgroundColor: c.surfaceMuted },
   totalRowLine: { flexDirection: "row", justifyContent: "space-between" },
-  totalLabel: { fontSize: 14, color: palette.textSecondary },
-  totalValueText: { fontSize: 14, color: palette.text, fontVariant: ["tabular-nums"] },
-  totalStrong: { fontSize: 16, fontWeight: "700", color: palette.text },
-  plain: { fontSize: 15, color: palette.text, lineHeight: 21 },
+  totalLabel: { fontSize: 14, color: c.textSecondary },
+  totalValueText: { fontSize: 14, color: c.text, fontVariant: ["tabular-nums"] },
+  totalStrong: { fontSize: 16, fontWeight: "700", color: c.text },
+  plain: { fontSize: 15, color: c.text, lineHeight: 21 },
   actions: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 16 },
   center:   { flex: 1, justifyContent: "center", alignItems: "center" },
-  card:     { backgroundColor: "white", borderRadius: 18, padding: 20 },
+  card:     { backgroundColor: c.surface, borderRadius: 18, padding: 20 },
 
   // Header
   headerTop:   { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  saleLabel:   { color: "rgba(255,255,255,0.75)", letterSpacing: 2, fontSize: 11 },
-  saleNumber:  { color: "white", fontWeight: "bold", marginBottom: 10 },
-  headerMeta:  { color: "rgba(255,255,255,0.85)", fontSize: 13 },
+  saleLabel:   { color: c.primaryForeground, opacity: 0.75, letterSpacing: 2, fontSize: 11 },
+  saleNumber:  { color: c.primaryForeground, fontWeight: "bold", marginBottom: 10 },
+  headerMeta:  { color: c.primaryForeground, opacity: 0.85, fontSize: 13 },
   statusBadge: { alignItems: "center", gap: 4, paddingLeft: 12 },
-  statusText:  { color: "rgba(255,255,255,0.9)", fontWeight: "700", textAlign: "center" },
+  statusText:  { color: c.primaryForeground, opacity: 0.9, fontWeight: "700", textAlign: "center" },
   totalRow:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  totalValue:  { color: "white", fontWeight: "bold" },
+  totalValue:  { color: c.primaryForeground, fontWeight: "bold" },
 
   // Common
   row:          { flexDirection: "row", alignItems: "center", gap: 8 },
   sectionTitle: { fontWeight: "700" },
   sectionHeader:{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  metaLabel:    { color: "#8F8B7D", fontSize: 12 },
+  metaLabel:    { color: c.textMuted, fontSize: 12 },
 
   // Summary grid
   summaryGrid:  { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 14 },
-  summaryItem:  { flex: 1, minWidth: "43%", backgroundColor: "#F6F4EE", borderRadius: 12, padding: 12, gap: 4 },
+  summaryItem:  { flex: 1, minWidth: "43%", backgroundColor: c.surfaceMuted, borderRadius: 12, padding: 12, gap: 4 },
   summaryValue: { fontWeight: "700" },
 
   // Payment
-  progressTrack: { height: 7, backgroundColor: "#E6E1D5", borderRadius: 4, overflow: "hidden" },
+  progressTrack: { height: 7, backgroundColor: c.border, borderRadius: 4, overflow: "hidden" },
   progressFill:  { height: "100%", borderRadius: 4 },
   paymentRow:    { flexDirection: "row", justifyContent: "space-between" },
   paymentCell:   { gap: 2 },
   iconCircle:    { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center" },
 
   // History
-  historyItem: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#F6F4EE", borderRadius: 12, padding: 12 },
+  historyItem: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: c.surfaceMuted, borderRadius: 12, padding: 12 },
 
   // Products
-  productItem:             { flexDirection: "row", gap: 12, alignItems: "center", backgroundColor: "#F6F4EE", borderRadius: 12, padding: 12 },
+  productItem:             { flexDirection: "row", gap: 12, alignItems: "center", backgroundColor: c.surfaceMuted, borderRadius: 12, padding: 12 },
   productImage:            { width: 56, height: 56, borderRadius: 10 },
-  productImagePlaceholder: { backgroundColor: "#E6E1D5", justifyContent: "center", alignItems: "center" },
-  qtyBadge:                { backgroundColor: "#DFEDF0", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  productImagePlaceholder: { backgroundColor: c.border, justifyContent: "center", alignItems: "center" },
+  qtyBadge:                { backgroundColor: c.infoSoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
 
   // Actions
   actionBtn: { borderRadius: 10 },
@@ -763,7 +768,7 @@ const styles = StyleSheet.create({
   // Modal pago
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: c.overlay,
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
@@ -772,12 +777,12 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 480,
     maxHeight: "85%",
-    backgroundColor: "white",
+    backgroundColor: c.surface,
     borderRadius: 16,
     padding: 20,
   },
   modalTitle: { fontWeight: "700", marginBottom: 16 },
-  modalError: { color: "#B9412C", fontSize: 13, marginTop: 4, fontWeight: "600" },
+  modalError: { color: c.error, fontSize: 13, marginTop: 4, fontWeight: "600" },
   modalScroll: { flexGrow: 0 },
   modalActions: {
     flexDirection: "row",
@@ -790,11 +795,12 @@ const styles = StyleSheet.create({
   inputLabel: { marginBottom: 6, fontWeight: "600", fontSize: 14 },
   input: {
     borderWidth: 1,
-    borderColor: "#DDD7C9",
+    borderColor: c.borderStrong,
     borderRadius: 10,
     padding: 12,
     marginBottom: 16,
     fontSize: 15,
-    backgroundColor: "#F8F6F1",
+    color: c.text,
+    backgroundColor: c.background,
   },
-});
+}));

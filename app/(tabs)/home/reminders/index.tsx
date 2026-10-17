@@ -2,10 +2,10 @@ import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
 import StatusBadge, { type BadgeTone } from "@/components/App/StatusBadge";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
+import { useTheme } from "@/contexts/ThemeContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React, { useState } from "react";
@@ -13,6 +13,7 @@ import { View } from "react-native";
 import { Text } from "react-native-paper";
 
 export default function RemindersIndex() {
+  const { colors } = useTheme();
   const navigation = router;
   const alerts = useAlerts();
   const { hasPermission } = useAuth();
@@ -30,20 +31,20 @@ export default function RemindersIndex() {
   };
 
   const getTypeColor = (type: string) => {
-    const colors: Record<string, string> = {
-      payment: palette.error,
-      renewal: palette.blue,
-      expiration: palette.warning,
-      other: palette.textSecondary,
+    const typeColors: Record<string, string> = {
+      payment: colors.error,
+      renewal: colors.info,
+      expiration: colors.warning,
+      other: colors.textSecondary,
     };
-    return colors[type] || palette.primary;
+    return typeColors[type] || colors.primary;
   };
 
   const getStatusColor = (reminder: App.Entities.Reminder) => {
-    if (reminder.status === "completed") return palette.success;
-    if (reminder.is_overdue) return palette.error;
-    if (reminder.days_until_due != null && reminder.days_until_due <= 3) return palette.warning;
-    return palette.textSecondary;
+    if (reminder.status === "completed") return colors.success;
+    if (reminder.is_overdue) return colors.error;
+    if (reminder.days_until_due != null && reminder.days_until_due <= 3) return colors.warning;
+    return colors.textSecondary;
   };
 
   const getStatusLabel = (reminder: App.Entities.Reminder) => {
@@ -142,7 +143,7 @@ export default function RemindersIndex() {
             {reminder.description && (
               <Text
                 variant="bodyMedium"
-                style={{ color: palette.text }}
+                style={{ color: colors.text }}
                 numberOfLines={2}
               >
                 {reminder.description}
@@ -165,11 +166,11 @@ export default function RemindersIndex() {
                 <MaterialCommunityIcons
                   name="calendar"
                   size={14}
-                  color={palette.textSecondary}
+                  color={colors.textSecondary}
                 />
                 <Text
                   variant="bodySmall"
-                  style={{ color: palette.textSecondary }}
+                  style={{ color: colors.textSecondary }}
                 >
                   {formatDate(reminder.reminder_date)}
                 </Text>
@@ -179,11 +180,11 @@ export default function RemindersIndex() {
                   <MaterialCommunityIcons
                     name="currency-usd"
                     size={14}
-                    color={palette.textSecondary}
+                    color={colors.textSecondary}
                   />
                   <Text
                     variant="bodySmall"
-                    style={{ color: palette.textSecondary, fontWeight: "600" }}
+                    style={{ color: colors.textSecondary, fontWeight: "600" }}
                   >
                     {new Intl.NumberFormat("es-MX", {
                       style: "currency",
@@ -196,7 +197,7 @@ export default function RemindersIndex() {
                 <MaterialCommunityIcons
                   name="refresh"
                   size={14}
-                  color={palette.primary}
+                  color={colors.primary}
                 />
               )}
             </View>
@@ -220,7 +221,7 @@ export default function RemindersIndex() {
           {
             title: "Marcar como Completado",
             icon: "check-circle",
-            color: palette.success,
+            color: colors.success,
             // También los vencidos (status "overdue"); pide reminders_update.
             show: (item: App.Entities.Reminder) =>
               item.status !== "completed" && hasPermission("reminders_update"),

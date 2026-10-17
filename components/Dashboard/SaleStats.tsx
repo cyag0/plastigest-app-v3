@@ -2,8 +2,9 @@ import AppChip from "@/components/App/Chip";
 import PermissionGate from "@/components/App/PermissionGate";
 import EmptyState from "@/components/App/EmptyState";
 import KpiCard from "@/components/Dashboard/KpiCard";
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { useResponsive } from "@/hooks/useResponsive";
 import { formatDate } from "@/utils/dates";
 import axiosClient from "@/utils/axios";
@@ -12,12 +13,17 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
-  StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
+
+/** "#4F7A3A" → "79, 122, 58": las gráficas piden el color con opacidad. */
+const rgbOf = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+};
 
 /** GET /sales/stats pide sales_read: sin él no se consulta y se ve «sin permiso». */
 export default function SaleStats() {
@@ -29,6 +35,9 @@ export default function SaleStats() {
 }
 
 function SaleStatsContent() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const primaryRgb = rgbOf(colors.primary);
   const { isMobile } = useResponsive();
   const { width: screenWidth } = useWindowDimensions();
   const [loading, setLoading] = useState(true);
@@ -56,7 +65,7 @@ function SaleStatsContent() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={palette.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Cargando estadísticas...</Text>
       </View>
     );
@@ -92,7 +101,7 @@ function SaleStatsContent() {
       {
         data:
           stats.sales_trend?.map((item: any) => item.total || 0) || [0],
-        color: (opacity = 1) => `rgba(79, 122, 58, ${opacity})`,
+        color: (opacity = 1) => `rgba(${primaryRgb}, ${opacity})`,
         strokeWidth: 3,
       },
     ],
@@ -211,14 +220,14 @@ function SaleStatsContent() {
               width={chartWidth}
               height={220}
               chartConfig={{
-                backgroundColor: palette.surface,
-                backgroundGradientFrom: palette.surface,
-                backgroundGradientTo: palette.surface,
+                backgroundColor: colors.surface,
+                backgroundGradientFrom: colors.surface,
+                backgroundGradientTo: colors.surface,
                 decimalPlaces: 0,
-                color: (opacity = 1) => `rgba(79, 122, 58, ${opacity})`,
-                labelColor: () => palette.textSecondary,
+                color: (opacity = 1) => `rgba(${primaryRgb}, ${opacity})`,
+                labelColor: () => colors.textSecondary,
                 propsForBackgroundLines: {
-                  stroke: palette.border,
+                  stroke: colors.border,
                 },
               }}
               style={styles.chart}
@@ -244,7 +253,7 @@ function SaleStatsContent() {
                       <MaterialCommunityIcons
                         name={icon as any}
                         size={18}
-                        color={palette.primary}
+                        color={colors.primary}
                       />
                     </View>
                     <View style={styles.paymentMethodInfo}>
@@ -276,19 +285,19 @@ function SaleStatsContent() {
               width={chartWidth}
               height={220}
               chartConfig={{
-                backgroundColor: palette.surface,
-                backgroundGradientFrom: palette.surface,
-                backgroundGradientTo: palette.surface,
+                backgroundColor: colors.surface,
+                backgroundGradientFrom: colors.surface,
+                backgroundGradientTo: colors.surface,
                 decimalPlaces: 0,
-                color: (opacity = 1) => `rgba(79, 122, 58, ${opacity})`,
-                labelColor: () => palette.textSecondary,
+                color: (opacity = 1) => `rgba(${primaryRgb}, ${opacity})`,
+                labelColor: () => colors.textSecondary,
                 propsForDots: {
                   r: "5",
                   strokeWidth: "2",
-                  stroke: palette.primary,
+                  stroke: colors.primary,
                 },
                 propsForBackgroundLines: {
-                  stroke: palette.border,
+                  stroke: colors.border,
                 },
               }}
               bezier
@@ -337,10 +346,10 @@ function SaleStatsContent() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
   },
   content: {
     padding: tokens.spacing[5],
@@ -350,17 +359,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
     gap: tokens.spacing[3],
   },
   loadingText: {
     ...tokens.typography.body,
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
 
   periodText: {
     ...tokens.typography.caption,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginBottom: tokens.spacing[2],
   },
 
@@ -377,13 +386,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...tokens.typography.h3,
-    color: palette.text,
+    color: c.text,
   },
   card: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.lg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     padding: tokens.spacing[4],
     ...tokens.shadow.sm,
   },
@@ -401,10 +410,10 @@ const styles = StyleSheet.create({
   statusCard: {
     flexBasis: "47%",
     flexGrow: 1,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     padding: tokens.spacing[3],
     gap: tokens.spacing[2],
   },
@@ -415,12 +424,12 @@ const styles = StyleSheet.create({
   },
   statusCount: {
     ...tokens.typography.h2,
-    color: palette.text,
+    color: c.text,
     fontVariant: ["tabular-nums"],
   },
   statusAmount: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
@@ -434,16 +443,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: tokens.spacing[3],
     padding: tokens.spacing[3],
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
   },
   paymentMethodIcon: {
     width: 36,
     height: 36,
     borderRadius: tokens.radius.md,
-    backgroundColor: palette.primarySoft,
+    backgroundColor: c.primarySoft,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -453,16 +462,16 @@ const styles = StyleSheet.create({
   },
   paymentMethodLabel: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
   },
   paymentMethodSub: {
     ...tokens.typography.micro,
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
   paymentMethodTotal: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
@@ -476,20 +485,20 @@ const styles = StyleSheet.create({
   },
   topItemDivider: {
     borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+    borderBottomColor: c.border,
   },
   topItemRank: {
     width: 28,
     height: 28,
     borderRadius: tokens.radius.full,
-    backgroundColor: palette.primarySoft,
+    backgroundColor: c.primarySoft,
     justifyContent: "center",
     alignItems: "center",
     flexShrink: 0,
   },
   topItemRankText: {
     ...tokens.typography.micro,
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "700",
   },
   topItemInfo: {
@@ -499,17 +508,17 @@ const styles = StyleSheet.create({
   },
   topItemName: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
   },
   topItemSub: {
     ...tokens.typography.micro,
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
   topItemTotal: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
-});
+}));

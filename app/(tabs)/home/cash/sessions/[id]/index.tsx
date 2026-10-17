@@ -4,22 +4,25 @@ import RecordLoadError, {
   type RecordLoadProblem,
 } from "@/components/App/RecordLoadError";
 import CloseShiftModal from "@/components/Pos/CloseShiftModal";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { formatMoney } from "@/hooks/usePosCart";
 import { printShiftTicket } from "@/utils/printDocument";
 import Services from "@/utils/services";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { ActivityIndicator, Button, Surface, Text } from "react-native-paper";
 
 const METHOD_LABELS: Record<string, string> = { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia" };
 
 /** Detalle y corte de un turno. Un supervisor puede cerrar el que quedó abierto. */
 export default function CashSessionDetail() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { id } = useLocalSearchParams<{ id: string }>();
   const alerts = useAlerts();
   const { user } = useAuth();
@@ -81,7 +84,7 @@ export default function CashSessionDetail() {
   const canClose =
     isOpen && ((session.user_id === user?.id && can("sales_pos")) || can("cash_registers_update"));
   const diff = session.difference;
-  const diffColor = diff == null || diff === 0 ? palette.success : diff > 0 ? palette.blue : palette.error;
+  const diffColor = diff == null || diff === 0 ? colors.success : diff > 0 ? colors.info : colors.error;
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -156,6 +159,7 @@ export default function CashSessionDetail() {
 }
 
 function Row({ label, value, strong, color }: { label: string; value: string; strong?: boolean; color?: string }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.row}>
       <Text style={[styles.label, strong && styles.strong]}>{label}</Text>
@@ -164,15 +168,15 @@ function Row({ label, value, strong, color }: { label: string; value: string; st
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
   content: { padding: 16, gap: 12, maxWidth: 720, width: "100%", alignSelf: "center" },
-  card: { padding: 16, borderRadius: 12, backgroundColor: palette.surface, gap: 2 },
-  title: { fontWeight: "700", marginBottom: 8, color: palette.text },
+  card: { padding: 16, borderRadius: 12, backgroundColor: c.surface, gap: 2 },
+  title: { fontWeight: "700", marginBottom: 8, color: c.text },
   row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 4, gap: 12 },
-  label: { color: palette.textSecondary },
-  value: { color: palette.text, fontWeight: "600", flexShrink: 1, textAlign: "right" },
-  strong: { fontWeight: "800", color: palette.text },
-  divider: { height: 1, backgroundColor: palette.border, marginVertical: 8 },
-  notes: { marginTop: 8, color: palette.textSecondary, fontStyle: "italic" },
-});
+  label: { color: c.textSecondary },
+  value: { color: c.text, fontWeight: "600", flexShrink: 1, textAlign: "right" },
+  strong: { fontWeight: "800", color: c.text },
+  divider: { height: 1, backgroundColor: c.border, marginVertical: 8 },
+  notes: { marginTop: 8, color: c.textSecondary, fontStyle: "italic" },
+}));

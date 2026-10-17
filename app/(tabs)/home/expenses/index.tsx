@@ -1,8 +1,8 @@
 import { formatDate } from "@/utils/dates";
 import AppList from "@/components/App/AppList";
 import PermissionGate from "@/components/App/PermissionGate";
-import palette from "@/constants/palette";
 import Services from "@/utils/services";
+import { useTheme } from "@/contexts/ThemeContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useMemo } from "react";
@@ -10,6 +10,7 @@ import { View } from "react-native";
 import { Text } from "react-native-paper";
 
 export default function ExpensesIndex() {
+  const { colors } = useTheme();
   const navigation = router;
 
   const getCategoryIcon = (category: string) => {
@@ -27,17 +28,17 @@ export default function ExpensesIndex() {
   };
 
   const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      suministros: palette.primary,
-      servicios: palette.blue,
-      transporte: palette.warning,
-      nomina: palette.success,
-      mantenimiento: palette.accent,
-      marketing: palette.purple,
-      alquiler: palette.secondary,
-      otros: palette.textSecondary,
+    const categoryColors: Record<string, string> = {
+      suministros: colors.primary,
+      servicios: colors.info,
+      transporte: colors.warning,
+      nomina: colors.success,
+      mantenimiento: colors.accent,
+      marketing: colors.purple,
+      alquiler: colors.secondary,
+      otros: colors.textSecondary,
     };
-    return colors[category] || palette.primary;
+    return categoryColors[category] || colors.primary;
   };
 
   const getPaymentMethodIcon = (method: string) => {
@@ -126,7 +127,7 @@ export default function ExpensesIndex() {
             <Text
               variant="bodyMedium"
               style={{
-                color: palette.text,
+                color: colors.text,
               }}
               numberOfLines={2}
             >
@@ -144,16 +145,16 @@ export default function ExpensesIndex() {
                 <MaterialCommunityIcons
                   name={getPaymentMethodIcon(expense.payment_method)}
                   size={14}
-                  color={palette.textSecondary}
+                  color={colors.textSecondary}
                 />
                 <Text
                   variant="bodySmall"
-                  style={{ color: palette.textSecondary }}
+                  style={{ color: colors.textSecondary }}
                 >
                   {expense.payment_method_label}
                 </Text>
               </View>
-              <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
+              <Text variant="bodySmall" style={{ color: colors.textSecondary }}>
                 {formatDate(expense.expense_date)}
               </Text>
             </View>
@@ -164,7 +165,7 @@ export default function ExpensesIndex() {
             <Text
               variant="titleMedium"
               style={{
-                color: palette.error,
+                color: colors.error,
                 fontWeight: "bold",
               }}
             >
@@ -175,7 +176,7 @@ export default function ExpensesIndex() {
               }).format(expense.amount)}
             </Text>
             {expense.user && (
-              <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
+              <Text variant="bodySmall" style={{ color: colors.textSecondary }}>
                 {expense.user.name}
               </Text>
             )}

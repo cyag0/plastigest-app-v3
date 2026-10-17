@@ -15,7 +15,7 @@ import { roundMoney } from "@/utils/money";
 import Services from "@/utils/services";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import {
   ActivityIndicator,
   Button,
@@ -25,8 +25,8 @@ import {
   TextInput,
 } from "react-native-paper";
 import { parseLocalDate, toLocalDateString } from "@/utils/dates";
-import palette from "@/constants/palette";
 import AppSelect from "@/components/Form/AppSelect";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { DatePickerInput } from "react-native-paper-dates";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
@@ -43,6 +43,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
 
   const { location, selectedCompany } = useAuth();
   const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { can } = useCan();
   // Guardar cambios pide expenses_update (crear, expenses_create): sin él el
   // gasto se ve en «Solo lectura» en lugar de responder 403 al guardar.
@@ -220,7 +221,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={palette.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={{ marginTop: 16 }}>Cargando gasto...</Text>
       </View>
     );
@@ -244,7 +245,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
           <Card.Content>
             {!!lockMessage && (
               <View style={styles.lockBanner}>
-                <MaterialCommunityIcons name="lock-outline" size={18} color={palette.warning} />
+                <MaterialCommunityIcons name="lock-outline" size={18} color={colors.warning} />
                 <Text variant="bodySmall" style={styles.lockText}>
                   {lockMessage}
                 </Text>
@@ -292,10 +293,10 @@ export default function ExpenseForm(props: ExpenseFormProps) {
                   icon={method.icon}
                   style={styles.paymentButton}
                   buttonColor={
-                    paymentMethod === method.value ? palette.primary : undefined
+                    paymentMethod === method.value ? colors.primary : undefined
                   }
                   textColor={
-                    paymentMethod === method.value ? "#fff" : palette.primary
+                    paymentMethod === method.value ? colors.primaryForeground : colors.primary
                   }
                   compact
                 >
@@ -308,7 +309,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
               <View style={styles.cashRow}>
                 <View style={{ flex: 1 }}>
                   <Text variant="bodyMedium">Pagado con dinero de la caja</Text>
-                  <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
+                  <Text variant="bodySmall" style={{ color: colors.textSecondary }}>
                     {paidFromCash
                       ? "Se descontará del efectivo en el corte de caja."
                       : "No afecta el corte (lo pagó el dueño u otra fuente)."}
@@ -352,11 +353,11 @@ export default function ExpenseForm(props: ExpenseFormProps) {
                 <MaterialCommunityIcons
                   name="map-marker"
                   size={16}
-                  color={palette.textSecondary}
+                  color={colors.textSecondary}
                 />
                 <Text
                   variant="bodySmall"
-                  style={{ color: palette.textSecondary }}
+                  style={{ color: colors.textSecondary }}
                 >
                   Ubicación: {location.name}
                 </Text>
@@ -381,7 +382,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
               style={styles.button}
               loading={saving}
               disabled={saving}
-              buttonColor={palette.primary}
+              buttonColor={colors.primary}
             >
               {expenseId ? "Actualizar" : "Guardar"}
             </Button>
@@ -399,7 +400,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     padding: 16,
@@ -411,17 +412,17 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent" as any,
   },
   card: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     marginBottom: 16,
   },
   input: {
     marginBottom: 16,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
   },
   label: {
     marginBottom: 12,
     marginTop: 4,
-    color: palette.text,
+    color: c.text,
   },
   cashRow: {
     flexDirection: "row",
@@ -441,11 +442,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: palette.warning,
+    borderColor: c.warning,
   },
   lockText: {
     flex: 1,
-    color: palette.text,
+    color: c.text,
     lineHeight: 18,
   },
   // Envuelve a otra línea si no caben (en celular "Transferencia" se salía).
@@ -482,4 +483,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
   },
-});
+}));

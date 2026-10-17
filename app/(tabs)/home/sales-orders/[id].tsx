@@ -9,7 +9,6 @@ import {
   isOutcomeUnknown,
   SALE_ERROR_CODES,
 } from "@/components/Pos/saleErrors";
-import palette from "@/constants/palette";
 import { paymentStatus, saleStatus, salesOrderStatus } from "@/constants/statuses";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -21,10 +20,11 @@ import { amountToCents, centsToAmount } from "@/utils/money";
 import { newClientRequestId } from "@/utils/requestId";
 import services from "@/utils/services";
 import { kioskOrderLabel } from "@/utils/services/kioskOrders";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { ScrollView, TextInput, View } from "react-native";
 import {
   ActivityIndicator,
   Button,
@@ -81,6 +81,7 @@ export default function SalesOrderDetail() {
   const id = params.id as string;
   const alerts = useAlerts();
   const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { hasPermission } = useAuth();
   const { can, canAccessRoute } = useCan();
   // Preparar, enviar, entregar, cobrar y cancelar piden sales_orders_update.
@@ -320,7 +321,7 @@ export default function SalesOrderDetail() {
   const activeStepIndex = flowSteps.indexOf(status);
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#F3F0E8" }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
         contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: hasAnyAction ? 140 : 24 }}
         showsVerticalScrollIndicator={false}
@@ -447,8 +448,8 @@ export default function SalesOrderDetail() {
             <Text variant="titleMedium" style={styles.sectionTitle}>Productos</Text>
             <Chip
               compact
-              style={{ backgroundColor: palette.primary + "18" }}
-              textStyle={{ color: palette.primary, fontSize: 12, fontWeight: "700" }}
+              style={{ backgroundColor: colors.primary + "18" }}
+              textStyle={{ color: colors.primary, fontSize: 12, fontWeight: "700" }}
             >
               {String(order.details?.length || 0)}
             </Chip>
@@ -457,7 +458,7 @@ export default function SalesOrderDetail() {
             {(order.details ?? []).map((d: any, idx: number) => (
               <View key={d.id ?? idx} style={styles.productItem}>
                 <View style={styles.productThumb}>
-                  <MaterialCommunityIcons name="package-variant" size={24} color={palette.textSecondary} />
+                  <MaterialCommunityIcons name="package-variant" size={24} color={colors.textSecondary} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text variant="bodyLarge" style={{ fontWeight: "600" }} numberOfLines={1}>
@@ -465,22 +466,22 @@ export default function SalesOrderDetail() {
                   </Text>
                   {!!d.package && (
                     <View style={[styles.row, { marginTop: 2 }]}>
-                      <MaterialCommunityIcons name="package-variant-closed" size={12} color="#A39F92" />
-                      <Text variant="bodySmall" style={{ color: "#8F8B7D" }}>{d.package.package_name}</Text>
+                      <MaterialCommunityIcons name="package-variant-closed" size={12} color={colors.textMuted} />
+                      <Text variant="bodySmall" style={{ color: colors.textMuted }}>{d.package.package_name}</Text>
                     </View>
                   )}
                   {!!d.unit && (
-                    <Text variant="bodySmall" style={{ color: "#A39F92", marginTop: 2 }}>
+                    <Text variant="bodySmall" style={{ color: colors.textMuted, marginTop: 2 }}>
                       {d.unit.name} ({d.unit.abbreviation})
                     </Text>
                   )}
                   <View style={[styles.row, { justifyContent: "space-between", marginTop: 8 }]}>
                     <View style={styles.qtyBadge}>
-                      <Text variant="bodySmall" style={{ color: palette.primary, fontWeight: "700" }}>
+                      <Text variant="bodySmall" style={{ color: colors.primary, fontWeight: "700" }}>
                         {toNum(d.requested_quantity)} × {fmt(toNum(d.unit_price))}
                       </Text>
                     </View>
-                    <Text variant="titleSmall" style={{ fontWeight: "bold", color: palette.primary }}>
+                    <Text variant="titleSmall" style={{ fontWeight: "bold", color: colors.primary }}>
                       {fmt(toNum(d.line_total))}
                     </Text>
                   </View>
@@ -488,16 +489,16 @@ export default function SalesOrderDetail() {
                     <View style={[styles.row, { marginTop: 6, gap: 14 }]}>
                       {toNum(d.prepared_quantity) > 0 && (
                         <View style={styles.row}>
-                          <MaterialCommunityIcons name="progress-check" size={13} color="#C47F12" />
-                          <Text variant="bodySmall" style={{ color: "#C47F12", fontWeight: "600" }}>
+                          <MaterialCommunityIcons name="progress-check" size={13} color={colors.warning} />
+                          <Text variant="bodySmall" style={{ color: colors.warning, fontWeight: "600" }}>
                             Preparado: {toNum(d.prepared_quantity)}
                           </Text>
                         </View>
                       )}
                       {toNum(d.delivered_quantity) > 0 && (
                         <View style={styles.row}>
-                          <MaterialCommunityIcons name="check-circle-outline" size={13} color="#3F8A3A" />
-                          <Text variant="bodySmall" style={{ color: "#3F8A3A", fontWeight: "600" }}>
+                          <MaterialCommunityIcons name="check-circle-outline" size={13} color={colors.success} />
+                          <Text variant="bodySmall" style={{ color: colors.success, fontWeight: "600" }}>
                             Entregado: {toNum(d.delivered_quantity)}
                           </Text>
                         </View>
@@ -511,18 +512,18 @@ export default function SalesOrderDetail() {
           <Divider style={{ marginVertical: 16 }} />
           <View style={{ gap: 6 }}>
             <View style={[styles.row, { justifyContent: "space-between" }]}>
-              <Text variant="bodyMedium" style={{ color: "#66635A" }}>Subtotal</Text>
+              <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>Subtotal</Text>
               <Text variant="bodyMedium">{fmt(toNum(order.subtotal))}</Text>
             </View>
             {toNum(order.discount_amount) > 0 && (
               <View style={[styles.row, { justifyContent: "space-between" }]}>
-                <Text variant="bodyMedium" style={{ color: "#66635A" }}>Descuento</Text>
-                <Text variant="bodyMedium" style={{ color: "#3F8A3A" }}>-{fmt(toNum(order.discount_amount))}</Text>
+                <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>Descuento</Text>
+                <Text variant="bodyMedium" style={{ color: colors.success }}>-{fmt(toNum(order.discount_amount))}</Text>
               </View>
             )}
             <View style={[styles.row, { justifyContent: "space-between" }]}>
               <Text variant="titleMedium" style={{ fontWeight: "700" }}>Total</Text>
-              <Text variant="titleLarge" style={{ fontWeight: "bold", color: palette.primary }}>
+              <Text variant="titleLarge" style={{ fontWeight: "bold", color: colors.primary }}>
                 {fmt(toNum(order.total_amount))}
               </Text>
             </View>
@@ -557,18 +558,18 @@ export default function SalesOrderDetail() {
         {!!(order.notes || order.internal_notes) && (
           <Surface style={styles.card} elevation={1}>
             <View style={[styles.row, { marginBottom: 8 }]}>
-              <MaterialCommunityIcons name="note-text-outline" size={18} color={palette.primary} />
+              <MaterialCommunityIcons name="note-text-outline" size={18} color={colors.primary} />
               <Text variant="titleMedium" style={styles.sectionTitle}>Notas</Text>
             </View>
             {!!order.notes && (
-              <Text variant="bodyMedium" style={{ color: "#57564B", lineHeight: 20 }}>{order.notes}</Text>
+              <Text variant="bodyMedium" style={{ color: colors.textSecondary, lineHeight: 20 }}>{order.notes}</Text>
             )}
             {!!order.internal_notes && (
               <>
-                <Text variant="labelSmall" style={{ color: palette.textSecondary, marginTop: 8 }}>
+                <Text variant="labelSmall" style={{ color: colors.textSecondary, marginTop: 8 }}>
                   Notas internas
                 </Text>
-                <Text variant="bodyMedium" style={{ color: "#57564B", lineHeight: 20 }}>
+                <Text variant="bodyMedium" style={{ color: colors.textSecondary, lineHeight: 20 }}>
                   {order.internal_notes}
                 </Text>
               </>
@@ -615,6 +616,7 @@ export default function SalesOrderDetail() {
                 }}
                 editable={paymentMethod !== "credit" && !actionLoading}
                 placeholder="0.00"
+                placeholderTextColor={colors.textMuted}
               />
               {paymentMethod !== "credit" && <AmountPreview value={paidAmount} label="Pagado" />}
               <Text variant="bodySmall" style={{ marginTop: 8 }}>
@@ -627,6 +629,7 @@ export default function SalesOrderDetail() {
                 onChangeText={setPaymentNotes}
                 editable={!actionLoading}
                 placeholder="Observaciones del cobro"
+                placeholderTextColor={colors.textMuted}
               />
               {checkoutMessage && (
                 <View style={{ marginTop: 12, gap: 8 }}>
@@ -635,10 +638,10 @@ export default function SalesOrderDetail() {
                     style={{
                       color:
                         checkoutMessage.tone === "error"
-                          ? palette.error
+                          ? colors.error
                           : checkoutMessage.tone === "warning"
-                            ? palette.warning
-                            : palette.text,
+                            ? colors.warning
+                            : colors.text,
                     }}
                   >
                     {checkoutMessage.text}
@@ -689,7 +692,7 @@ export default function SalesOrderDetail() {
                 loading={actionLoading}
                 disabled={actionLoading}
                 onPress={handlePrepare}
-                buttonColor="#C47F12"
+                buttonColor={colors.warning}
                 style={{ borderRadius: 10 }}
               >
                 Marcar preparando
@@ -702,7 +705,7 @@ export default function SalesOrderDetail() {
                 loading={actionLoading}
                 disabled={actionLoading}
                 onPress={() => runAction("Enviar a ruta", () => services.salesOrders.ship(Number(id)))}
-                buttonColor="#2F6F7E"
+                buttonColor={colors.info}
                 style={{ borderRadius: 10 }}
               >
                 Enviar a ruta
@@ -715,7 +718,7 @@ export default function SalesOrderDetail() {
                 loading={actionLoading}
                 disabled={actionLoading}
                 onPress={openCheckout}
-                buttonColor="#3F8A3A"
+                buttonColor={colors.success}
                 style={{ borderRadius: 10 }}
               >
                 Cobrar y cerrar venta
@@ -728,7 +731,7 @@ export default function SalesOrderDetail() {
                 loading={actionLoading}
                 disabled={actionLoading}
                 onPress={() => runAction("Marcar como entregado", () => services.salesOrders.deliver(Number(id)))}
-                buttonColor="#3F8A3A"
+                buttonColor={colors.success}
                 style={{ borderRadius: 10 }}
               >
                 Marcar entregado
@@ -741,8 +744,8 @@ export default function SalesOrderDetail() {
                 loading={actionLoading}
                 disabled={actionLoading}
                 onPress={() => runAction("Cancelar pedido", () => services.salesOrders.cancel(Number(id)))}
-                textColor="#B9412C"
-                style={{ borderRadius: 10, borderColor: "#B9412C" }}
+                textColor={colors.error}
+                style={{ borderRadius: 10, borderColor: colors.error }}
               >
                 Cancelar pedido
               </Button>
@@ -754,9 +757,9 @@ export default function SalesOrderDetail() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   center:  { flex: 1, justifyContent: "center", alignItems: "center" },
-  card:    { backgroundColor: "white", borderRadius: 18, padding: 20 },
+  card:    { backgroundColor: c.surface, borderRadius: 18, padding: 20 },
   // Encabezado: superficie lisa; el estado va en el badge (colores en línea, del tema).
   header:         { borderRadius: 12, borderWidth: 1, padding: 16, gap: 6 },
   headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 2 },
@@ -777,12 +780,12 @@ const styles = StyleSheet.create({
   timelineLine:    { width: 2, flex: 1, marginTop: 4, minHeight: 24 },
   timelineContent: { flex: 1, paddingTop: 4 },
   // Products
-  productItem:  { flexDirection: "row", gap: 12, alignItems: "flex-start", backgroundColor: "#F6F4EE", borderRadius: 12, padding: 12 },
-  productThumb: { width: 52, height: 52, borderRadius: 10, backgroundColor: "#E6E1D5", justifyContent: "center", alignItems: "center" },
-  qtyBadge:     { backgroundColor: "#DFEDF0", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  productItem:  { flexDirection: "row", gap: 12, alignItems: "flex-start", backgroundColor: c.background, borderRadius: 12, padding: 12 },
+  productThumb: { width: 52, height: 52, borderRadius: 10, backgroundColor: c.border, justifyContent: "center", alignItems: "center" },
+  qtyBadge:     { backgroundColor: c.infoSoft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   // BottomBar
   bottomBar: {
-    backgroundColor: "white",
+    backgroundColor: c.surface,
     padding: 16,
     paddingBottom: 24,
     borderTopLeftRadius: 16,
@@ -791,13 +794,14 @@ const styles = StyleSheet.create({
   // Dialog input
   input: {
     borderWidth: 1,
-    borderColor: palette.border ?? "#D3CCBC",
+    borderColor: c.border,
     borderRadius: 8,
     padding: 8,
     marginTop: 4,
+    color: c.text,
   },
   inputDisabled: {
-    backgroundColor: palette.surfaceMuted,
-    color: palette.textSecondary,
+    backgroundColor: c.surfaceMuted,
+    color: c.textSecondary,
   },
-});
+}));

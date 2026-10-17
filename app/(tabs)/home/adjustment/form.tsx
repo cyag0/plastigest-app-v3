@@ -10,17 +10,18 @@ import { FormInput } from "@/components/Form/AppInput";
 import { FormNumeric } from "@/components/Form/AppNumeric";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
-import palette from "@/constants/palette";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useFormikContext } from "formik";
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View, ScrollView } from "react-native";
+import { View, ScrollView } from "react-native";
 import { Button, Card, Divider, IconButton, Text, Chip } from "react-native-paper";
 import * as Yup from "yup";
 import { toLocalDateString } from "@/utils/dates";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 
 interface AdjustmentFormProps {
   id?: number;
@@ -127,6 +128,8 @@ export default function AdjustmentForm(props: AdjustmentFormProps) {
 }
 
 function ProductsList() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const form = useFormikContext<AdjustmentFormData>();
   const formContext = useAppForm();
 
@@ -195,7 +198,7 @@ function ProductsList() {
           mode="contained"
           onPress={handleAddProduct}
           icon="plus"
-          buttonColor={palette.primary}
+          buttonColor={colors.primary}
           style={{ marginTop: 8, marginBottom: 24 }}
         >
           Agregar producto
@@ -212,6 +215,8 @@ interface ProductCardProps {
 }
 
 function ProductCard({ index, onRemove }: ProductCardProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const form = useFormikContext<AdjustmentFormData>();
   const [productData, setProductData] = useState<any>(null);
   const [availableUnits, setAvailableUnits] = useState<any[]>([]);
@@ -316,13 +321,13 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
             <MaterialCommunityIcons
               name="package-variant"
               size={20}
-              color={palette.primary}
+              color={colors.primary}
             />
             <Text variant="titleSmall" style={{ fontWeight: "bold" }}>
               Producto #{index + 1}
             </Text>
             {loading && (
-              <Text variant="bodySmall" style={{ color: palette.primary }}>
+              <Text variant="bodySmall" style={{ color: colors.primary }}>
                 Cargando...
               </Text>
             )}
@@ -331,7 +336,7 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
             <IconButton
               icon="delete"
               size={20}
-              iconColor={palette.error}
+              iconColor={colors.error}
               onPress={onRemove}
             />
           )}
@@ -486,25 +491,25 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
             style={{
               backgroundColor:
                 resultingStock < 0 
-                  ? palette.error + "15" 
-                  : palette.primary + "10",
+                  ? colors.error + "15" 
+                  : colors.primary + "10",
               padding: 12,
               borderRadius: 8,
               marginTop: 12,
               gap: 8,
               borderWidth: 1,
-              borderColor: resultingStock < 0 ? palette.error + "30" : palette.primary + "30",
+              borderColor: resultingStock < 0 ? colors.error + "30" : colors.primary + "30",
             }}
           >
             <View
               style={{ flexDirection: "row", justifyContent: "space-between" }}
             >
-              <Text variant="bodyMedium" style={{ color: palette.textSecondary }}>
+              <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
                 Stock actual:
               </Text>
               <Text
                 variant="bodyMedium"
-                style={{ fontWeight: "bold", color: palette.textSecondary }}
+                style={{ fontWeight: "bold", color: colors.textSecondary }}
               >
                 {currentStock} {baseUnit?.abbreviation || "unidades"}
               </Text>
@@ -519,20 +524,20 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
                 alignItems: "center",
               }}
             >
-              <Text variant="bodyMedium" style={{ color: palette.textSecondary }}>
+              <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
                 Stock resultante:
               </Text>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                 <MaterialCommunityIcons
                   name={direction === "in" ? "arrow-up" : "arrow-down"}
                   size={16}
-                  color={direction === "in" ? palette.primary : palette.error}
+                  color={direction === "in" ? colors.primary : colors.error}
                 />
                 <Text
                   variant="bodyMedium"
                   style={{
                     fontWeight: "bold",
-                    color: resultingStock < 0 ? palette.error : palette.primary,
+                    color: resultingStock < 0 ? colors.error : colors.primary,
                     fontSize: 16,
                   }}
                 >
@@ -544,7 +549,7 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
             {resultingStock < 0 && direction === "out" && (
               <View
                 style={{
-                  backgroundColor: palette.error + "20",
+                  backgroundColor: colors.error + "20",
                   padding: 8,
                   borderRadius: 6,
                   flexDirection: "row",
@@ -555,11 +560,11 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
                 <MaterialCommunityIcons
                   name="alert-circle"
                   size={20}
-                  color={palette.error}
+                  color={colors.error}
                 />
                 <Text
                   variant="bodySmall"
-                  style={{ color: palette.error, fontWeight: "bold", flex: 1 }}
+                  style={{ color: colors.error, fontWeight: "bold", flex: 1 }}
                 >
                   El stock resultante será negativo
                 </Text>
@@ -578,13 +583,13 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
               marginTop: 12,
               gap: 8,
               borderWidth: 1,
-              borderColor: palette.primary + "30",
+              borderColor: colors.primary + "30",
             }}
           >
             <Text
               variant="titleSmall"
               style={{
-                color: palette.primary,
+                color: colors.primary,
                 fontWeight: "bold",
                 marginBottom: 4,
               }}
@@ -594,24 +599,24 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
             <Divider style={{ marginVertical: 4 }} />
 
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <Text variant="bodyMedium" style={{ color: palette.textSecondary }}>
+              <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
                 Stock anterior:
               </Text>
               <Text
                 variant="bodyMedium"
-                style={{ fontWeight: "bold", color: palette.textSecondary }}
+                style={{ fontWeight: "bold", color: colors.textSecondary }}
               >
                 {detail?.previous_stock}
               </Text>
             </View>
 
             <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <Text variant="bodyMedium" style={{ color: palette.textSecondary }}>
+              <Text variant="bodyMedium" style={{ color: colors.textSecondary }}>
                 Stock nuevo:
               </Text>
               <Text
                 variant="bodyMedium"
-                style={{ fontWeight: "bold", color: palette.textSecondary }}
+                style={{ fontWeight: "bold", color: colors.textSecondary }}
               >
                 {detail?.new_stock}
               </Text>
@@ -623,14 +628,14 @@ function ProductCard({ index, onRemove }: ProductCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   productCard: {
     marginBottom: 16,
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     elevation: 2,
   },
   emptyCard: {
     padding: 24,
-    backgroundColor: "#F3F0E8",
+    backgroundColor: c.surfaceMuted,
   },
-});
+}));
