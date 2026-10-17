@@ -18,6 +18,8 @@ interface AppDatePickerProps {
   label?: string;
   placeholder?: string;
   readonly?: boolean;
+  /** Fechas que se pueden elegir; p. ej. `{ endDate: new Date() }` para no permitir futuras. */
+  validRange?: { startDate?: Date; endDate?: Date; disabledDates?: Date[] };
 }
 
 export default function AppDatePicker(props: AppDatePickerProps) {
@@ -88,6 +90,7 @@ export default function AppDatePicker(props: AppDatePickerProps) {
             saveLabel="Guardar"
             cancelLabel="Cancelar"
             presentationStyle="pageSheet"
+            validRange={props.validRange}
           />
         </View>
       )}

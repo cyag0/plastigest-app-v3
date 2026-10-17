@@ -139,6 +139,13 @@ export function FormFooter({
   children,
 }: FormFooterProps) {
   const insets = useSafeAreaInsets();
+  // En el teléfono "Cancelar" se hace chico para que la acción principal
+  // ("Registrar salida de 3 pz") quepa entera.
+  const [narrow, setNarrow] = useState(false);
+  const onLayout = (e: LayoutChangeEvent) => {
+    const next = e.nativeEvent.layout.width < ROW_MIN_WIDTH;
+    if (next !== narrow) setNarrow(next);
+  };
   const styles = useThemedStyles((c) => ({
     footer: {
       backgroundColor: c.surface,
@@ -152,14 +159,20 @@ export function FormFooter({
   }));
 
   return (
-    <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]}>
+    <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom) }]} onLayout={onLayout}>
       <View style={styles.inner}>
         {!!note && <FormNote tone={noteTone}>{note}</FormNote>}
         <View style={styles.buttons}>
           {children ?? (
             <>
               {onCancel && (
-                <Button mode="outlined" onPress={onCancel} style={{ flex: 1 }} disabled={loading}>
+                <Button
+                  mode="outlined"
+                  onPress={onCancel}
+                  style={narrow ? { flexShrink: 0 } : { flex: 1 }}
+                  compact={narrow}
+                  disabled={loading}
+                >
                   {cancelLabel}
                 </Button>
               )}

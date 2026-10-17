@@ -262,6 +262,8 @@ interface AppListProps<T> {
 
   // Props opcionales
   onPressCreate?: () => void;
+  /** Nombre del "+" para lectores de pantalla ("Nuevo ajuste"). */
+  createLabel?: string;
   detailRoute?: (item: T) => string;
   searchPlaceholder?: string;
   emptyMessage?: string;
@@ -330,6 +332,7 @@ function AppList<T extends { id: number | string }>({
   service,
   renderCard,
   onPressCreate,
+  createLabel,
   detailRoute,
   searchPlaceholder = "Buscar...",
   emptyMessage = "No hay elementos para mostrar",
@@ -416,6 +419,7 @@ function AppList<T extends { id: number | string }>({
                 icon="plus"
                 iconColor={colors.primary}
                 onPress={handleCreate}
+                accessibilityLabel={createLabel ?? "Nuevo"}
               />
             );
           }

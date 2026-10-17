@@ -78,6 +78,8 @@ const segmentLabels: Record<string, string> = {
 const pathLabels: Record<string, string> = {
   "/administration/current-location": "Esta sucursal",
   "/home/purchases/formv2": "Nueva compra",
+  "/home/adjustment/form": "Nuevo ajuste",
+  "/inventory/adjustment/form": "Nuevo ajuste",
   "/home/transfers/formv2": "Nueva solicitud",
   "/inventory/weekly-inventory/form": "Nuevo inventario",
   "/inventory/products/type/all": "Todos",

@@ -184,6 +184,8 @@ interface AppUploadProps {
   showCameraOption?: boolean;
   showGalleryOption?: boolean;
   showPreview?: boolean;
+  /** "Máximo N archivos" debajo (por omisión, con `multiple`). */
+  showLimitHint?: boolean;
   renderButtons?: (handlers: {
     handleCameraPick: () => void;
     handleImagePick: () => void;
@@ -585,7 +587,7 @@ export default function AppUpload(props: AppUploadProps) {
       )}
 
       {/* File Limit Info */}
-      {multiple && !props.readonly && (
+      {multiple && !props.readonly && props.showLimitHint !== false && (
         <Text
           variant="bodySmall"
           style={[styles.helperText, { color: colors.textSecondary }]}

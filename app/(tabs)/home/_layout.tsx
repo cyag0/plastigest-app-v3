@@ -228,12 +228,6 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
-        name="adjustment/[id]/edit"
-        options={{
-          title: "Editar ajuste",
-        }}
-      />
-      <Stack.Screen
         name="adjustment/[id]/index"
         options={{
           title: "Ajuste",
