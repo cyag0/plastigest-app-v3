@@ -3,6 +3,6 @@ import React from "react";
 import CashRegisterFormScreen from "../form";
 
 export default function EditCashRegister() {
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams<{ id: string }>();
   return <CashRegisterFormScreen id={Number(id)} />;
 }
