@@ -1,25 +1,26 @@
-import { goBack } from "@/utils/navigation";
+import { ListGroup, ListValueRow, LIST_TEXT_INSET } from "@/components/App/ListGroup";
 import AppDependency from "@/components/Form/AppDependency";
-import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
+import AppForm, { AppFormRef, useAppForm } from "@/components/Form/AppForm/AppForm";
+import ReadonlyText from "@/components/Form/AppForm/ReadonlyText";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { FormSwitch } from "@/components/Form/AppSwitch";
 import { FormUpload } from "@/components/Form/AppUpload";
-import BarcodeScanner from "@/components/Form/BarcodeScanner";
 import EditableTable, {
   EditableTableColumn,
 } from "@/components/Form/EditableTable/EditableTable";
-import { tokens } from "@/constants/tokens";
-import { useTheme } from "@/contexts/ThemeContext";
+import { FormRow, FormSection } from "@/components/Form/FormLayout";
+import CodeField from "@/components/Products/CodeField";
 import useInventoryTypes from "@/hooks/useInventoryTypes";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
-import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { formatQuantity } from "@/utils/format";
+import { goBack } from "@/utils/navigation";
 import Services from "@/utils/services";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useNavigation } from "expo-router";
+import { useFormikContext } from "formik";
 import React, { useEffect, useMemo, useRef } from "react";
-import { useWindowDimensions, View } from "react-native";
-import { Icon, IconButton, Text } from "react-native-paper";
+import * as Yup from "yup";
 
 interface ProductFormData {
   name: string;
@@ -64,18 +65,68 @@ interface ProductsFormProps {
   inventoryTypeSlug?: string;
 }
 
+/** Vacío = sin valor (el campo es opcional); con algo escrito, un número ≥ 0. */
+const optionalAmount = (typeMessage: string) =>
+  Yup.number()
+    .transform((value, original) =>
+      original === "" || original === null || original === undefined ? null : value,
+    )
+    .nullable()
+    .typeError(typeMessage)
+    .min(0, "No puede ser negativo");
+
+const isOn = (value: unknown) => value === true || value === 1 || value === "1";
+
+/**
+ * Lo mismo que pide el backend (ProductController: nombre ≤ 150, código ≤ 50,
+ * tipo obligatorio) más la unidad, sin la cual el producto no se puede
+ * transferir ni convertir, y la receta de envasado: con el interruptor
+ * encendido, envasar falla si no dice de qué granel ni cuánto lleva.
+ */
+const productSchema = Yup.object({
+  name: Yup.string()
+    .trim()
+    .required("Escribe el nombre del producto")
+    .max(150, "Usa 150 caracteres o menos"),
+  code: Yup.string()
+    .trim()
+    .required("Escribe, escanea o genera un código")
+    .max(50, "Usa 50 caracteres o menos"),
+  inventory_type_id: Yup.number()
+    .typeError("Elige el tipo de inventario")
+    .required("Elige el tipo de inventario"),
+  unit_id: Yup.number().typeError("Elige la unidad").required("Elige la unidad"),
+  purchase_price: optionalAmount("Escribe solo el número, por ejemplo 38.50"),
+  sale_price: optionalAmount("Escribe solo el número, por ejemplo 65"),
+  minimum_stock: optionalAmount("Escribe una cantidad, por ejemplo 10"),
+  maximum_stock: optionalAmount("Escribe una cantidad, por ejemplo 60"),
+  packaging_source_product_id: Yup.mixed().when("requires_packaging", {
+    is: isOn,
+    then: () =>
+      Yup.number()
+        .typeError("Elige de qué granel se envasa")
+        .required("Elige de qué granel se envasa"),
+    otherwise: (schema) => schema.nullable(),
+  }),
+  packaging_source_quantity: Yup.mixed().when("requires_packaging", {
+    is: isOn,
+    then: () =>
+      Yup.number()
+        .typeError("Escribe cuánto granel lleva cada pieza, por ejemplo 1")
+        .required("Escribe cuánto granel lleva cada pieza")
+        .moreThan(0, "Escribe cuánto granel lleva cada pieza"),
+    otherwise: (schema) => schema.nullable(),
+  }),
+});
+
 export default function ProductsForm(props: ProductsFormProps) {
   const params = useLocalSearchParams();
   const productId =
     props.id || (params.id ? parseInt(params.id as string) : undefined);
   const formRef = useRef<AppFormRef<ProductFormData>>(null);
-  const scannerRef = useRef<any>(null);
 
   const { company } = useSelectedCompany();
   const { selectedLocation } = useSelectedLocation();
-  const router = useRouter();
-  const { colors } = useTheme();
-  const styles = useFormStyles();
   const { byId: inventoryTypesById, bySlug: inventoryTypesBySlug } =
     useInventoryTypes();
 
@@ -85,21 +136,21 @@ export default function ProductsForm(props: ProductsFormProps) {
     ? undefined
     : inventoryTypesBySlug[props.inventoryTypeSlug || ""]?.id;
 
-  // A partir de tablet los campos se acomodan en rejilla; en móvil se apilan.
-  const { width } = useWindowDimensions();
-  const isWide = width >= 768;
+  // El tipo elegido decide qué partes aplican (proveedor, presentación).
+  const typeOf = (value: unknown) =>
+    value ? inventoryTypesById[Number(value)] : undefined;
 
-  // Función para generar código de barras aleatorio en el frontend
-  const generateRandomBarcode = () => {
-    // Generar un código de 13 dígitos (similar a EAN-13)
-    const timestamp = Date.now().toString().slice(-8); // Últimos 8 dígitos del timestamp
-    const random = Math.floor(Math.random() * 100000)
-      .toString()
-      .padStart(5, "0"); // 5 dígitos aleatorios
-    const barcode = timestamp + random; // 13 dígitos en total
-
-    formRef.current?.setFieldValue("code", barcode);
-  };
+  // En el teléfono el título va en la barra (en web, la ruta de migas).
+  const navigation = useNavigation();
+  useEffect(() => {
+    navigation.setOptions({
+      title: props.readonly
+        ? "Producto"
+        : productId
+          ? "Editar producto"
+          : "Nuevo producto",
+    });
+  }, [navigation, props.readonly, productId]);
 
   useEffect(() => {
     setTimeout(() => {
@@ -138,280 +189,189 @@ export default function ProductsForm(props: ProductsFormProps) {
       api={Services.products}
       id={productId}
       readonly={props.readonly}
+      validationSchema={productSchema}
+      submitButtonText={productId ? "Guardar cambios" : "Guardar producto"}
+      successMessage="Producto guardado"
       onSuccess={() => {
         goBack();
       }}
       initialValues={initialValues}
     >
-      {/* ───────────────── Identificación ───────────────── */}
-      <Section
-        icon="tag-outline"
-        color={colors.primary}
-        title="Identificación"
-        subtitle="Cómo se llama y cómo se identifica el producto"
-      >
+      {/* Lo que identifica al producto. */}
+      <FormSection>
         <FormInput
           name="name"
-          label="Nombre del Producto"
-          placeholder="Ej: Bolsa Plástica 20x30cm"
-          required
+          label="Nombre"
+          placeholder="Agua de coco 1 L"
+          maxLength={150}
         />
-
-        <View style={styles.codeInputContainer}>
-          <View style={styles.codeInput}>
-            {/* Editable: se escribe a mano, con lector USB (teclea en el campo)
-                o con los botones de escanear / generar. */}
-            <FormInput
-              name="code"
-              label="Código del Producto"
-              placeholder="Ej: BP-2030"
-              required
-              autoCapitalize="characters"
-              autoCorrect={false}
-            />
-          </View>
-          {/* En el detalle (solo lectura) no hay nada que escanear ni generar. */}
-          {!props.readonly && (
-            <>
-              <IconButton
-                icon="barcode-scan"
-                mode="contained"
-                containerColor={colors.primary}
-                iconColor={colors.primaryForeground}
-                size={22}
-                onPress={() => scannerRef.current?.open()}
-                style={styles.scanButton}
-                accessibilityLabel="Escanear código"
-              />
-              <IconButton
-                icon="auto-fix"
-                mode="contained"
-                containerColor={colors.surfaceMuted}
-                iconColor={colors.textSecondary}
-                size={22}
-                onPress={generateRandomBarcode}
-                style={styles.scanButton}
-                accessibilityLabel="Generar código"
-              />
-            </>
-          )}
-        </View>
-
+        <CodeField
+          name="code"
+          label="Código"
+          maxLength={50}
+          hint="El de la etiqueta: escríbelo, escanéalo o genera uno."
+        />
         <FormInput
           name="description"
           label="Descripción"
-          placeholder="Descripción del producto"
+          optional
           multiline
           numberOfLines={2}
         />
+      </FormSection>
 
-        <BarcodeScanner
-          ref={scannerRef}
-          onScanned={(code) => {
-            formRef.current?.setFieldValue("code", code);
-          }}
-        />
-      </Section>
-
-      {/* ───────────────── Clasificación ───────────────── */}
-      <Section
-        icon="shape-outline"
-        color={colors.info}
+      <FormSection
         title="Clasificación"
-        subtitle="El tipo de inventario define qué se puede hacer con el producto"
+        description="El tipo define si el producto se compra, se produce o se vende."
       >
-        <Row isWide={isWide} styles={styles}>
-          <Field isWide={isWide} styles={styles}>
-            {/* selectedLabelField: el nombre que trae el producto. Sin
-                permiso para listar el catálogo, el select no lo pide y
-                muestra ese nombre. */}
-            <FormProSelect
-              name="inventory_type_id"
-              label="Tipo de Inventario"
-              model="inventoryTypes"
-              placeholder="Seleccione un tipo de inventario"
-              selectedLabelField="inventory_type.name"
-              required
-            />
-          </Field>
-
-          <Field isWide={isWide} styles={styles}>
-            <FormProSelect
-              name="category_id"
-              label="Categoría"
-              model="categories"
-              placeholder="Seleccione una categoría"
-              selectedLabelField="category_name"
-            />
-          </Field>
-
-          <Field isWide={isWide} styles={styles}>
-            <FormProSelect
-              model="home.unidades"
-              name="unit_id"
-              label="Unidad de Medida"
-              placeholder="Seleccione una unidad de medida"
-              selectedLabelField="unit.name"
-              required
-              fetchParams={{
-                only_base: true,
-              }}
-            />
-          </Field>
-
-          {/* El proveedor sólo aplica a los tipos que se compran. */}
-          <AppDependency name="inventory_type_id">
-            {(value) => {
-              const type = value ? inventoryTypesById[Number(value)] : undefined;
-
-              if (!type?.is_purchasable) return null;
-
-              return (
-                <Field isWide={isWide} styles={styles}>
-                  <FormProSelect
-                    name="supplier_id"
-                    label="Proveedor"
-                    model="suppliers"
-                    placeholder="Seleccione un proveedor (opcional)"
-                    selectedLabelField="supplier_name"
-                  />
-                </Field>
-              );
+        <FormRow>
+          {/* selectedLabelField: el nombre que trae el producto. Sin permiso
+              para listar el catálogo, el select no lo pide y muestra ese
+              nombre. */}
+          <FormProSelect
+            name="inventory_type_id"
+            label="Tipo de inventario"
+            model="inventoryTypes"
+            placeholder="Elige el tipo"
+            selectedLabelField="inventory_type.name"
+          />
+          <FormProSelect
+            model="home.unidades"
+            name="unit_id"
+            label="Unidad"
+            placeholder="Elige la unidad"
+            selectedLabelField="unit.name"
+            fetchParams={{
+              only_base: true,
             }}
-          </AppDependency>
-        </Row>
-      </Section>
+            hint={
+              productId
+                ? "No cambia si ya tiene existencia o movimientos."
+                : "En la que se lleva la existencia."
+            }
+          />
+        </FormRow>
 
-      {/* ───────────────── Precios ───────────────── */}
-      <Section
-        icon="cash-multiple"
-        color={colors.warning}
-        title="Precios"
-        subtitle="Costo de adquisición y precio al público"
-      >
-        <Row isWide={isWide} styles={styles}>
-          <Field isWide={isWide} styles={styles}>
-            <FormInput
-              name="purchase_price"
-              label="Precio de Compra"
-              placeholder="0.00"
-              keyboardType="numeric"
-            />
-          </Field>
+        {/* El proveedor sólo aplica a los tipos que se compran. */}
+        <AppDependency name="inventory_type_id">
+          {(value) => (
+            <FormRow>
+              <FormProSelect
+                name="category_id"
+                label="Categoría"
+                optional
+                model="categories"
+                placeholder="Sin categoría"
+                selectedLabelField="category_name"
+              />
+              {typeOf(value)?.is_purchasable ? (
+                <FormProSelect
+                  name="supplier_id"
+                  label="Proveedor"
+                  optional
+                  model="suppliers"
+                  placeholder="Sin proveedor"
+                  selectedLabelField="supplier_name"
+                  hint="Aparece en su catálogo al registrar una compra."
+                />
+              ) : null}
+            </FormRow>
+          )}
+        </AppDependency>
+      </FormSection>
 
-          <Field isWide={isWide} styles={styles}>
-            <FormInput
-              name="sale_price"
-              label="Precio de Venta"
-              placeholder="0.00"
-              keyboardType="numeric"
-            />
-          </Field>
-        </Row>
+      <FormSection title="Precios">
+        <FormRow>
+          <FormInput
+            name="purchase_price"
+            label="Precio de compra"
+            optional
+            placeholder="0.00"
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            hint="Se propone al comprar si no hay un precio anterior."
+          />
+          <FormInput
+            name="sale_price"
+            label="Precio de venta"
+            optional
+            placeholder="0.00"
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            hint="El del punto de venta y el kiosco."
+          />
+        </FormRow>
+        <FormSwitch
+          name="for_sale"
+          text="Disponible para venta"
+          description="Se vende suelto. Si lo apagas, solo se venden sus paquetes con precio."
+        />
+      </FormSection>
 
-        <FormSwitch name="for_sale" text="Producto Disponible para Venta" />
-      </Section>
-
-      {/* ───────── Presentación: lo que se envasa de un granel ─────────
-          Cómo se hace el granel va en Producción → Procesos; aquí, en qué se
-          envasa (antes había además una "Receta" que nada usaba). */}
+      {/* Presentación: lo que se envasa de un granel. Cómo se hace el granel
+          va en Producción → Procesos; aquí, en qué se envasa (antes había
+          además una "Receta" que nada usaba). */}
       <AppDependency name="inventory_type_id">
-        {(value) => {
-          const type = value ? inventoryTypesById[Number(value)] : undefined;
-
-          if (!type?.is_producible) return null;
-
-          return (
-            <Section
-              icon="package-variant-closed"
-              color={colors.info}
+        {(value) =>
+          typeOf(value)?.is_producible ? (
+            <FormSection
               title="Presentación"
-              subtitle="De qué granel se envasa, cuánto lleva cada pieza y qué material de empaque usa. Se envasa al registrar la producción o desde «Envasar granel»"
+              description="Si se envasa de un granel: de cuál, cuánto lleva cada pieza y qué material usa."
             >
               <FormSwitch
                 name="requires_packaging"
-                text="Se envasa de un granel (botella, bolsa, galón…)"
+                text="Se envasa de un granel"
+                description="Botella, bolsa o galón. Se envasa al registrar la producción o desde «Envasar granel»."
               />
 
               {/* El resto sólo aparece cuando hay algo que empacar. */}
               <AppDependency name="requires_packaging">
                 {(requiresPackaging) =>
-                  requiresPackaging ? (
-                    <PackagingFields isWide={isWide} styles={styles} />
-                  ) : null
+                  requiresPackaging ? <PackagingFields /> : null
                 }
               </AppDependency>
-            </Section>
-          );
-        }}
+            </FormSection>
+          ) : null
+        }
       </AppDependency>
 
-      {/* ───────────────── Imágenes ───────────────── */}
-      <Section
-        icon="image-multiple-outline"
-        color={colors.chart5}
-        title="Imágenes"
-        subtitle="Hasta 5 fotos (JPG, PNG)"
-      >
-        <FormUpload
-          name="product_images"
-          label="Imágenes del producto"
-          placeholder="Subir fotos del producto"
-          multiple
-          maxFiles={5}
-          accept="images"
-        />
-      </Section>
+      <PhotosSection />
 
-      {/* ───────────────── Stock en la sucursal ───────────────── */}
-      <Section
-        icon="warehouse"
-        color={colors.success}
-        title={`Inventario en ${selectedLocation?.name || "esta sucursal"}`}
-        subtitle="Existencia actual y niveles de reposición"
+      <FormSection
+        title={`En ${selectedLocation?.name || "esta sucursal"}`}
+        description={
+          productId
+            ? "Existencia y niveles para reponer en esta sucursal."
+            : "La existencia empieza en 0 y se suma con compras, producción o ajustes."
+        }
       >
+        {!!productId && <CurrentStock />}
+        <FormRow>
+          <FormInput
+            name="minimum_stock"
+            label="Existencia mínima"
+            optional
+            placeholder="0"
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            hint="Se avisa cuando la existencia baja de aquí."
+          />
+          <FormInput
+            name="maximum_stock"
+            label="Existencia máxima"
+            optional
+            placeholder="Sin tope"
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            hint="Lo más que se sugiere tener al reponer."
+          />
+        </FormRow>
         <FormSwitch
           name="is_active"
-          text={`Producto Activo en ${
-            selectedLocation?.name || "esta sucursal"
-          }`}
+          text="Activo en esta sucursal"
+          description="Si lo apagas, deja de aparecer en esta sucursal."
         />
-
-        <Row isWide={isWide} styles={styles}>
-          <Field isWide={isWide} styles={styles} span="third">
-            <FormInput
-              name="current_stock"
-              label="Stock Actual"
-              placeholder="0.00"
-              keyboardType="numeric"
-              //@ts-ignore
-              readonly
-            />
-          </Field>
-
-          <Field isWide={isWide} styles={styles} span="third">
-            <FormInput
-              name="minimum_stock"
-              label="Stock Mínimo"
-              placeholder="0.00"
-              keyboardType="numeric"
-            />
-          </Field>
-
-          <Field isWide={isWide} styles={styles} span="third">
-            <FormInput
-              name="maximum_stock"
-              label="Stock Máximo"
-              placeholder="0.00"
-              keyboardType="numeric"
-            />
-          </Field>
-        </Row>
-      </Section>
-
-      <View style={{ display: "none" }}>
-        <FormInput name="current_location_id" />
-      </View>
+      </FormSection>
     </AppForm>
   );
 }
@@ -423,67 +383,61 @@ export default function ProductsForm(props: ProductsFormProps) {
  * El granel se filtra por el tipo "Semiterminado (granel)" y el material por
  * "Material de empaque": así el empaque no se mezcla con los ingredientes.
  */
-function PackagingFields({
-  isWide,
-  styles,
-}: {
-  isWide: boolean;
-  styles: FormStyles;
-}) {
+function PackagingFields() {
+  const { readonly } = useAppForm();
   return (
-    <View style={{ marginTop: tokens.spacing[3] }}>
-      <Row isWide={isWide} styles={styles}>
-        <Field isWide={isWide} styles={styles}>
-          <FormProSelect
-            name="packaging_source_product_id"
-            label="Se envasa de"
-            model="products"
-            placeholder="Granel (agua de coco, horchata…)"
-            fetchParams={{ inventory_type_code: "semi_finished" }}
-            selectedLabelField="packaging_source_product.name"
-          />
-        </Field>
+    <>
+      <FormProSelect
+        name="packaging_source_product_id"
+        label="Se envasa de"
+        model="products"
+        placeholder="Elige el granel"
+        fetchParams={{ inventory_type_code: "semi_finished" }}
+        selectedLabelField="packaging_source_product.name"
+      />
 
-        <Field isWide={isWide} styles={styles} span="third">
-          <FormInput
-            name="packaging_source_quantity"
-            label="Contenido por pieza"
-            placeholder="0.00"
-            keyboardType="numeric"
-          />
-        </Field>
-
-        <Field isWide={isWide} styles={styles} span="third">
-          <FormProSelect
-            name="packaging_source_unit_id"
-            label="Unidad del contenido"
-            model="home.unidades"
-            placeholder="Unidad"
-            selectedLabelField="packaging_source_unit.name"
-          />
-        </Field>
-      </Row>
+      <FormRow>
+        <FormInput
+          name="packaging_source_quantity"
+          label="Contenido por pieza"
+          keyboardType="decimal-pad"
+          inputMode="decimal"
+          hint="Cuánto granel lleva cada pieza."
+        />
+        <FormProSelect
+          name="packaging_source_unit_id"
+          label="Unidad del contenido"
+          optional
+          model="home.unidades"
+          placeholder="La del granel"
+          selectedLabelField="packaging_source_unit.name"
+        />
+      </FormRow>
 
       <EditableTable
         name="packaging_materials"
         label="Material de empaque"
-        columns={PACKAGING_MATERIAL_COLUMNS}
+        columns={readonly ? PACKAGING_MATERIAL_COLUMNS_READONLY : PACKAGING_MATERIAL_COLUMNS}
         defaultRow={DEFAULT_PACKAGING_MATERIAL}
         addLabel="Agregar material"
-        emptyMessage="Agrega el material que lleva cada pieza: botella, tapa, etiqueta, caja…"
+        emptyMessage="Agrega lo que lleva cada pieza: botella, tapa, etiqueta, caja…"
       />
-    </View>
+    </>
   );
 }
 
-/** Sólo productos del tipo "Material de empaque". */
-const PACKAGING_MATERIAL_COLUMNS: EditableTableColumn[] = [
+/**
+ * Sólo productos del tipo "Material de empaque". Sin `required` en las
+ * columnas: lo obligatorio ya no lleva asterisco (el backend descarta los
+ * renglones sin material). Los anchos llenan la columna del formulario (678
+ * dentro del borde); al editar, la tabla agrega 60 para el botón de quitar.
+ */
+const materialColumns = (widths: [number, number, number, number]): EditableTableColumn[] => [
   {
     key: "material_product_id",
     label: "Material",
     type: "product",
-    width: 230,
-    required: true,
+    width: widths[0],
     productFetchParams: { inventory_type_code: "packaging_material" },
     labelKey: "material_name",
   },
@@ -491,19 +445,20 @@ const PACKAGING_MATERIAL_COLUMNS: EditableTableColumn[] = [
     key: "unit_id",
     label: "Unidad",
     type: "unit",
-    width: 110,
-    required: true,
+    width: widths[1],
     labelKey: "unit_name",
   },
   {
     key: "quantity",
-    label: "Cantidad por unidad",
+    label: "Por pieza",
     type: "number",
-    width: 160,
-    required: true,
+    width: widths[2],
   },
-  { key: "notes", label: "Notas", type: "text", width: 180 },
+  { key: "notes", label: "Notas", type: "text", width: widths[3] },
 ];
+
+const PACKAGING_MATERIAL_COLUMNS = materialColumns([220, 120, 110, 168]);
+const PACKAGING_MATERIAL_COLUMNS_READONLY = materialColumns([260, 130, 110, 178]);
 
 const DEFAULT_PACKAGING_MATERIAL = {
   material_product_id: 0,
@@ -512,154 +467,52 @@ const DEFAULT_PACKAGING_MATERIAL = {
   notes: "",
 };
 
-type FormStyles = ReturnType<typeof useFormStyles>;
-
 /**
- * Bloque del formulario con encabezado. Agrupa campos relacionados para que la
- * pantalla se lea de un vistazo en vez de ser una columna larga de inputs.
+ * Fotos del producto. No tienen etiqueta propia (la sección se llama así),
+ * por eso lo opcional va en la descripción; en el detalle sin fotos dice
+ * "Sin fotos".
  */
-function Section(props: {
-  icon: string;
-  color: string;
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}) {
-  const styles = useFormStyles();
+function PhotosSection() {
+  const { readonly } = useAppForm();
+  const { values } = useFormikContext<ProductFormData>();
+  const hasPhotos =
+    Array.isArray(values.product_images) && values.product_images.length > 0;
 
   return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <View
-          style={[styles.sectionIcon, { backgroundColor: props.color + "1F" }]}
-        >
-          <Icon source={props.icon} size={18} color={props.color} />
-        </View>
-
-        <View style={styles.sectionHeaderText}>
-          <Text style={styles.sectionTitle}>{props.title}</Text>
-          {!!props.subtitle && (
-            <Text style={styles.sectionSubtitle}>{props.subtitle}</Text>
-          )}
-        </View>
-      </View>
-
-      <View style={styles.sectionBody}>{props.children}</View>
-    </View>
-  );
-}
-
-/** Contenedor de la rejilla: acomoda los Field en filas cuando hay ancho. */
-function Row(props: {
-  isWide: boolean;
-  styles: FormStyles;
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={props.isWide ? props.styles.row : props.styles.rowStacked}>
-      {props.children}
-    </View>
-  );
-}
-
-/**
- * Celda de la rejilla. `half` (por defecto) ocupa media fila y `third` un
- * tercio. En móvil todo pasa a una sola columna.
- */
-function Field(props: {
-  isWide: boolean;
-  styles: FormStyles;
-  span?: "half" | "third";
-  children: React.ReactNode;
-}) {
-  if (!props.isWide) {
-    return <View style={props.styles.fieldFull}>{props.children}</View>;
-  }
-
-  return (
-    <View
-      style={
-        props.span === "third" ? props.styles.fieldThird : props.styles.fieldHalf
+    <FormSection
+      title="Fotos"
+      description={
+        readonly
+          ? undefined
+          : "Opcional. Se ven en el punto de venta, el kiosco y la lista de productos."
       }
     >
-      {props.children}
-    </View>
+      {readonly && !hasPhotos ? (
+        <ReadonlyText text="" />
+      ) : (
+        <FormUpload
+          name="product_images"
+          placeholder="Toma o elige hasta 5 fotos"
+          multiple
+          maxFiles={5}
+          accept="images"
+        />
+      )}
+    </FormSection>
   );
 }
 
-function useFormStyles() {
-  return useThemedStyles((colors) => ({
-    section: {
-      backgroundColor: colors.surface,
-      borderRadius: tokens.radius.lg,
-      borderWidth: 1,
-      borderColor: colors.border,
-      paddingHorizontal: tokens.spacing[5],
-      paddingTop: tokens.spacing[4],
-      paddingBottom: tokens.spacing[4],
-      marginBottom: tokens.spacing[4],
-      ...tokens.shadow.xs,
-    },
-    sectionHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[3],
-      paddingBottom: tokens.spacing[3],
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    sectionIcon: {
-      width: 34,
-      height: 34,
-      borderRadius: tokens.radius.md,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    sectionHeaderText: {
-      flex: 1,
-    },
-    sectionTitle: {
-      ...tokens.typography.h3,
-      color: colors.text,
-    },
-    sectionSubtitle: {
-      ...tokens.typography.caption,
-      color: colors.textSecondary,
-    },
-    sectionBody: {
-      paddingTop: tokens.spacing[1],
-    },
-    row: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      columnGap: tokens.spacing[4],
-    },
-    rowStacked: {
-      flexDirection: "column",
-    },
-    fieldFull: {
-      width: "100%",
-    },
-    fieldHalf: {
-      flexGrow: 1,
-      flexBasis: "45%",
-      minWidth: 220,
-    },
-    fieldThird: {
-      flexGrow: 1,
-      flexBasis: "28%",
-      minWidth: 150,
-    },
-    codeInputContainer: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[2],
-    },
-    codeInput: {
-      flex: 1,
-    },
-    scanButton: {
-      margin: 0,
-    },
-  }));
+/** Existencia de la sucursal (no se edita: cambia con los movimientos). */
+function CurrentStock() {
+  const { values } = useFormikContext<
+    ProductFormData & { unit?: { abbreviation?: string } }
+  >();
+  return (
+    <ListGroup inset={LIST_TEXT_INSET} style={{ marginBottom: 18 }}>
+      <ListValueRow
+        label="Existencia actual"
+        value={formatQuantity(values.current_stock, values.unit?.abbreviation)}
+      />
+    </ListGroup>
+  );
 }
