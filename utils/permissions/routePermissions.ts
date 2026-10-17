@@ -183,7 +183,8 @@ export const ROUTE_PERMISSIONS: Readonly<Record<string, RouteRule>> = {
   "(tabs)/home/production/form": "production_orders_create",
   "(tabs)/home/production/[id]/index": "production_orders_read",
   "(tabs)/home/production/[id]/edit": "production_orders_update",
-  "(tabs)/home/production/[id]/packaging": "production_orders_read",
+  // Envasar granel guardado crea una orden de envasado.
+  "(tabs)/home/production/pack": "production_orders_create",
   "(tabs)/home/production/formulas/index": "formulas_list",
   "(tabs)/home/production/formulas/form": byParam("id", "formulas_read", "formulas_create"),
   "(tabs)/home/purchases/index": "purchases_list",

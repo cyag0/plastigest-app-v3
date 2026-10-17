@@ -804,9 +804,16 @@ namespace App {
       | "packed"
       | "cancelled";
 
+    /** Producción (cocos → agua y pulpa) o envasado de granel guardado. */
+    type ProductionKind = "process" | "packaging";
+
     interface ProductionOrder {
       id: number;
       folio: string;
+      kind: ProductionKind;
+      kind_label: string;
+      /** El proceso que se corrió ("Abrir cocos") o "Envasado". */
+      title: string;
       production_date: string;
       company_id?: number;
       location_id?: number;
@@ -819,24 +826,25 @@ namespace App {
       status_label: string;
       status_color: string;
       status_icon?: string;
-      /** El backend habilita el empaque sólo en `completed` y `packaging`. */
-      can_pack?: boolean;
       notes?: string | null;
       wastes?: ProductionWaste[];
+      /** Lo que se va a envasar al registrar un pendiente. */
+      planned_packagings?: ProductionPlannedPackaging[];
       total_consumed_quantity?: number | null;
       total_produced_quantity?: number | null;
       waste_percentage?: number | null;
       completed_at?: string | null;
-      packed_at?: string | null;
       cancelled_at?: string | null;
-      consumptions?: ProductionOrderConsumption[];
-      outputs?: ProductionOrderOutput[];
+      consumptions?: ProductionOrderLine[];
+      outputs?: ProductionOrderLine[];
       packagings?: ProductionOrderPackaging[];
+      /** Cuánto salió por unidad del insumo principal, contra lo esperado. */
+      yields?: ProductionYield[];
       summary?: {
-        consumption_count?: number;
-        output_count?: number;
-        waste_count?: number;
-        packaging_count?: number;
+        consumption_count?: number | null;
+        output_count?: number | null;
+        waste_count?: number | null;
+        packaging_count?: number | null;
         packaged_quantity?: number | null;
         waste_percentage?: number | null;
       };
@@ -844,115 +852,182 @@ namespace App {
       updated_at?: string;
     }
 
-    /** Una operación de empaque: granel + material → producto terminado. */
+    /** Un consumo o una salida de la orden. */
+    interface ProductionOrderLine {
+      id?: number;
+      product_id: number;
+      product_name?: string | null;
+      product_code?: string | null;
+      unit_id: number;
+      unit_name?: string | null;
+      unit_abbreviation?: string | null;
+      quantity: number;
+      expected_quantity?: number | null;
+      variance_pct?: number | null;
+      notes?: string | null;
+      /** Granel (en las salidas): lo que no se envasó queda en inventario. */
+      is_bulk?: boolean | null;
+    }
+
+    /** Envasado registrado: granel + material → presentación. */
     interface ProductionOrderPackaging {
       id: number;
       product_id: number;
-      product_name?: string;
-      product_code?: string;
+      product_name?: string | null;
+      product_code?: string | null;
       unit_id: number;
-      unit_name?: string;
+      unit_name?: string | null;
+      unit_abbreviation?: string | null;
       quantity: number;
       source_product_id?: number | null;
       source_product_name?: string | null;
       source_unit_id?: number | null;
       source_unit_name?: string | null;
+      source_unit_abbreviation?: string | null;
       source_quantity?: number | null;
       packed_at?: string | null;
       notes?: string | null;
       materials?: Array<{
         id?: number;
         product_id: number;
-        product_name?: string;
+        product_name?: string | null;
         unit_id: number;
-        unit_name?: string;
+        unit_name?: string | null;
+        unit_abbreviation?: string | null;
         quantity: number;
       }>;
     }
 
-    /** Respuesta de GET /production-orders/{id}/packaging. */
-    interface PackagingPlan {
-      can_pack: boolean;
-      status: ProductionStatus;
-      status_label: string;
-      lines: PackagingPlanLine[];
-      packagings: ProductionOrderPackaging[];
-    }
-
-    /** Una salida de la orden y los productos que pueden empacarse de ella. */
-    interface PackagingPlanLine {
-      source_product_id: number;
-      source_product_name?: string;
-      source_unit_id: number;
-      source_unit_name?: string;
-      produced_quantity: number;
-      packed_quantity: number;
-      remaining_quantity: number;
-      available_stock: number;
-      products: PackagingPlanOption[];
-    }
-
-    interface PackagingPlanOption {
+    interface ProductionPlannedPackaging {
       product_id: number;
-      product_name: string;
-      product_code?: string | null;
+      product_name?: string | null;
+      quantity: number;
       unit_id?: number | null;
-      unit_name?: string | null;
-      source_quantity_per_unit: number;
-      source_unit_id?: number | null;
-      source_unit_name?: string | null;
-      /** Techo real: lo marca el insumo más escaso (granel o material). */
-      max_units: number | null;
-      max_units_by_source: number | null;
-      materials: Array<{
-        product_id: number;
-        product_name?: string;
-        product_code?: string | null;
-        unit_id: number;
-        unit_name?: string;
-        quantity_per_unit: number;
-        available_stock: number;
-        max_units: number | null;
-        notes?: string | null;
-      }>;
-    }
-
-    interface ProductionOrderConsumption {
-      id?: number;
-      product_id: number;
-      product_name?: string;
-      product_code?: string;
-      unit_id: number;
-      unit_name?: string;
-      quantity: number;
-      expected_quantity?: number | null;
-      variance_pct?: number | null;
-      notes?: string | null;
-    }
-
-    interface ProductionOrderOutput {
-      id?: number;
-      product_id: number;
-      product_name?: string;
-      product_code?: string;
-      unit_id: number;
-      unit_name?: string;
-      quantity: number;
-      expected_quantity?: number | null;
-      variance_pct?: number | null;
-      notes?: string | null;
+      unit_abbreviation?: string | null;
+      source_product_id?: number | null;
+      source_product_name?: string | null;
     }
 
     interface ProductionWaste {
       id?: number;
       product_id: number;
-      product_name?: string;
+      product_name?: string | null;
       unit_id: number;
-      unit_name?: string;
+      unit_name?: string | null;
+      unit_abbreviation?: string | null;
       quantity: number;
       reason: string;
       reason_label?: string;
       notes?: string | null;
+      reverted?: boolean;
+    }
+
+    interface ProductionYield {
+      product_id: number;
+      product_name?: string | null;
+      quantity: number;
+      unit_abbreviation?: string | null;
+      input_product_id: number;
+      input_product_name?: string | null;
+      input_quantity: number;
+      input_unit_abbreviation?: string | null;
+      per_input: number;
+      expected_per_input: number | null;
+      variance_pct: number | null;
+    }
+
+    /** Lo que manda la app al guardar una producción o un envasado. */
+    interface ProductionOrderPayload {
+      kind?: ProductionKind;
+      formula_id?: number | null;
+      production_date: string;
+      responsible_user_id?: number | null;
+      notes?: string | null;
+      consumptions?: Array<{ product_id: number; unit_id: number; quantity: number; expected_quantity?: number | null }>;
+      outputs?: Array<{ product_id: number; unit_id: number; quantity: number; expected_quantity?: number | null }>;
+      wastes?: Array<{ product_id: number; unit_id: number; quantity: number; reason: string; notes?: string | null }>;
+      packagings?: Array<{ product_id: number; quantity: number; unit_id?: number | null }>;
+      /** true: se registra ya (mueve inventario); false: queda pendiente. */
+      affect_stock: boolean;
+    }
+
+    /** GET /production-orders/initial-data */
+    interface ProductionInitialData {
+      processes: ProductionProcess[];
+      bulks: ProductionBulk[];
+      responsibles: Array<{ id: number; name: string }>;
+      waste_reasons: Array<{ value: string; label: string }>;
+      statuses: Array<{ value: ProductionStatus; label: string; color: string; icon: string }>;
+    }
+
+    /** Un proceso (fórmula) listo para registrar: qué entra y qué sale. */
+    interface ProductionProcess {
+      id: number;
+      name: string;
+      description?: string | null;
+      items: ProductionProcessLine[];
+      outputs: Array<ProductionProcessLine & {
+        is_primary: boolean;
+        /** Granel: se guarda en inventario y se envasa. */
+        is_bulk: boolean;
+        has_presentations: boolean;
+      }>;
+    }
+
+    interface ProductionProcessLine {
+      product_id: number;
+      product_name?: string | null;
+      product_code?: string | null;
+      unit_id: number;
+      unit_abbreviation?: string | null;
+      unit_type?: "mass" | "volume" | "quantity" | null;
+      /** Por tanda; 0 = sin cantidad esperada (solo plantilla). */
+      expected_quantity: number;
+      /** Existencia en la sucursal, en la unidad base del producto. */
+      stock: number;
+      stock_unit_abbreviation?: string | null;
+      inventory_type_code?: string | null;
+    }
+
+    /** Un granel con las presentaciones en que se envasa. */
+    interface ProductionBulk {
+      product_id: number;
+      product_name: string;
+      product_code?: string | null;
+      unit_id: number;
+      unit_name?: string | null;
+      unit_abbreviation?: string | null;
+      unit_type?: "mass" | "volume" | "quantity" | null;
+      stock: number;
+      presentations: ProductionPresentation[];
+    }
+
+    interface ProductionPresentation {
+      product_id: number;
+      product_name: string;
+      product_code?: string | null;
+      barcodes: string[];
+      unit_id: number;
+      unit_name?: string | null;
+      unit_abbreviation?: string | null;
+      /** Lo que lleva una unidad, en la unidad de la receta. */
+      content: number;
+      content_unit_id: number;
+      content_unit_abbreviation?: string | null;
+      /** Lo mismo, convertido a la unidad del granel (500 ml → 0.5 L). */
+      content_in_bulk_unit: number;
+      stock: number;
+      materials: Array<{
+        product_id: number;
+        product_name?: string | null;
+        product_code?: string | null;
+        unit_id: number;
+        unit_abbreviation?: string | null;
+        quantity_per_unit: number;
+        quantity_per_unit_base: number;
+        stock: number;
+        stock_unit_abbreviation?: string | null;
+      }>;
     }
 
     /** Producto de una fórmula, con su imagen para los selectores. */
@@ -1009,6 +1084,17 @@ namespace App {
       product_id: number;
       product_name?: string;
       product_code?: string;
+      inventory_type_code?: string | null;
+      /** Granel: se guarda y se envasa en sus presentaciones. */
+      is_bulk?: boolean;
+      presentations?: Array<{
+        product_id: number;
+        product_name: string;
+        product_code?: string | null;
+        content: number;
+        content_unit_abbreviation?: string | null;
+        materials: Array<{ product_id: number; product_name?: string | null; quantity: number; unit_abbreviation?: string | null }>;
+      }>;
       unit_id: number;
       unit_name?: string;
       unit_abbreviation?: string;
@@ -1026,6 +1112,7 @@ namespace App {
       product_id: number;
       product_name?: string;
       product_code?: string;
+      inventory_type_code?: string | null;
       unit_id: number;
       unit_name?: string;
       unit_abbreviation?: string;

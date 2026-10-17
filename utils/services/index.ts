@@ -1,6 +1,6 @@
 import { default as api, default as axiosClient } from "../axios";
 import admin from "./admin/admin";
-import { createCrudService } from "./crudService";
+import { createCrudService, type RequestOptions } from "./crudService";
 
 const Services = {
   admin,
@@ -432,18 +432,35 @@ const Services = {
       return response.data;
     },
   },
-  productions: {
-    // Mantenido por compatibilidad con código legacy, apunta a la nueva ruta.
-    ...createCrudService<any>("/auth/admin/production-orders"),
-  },
   productionOrders: {
-    ...createCrudService<any>("/auth/admin/production-orders"),
-    async getInitialData() {
+    ...createCrudService<App.Entities.ProductionOrder>("/auth/admin/production-orders"),
+    /**
+     * Procesos con sus insumos y resultados (con la existencia de la
+     * sucursal), graneles con sus presentaciones, responsables y motivos de
+     * merma: todo lo que necesita la pantalla de registro.
+     */
+    async getInitialData(options?: RequestOptions): Promise<App.Entities.ProductionInitialData> {
       const response = await axiosClient.get(
         "/auth/admin/production-orders/initial-data",
+        options,
       );
-      return response.data;
+      return response.data?.data;
     },
+    /**
+     * Guarda una producción o un envasado. Con `affect_stock` se registra en
+     * el mismo paso (mueve inventario); sin él queda pendiente.
+     * silent: la pantalla muestra el motivo en su lugar.
+     */
+    async save(
+      payload: App.Entities.ProductionOrderPayload,
+      id?: number,
+    ): Promise<App.Entities.ProductionOrder> {
+      const response = id
+        ? await axiosClient.put(`/auth/admin/production-orders/${id}`, payload, { silent: true })
+        : await axiosClient.post("/auth/admin/production-orders", payload, { silent: true });
+      return response.data?.data;
+    },
+    /** Lo producido hoy en la sucursal (lo usa el tablero de Reportes). */
     async getTodayStats(params?: { location_id?: number | string }) {
       const response = await axiosClient.get(
         "/auth/admin/production-orders/today-stats",
@@ -451,63 +468,17 @@ const Services = {
       );
       return response.data;
     },
+    /** Registra un pendiente: descuenta, suma y envasa. */
     async complete(id: number) {
       const response = await axiosClient.post(
         `/auth/admin/production-orders/${id}/complete`,
       );
       return response.data;
     },
+    /** Cancela y revierte el inventario (envasado, merma, producción). */
     async cancel(id: number) {
       const response = await axiosClient.post(
         `/auth/admin/production-orders/${id}/cancel`,
-      );
-      return response.data;
-    },
-    async getVariance(id: number) {
-      const response = await axiosClient.get(
-        `/auth/admin/production-orders/${id}/variance`,
-      );
-      return response.data;
-    },
-
-    // ── Empaque: paso posterior, sólo habilitado con la producción completada.
-
-    /** Qué se puede empacar de cada salida y cuánto material haría falta. */
-    async getPackagingPlan(id: number) {
-      // silent: la pantalla de empaque explica la falla en su lugar.
-      const response = await axiosClient.get(
-        `/auth/admin/production-orders/${id}/packaging`,
-        { silent: true },
-      );
-      return response.data;
-    },
-    /** Registra empaques: descuenta granel + material y acredita el terminado. */
-    async pack(
-      id: number,
-      packagings: {
-        product_id: number;
-        quantity: number;
-        unit_id?: number | null;
-        notes?: string | null;
-      }[],
-    ) {
-      const response = await axiosClient.post(
-        `/auth/admin/production-orders/${id}/packaging`,
-        { packagings },
-      );
-      return response.data;
-    },
-    /** Deshace un empaque y devuelve el stock. */
-    async revertPackaging(id: number, packagingId: number) {
-      const response = await axiosClient.delete(
-        `/auth/admin/production-orders/${id}/packaging/${packagingId}`,
-      );
-      return response.data;
-    },
-    /** Cierra el empaque: la orden queda empacada y no admite más. */
-    async finishPackaging(id: number) {
-      const response = await axiosClient.post(
-        `/auth/admin/production-orders/${id}/packaging/finish`,
       );
       return response.data;
     },

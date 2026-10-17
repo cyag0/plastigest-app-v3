@@ -1,464 +1,291 @@
-import AppList from "@/components/App/AppList/AppList";
-import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
-import PermissionGate from "@/components/App/PermissionGate";
-import ProductionKpiCards from "@/components/Production/ProductionKpiCards";
-import ProductionStatusBadge from "@/components/Production/ProductionStatusBadge";
-import palette from "@/constants/palette";
-import { useAlerts } from "@/hooks/useAlerts";
+/**
+ * Producción: lo que se hizo, día por día.
+ *
+ * Cada renglón dice qué proceso se corrió, qué entró y qué salió
+ * ("257 pz Coco Entero → 150 L Agua de coco · 38 kg Pulpa") y el rendimiento
+ * del producto principal. Arriba, las dos cosas que se hacen en la planta:
+ * registrar una producción y envasar granel guardado. Los procesos (qué entra
+ * y qué sale de cada uno) se configuran desde "Procesos".
+ */
+
+import EmptyState from "@/components/App/EmptyState";
+import AppListFilterBar, { type FilterConfig } from "@/components/App/AppList/AppListFilter";
+import AppBar from "@/components/App/AppBar";
+import { ListGroup, ListGroupSkeleton, ListRow, ListSection } from "@/components/App/ListGroup";
+import ListSearchbar from "@/components/App/ListSearchbar";
+import { dayTitle, meaningfulYields, orderSummary, piecesYield, yieldShort } from "@/components/Production/productionFormat";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useCan } from "@/hooks/useCan";
-import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
-import { useResponsive } from "@/hooks/useResponsive";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, StyleSheet, TouchableOpacity, View, useWindowDimensions } from "react-native";
-import { Text } from "react-native-paper";
-import { SceneMap, TabView } from "react-native-tab-view";
-import { parseLocalDate, formatDate } from "@/utils/dates";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { Button } from "react-native-paper";
 
-const PRODUCTION_COLUMNS: AppListColumn<any>[] = [
+const FILTERS: FilterConfig[] = [
   {
-    title: "Folio",
-    dataIndex: "folio",
-    key: "folio",
-    width: 140,
+    type: "simple",
+    name: "status",
+    label: "Estado",
+    options: [
+      { label: "Todos", value: "all" },
+      { label: "Pendientes", value: "draft" },
+      { label: "Registradas", value: "completed" },
+      { label: "Canceladas", value: "cancelled" },
+    ],
   },
   {
-    title: "Fecha",
-    dataIndex: "production_date",
-    key: "production_date",
-    width: 130,
-    render: (value: any) => {
-      if (!value) return "-";
-      try {
-        return formatDate(value);
-      } catch {
-        return String(value);
-      }
-    },
-  },
-  {
-    title: "Responsable",
-    dataIndex: "responsible_name",
-    key: "responsible_name",
-    width: 200,
-  },
-  {
-    title: "Sucursal",
-    dataIndex: "location_name",
-    key: "location_name",
-    width: 170,
-  },
-  {
-    title: "Estado",
-    dataIndex: "status",
-    key: "status",
-    width: 150,
-    align: "center",
-    render: (value: any) => <ProductionStatusBadge status={value} />,
-  },
-  {
-    title: "Consumos",
-    dataIndex: "summary.consumption_count",
-    key: "consumption_count",
-    width: 110,
-    align: "center",
-  },
-  {
-    title: "Productos",
-    dataIndex: "summary.output_count",
-    key: "output_count",
-    width: 110,
-    align: "center",
+    type: "simple",
+    name: "kind",
+    label: "Tipo",
+    options: [
+      { label: "Todo", value: "all" },
+      { label: "Producción", value: "process" },
+      { label: "Envasado", value: "packaging" },
+    ],
   },
 ];
 
+const PER_PAGE = 20;
+
 export default function ProductionIndex() {
   const router = useRouter();
-  const alerts = useAlerts();
-  const { company } = useSelectedCompany();
-  const { selectedLocation } = useSelectedLocation();
-  const { isMobile } = useResponsive();
+  const navigation = useNavigation();
+  const { colors } = useTheme();
   const { can } = useCan();
-  // Cancelar revierte el stock: el backend pide production_orders_update.
-  const canUpdate = can("production_orders_update");
-  // Duplicar abre el alta (production_orders_create) con los datos de la
-  // orden original (GET /production-orders/{id}: production_orders_read).
-  const canDuplicate = can(["production_orders_create", "production_orders_read"], {
-    all: true,
-  });
-  const canSeeFormulas = can("formulas_list");
-  const layout = useWindowDimensions();
-  const [tabIndex, setTabIndex] = useState(0);
-  const [routes] = useState([
-    { key: "list", title: "Lista" },
-    { key: "stats", title: "Estadísticas" },
-  ]);
+  const { selectedLocation } = useSelectedLocation();
+  const { width } = useWindowDimensions();
+  const wide = width >= 768;
+  const narrow = width < 480;
+  const canCreate = can("production_orders_create");
+  const canSeeProcesses = can("formulas_list");
 
-  const handleItem = useCallback(
-    (item: any) => {
-      router.push(`/(tabs)/home/production/${item.id}` as any);
-    },
-    [router],
-  );
+  const [orders, setOrders] = useState<App.Entities.ProductionOrder[]>([]);
+  const [page, setPage] = useState(1);
+  const [lastPage, setLastPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [kind, setKind] = useState("all");
+  const requestId = useRef(0);
 
-  const handleEdit = useCallback(
-    (item: any) => {
-      if (item.status !== "draft") {
-        alerts.warning("Solo se pueden editar producciones en estado Borrador.");
-        return;
-      }
-      router.push(`/(tabs)/home/production/${item.id}/edit` as any);
-    },
-    [router, alerts],
-  );
+  // La búsqueda espera a que se termine de escribir.
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-  const handleCancel = useCallback(
-    async (item: any) => {
-      if (item.status === "cancelled") return false;
-      const ok = await alerts.confirm(
-        `¿Cancelar la producción ${item.folio}? Se revertirá el impacto en stock.`,
-        { title: "Cancelar producción", okText: "Sí, cancelar" },
-      );
-      if (!ok) return false;
+  const load = useCallback(
+    async (nextPage = 1) => {
+      const id = ++requestId.current;
       try {
-        await Services.productionOrders.cancel(item.id);
-        alerts.success("Producción cancelada y stock revertido");
-        return true;
-      } catch (e: any) {
-        // El motivo (p. ej. no hay stock para revertir) viene en `error`;
-        // `message` solo dice "Error al cancelar producción".
-        const data = e?.response?.data;
-        alerts.error(
-          "No se pudo cancelar: " +
-            (data?.error ??
-              data?.message ??
-              (e?.response ? "Error" : "sin conexión con el servidor")),
-        );
-        return false;
+        if (nextPage > 1) setLoadingMore(true);
+        const response: any = await Services.productionOrders.index({
+          paginated: true,
+          per_page: PER_PAGE,
+          page: nextPage,
+          search: query || undefined,
+          status: status !== "all" ? status : undefined,
+          kind: kind !== "all" ? kind : undefined,
+          location_id: selectedLocation?.id,
+          sort_by: "production_date",
+          sort_direction: "desc",
+        });
+        if (id !== requestId.current) return;
+        const rows: App.Entities.ProductionOrder[] = response?.data?.data ?? [];
+        setOrders((current) => (nextPage > 1 ? [...current, ...rows] : rows));
+        setPage(nextPage);
+        setLastPage(response?.data?.meta?.last_page ?? 1);
+      } catch {
+        // El aviso global ya dijo qué pasó.
+      } finally {
+        if (id === requestId.current) {
+          setLoading(false);
+          setLoadingMore(false);
+          setRefreshing(false);
+        }
       }
     },
-    [alerts],
+    [query, status, kind, selectedLocation?.id],
   );
 
-  // Remonta la lista después de cancelar para que el estado se actualice, y
-  // al cambiar de sucursal (AppList no recarga si cambian sus filtros fijos).
-  const [reloadToken, setReloadToken] = useState(0);
-  const companyId = company?.id;
-  const locationId = selectedLocation?.id;
-  const listKey = `${reloadToken}-${locationId ?? "all"}`;
-  const listFilters = useMemo(
-    () => ({
-      ...(companyId ? { company_id: companyId } : {}),
-      ...(locationId ? { location_id: locationId } : {}),
-    }),
-    [companyId, locationId],
+  // Al volver de registrar o de un detalle, la lista ya lo refleja.
+  useFocusEffect(
+    useCallback(() => {
+      load(1);
+    }, [load]),
   );
 
-  // "Duplicar" y "Cancelar" vivían en un onMenuAction que AppList no soporta:
-  // nunca aparecían. AppList sí muestra customActions.
-  const productionMenu = useMemo(
-    () => ({
-      onShow: handleItem,
-      onEdit: handleEdit,
-      showEdit: (item: any) => item.status === "draft",
-      showDelete: () => false,
-      customActions: [
-        {
-          title: "Duplicar",
-          icon: "content-copy",
-          show: () => canDuplicate,
-          onPress: (item: any) =>
-            router.push({
-              pathname: "/(tabs)/home/production/form",
-              params: { duplicateFrom: item.id },
-            } as any),
-        },
-        {
-          title: "Cancelar producción",
-          icon: "cancel",
-          color: palette.error,
-          show: (item: any) => canUpdate && item.status !== "cancelled",
-          onPress: async (item: any) => {
-            if (await handleCancel(item)) setReloadToken((t) => t + 1);
-          },
-        },
-      ],
-    }),
-    [handleItem, handleEdit, handleCancel, router, canUpdate, canDuplicate],
+  useFocusEffect(
+    useCallback(() => {
+      navigation.setOptions({
+        headerRight: () =>
+          canCreate ? (
+            <AppBar.Action icon="plus" iconColor={colors.primary} onPress={() => router.push("/(tabs)/home/production/form" as any)} />
+          ) : null,
+      });
+    }, [navigation, canCreate, colors.primary, router]),
   );
 
-  const formulasButton = (
-    <TouchableOpacity
-      onPress={() => router.push("/(tabs)/home/production/formulas" as any)}
-      activeOpacity={0.7}
-      style={{
-        marginHorizontal: 12,
-        marginBottom: 8,
-        padding: 12,
-        backgroundColor: palette.accent + "11",
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: palette.accent + "33",
-        flexDirection: "row",
-        alignItems: "center",
-      }}
-    >
-      <View
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          backgroundColor: palette.accent,
-          alignItems: "center",
-          justifyContent: "center",
-          marginRight: 12,
-        }}
-      >
-        <MaterialCommunityIcons name="flask" size={20} color="#fff" />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={{ color: palette.text, fontWeight: "700" }}>
-          Fórmulas y recetas
-        </Text>
-        <Text style={{ color: palette.textSecondary, fontSize: 11 }}>
-          Configura plantillas de ingredientes y rendimientos esperados
-        </Text>
-      </View>
-      <MaterialCommunityIcons
-        name="chevron-right"
-        size={22}
-        color={palette.textSecondary}
-      />
-    </TouchableOpacity>
-  );
+  // Por día, en el orden en que llegan (más reciente primero).
+  const sections = useMemo(() => {
+    const byDay = new Map<string, App.Entities.ProductionOrder[]>();
+    for (const order of orders) {
+      const key = order.production_date;
+      byDay.set(key, [...(byDay.get(key) ?? []), order]);
+    }
+    return Array.from(byDay.entries()).map(([day, rows]) => ({ day, rows: [...rows].sort((a, b) => b.id - a.id) }));
+  }, [orders]);
 
-  const listScene = useMemo(
-    () => () => (
-      <View style={{ flex: 1 }}>
-        {canSeeFormulas && formulasButton}
-        <AppList
-          key={listKey}
-          title="Producción"
-          service={Services.productionOrders}
-          // «+» pide _create, abrir _read y «Editar» _update.
-          permissionPrefix="production_orders"
-          columns={PRODUCTION_COLUMNS}
-          showAppBar={isMobile ? false : undefined}
-          actionColumnTitle="Acciones"
-          actionColumnWidth={200}
-          // AppList no conoce `queryParams`: la sucursal nunca se mandaba y
-          // quien ve todas las sucursales recibía las órdenes de todas.
-          defaultFilters={listFilters}
-          renderCard={({ item }: { item: any }) => ({
-            // Celular: folio como título y el estado debajo, sin columna de
-            // ícono; antes ícono + badge + menú dejaban ~100px al texto y el
-            // título se partía letra por letra.
-            title: item.folio,
-            description: (
-              <View style={{ gap: 2 }}>
-                <View style={{ alignSelf: "flex-start", marginVertical: 2 }}>
-                  <ProductionStatusBadge status={item.status} />
-                </View>
-                <Text style={{ color: palette.textSecondary, fontSize: 12 }} numberOfLines={1}>
-                  {item.responsible_name ?? "—"} · {item.location_name ?? "—"}
-                </Text>
-                {item.outputs && item.outputs.length > 0 ? (
-                  <Text
-                    style={{ color: palette.success, fontSize: 12, marginTop: 2 }}
-                    numberOfLines={1}
-                  >
-                    {item.outputs
-                      .map(
-                        (o: any) =>
-                          `+${Number(o.quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })}${o.unit_name ?? ""} ${o.product_name ?? ""}`,
-                      )
-                      .join(" · ")}
-                  </Text>
-                ) : null}
-                {item.consumptions && item.consumptions.length > 0 ? (
-                  <Text
-                    style={{ color: palette.error, fontSize: 11, marginTop: 2 }}
-                    numberOfLines={1}
-                  >
-                    {item.consumptions
-                      .map(
-                        (c: any) =>
-                          `−${Number(c.quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })}${c.unit_name ?? ""} ${c.product_name ?? ""}`,
-                      )
-                      .join(" · ")}
-                  </Text>
-                ) : null}
-              </View>
-            ),
-            bottom: [
-              {
-                label: "Fecha",
-                value: item.production_date
-                  ? formatDate(item.production_date)
-                  : "—",
-              },
-            ],
-          })}
-          onItemPress={handleItem}
-          menu={productionMenu}
-          onPressCreate={() => router.push("/(tabs)/home/production/form" as any)}
-          fabLabel="Nueva Producción"
-        />
-      </View>
-    ),
-    [listFilters, listKey, handleItem, productionMenu, isMobile, canSeeFormulas],
-  );
+  const filtered = !!query || status !== "all" || kind !== "all";
 
-  const statsScene = useMemo(() => () => <ProductionKpiCards />, []);
+  const styles = useThemedStyles((c) => ({
+    screen: { flex: 1, backgroundColor: c.background },
+    content: { padding: 16, paddingBottom: 40, gap: 14 },
+    contentWide: { padding: 28, maxWidth: 880, width: "100%", alignSelf: "center" },
+    actions: { flexDirection: "row", gap: 10 },
+    actionsNarrow: { flexDirection: "column", gap: 8 },
+    action: { flexGrow: 1, flexBasis: 0 },
+    actionNarrow: { alignSelf: "stretch" },
+    processesLink: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", paddingVertical: 4 },
+    processesText: { fontSize: 14, fontWeight: "600", color: c.primary },
+    filters: { marginLeft: -16, marginRight: -16, marginTop: -6 },
+    sections: { gap: 22 },
+    more: { alignSelf: "center", marginTop: 4 },
+  }));
 
-  const renderScene = useMemo(
-    () => SceneMap({ list: listScene, stats: statsScene }),
-    [listScene, statsScene],
-  );
-
-  if (isMobile) {
+  const rowFor = (order: App.Entities.ProductionOrder) => {
+    const main = meaningfulYields(order.yields)[0];
+    const meta = [
+      order.status === "completed" ? null : order.status_label,
+      order.status === "cancelled" ? null : main ? yieldShort(main) : piecesYield(order.yields),
+      order.folio,
+      order.responsible_name,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const muted = order.status === "cancelled";
     return (
-      <PermissionGate permission="production_orders_list">
-        <View style={styles.container}>
-          <View style={styles.tabsContainer}>
-            <Pressable
-              style={[styles.tab, tabIndex === 0 && styles.tabActive]}
-              onPress={() => setTabIndex(0)}
-            >
-              <Text style={[styles.tabText, tabIndex === 0 && styles.tabTextActive]}>
-                Lista
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.tab, tabIndex === 1 && styles.tabActive]}
-              onPress={() => setTabIndex(1)}
-            >
-              <Text style={[styles.tabText, tabIndex === 1 && styles.tabTextActive]}>
-                Estadísticas
-              </Text>
-            </Pressable>
-          </View>
-          <TabView
-            navigationState={{ index: tabIndex, routes }}
-            renderScene={renderScene}
-            onIndexChange={setTabIndex}
-            initialLayout={{ width: layout.width }}
-            renderTabBar={() => null}
-          />
-        </View>
-      </PermissionGate>
+      <ListRow
+        key={order.id}
+        icon={order.kind === "packaging" ? "package-variant" : "pot-steam-outline"}
+        iconColor={order.status === "draft" ? colors.warning : muted ? colors.textMuted : colors.primary}
+        title={order.title}
+        subtitle={orderSummary(order)}
+        subtitleLines={2}
+        meta={meta}
+        alignTop
+        onPress={() => router.push(`/(tabs)/home/production/${order.id}` as any)}
+      />
     );
-  }
+  };
 
   return (
-    <PermissionGate permission="production_orders_list">
-      <View style={{ flex: 1, backgroundColor: "transparent" as any }}>
-        <ProductionKpiCards />
-        {canSeeFormulas && formulasButton}
-        <AppList
-          key={listKey}
-          title="Producción"
-          service={Services.productionOrders}
-          // «+» pide _create, abrir _read y «Editar» _update.
-          permissionPrefix="production_orders"
-          columns={PRODUCTION_COLUMNS}
-          actionColumnTitle="Acciones"
-          actionColumnWidth={200}
-          // AppList no conoce `queryParams`: la sucursal nunca se mandaba y
-          // quien ve todas las sucursales recibía las órdenes de todas.
-          defaultFilters={listFilters}
-          renderCard={({ item }: { item: any }) => ({
-            // Celular: folio como título y el estado debajo, sin columna de
-            // ícono; antes ícono + badge + menú dejaban ~100px al texto y el
-            // título se partía letra por letra.
-            title: item.folio,
-            description: (
-              <View style={{ gap: 2 }}>
-                <View style={{ alignSelf: "flex-start", marginVertical: 2 }}>
-                  <ProductionStatusBadge status={item.status} />
-                </View>
-                <Text style={{ color: palette.textSecondary, fontSize: 12 }} numberOfLines={1}>
-                  {item.responsible_name ?? "—"} · {item.location_name ?? "—"}
-                </Text>
-                {item.outputs && item.outputs.length > 0 ? (
-                  <Text
-                    style={{ color: palette.success, fontSize: 12, marginTop: 2 }}
-                    numberOfLines={1}
-                  >
-                    {item.outputs
-                      .map(
-                        (o: any) =>
-                          `+${Number(o.quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })}${o.unit_name ?? ""} ${o.product_name ?? ""}`,
-                      )
-                      .join(" · ")}
-                  </Text>
-                ) : null}
-                {item.consumptions && item.consumptions.length > 0 ? (
-                  <Text
-                    style={{ color: palette.error, fontSize: 11, marginTop: 2 }}
-                    numberOfLines={1}
-                  >
-                    {item.consumptions
-                      .map(
-                        (c: any) =>
-                          `−${Number(c.quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })}${c.unit_name ?? ""} ${c.product_name ?? ""}`,
-                      )
-                      .join(" · ")}
-                  </Text>
-                ) : null}
-              </View>
-            ),
-            bottom: [
-              {
-                label: "Fecha",
-                value: item.production_date
-                  ? formatDate(item.production_date)
-                  : "—",
-              },
-            ],
-          })}
-          onItemPress={handleItem}
-          menu={productionMenu}
-          onPressCreate={() => router.push("/(tabs)/home/production/form" as any)}
-          fabLabel="Nueva Producción"
-        />
-      </View>
-    </PermissionGate>
+    <View style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={[styles.content, wide && styles.contentWide]}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              load(1);
+            }}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+      >
+        {canCreate && (
+          <View style={narrow ? styles.actionsNarrow : styles.actions}>
+            <Button
+              mode="contained"
+              icon="plus"
+              style={narrow ? styles.actionNarrow : styles.action}
+              onPress={() => router.push("/(tabs)/home/production/form" as any)}
+            >
+              Registrar producción
+            </Button>
+            <Button
+              mode="outlined"
+              icon="package-variant"
+              style={narrow ? styles.actionNarrow : styles.action}
+              onPress={() => router.push("/(tabs)/home/production/pack" as any)}
+            >
+              Envasar granel
+            </Button>
+          </View>
+        )}
+        {canSeeProcesses && (
+          <Pressable
+            onPress={() => router.push("/(tabs)/home/production/formulas" as any)}
+            style={styles.processesLink}
+            accessibilityRole="link"
+          >
+            <MaterialCommunityIcons name="cog-outline" size={16} color={colors.primary} />
+            <Text style={styles.processesText}>Procesos: qué entra y qué sale</Text>
+          </Pressable>
+        )}
+
+        <ListSearchbar value={search} onChangeText={setSearch} placeholder="Buscar por proceso, producto o folio" />
+        <View style={styles.filters}>
+          <AppListFilterBar
+            filters={FILTERS}
+            values={{ status, kind }}
+            onChange={(values) => {
+              setStatus(values.status || "all");
+              setKind(values.kind || "all");
+            }}
+          />
+        </View>
+
+        <View style={styles.sections}>
+          {loading ? (
+            <ListGroupSkeleton rows={4} />
+          ) : sections.length === 0 ? (
+            <EmptyState
+              icon={filtered ? "magnify" : "pot-steam-outline"}
+              title={filtered ? "No hay producciones con estos filtros" : "Todavía no hay producción registrada"}
+              description={
+                filtered
+                  ? "Cambia la búsqueda o los filtros."
+                  : "Cuando abras cocos o hagas dulces, regístralo aquí: qué usaste, qué salió y cómo lo envasaste."
+              }
+              actionLabel={filtered ? "Limpiar filtros" : canCreate ? "Registrar producción" : undefined}
+              onAction={
+                filtered
+                  ? () => {
+                      setSearch("");
+                      setStatus("all");
+                      setKind("all");
+                    }
+                  : canCreate
+                    ? () => router.push("/(tabs)/home/production/form" as any)
+                    : undefined
+              }
+            />
+          ) : (
+            sections.map((section) => (
+              <ListSection key={section.day} title={dayTitle(section.day)} count={section.rows.length}>
+                <ListGroup>{section.rows.map(rowFor)}</ListGroup>
+              </ListSection>
+            ))
+          )}
+          {page < lastPage && !loading && (
+            <Button mode="text" onPress={() => load(page + 1)} loading={loadingMore} disabled={loadingMore} style={styles.more}>
+              Ver más
+            </Button>
+          )}
+          {loadingMore && page >= lastPage && <ActivityIndicator color={colors.primary} />}
+        </View>
+      </ScrollView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "transparent" as any,
-  },
-  tabsContainer: {
-    flexDirection: "row",
-    backgroundColor: palette.surface,
-    borderBottomWidth: 2,
-    borderBottomColor: palette.border,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    borderBottomWidth: 3,
-    borderBottomColor: "transparent",
-  },
-  tabActive: {
-    borderBottomColor: palette.primary,
-  },
-  tabText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: palette.textSecondary,
-  },
-  tabTextActive: {
-    color: palette.primary,
-  },
-});
