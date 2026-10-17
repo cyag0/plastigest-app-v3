@@ -1,5 +1,6 @@
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import {
@@ -10,7 +11,7 @@ import {
 } from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
-import { Image, Platform, StyleSheet, View } from "react-native";
+import { Image, Platform, View } from "react-native";
 import {
   Button,
   Card,
@@ -195,6 +196,8 @@ interface AppUploadProps {
 export default function AppUpload(props: AppUploadProps) {
   const [uploading, setUploading] = useState(false);
   const alerts = useAlerts();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
 
   const {
     value: rawValue,
@@ -400,10 +403,10 @@ export default function AppUpload(props: AppUploadProps) {
               style={[
                 styles.uploadArea,
                 {
-                  borderColor: error ? palette.error : palette.border,
+                  borderColor: error ? colors.error : colors.border,
                   backgroundColor: disabled
-                    ? palette.surface
-                    : palette.background,
+                    ? colors.surface
+                    : colors.background,
                 },
                 error && styles.errorBorder,
               ]}
@@ -415,8 +418,8 @@ export default function AppUpload(props: AppUploadProps) {
                     styles.placeholder,
                     {
                       color: disabled
-                        ? palette.textSecondary
-                        : palette.text,
+                        ? colors.textSecondary
+                        : colors.text,
                     },
                   ]}
                 >
@@ -437,9 +440,9 @@ export default function AppUpload(props: AppUploadProps) {
                           icon="camera"
                           style={[
                             styles.button,
-                            { borderColor: palette.success },
+                            { borderColor: colors.success },
                           ]}
-                          textColor={palette.success}
+                          textColor={colors.success}
                         >
                           Cámara
                         </Button>
@@ -453,9 +456,9 @@ export default function AppUpload(props: AppUploadProps) {
                           icon="image"
                           style={[
                             styles.button,
-                            { borderColor: palette.primary },
+                            { borderColor: colors.primary },
                           ]}
-                          textColor={palette.primary}
+                          textColor={colors.primary}
                         >
                           Galería
                         </Button>
@@ -472,9 +475,9 @@ export default function AppUpload(props: AppUploadProps) {
                       icon="file-document"
                       style={[
                         styles.button,
-                        { borderColor: palette.secondary },
+                        { borderColor: colors.secondary },
                       ]}
-                      textColor={palette.secondary}
+                      textColor={colors.secondary}
                     >
                       Documentos
                     </Button>
@@ -509,8 +512,8 @@ export default function AppUpload(props: AppUploadProps) {
                     itemStyle,
                     {
                       backgroundColor: props.readonly
-                        ? palette.background
-                        : palette.card,
+                        ? colors.background
+                        : colors.card,
                     },
                   ]}
                 >
@@ -530,7 +533,7 @@ export default function AppUpload(props: AppUploadProps) {
                           <IconButton
                             icon={getFileIcon(file.type)}
                             size={24}
-                            iconColor={palette.primary}
+                            iconColor={colors.primary}
                           />
                         )}
                         <View style={styles.fileDetails}>
@@ -540,7 +543,7 @@ export default function AppUpload(props: AppUploadProps) {
                           {file.size && (
                             <Text
                               variant="bodySmall"
-                              style={{ color: palette.textSecondary }}
+                              style={{ color: colors.textSecondary }}
                             >
                               {formatFileSize(file.size)}
                             </Text>
@@ -552,7 +555,7 @@ export default function AppUpload(props: AppUploadProps) {
                         <IconButton
                           icon="close"
                           size={20}
-                          iconColor={palette.error}
+                          iconColor={colors.error}
                           onPress={(e) => {
                             e.stopPropagation();
                             handleRemoveFile(index);
@@ -574,7 +577,7 @@ export default function AppUpload(props: AppUploadProps) {
           variant="bodySmall"
           style={[
             styles.helperText,
-            { color: error ? palette.error : palette.textSecondary },
+            { color: error ? colors.error : colors.textSecondary },
           ]}
         >
           {helperText}
@@ -585,7 +588,7 @@ export default function AppUpload(props: AppUploadProps) {
       {multiple && !props.readonly && (
         <Text
           variant="bodySmall"
-          style={[styles.helperText, { color: palette.textSecondary }]}
+          style={[styles.helperText, { color: colors.textSecondary }]}
         >
           Máximo {maxFiles} archivos
         </Text>
@@ -594,7 +597,7 @@ export default function AppUpload(props: AppUploadProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     marginVertical: 8,
   },
@@ -608,7 +611,7 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
   },
   errorBorder: {
-    borderColor: palette.error,
+    borderColor: c.error,
   },
   uploadContent: {
     alignItems: "center",
@@ -632,7 +635,7 @@ const styles = StyleSheet.create({
   },
   fileCard: {
     marginBottom: 8,
-    backgroundColor: palette.card,
+    backgroundColor: c.card,
   },
   fileContent: {
     paddingVertical: 8,
@@ -649,6 +652,6 @@ const styles = StyleSheet.create({
   helperText: {
     marginTop: 4,
   },
-});
+}));
 
 export const FormUpload = MakeForm(AppUpload);

@@ -1,6 +1,6 @@
-import palette from "@/constants/palette";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import React, { forwardRef, useImperativeHandle, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import {
   Button,
   Divider,
@@ -57,6 +57,7 @@ interface ModalProps {
 }
 
 const AppModal = forwardRef<AppModalRef, ModalProps>((props, ref) => {
+  const styles = useThemedStyles(makeStyles);
   const [visible, setVisible] = useState(false);
   const [config, setConfig] = useState<AppModalConfig>({});
 
@@ -200,7 +201,7 @@ const AppModal = forwardRef<AppModalRef, ModalProps>((props, ref) => {
 
 AppModal.displayName = "AppModal";
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   modalContainer: {
     alignSelf: "center",
     maxHeight: "80%",
@@ -208,7 +209,7 @@ const styles = StyleSheet.create({
     width: "90%", // default width
   },
   modal: {
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     borderRadius: 12,
     overflow: "hidden",
     elevation: 8,
@@ -219,18 +220,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
   },
   title: {
     flex: 1,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontWeight: "bold",
   },
   closeButton: {
     margin: 0,
   },
   divider: {
-    backgroundColor: palette.border,
+    backgroundColor: c.border,
   },
   content: {
     padding: 20,
@@ -238,7 +239,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentText: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     lineHeight: 22,
   },
   actions: {
@@ -251,6 +252,6 @@ const styles = StyleSheet.create({
   actionButton: {
     minWidth: 80,
   },
-});
+}));
 
 export default AppModal;

@@ -1,3 +1,4 @@
+import { useTheme } from "@/contexts/ThemeContext";
 import React from "react";
 import { Text } from "react-native";
 
@@ -7,10 +8,11 @@ interface ReadonlyTextProps {
 }
 
 export default function ReadonlyText(props: ReadonlyTextProps) {
+  const { colors } = useTheme();
   return (
     <Text
       style={{
-        color: "#57564B",
+        color: colors.textSecondary,
         ...props.textStyle,
       }}
     >

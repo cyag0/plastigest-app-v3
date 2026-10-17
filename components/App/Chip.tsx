@@ -1,5 +1,6 @@
-import palette from "@/constants/palette";
+import type { Palette } from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -33,7 +34,8 @@ export default function AppChip({
   onPress,
   style,
 }: AppChipProps) {
-  const colors = VARIANT_COLORS[variant];
+  const theme = useTheme();
+  const colors = variantColors(theme.colors)[variant];
   const sizing = SIZE[size];
   const Wrapper: any = onPress ? TouchableOpacity : View;
 
@@ -76,18 +78,17 @@ export default function AppChip({
   );
 }
 
-const VARIANT_COLORS: Record<
-  ChipVariant,
-  { bg: string; fg: string }
-> = {
-  default: { bg: palette.surfaceMuted, fg: palette.text },
-  primary: { bg: palette.primarySoft, fg: palette.primary },
+const variantColors = (
+  c: Palette,
+): Record<ChipVariant, { bg: string; fg: string }> => ({
+  default: { bg: c.surfaceMuted, fg: c.text },
+  primary: { bg: c.primarySoft, fg: c.primary },
   // Texto *Strong: los colores de estado sobre su fondo suave no contrastan.
-  success: { bg: palette.successSoft, fg: palette.successStrong },
-  warning: { bg: palette.warningSoft, fg: palette.warningStrong },
-  error: { bg: palette.errorSoft, fg: palette.errorStrong },
-  info: { bg: palette.infoSoft, fg: palette.infoStrong },
-};
+  success: { bg: c.successSoft, fg: c.successStrong },
+  warning: { bg: c.warningSoft, fg: c.warningStrong },
+  error: { bg: c.errorSoft, fg: c.errorStrong },
+  info: { bg: c.infoSoft, fg: c.infoStrong },
+});
 
 const SIZE = {
   sm: { height: 20, px: 6, fontSize: 11, lineHeight: 14, iconSize: 11 },

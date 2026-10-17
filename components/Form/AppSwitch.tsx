@@ -1,5 +1,6 @@
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import React from "react";
 import { View } from "react-native";
 import { Switch, Text } from "react-native-paper";
@@ -17,6 +18,22 @@ interface AppSwitchProps {
 }
 
 export default function AppSwitch(props: AppSwitchProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles((c) => ({
+    container: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginVertical: tokens.spacing[2],
+      paddingVertical: tokens.spacing[1],
+    },
+    label: {
+      ...tokens.typography.body,
+      color: c.text,
+      flex: 1,
+      marginRight: tokens.spacing[3],
+    },
+  }));
   const readonly = props.readonly || false;
   const text = props.label || props.text || "Selecciona una opción";
 
@@ -41,28 +58,12 @@ export default function AppSwitch(props: AppSwitchProps) {
       <Switch
         value={!!props.value}
         onValueChange={handleChange}
-        color={palette.primary}
+        color={colors.primary}
         disabled={props.disabled}
       />
     </View>
   );
 }
-
-const styles = {
-  container: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    justifyContent: "space-between" as const,
-    marginVertical: tokens.spacing[2],
-    paddingVertical: tokens.spacing[1],
-  },
-  label: {
-    ...tokens.typography.body,
-    color: palette.text,
-    flex: 1,
-    marginRight: tokens.spacing[3],
-  },
-};
 
 export const FormSwitch = MakeForm(AppSwitch, {
   label: false,

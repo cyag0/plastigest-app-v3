@@ -1,8 +1,9 @@
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useCan } from "@/hooks/useCan";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useGlobalSearchParams, usePathname } from "expo-router";
-import { Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Platform, Pressable, ScrollView, View } from "react-native";
 import { Text } from "react-native-paper";
 
 type BreadcrumbItem = {
@@ -184,6 +185,8 @@ export default function WebBreadcrumb({
   const pathname = usePathname();
   const { id } = useGlobalSearchParams<{ id?: string | string[] }>();
   const { canAccessRoute } = useCan();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
 
   if (Platform.OS !== "web") {
     return null;
@@ -227,7 +230,7 @@ export default function WebBreadcrumb({
             accessibilityLabel={`Volver a ${backTarget.label}`}
             hitSlop={8}
           >
-            <MaterialCommunityIcons name="chevron-left" size={24} color={palette.text} />
+            <MaterialCommunityIcons name="chevron-left" size={24} color={colors.text} />
           </Pressable>
         )}
         <Text numberOfLines={1} style={styles.compactLabel}>
@@ -247,7 +250,7 @@ export default function WebBreadcrumb({
       >
         {items.map((item, index) => (
           <View key={`${item.href}-${index}`} style={styles.itemGroup}>
-            {index > 0 && <MaterialCommunityIcons name="chevron-right" size={16} color={palette.textSecondary} />}
+            {index > 0 && <MaterialCommunityIcons name="chevron-right" size={16} color={colors.textSecondary} />}
             <Pressable
               disabled={item.current || !item.accessible}
               onPress={() => router.push(item.href as any)}
@@ -255,7 +258,7 @@ export default function WebBreadcrumb({
               accessibilityRole={item.current || !item.accessible ? "text" : "link"}
               accessibilityLabel={item.label}
             >
-              {index === 0 && <MaterialCommunityIcons name="home-outline" size={16} color={item.current ? palette.primary : palette.textSecondary} />}
+              {index === 0 && <MaterialCommunityIcons name="home-outline" size={16} color={item.current ? colors.primary : colors.textSecondary} />}
               <Text numberOfLines={1} style={[styles.label, item.current && styles.currentLabel]}>
                 {item.label}
               </Text>
@@ -267,11 +270,11 @@ export default function WebBreadcrumb({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   wrapper: {
-    backgroundColor: "#F8F5EF",
+    backgroundColor: c.background,
     borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+    borderBottomColor: c.border,
     paddingHorizontal: 16,
     paddingVertical: 9,
   },
@@ -307,18 +310,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   currentItem: {
-    backgroundColor: palette.primary + "18",
+    backgroundColor: c.primary + "18",
   },
   pressedItem: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
   },
   label: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontSize: 13,
     fontWeight: "800",
   },
   currentLabel: {
-    color: palette.primary,
+    color: c.primary,
   },
   compactContent: {
     flexDirection: "row",
@@ -335,8 +338,8 @@ const styles = StyleSheet.create({
   },
   compactLabel: {
     flexShrink: 1,
-    color: palette.text,
+    color: c.text,
     fontSize: 16,
     fontWeight: "700",
   },
-});
+}));

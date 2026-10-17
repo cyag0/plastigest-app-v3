@@ -16,8 +16,8 @@ import {
 import AppBar from "@/components/App/AppBar";
 import NavigationSidebar from "@/components/App/NavigationSidebar";
 import { routeGuardLayout } from "@/components/App/RoutePermissionGuard";
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useCan } from "@/hooks/useCan";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
@@ -67,10 +67,11 @@ function TabBarButton({
   href: _href,
   ...rest
 }: BottomTabBarButtonProps) {
+  const { colors } = useTheme();
   return (
     <Pressable
       {...(rest as PressableProps)}
-      android_ripple={{ color: palette.ring, borderless: false, foreground: true }}
+      android_ripple={{ color: colors.ring, borderless: false, foreground: true }}
       style={[style as StyleProp<ViewStyle>, TAB_BUTTON_STYLE]}
     >
       {children}
@@ -152,6 +153,7 @@ function WebTabLayout() {
   const isNarrow = isMobile; // <768px -> overlay
   const railMode = isMd; // 768-991px -> rail forzado
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const { colors } = useTheme();
 
   // Al pasar a un ancho mayor, cerramos el overlay para no dejar
   // el drawer "pegado" sobre un sidebar inline. Se ajusta durante el
@@ -203,7 +205,7 @@ function WebTabLayout() {
     },
     backdrop: {
       flex: 1,
-      backgroundColor: "rgba(15, 23, 42, 0.45)",
+      backgroundColor: colors.overlay,
     },
   }));
 
@@ -224,7 +226,7 @@ function WebTabLayout() {
           accessibilityLabel="Abrir menú"
           activeOpacity={0.8}
         >
-          <MaterialCommunityIcons name="menu" size={24} color={palette.text} />
+          <MaterialCommunityIcons name="menu" size={24} color={colors.text} />
         </TouchableOpacity>
       )}
 
@@ -255,17 +257,18 @@ function NativeTabLayout() {
     canAccessRoute(route) ? {} : HIDDEN_TAB_OPTIONS;
 
   const { width } = useWindowDimensions();
+  const { colors } = useTheme();
   const tabBarInset = Math.max(0, (width - TAB_BAR_MAX_WIDTH) / 2);
 
   return (
     <Tabs
       screenLayout={screenLayout}
       screenOptions={{
-        tabBarActiveTintColor: palette.primary,
-        tabBarInactiveTintColor: palette.textSecondary,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textSecondary,
         tabBarStyle: {
-          backgroundColor: palette.surface,
-          borderTopColor: palette.border,
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
           ...Platform.select({
             ios: {
               position: "absolute",

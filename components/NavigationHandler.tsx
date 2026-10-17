@@ -1,9 +1,10 @@
 import { SafeAreaView } from "react-native-safe-area-context";
 import Logo from "@/components/App/Logo";
 import LocationSelector from "@/components/LocationSelector";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import {
   readEntityId,
   resolvePushRoute,
@@ -13,7 +14,7 @@ import { notificationOpenedBus } from "@/utils/notificationEvents";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter, useSegments } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, View } from "react-native";
 import { ActivityIndicator, Button, Text } from "react-native-paper";
 import Animated, {
   useAnimatedStyle,
@@ -78,6 +79,7 @@ export default function NavigationHandler({
   const router = useRouter();
   const segments = useSegments();
   const alerts = useAlerts();
+  const styles = useThemedStyles(makeStyles);
 
   // La sesión se cerró sola (401): avisar por qué se regresó a login.
   useEffect(() => {
@@ -314,13 +316,15 @@ function SessionErrorView({
   onRetry: () => void;
   onLogout: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.loadingContainer}>
       <View style={styles.errorCard}>
         <MaterialCommunityIcons
           name="wifi-off"
           size={56}
-          color={palette.textSecondary}
+          color={colors.textSecondary}
         />
         <Text variant="titleLarge" style={styles.errorTitle}>
           Sin conexión con el servidor
@@ -345,6 +349,8 @@ function SessionErrorView({
 }
 
 function LoaderWithLogo({ message }: { message: string }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
 
@@ -390,7 +396,7 @@ function LoaderWithLogo({ message }: { message: string }) {
         <Text
           variant="displaySmall"
           style={{
-            color: palette.primary,
+            color: colors.primary,
             fontWeight: "bold",
             marginTop: 12,
           }}
@@ -398,27 +404,27 @@ function LoaderWithLogo({ message }: { message: string }) {
           GCStock
         </Text>
 
-        <ActivityIndicator size="large" color={palette.primary} style={{ marginTop: 24 }} />
+        <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: 24 }} />
       </Animated.View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: palette.text,
+    color: c.text,
   },
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
   },
   errorCard: {
     width: "100%",
@@ -428,16 +434,16 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   errorTitle: {
-    color: palette.text,
+    color: c.text,
     fontWeight: "700",
     textAlign: "center",
   },
   errorMessage: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     textAlign: "center",
   },
   errorButton: {
     alignSelf: "stretch",
   },
-});
+}));
 

@@ -3,6 +3,7 @@ import ContextSwitcherModal from "@/components/App/ContextSwitcherModal";
 import HelpButton from "@/components/Help/HelpButton";
 import UserMenu from "@/components/App/UserMenu";
 import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { useRouter } from "expo-router";
@@ -69,6 +70,7 @@ export default function AppBar({
 }: AppBarProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
   const isWeb = Platform.OS === "web";
   const useBreadcrumbTitle = showBreadcrumb && isWeb;
   // En web angosta el menú es un botón flotante arriba a la izquierda
@@ -152,7 +154,7 @@ export default function AppBar({
           <Appbar.Action
             icon="account-circle"
             size={20}
-            color={styles.avatar.backgroundColor === "#4F7A3A" ? "#FFFFFF" : "#1F241B"}
+            color={colors.primaryForeground}
             style={styles.avatarIcon}
           />
         </View>

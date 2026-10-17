@@ -2,10 +2,11 @@ import { useAppForm } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { useSelectData } from "@/components/Form/AppProSelect/context";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useCan } from "@/hooks/useCan";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFormikContext, getIn } from "formik";
@@ -15,7 +16,6 @@ import {
   LayoutAnimation,
   Platform,
   ScrollView,
-  StyleSheet,
   TouchableOpacity,
   UIManager,
   View,
@@ -87,6 +87,8 @@ export default function EditableTable({
   rowKeyField = "_key",
   readonly: readonlyProp,
 }: EditableTableProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { values, setFieldValue } = useFormikContext<any>();
   const formContext = useAppForm();
   // Antes la tabla de un formulario en solo lectura seguía agregando y
@@ -115,11 +117,11 @@ export default function EditableTable({
         <View style={styles.headerRow}>
           <Text
             variant="titleSmall"
-            style={{ color: palette.text, fontWeight: "600" }}
+            style={{ color: colors.text, fontWeight: "600" }}
           >
             {label}
           </Text>
-          <Text style={{ color: palette.textSecondary, fontSize: 12 }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
             {rows.length} {rows.length === 1 ? "fila" : "filas"}
           </Text>
         </View>
@@ -131,14 +133,14 @@ export default function EditableTable({
           styles.card,
           borderLeft && {
             borderLeftWidth: 4,
-            borderLeftColor: highlightColor ?? palette.error,
+            borderLeftColor: highlightColor ?? colors.error,
           },
         ]}
       >
         <Card.Content style={{ padding: 0 }}>
           {rows.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={{ color: palette.textSecondary }}>
+              <Text style={{ color: colors.textSecondary }}>
                 {readonly ? "Sin renglones." : emptyMessage}
               </Text>
             </View>
@@ -170,7 +172,7 @@ export default function EditableTable({
                     key={row[rowKeyField] ?? index}
                     style={[
                       styles.row,
-                      { backgroundColor: index % 2 === 0 ? "#fafaf7" : "#ffffff" },
+                      { backgroundColor: index % 2 === 0 ? colors.background : colors.surface },
                     ]}
                   >
                     {columns.map((c) => (
@@ -191,7 +193,7 @@ export default function EditableTable({
                           <MaterialCommunityIcons
                             name="trash-can-outline"
                             size={18}
-                            color={palette.error}
+                            color={colors.error}
                           />
                         </TouchableOpacity>
                       </View>
@@ -210,8 +212,8 @@ export default function EditableTable({
             icon="plus"
             mode="contained-tonal"
             onPress={addRow}
-            buttonColor={palette.surface}
-            textColor={palette.primary}
+            buttonColor={colors.surface}
+            textColor={colors.primary}
           >
             {addLabel}
           </Button>
@@ -292,7 +294,7 @@ export default function EditableTable({
             <Text
               style={{
                 fontSize: 10,
-                color: palette.textSecondary,
+                color: colors.textSecondary,
                 marginTop: 2,
               }}
             >
@@ -418,6 +420,7 @@ function StockCell({
   quantity: any;
   productParams?: Record<string, any>;
 }) {
+  const { colors } = useTheme();
   const { companyId } = useSelectedCompany();
   const { selectedLocation } = useSelectedLocation();
   const locationId = selectedLocation?.id;
@@ -471,11 +474,11 @@ function StockCell({
   }, [productId, locationId, companyId]);
 
   if (!productId) {
-    return <Text style={{ color: palette.textSecondary, fontSize: 12 }}>—</Text>;
+    return <Text style={{ color: colors.textSecondary, fontSize: 12 }}>—</Text>;
   }
 
   if (loading && stock === null) {
-    return <ActivityIndicator size="small" color={palette.primary} />;
+    return <ActivityIndicator size="small" color={colors.primary} />;
   }
 
   const baseUnitName: string = product?.unit?.name ?? "";
@@ -487,10 +490,10 @@ function StockCell({
 
   const color =
     stock === null
-      ? palette.textSecondary
+      ? colors.textSecondary
       : insufficient
-        ? palette.error
-        : palette.success;
+        ? colors.error
+        : colors.success;
 
   return (
     <View>
@@ -501,7 +504,7 @@ function StockCell({
         {baseUnitName ? ` ${baseUnitName}` : ""}
       </Text>
       {insufficient ? (
-        <Text style={{ fontSize: 10, color: palette.error, marginTop: 2 }}>
+        <Text style={{ fontSize: 10, color: colors.error, marginTop: 2 }}>
           Stock insuficiente
         </Text>
       ) : null}
@@ -509,7 +512,7 @@ function StockCell({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -517,12 +520,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   card: {
-    backgroundColor: palette.card,
+    backgroundColor: c.card,
     borderRadius: 12,
     elevation: 0,
     shadowColor: "transparent",
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
   },
   empty: {
     padding: 24,
@@ -532,11 +535,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#EEEAE0",
+    borderBottomColor: c.border,
     paddingVertical: 8,
   },
   headerRowTable: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
   },
@@ -546,7 +549,7 @@ const styles = StyleSheet.create({
   },
   headerCellText: {
     fontWeight: "700",
-    color: palette.text,
+    color: c.text,
     fontSize: 12,
   },
   removeBtn: {
@@ -555,6 +558,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 15,
-    backgroundColor: "#F8E2DC",
+    backgroundColor: c.errorSoft,
   },
-});
+}));

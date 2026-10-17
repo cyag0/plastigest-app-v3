@@ -1,6 +1,7 @@
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, View } from "react-native";
+import { Animated, View } from "react-native";
 
 interface SkeletonLoaderProps {
   width?: number | string;
@@ -15,6 +16,7 @@ export default function SkeletonLoader({
   borderRadius = 4,
   style,
 }: SkeletonLoaderProps) {
+  const { colors } = useTheme();
   const opacity = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export default function SkeletonLoader({
           width,
           height,
           borderRadius,
-          backgroundColor: palette.skeleton,
+          backgroundColor: colors.skeleton,
           opacity,
         },
         style,
@@ -54,6 +56,7 @@ export default function SkeletonLoader({
 }
 
 export function SkeletonCard({ style }: { style?: any }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={[styles.card, style]}>
       <SkeletonLoader width={100} height={16} borderRadius={8} />
@@ -63,6 +66,7 @@ export function SkeletonCard({ style }: { style?: any }) {
 }
 
 export function SkeletonListCard() {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.listCard}>
       <View style={styles.listCardMain}>
@@ -100,6 +104,7 @@ export function SkeletonListCard() {
 }
 
 export function SkeletonListLoader({ itemCount = 6 }: { itemCount?: number }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={styles.listContainer}>
       {/* Search bar skeleton */}
@@ -119,6 +124,7 @@ export function SkeletonListLoader({ itemCount = 6 }: { itemCount?: number }) {
 }
 
 export function SkeletonChart({ style }: { style?: any }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={[styles.chartContainer, style]}>
       <SkeletonLoader width={150} height={20} style={{ marginBottom: 16 }} />
@@ -127,22 +133,22 @@ export function SkeletonChart({ style }: { style?: any }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   card: {
     padding: 16,
-    backgroundColor: palette.card,
+    backgroundColor: c.card,
     borderRadius: 12,
   },
   chartContainer: {
     padding: 16,
-    backgroundColor: palette.card,
+    backgroundColor: c.card,
     borderRadius: 12,
   },
   listContainer: {
     padding: 16,
   },
   listCard: {
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     marginBottom: 8,
     padding: 16,
     borderRadius: 8,
@@ -176,6 +182,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: palette.border,
+    borderTopColor: c.border,
   },
-});
+}));

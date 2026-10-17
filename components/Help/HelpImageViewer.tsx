@@ -37,6 +37,7 @@ export default function HelpImageViewer({ image, caption, onClose }: HelpImageVi
   );
 }
 
+// Visor a pantalla completa: fondo oscuro y texto claro fijos en ambos temas.
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,

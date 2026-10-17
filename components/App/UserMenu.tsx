@@ -1,11 +1,12 @@
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useCallback } from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, Text, TouchableOpacity, View } from "react-native";
 import { Divider, Menu } from "react-native-paper";
 
 export interface UserMenuProps {
@@ -33,6 +34,8 @@ export default function UserMenu({
   const router = useRouter();
   const auth = useAuth();
   const alerts = useAlerts();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { user, selectedCompany, location, logout } = auth;
 
   const handleProfile = useCallback(() => {
@@ -87,7 +90,7 @@ export default function UserMenu({
             <MaterialCommunityIcons
               name="office-building"
               size={14}
-              color={palette.textSecondary}
+              color={colors.textSecondary}
             />
             <Text style={styles.headerTitle} numberOfLines={1}>
               {selectedCompany.name}
@@ -99,7 +102,7 @@ export default function UserMenu({
             <MaterialCommunityIcons
               name="map-marker"
               size={14}
-              color={palette.textMuted}
+              color={colors.textMuted}
             />
             <Text style={styles.headerSubtitle} numberOfLines={1}>
               {location.name}
@@ -149,7 +152,9 @@ interface MenuItemProps {
 }
 
 function MenuItem({ icon, label, onPress, danger }: MenuItemProps) {
-  const color = danger ? palette.error : palette.text;
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const color = danger ? colors.error : colors.text;
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -162,9 +167,9 @@ function MenuItem({ icon, label, onPress, danger }: MenuItemProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   menuContent: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.lg,
     marginTop: 8,
     paddingVertical: 6,
@@ -184,16 +189,16 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     flex: 1,
   },
   headerSubtitle: {
     ...tokens.typography.caption,
-    color: palette.textMuted,
+    color: c.textMuted,
     flex: 1,
   },
   divider: {
-    backgroundColor: palette.border,
+    backgroundColor: c.border,
     marginVertical: 4,
   },
   menuItem: {
@@ -208,4 +213,4 @@ const styles = StyleSheet.create({
     ...tokens.typography.body,
     flex: 1,
   },
-});
+}));

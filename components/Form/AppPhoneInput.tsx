@@ -1,5 +1,6 @@
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import {
   DEFAULT_PHONE_COUNTRY,
   PHONE_COUNTRIES,
@@ -24,7 +25,7 @@ import {
 import { Menu, TextInput } from "react-native-paper";
 import MakeForm from "./AppForm/hoc";
 import ReadonlyText from "./AppForm/ReadonlyText";
-import { paperTheme } from "./AppInput";
+import { useInputPaperTheme } from "./AppInput";
 
 interface AppPhoneInputProps {
   value?: string | null;
@@ -49,6 +50,9 @@ interface AppPhoneInputProps {
 export default function AppPhoneInput(props: AppPhoneInputProps) {
   const { value, onChange, onBlur, hasError, readonly, disabled, placeholder } = props;
 
+  const { colors } = useTheme();
+  const paperTheme = useInputPaperTheme();
+  const styles = useThemedStyles(makeStyles);
   const inputRef = useRef<TextInputInstance | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   // Con el campo vacío el valor no dice de qué país es: se recuerda el elegido.
@@ -112,10 +116,10 @@ export default function AppPhoneInput(props: AppPhoneInputProps) {
         autoComplete="tel"
         textContentType="telephoneNumber"
         theme={paperTheme}
-        outlineColor={palette.border}
-        activeOutlineColor={palette.primary}
-        textColor={palette.text}
-        placeholderTextColor={palette.textMuted}
+        outlineColor={colors.border}
+        activeOutlineColor={colors.primary}
+        textColor={colors.text}
+        placeholderTextColor={colors.textMuted}
         style={styles.input}
         contentStyle={styles.inputContent}
         render={(inputProps) => (
@@ -126,7 +130,7 @@ export default function AppPhoneInput(props: AppPhoneInputProps) {
               <Menu
                 visible={menuOpen}
                 onDismiss={() => setMenuOpen(false)}
-                contentStyle={{ backgroundColor: palette.surface }}
+                contentStyle={{ backgroundColor: colors.surface }}
                 anchor={
                   <Pressable
                     onPress={() => setMenuOpen(true)}
@@ -136,7 +140,7 @@ export default function AppPhoneInput(props: AppPhoneInputProps) {
                     accessibilityLabel={`Lada de ${country.name}, +${country.dialCode}. Cambiar país`}
                   >
                     <Text style={styles.prefixText}>+{country.dialCode}</Text>
-                    <MaterialCommunityIcons name="chevron-down" size={18} color={palette.textMuted} />
+                    <MaterialCommunityIcons name="chevron-down" size={18} color={colors.textMuted} />
                   </Pressable>
                 }
               >
@@ -145,7 +149,7 @@ export default function AppPhoneInput(props: AppPhoneInputProps) {
                     key={c.id}
                     title={`${c.name}  +${c.dialCode}`}
                     trailingIcon={c.id === country.id ? "check" : undefined}
-                    titleStyle={{ color: palette.text }}
+                    titleStyle={{ color: colors.text }}
                     onPress={() => selectCountry(c)}
                   />
                 ))}
@@ -169,16 +173,16 @@ export default function AppPhoneInput(props: AppPhoneInputProps) {
   );
 }
 
-const styles = {
+const makeStyles = themedStyles((c) => ({
   container: {
     marginVertical: tokens.spacing[2],
   },
   input: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
   },
   inputContent: {
     ...tokens.typography.body,
-    color: palette.text,
+    color: c.text,
   },
   row: {
     flexDirection: "row" as const,
@@ -199,18 +203,18 @@ const styles = {
   },
   prefixText: {
     ...tokens.typography.body,
-    color: palette.text,
+    color: c.text,
   },
   divider: {
     width: 1,
     alignSelf: "stretch" as const,
     marginVertical: 12,
-    backgroundColor: palette.border,
+    backgroundColor: c.border,
   },
   nativeInput: {
     flex: 1,
     paddingLeft: 10,
   },
-};
+}));
 
 export const FormPhoneInput = MakeForm(AppPhoneInput);

@@ -1,6 +1,8 @@
-import palette from "@/constants/palette";
+import type { Palette } from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
-import React from "react";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
+import React, { useMemo } from "react";
 import { View } from "react-native";
 import { TextInput, TextInputProps } from "react-native-paper";
 import MakeForm from "./AppForm/hoc";
@@ -24,21 +26,43 @@ interface AppInputProps
  * consistentes con el resto de la app, sin cambiar el comportamiento
  * interno del componente.
  */
-export const paperTheme = {
-  colors: {
-    primary: palette.primary,
-    onSurfaceVariant: palette.textSecondary,
-    outline: palette.border,
-    surface: palette.surface,
-    onSurface: palette.text,
-    error: palette.error,
-  },
-};
+export function inputPaperTheme(colors: Palette) {
+  return {
+    colors: {
+      primary: colors.primary,
+      onSurfaceVariant: colors.textSecondary,
+      outline: colors.border,
+      surface: colors.surface,
+      onSurface: colors.text,
+      error: colors.error,
+    },
+  };
+}
+
+/** `inputPaperTheme` del tema activo, memorizado (es un prop objeto). */
+export function useInputPaperTheme() {
+  const { colors } = useTheme();
+  return useMemo(() => inputPaperTheme(colors), [colors]);
+}
 
 export default function AppInput(props: AppInputProps) {
   // `error` (el texto de validación) no se reenvía al TextInput: pisaría a
   // hasError y marcaría en rojo campos que el usuario aún no ha tocado.
   const { value = "", onChange, onBlur, hasError, error: _error, ...restProps } = props;
+  const { colors } = useTheme();
+  const paperTheme = useInputPaperTheme();
+  const styles = useThemedStyles((c) => ({
+    container: {
+      marginVertical: tokens.spacing[2],
+    },
+    input: {
+      backgroundColor: c.surface,
+    },
+    inputContent: {
+      ...tokens.typography.body,
+      color: c.text,
+    },
+  }));
 
   const readonly = props.readonly || false;
 
@@ -56,10 +80,10 @@ export default function AppInput(props: AppInputProps) {
           onBlur={onBlur}
           error={hasError}
           theme={paperTheme}
-          outlineColor={palette.border}
-          activeOutlineColor={palette.primary}
-          textColor={palette.text}
-          placeholderTextColor={palette.textMuted}
+          outlineColor={colors.border}
+          activeOutlineColor={colors.primary}
+          textColor={colors.text}
+          placeholderTextColor={colors.textMuted}
           style={styles.input}
           contentStyle={styles.inputContent}
           {...restProps}
@@ -70,18 +94,5 @@ export default function AppInput(props: AppInputProps) {
     </View>
   );
 }
-
-const styles = {
-  container: {
-    marginVertical: tokens.spacing[2],
-  },
-  input: {
-    backgroundColor: palette.surface,
-  },
-  inputContent: {
-    ...tokens.typography.body,
-    color: palette.text,
-  },
-};
 
 export const FormInput = MakeForm(AppInput);

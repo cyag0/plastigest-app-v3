@@ -1,5 +1,6 @@
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import dayjs, { Dayjs } from "dayjs";
 import React from "react";
 import { View } from "react-native";
@@ -9,6 +10,7 @@ import { CalendarDate } from "react-native-paper-dates/lib/typescript/Date/Calen
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import MakeForm from "./AppForm/hoc";
 import ReadonlyText from "./AppForm/ReadonlyText";
+import { useInputPaperTheme } from "./AppInput";
 
 interface AppDatePickerProps {
   value?: string;
@@ -18,18 +20,22 @@ interface AppDatePickerProps {
   readonly?: boolean;
 }
 
-const paperTheme = {
-  colors: {
-    primary: palette.primary,
-    onSurfaceVariant: palette.textSecondary,
-    outline: palette.border,
-    surface: palette.surface,
-    onSurface: palette.text,
-    error: palette.error,
-  },
-};
-
 export default function AppDatePicker(props: AppDatePickerProps) {
+  const { colors } = useTheme();
+  const paperTheme = useInputPaperTheme();
+  const styles = useThemedStyles((c) => ({
+    container: {
+      marginVertical: tokens.spacing[2],
+    },
+    input: {
+      backgroundColor: c.surface,
+    },
+    inputContent: {
+      ...tokens.typography.body,
+      color: c.text,
+    },
+  }));
+
   const [time, setTime] = React.useState({
     hours: 0,
     minutes: 0,
@@ -75,10 +81,10 @@ export default function AppDatePicker(props: AppDatePickerProps) {
                 placeholder={props.placeholder || "Selecciona una fecha"}
                 right={<TextInput.Icon icon="calendar" />}
                 theme={paperTheme}
-                outlineColor={palette.border}
-                activeOutlineColor={palette.primary}
-                textColor={palette.text}
-                placeholderTextColor={palette.textMuted}
+                outlineColor={colors.border}
+                activeOutlineColor={colors.primary}
+                textColor={colors.text}
+                placeholderTextColor={colors.textMuted}
                 style={styles.input}
                 contentStyle={styles.inputContent}
               />
@@ -101,18 +107,5 @@ export default function AppDatePicker(props: AppDatePickerProps) {
     </SafeAreaProvider>
   );
 }
-
-const styles = {
-  container: {
-    marginVertical: tokens.spacing[2],
-  },
-  input: {
-    backgroundColor: palette.surface,
-  },
-  inputContent: {
-    ...tokens.typography.body,
-    color: palette.text,
-  },
-};
 
 export const FormDatePicker = MakeForm(AppDatePicker);

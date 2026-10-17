@@ -1,16 +1,22 @@
-import palette from "@/constants/palette";
+import { paletteFor, type Palette } from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { getAppVersionLabel } from "@/utils/appVersion";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React from "react";
+import React, { useMemo } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
 /**
  * Pantalla para un build mal configurado (ver utils/appConfig): se muestra en
  * lugar de toda la app, antes de AuthProvider, para que no salga ninguna
  * petición a un servidor equivocado. Sin Paper: va fuera de PaperProvider.
+ * También va fuera del ThemeProvider: el tema sale del esquema del sistema.
  */
 export default function ConfigErrorScreen({ message }: { message: string }) {
+  const scheme = useColorScheme();
+  const colors = paletteFor(scheme === "dark" ? "dark" : "light");
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   return (
     <ScrollView
       style={styles.scroll}
@@ -20,7 +26,7 @@ export default function ConfigErrorScreen({ message }: { message: string }) {
         <MaterialCommunityIcons
           name="server-off"
           size={56}
-          color={palette.error}
+          color={colors.error}
         />
         <Text style={styles.title}>La app no está configurada</Text>
         <Text style={styles.message}>{message}</Text>
@@ -34,10 +40,10 @@ export default function ConfigErrorScreen({ message }: { message: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   scroll: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
   },
   container: {
     flexGrow: 1,
@@ -52,28 +58,28 @@ const styles = StyleSheet.create({
     gap: tokens.spacing[3],
     padding: tokens.spacing[7],
     borderRadius: tokens.radius.lg,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
   },
   title: {
     ...tokens.typography.h2,
-    color: palette.text,
+    color: c.text,
     textAlign: "center",
   },
   message: {
     ...tokens.typography.body,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     textAlign: "center",
   },
   hint: {
     ...tokens.typography.bodySm,
-    color: palette.textMuted,
+    color: c.textMuted,
     textAlign: "center",
   },
   version: {
     ...tokens.typography.caption,
-    color: palette.textMuted,
+    color: c.textMuted,
     marginTop: tokens.spacing[2],
   },
 });

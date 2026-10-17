@@ -1,7 +1,8 @@
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { forwardRef, useImperativeHandle, useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, View } from "react-native";
 import { Button, Text } from "react-native-paper";
 
 interface ConfirmOptions {
@@ -24,6 +25,8 @@ export interface ConfirmDialogRef {
 }
 
 const ConfirmDialog = forwardRef<ConfirmDialogRef>((props, ref) => {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [state, setState] = useState<ConfirmState>({
     visible: false,
     message: "",
@@ -68,7 +71,7 @@ const ConfirmDialog = forwardRef<ConfirmDialogRef>((props, ref) => {
             <MaterialCommunityIcons
               name="help-circle"
               size={24}
-              color={palette.primary}
+              color={colors.primary}
               style={{ marginRight: 8 }}
             />
             <Text style={styles.title}>{state.title || "Confirmar"}</Text>
@@ -79,7 +82,7 @@ const ConfirmDialog = forwardRef<ConfirmDialogRef>((props, ref) => {
           <View style={styles.actions}>
             <Button
               onPress={handleCancel}
-              textColor={palette.textSecondary}
+              textColor={colors.textSecondary}
               style={{ marginRight: 8 }}
             >
               {state.cancelText || "Cancelar"}
@@ -87,8 +90,8 @@ const ConfirmDialog = forwardRef<ConfirmDialogRef>((props, ref) => {
             <Button
               onPress={handleConfirm}
               mode="contained"
-              buttonColor={palette.primary}
-              textColor={palette.background}
+              buttonColor={colors.primary}
+              textColor={colors.background}
             >
               {state.okText || "Aceptar"}
             </Button>
@@ -99,10 +102,10 @@ const ConfirmDialog = forwardRef<ConfirmDialogRef>((props, ref) => {
   );
 });
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: c.overlay,
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
@@ -110,7 +113,7 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 400,
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
     borderRadius: 12,
     padding: 24,
   },
@@ -122,18 +125,18 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: "bold",
-    color: palette.text,
+    color: c.text,
   },
   message: {
     fontSize: 16,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginBottom: 24,
   },
   actions: {
     flexDirection: "row",
     justifyContent: "flex-end",
   },
-});
+}));
 
 ConfirmDialog.displayName = "ConfirmDialog";
 

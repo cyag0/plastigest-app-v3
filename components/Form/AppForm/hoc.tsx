@@ -1,7 +1,7 @@
-import palette from "@/constants/palette";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { FastField, FieldConfig, getIn } from "formik";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useAppForm } from "./AppForm";
 import { InjectedFormProps, WithFormProps } from "./types";
 
@@ -22,6 +22,7 @@ function MakeForm<TProps extends Record<string, any>>(
 
     const formContext = useAppForm();
     const readonly = props.readonly || formContext?.readonly || false;
+    const styles = useThemedStyles(makeStyles);
 
     return (
       <FastField
@@ -98,7 +99,7 @@ function MakeForm<TProps extends Record<string, any>>(
               />
 
               {showError && hasError && (
-                <Text style={[styles.errorText, errorStyle]}>{meta.error}</Text>
+                <FieldError message={meta.error} style={errorStyle} />
               )}
             </View>
           );
@@ -108,16 +109,24 @@ function MakeForm<TProps extends Record<string, any>>(
   };
 }
 
+// El error va en su propio componente: FastField solo se vuelve a pintar
+// cuando cambia el campo, y así el color sigue al tema.
+function FieldError(props: { message?: string; style?: object }) {
+  const styles = useThemedStyles(makeStyles);
+  return <Text style={[styles.errorText, props.style]}>{props.message}</Text>;
+}
+
 export function InputLabel(props: { label: string; required: boolean }) {
+  const styles = useThemedStyles(makeStyles);
   return (
     <Text style={styles.label}>
-      {props.required && <Text style={{ color: "red" }}>* </Text>}
+      {props.required && <Text style={styles.required}>* </Text>}
       {props.label}
     </Text>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     marginBottom: 16,
   },
@@ -125,13 +134,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     fontSize: 16,
     fontWeight: "bold",
-    color: palette.textSecondary,
+    color: c.textSecondary,
+  },
+  required: {
+    color: c.error,
   },
   errorText: {
-    color: "red",
+    color: c.error,
     fontSize: 12,
     marginTop: 4,
   },
-});
+}));
 
 export default MakeForm;

@@ -1,5 +1,6 @@
 import { SafeAreaView } from "react-native-safe-area-context";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import React, { forwardRef, useImperativeHandle, useState } from "react";
@@ -17,6 +18,8 @@ export interface BarcodeScannerRef {
 
 const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
   ({ onScanned }, ref) => {
+    const { colors } = useTheme();
+    const styles = useThemedStyles(makeStyles);
     const [permission, requestPermission] = useCameraPermissions();
     const [scanned, setScanned] = useState(false);
     const [visible, setVisible] = useState(false);
@@ -88,7 +91,7 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
               <MaterialCommunityIcons
                 name="camera-off"
                 size={64}
-                color={palette.error}
+                color={colors.error}
                 style={{ marginBottom: 16 }}
               />
               <Text variant="titleMedium" style={{ marginBottom: 8 }}>
@@ -96,7 +99,7 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
               </Text>
               <Text
                 variant="bodyMedium"
-                style={{ color: palette.textSecondary, textAlign: "center" }}
+                style={{ color: colors.textSecondary, textAlign: "center" }}
               >
                 Necesitas otorgar permisos de cámara para usar el escáner de
                 códigos de barras
@@ -132,7 +135,11 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
             <Text variant="headlineSmall" style={styles.title}>
               Escanear Código de Barras
             </Text>
-            <IconButton icon="close" onPress={handleClose} iconColor="#fff" />
+            <IconButton
+              icon="close"
+              onPress={handleClose}
+              iconColor={colors.primaryForeground}
+            />
           </View>
 
           <View style={styles.scannerContainer}>
@@ -183,7 +190,7 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
             <MaterialCommunityIcons
               name="barcode-scan"
               size={48}
-              color={palette.primary}
+              color={colors.primary}
               style={{ marginBottom: 12 }}
             />
             <Text
@@ -214,7 +221,9 @@ const BarcodeScanner = forwardRef<BarcodeScannerRef, BarcodeScannerProps>(
 
 export default BarcodeScanner;
 
-const styles = StyleSheet.create({
+// Fondo negro y textos blancos fijos: es la vista de la cámara, igual en
+// ambos temas.
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     backgroundColor: "#000",
@@ -226,10 +235,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 48,
     paddingBottom: 16,
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
   },
   title: {
-    color: "#fff",
+    color: c.primaryForeground,
     fontWeight: "bold",
   },
   scannerContainer: {
@@ -267,7 +276,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 40,
     height: 40,
-    borderColor: palette.primary,
+    borderColor: c.primary,
   },
   topLeft: {
     top: 0,
@@ -298,4 +307,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "rgba(0,0,0,0.8)",
   },
-});
+}));

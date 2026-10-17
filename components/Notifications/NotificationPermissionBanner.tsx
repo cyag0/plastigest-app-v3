@@ -1,8 +1,9 @@
 import { useAuth } from "@/contexts/AuthContext";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { Button, Text } from "react-native-paper";
 
 // El aviso se puede cerrar; vuelve a salir después de una semana.
@@ -43,6 +44,8 @@ export default function NotificationPermissionBanner() {
   } = useAuth();
   const [requesting, setRequesting] = useState(false);
   const [dismissed, setDismissed] = useState(wasDismissedRecently);
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
 
   // Solo mostramos banner en web (en native el sistema operativo se encarga)
   if (Platform.OS !== "web") return null;
@@ -66,14 +69,14 @@ export default function NotificationPermissionBanner() {
   };
 
   const isDenied = notificationPermission === "denied";
-  const accent = isDenied ? palette.warning : palette.primary;
+  const accent = isDenied ? colors.warning : colors.primary;
 
   return (
     <View
       style={[
         styles.container,
         {
-          backgroundColor: isDenied ? palette.warningSoft : palette.primarySoft,
+          backgroundColor: isDenied ? colors.warningSoft : colors.primarySoft,
           borderColor: accent + "55",
         },
       ]}
@@ -81,7 +84,7 @@ export default function NotificationPermissionBanner() {
       <MaterialCommunityIcons
         name={isDenied ? "bell-off-outline" : "bell-ring-outline"}
         size={22}
-        color={isDenied ? "#9A6210" : palette.primary}
+        color={isDenied ? colors.warningStrong : colors.primary}
       />
 
       <View style={styles.textContainer}>
@@ -98,8 +101,8 @@ export default function NotificationPermissionBanner() {
       {!isDenied && (
         <Button
           mode="contained"
-          buttonColor={palette.primary}
-          textColor="#fff"
+          buttonColor={colors.primary}
+          textColor={colors.primaryForeground}
           onPress={handleRequest}
           loading={requesting}
           disabled={requesting}
@@ -116,13 +119,13 @@ export default function NotificationPermissionBanner() {
         hitSlop={8}
         style={styles.close}
       >
-        <MaterialCommunityIcons name="close" size={18} color={palette.textSecondary} />
+        <MaterialCommunityIcons name="close" size={18} color={colors.textSecondary} />
       </Pressable>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flexDirection: "row",
     alignItems: "center",
@@ -137,11 +140,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   title: {
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
   },
   description: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginTop: 2,
   },
   close: {
@@ -151,4 +154,4 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-});
+}));

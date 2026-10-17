@@ -1,7 +1,8 @@
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { TouchableRipple } from "react-native-paper";
 import SelectDropdown from "react-native-select-dropdown";
 import MakeForm from "../AppForm/hoc";
@@ -20,6 +21,8 @@ interface AppSelectProps {
 }
 
 export default function AppSelect(props: AppSelectProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const dropdownRef = React.useRef<SelectDropdown>(null);
 
   // Normalizar el valor para el procesamiento interno
@@ -99,8 +102,8 @@ export default function AppSelect(props: AppSelectProps) {
   // Texto a mostrar en el botón (placeholder o valor seleccionado)
   const buttonText = selectedValue || props.placeholder || "Seleccionar...";
   const buttonTextColor = selectedValue
-    ? palette.text
-    : palette.textMuted;
+    ? colors.text
+    : colors.textMuted;
 
   if (props.multiple) {
     return (
@@ -194,7 +197,7 @@ export default function AppSelect(props: AppSelectProps) {
         search={!props.hideSearchBox}
         searchInputStyle={styles.searchInput}
         searchPlaceHolder="Buscar..."
-        searchPlaceHolderColor={palette.textMuted}
+        searchPlaceHolderColor={colors.textMuted}
       />
     </View>
   );
@@ -202,7 +205,7 @@ export default function AppSelect(props: AppSelectProps) {
 
 export const FormSelectSimple = MakeForm(AppSelect);
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     minHeight: 48,
     marginVertical: tokens.spacing[2],
@@ -212,17 +215,17 @@ const styles = StyleSheet.create({
   dropdownButton: {
     width: "100%",
     height: 48,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     paddingHorizontal: tokens.spacing[3],
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   disabled: {
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     opacity: 0.6,
   },
   buttonText: {
@@ -231,28 +234,28 @@ const styles = StyleSheet.create({
   },
   chevron: {
     fontSize: 14,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginLeft: tokens.spacing[2],
   },
 
   // --- Dropdown panel (the open list) ---
   dropdown: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.md,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     marginTop: 4,
     ...tokens.shadow.md,
   },
 
   // --- Search input inside dropdown ---
   searchInput: {
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+    borderBottomColor: c.border,
     borderRadius: 0,
     paddingHorizontal: tokens.spacing[3],
-    color: palette.text,
+    color: c.text,
   },
 
   // --- Items ---
@@ -261,18 +264,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: tokens.spacing[3],
     paddingVertical: tokens.spacing[3],
     borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+    borderBottomColor: c.border,
   },
   itemText: {
     ...tokens.typography.body,
-    color: palette.text,
+    color: c.text,
   },
-  // El item seleccionado usa el color primary de la app (antes era palette.error)
+  // El item seleccionado usa el color primary de la app (antes era el rojo de error)
   selectedItem: {
-    backgroundColor: palette.primarySoft,
+    backgroundColor: c.primarySoft,
   },
   selectedItemText: {
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "600",
   },
-});
+}));

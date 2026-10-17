@@ -1,3 +1,4 @@
+import { useTheme } from "@/contexts/ThemeContext";
 import React from "react";
 import { StyleProp, ViewStyle } from "react-native";
 import Svg, { Path, Rect, Text as SvgText, TSpan } from "react-native-svg";
@@ -16,8 +17,9 @@ import Svg, { Path, Rect, Text as SvgText, TSpan } from "react-native-svg";
  *    solo como marca (ej. pantalla de login, encabezados).
  *
  * Colores fijos de marca: verde #4F7A3A y caras del cubo. El color del
- * texto neutro ("GC") es configurable (`wordmarkColor`) para adaptarse a
- * temas claro/oscuro; el acento "tock"/"Stock" siempre es el verde de marca.
+ * texto neutro ("GC") y de la tagline siguen el tema (o se pasan con
+ * `wordmarkColor` / `taglineColor`); el acento "Stock" siempre es el verde
+ * de marca.
  */
 
 const BRAND_GREEN = "#4F7A3A";
@@ -29,9 +31,9 @@ export interface LogoProps {
   variant?: "mark" | "full";
   /** Para "mark" es el ancho/alto. Para "full" es el ancho (el alto escala). */
   size?: number;
-  /** Color del texto neutro ("GC"). Por defecto oscuro; pásalo según el tema. */
+  /** Color del texto neutro ("GC"). Por defecto, el texto del tema. */
   wordmarkColor?: string;
-  /** Color de la tagline. */
+  /** Color de la tagline. Por defecto, el texto secundario del tema. */
   taglineColor?: string;
   /** Mostrar la tagline en la variante "full". */
   showTagline?: boolean;
@@ -52,11 +54,13 @@ function Mark() {
 export default function Logo({
   variant = "full",
   size = 160,
-  wordmarkColor = "#1F241B",
-  taglineColor = "#6E6B5E",
+  wordmarkColor,
+  taglineColor,
   showTagline = true,
   style,
 }: LogoProps) {
+  const { colors } = useTheme();
+
   if (variant === "mark") {
     return (
       <Svg width={size} height={size} viewBox="150 300 86 86" style={style}>
@@ -79,11 +83,16 @@ export default function Logo({
     >
       <Mark />
       <SvgText x={258} y={356} fontSize={44} fontWeight="600">
-        <TSpan fill={wordmarkColor}>GC</TSpan>
+        <TSpan fill={wordmarkColor ?? colors.text}>GC</TSpan>
         <TSpan fill={BRAND_GREEN}>Stock</TSpan>
       </SvgText>
       {showTagline && (
-        <SvgText x={260} y={380} fontSize={13} fill={taglineColor}>
+        <SvgText
+          x={260}
+          y={380}
+          fontSize={13}
+          fill={taglineColor ?? colors.textSecondary}
+        >
           Gestión de inventario y sucursales
         </SvgText>
       )}

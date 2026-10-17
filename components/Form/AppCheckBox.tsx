@@ -1,6 +1,7 @@
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
-import React from "react";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
+import React, { useMemo } from "react";
 import { View } from "react-native";
 import { Checkbox } from "react-native-paper";
 import MakeForm, { InputLabel } from "./AppForm/hoc";
@@ -16,16 +17,29 @@ interface AppCheckBoxProps
   readonly?: boolean;
 }
 
-const paperTheme = {
-  colors: {
-    primary: palette.primary,
-    onSurface: palette.text,
-    onSurfaceVariant: palette.textSecondary,
-    surface: palette.surface,
-  },
-};
-
 export default function AppCheckBox(props: AppCheckBoxProps) {
+  const { colors } = useTheme();
+  const paperTheme = useMemo(
+    () => ({
+      colors: {
+        primary: colors.primary,
+        onSurface: colors.text,
+        onSurfaceVariant: colors.textSecondary,
+        surface: colors.surface,
+      },
+    }),
+    [colors],
+  );
+  const styles = useThemedStyles((c) => ({
+    container: {
+      marginVertical: tokens.spacing[2],
+    },
+    label: {
+      ...tokens.typography.body,
+      color: c.text,
+      textAlign: "left",
+    },
+  }));
   const readonly = props.readonly || false;
 
   function handleChange() {
@@ -53,23 +67,12 @@ export default function AppCheckBox(props: AppCheckBoxProps) {
         position="leading"
         mode="android"
         theme={paperTheme}
-        color={palette.primary}
+        color={colors.primary}
         labelStyle={styles.label}
       />
     </View>
   );
 }
-
-const styles = {
-  container: {
-    marginVertical: tokens.spacing[2],
-  },
-  label: {
-    ...tokens.typography.body,
-    color: palette.text,
-    textAlign: "left" as const,
-  },
-};
 
 export const FormCheckBox = MakeForm(AppCheckBox, {
   label: false,

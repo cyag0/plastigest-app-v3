@@ -1,10 +1,13 @@
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Link, Stack } from "expo-router";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Button, Surface, Text } from "react-native-paper";
 
 export default function NotFoundScreen() {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <>
       <Stack.Screen options={{ title: "Página no encontrada" }} />
@@ -14,7 +17,7 @@ export default function NotFoundScreen() {
             <MaterialCommunityIcons
               name="alert-circle-outline"
               size={120}
-              color={palette.warning}
+              color={colors.warning}
             />
           </View>
 
@@ -34,7 +37,7 @@ export default function NotFoundScreen() {
             <MaterialCommunityIcons
               name="file-question-outline"
               size={24}
-              color={palette.textSecondary}
+              color={colors.textSecondary}
             />
             <Text variant="labelLarge" style={styles.errorCodeText}>
               Error 404
@@ -45,7 +48,7 @@ export default function NotFoundScreen() {
             <Button
               mode="contained"
               icon="home"
-              buttonColor={palette.primary}
+              buttonColor={colors.primary}
               contentStyle={styles.buttonContent}
             >
               Ir al inicio
@@ -61,20 +64,20 @@ export default function NotFoundScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: 20,
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
   },
   content: {
     maxWidth: 480,
     width: "100%",
     padding: 40,
     borderRadius: 24,
-    backgroundColor: palette.card,
+    backgroundColor: c.card,
     alignItems: "center",
     shadowColor: "transparent",
   },
@@ -82,25 +85,25 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
     borderRadius: 80,
-    backgroundColor: palette.warning + "15",
+    backgroundColor: c.warning + "15",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 24,
     borderWidth: 3,
-    borderColor: palette.warning + "30",
+    borderColor: c.warning + "30",
   },
   title: {
     fontWeight: "bold",
-    color: palette.text,
+    color: c.text,
     marginBottom: 8,
   },
   subtitle: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginBottom: 16,
     textAlign: "center",
   },
   description: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     textAlign: "center",
     marginBottom: 24,
     lineHeight: 24,
@@ -111,12 +114,12 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
     borderRadius: 20,
     marginBottom: 32,
   },
   errorCodeText: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontWeight: "600",
   },
   link: {
@@ -127,8 +130,8 @@ const styles = StyleSheet.create({
     height: 48,
   },
   helpText: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     textAlign: "center",
     opacity: 0.7,
   },
-});
+}));

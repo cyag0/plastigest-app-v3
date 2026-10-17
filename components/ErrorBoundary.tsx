@@ -1,5 +1,6 @@
-import palette, { type Palette } from "@/constants/palette";
+import { paletteFor, type Palette } from "@/constants/palette";
 import { useColors } from "@/contexts/ThemeContext";
+import { useColorScheme } from "@/hooks/useColorScheme";
 import { notifyChunkLoadError } from "@/utils/appVersion";
 import { reportClientError } from "@/utils/errorReporting";
 import { isChunkLoadError } from "@/utils/versionCheck";
@@ -74,8 +75,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
       if (Platform.OS === "web" && isChunkLoadError(this.state.error)) {
         return (
-          <ErrorFallback
-            colors={palette}
+          <RootErrorFallback
             error={this.state.error}
             icon="update"
             title={NEW_VERSION_TITLE}
@@ -87,8 +87,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
       }
 
       return (
-        <ErrorFallback
-          colors={palette}
+        <RootErrorFallback
           error={this.state.error}
           title="Algo salió mal"
           message="Ocurrió un error inesperado. Ya se avisó al administrador; vuelve a intentarlo."
@@ -100,6 +99,22 @@ export default class ErrorBoundary extends React.Component<Props, State> {
 
     return this.props.children;
   }
+}
+
+type ErrorFallbackProps = React.ComponentProps<typeof ErrorFallback>;
+
+/**
+ * El ErrorBoundary raíz queda fuera del ThemeProvider (y de PaperProvider):
+ * el tema sale del esquema del sistema.
+ */
+function RootErrorFallback(props: Omit<ErrorFallbackProps, "colors">) {
+  const scheme = useColorScheme();
+  return (
+    <ErrorFallback
+      {...props}
+      colors={paletteFor(scheme === "dark" ? "dark" : "light")}
+    />
+  );
 }
 
 // Al montarse el aviso, el navegador de la sección se desmonta y puede
@@ -231,6 +246,7 @@ function ErrorFallback({
         mode="contained"
         onPress={onPrimary}
         buttonColor={colors.primary}
+        textColor={colors.primaryForeground}
         style={styles.button}
       >
         {primaryLabel}

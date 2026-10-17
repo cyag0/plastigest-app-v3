@@ -153,7 +153,7 @@ export default function NavigationSidebar({
     ...section,
     items: section.items.filter(canSee),
   })).filter((section) => section.items.length > 0);
-  const { mode } = useTheme();
+  const { colors } = useTheme();
 
   const [collapsedPref, setCollapsedPref] = useState(false);
   const [userMenuVisible, setUserMenuVisible] = useState(false);
@@ -208,8 +208,8 @@ export default function NavigationSidebar({
   }, []);
 
   // Color del icono de texto (chevron, map-marker): del theme
-  const iconMuted = mode === "dark" ? "#6E6B5E" : "#8F8B7D";
-  const iconSecondary = mode === "dark" ? "#D3CCBC" : "#57564B";
+  const iconMuted = colors.textMuted;
+  const iconSecondary = colors.textSecondary;
 
   const styles = useThemedStyles((colors) => ({
     container: {
