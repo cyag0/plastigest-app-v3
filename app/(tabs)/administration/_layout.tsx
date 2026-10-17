@@ -48,25 +48,25 @@ export default function _layout() {
       <Stack.Screen
         name="companies/index"
         options={{
-          title: "Compañías",
+          title: "Empresas",
         }}
       />
       <Stack.Screen
         name="companies/form"
         options={{
-          title: "Nueva Compañía",
+          title: "Nueva empresa",
         }}
       />
       <Stack.Screen
         name="companies/[id]/index"
         options={{
-          title: "Ver Compañía",
+          title: "Empresa",
         }}
       />
       <Stack.Screen
         name="companies/[id]/edit"
         options={{
-          title: "Editar Compañía",
+          title: "Editar empresa",
         }}
       />
       <Stack.Screen name="company-users/index" options={{ title: "Usuarios" }} />
@@ -81,9 +81,9 @@ export default function _layout() {
       <Stack.Screen name="current-location/users/[id]/edit" options={{ title: "Editar usuario" }} />
 
       <Stack.Screen name="cash-registers/index" options={{ title: "Cajas" }} />
-      <Stack.Screen name="cash-registers/form" options={{ title: "Nueva Caja" }} />
-      <Stack.Screen name="cash-registers/[id]/index" options={{ title: "Ver Caja" }} />
-      <Stack.Screen name="cash-registers/[id]/edit" options={{ title: "Editar Caja" }} />
+      <Stack.Screen name="cash-registers/form" options={{ title: "Nueva caja" }} />
+      <Stack.Screen name="cash-registers/[id]/index" options={{ title: "Caja" }} />
+      <Stack.Screen name="cash-registers/[id]/edit" options={{ title: "Editar caja" }} />
       <Stack.Screen
         name="locations/index"
         options={{
@@ -93,19 +93,19 @@ export default function _layout() {
       <Stack.Screen
         name="locations/form"
         options={{
-          title: "Nueva Sucursal",
+          title: "Nueva sucursal",
         }}
       />
       <Stack.Screen
         name="locations/[id]"
         options={{
-          title: "Ver Sucursal",
+          title: "Sucursal",
         }}
       />
       <Stack.Screen
         name="locations/[id]/edit"
         options={{
-          title: "Editar Sucursal",
+          title: "Editar sucursal",
         }}
       />
       <Stack.Screen name="users/index" options={{ title: "Todos los usuarios" }} />
@@ -115,7 +115,7 @@ export default function _layout() {
       <Stack.Screen
         name="current-location/index"
         options={{
-          title: "Mi Sucursal",
+          title: "Esta sucursal",
         }}
       />
       {/* Categorias */}
@@ -128,19 +128,19 @@ export default function _layout() {
       <Stack.Screen
         name="categories/form"
         options={{
-          title: "Nueva Categoría",
+          title: "Nueva categoría",
         }}
       />
       <Stack.Screen
         name="categories/[id]/index"
         options={{
-          title: "Ver Categoría",
+          title: "Categoría",
         }}
       />
       <Stack.Screen
         name="categories/[id]/edit"
         options={{
-          title: "Editar Categoría",
+          title: "Editar categoría",
         }}
       />
       {/* Unidades */}
@@ -153,19 +153,19 @@ export default function _layout() {
       <Stack.Screen
         name="unidades/form"
         options={{
-          title: "Nueva Unidad",
+          title: "Nueva unidad",
         }}
       />
       <Stack.Screen
         name="unidades/[id]/index"
         options={{
-          title: "Ver Unidad",
+          title: "Unidad",
         }}
       />
       <Stack.Screen
         name="unidades/[id]/edit"
         options={{
-          title: "Editar Unidad",
+          title: "Editar unidad",
         }}
       />
       <Stack.Screen
@@ -183,31 +183,31 @@ export default function _layout() {
       <Stack.Screen
         name="settings/working-hours"
         options={{
-          title: "Horario de Trabajo",
+          title: "Horario de trabajo",
         }}
       />
       <Stack.Screen
         name="recurring-tasks/index"
         options={{
-          title: "Tareas Recurrentes",
+          title: "Tareas recurrentes",
         }}
       />
       <Stack.Screen
         name="recurring-tasks/form"
         options={{
-          title: "Nueva Tarea Recurrente",
+          title: "Nueva tarea recurrente",
         }}
       />
       <Stack.Screen
         name="recurring-tasks/[id]/index"
         options={{
-          title: "Ver Tarea Recurrente",
+          title: "Tarea recurrente",
         }}
       />
       <Stack.Screen
         name="recurring-tasks/[id]/edit"
         options={{
-          title: "Editar Tarea Recurrente",
+          title: "Editar tarea recurrente",
         }}
       />
       <Stack.Screen
@@ -219,19 +219,19 @@ export default function _layout() {
       <Stack.Screen
         name="packages/form"
         options={{
-          title: "Nuevo Paquete",
+          title: "Nuevo paquete",
         }}
       />
       <Stack.Screen
         name="packages/[id]/index"
         options={{
-          title: "Ver Paquete",
+          title: "Paquete",
         }}
       />
       <Stack.Screen
         name="packages/[id]/edit"
         options={{
-          title: "Editar Paquete",
+          title: "Editar paquete",
         }}
       />
 
@@ -244,19 +244,19 @@ export default function _layout() {
       <Stack.Screen
         name="suppliers/form"
         options={{
-          title: "Nuevo Proveedor",
+          title: "Nuevo proveedor",
         }}
       />
       <Stack.Screen
         name="suppliers/[id]/index"
         options={{
-          title: "Ver Proveedor",
+          title: "Proveedor",
         }}
       />
       <Stack.Screen
         name="suppliers/[id]/edit"
         options={{
-          title: "Editar Proveedor",
+          title: "Editar proveedor",
         }}
       />
       {/* Clientes */}
@@ -269,19 +269,19 @@ export default function _layout() {
       <Stack.Screen
         name="clientes/form"
         options={{
-          title: "Nuevo Cliente",
+          title: "Nuevo cliente",
         }}
       />
       <Stack.Screen
         name="clientes/[id]/index"
         options={{
-          title: "Ver Cliente",
+          title: "Cliente",
         }}
       />
       <Stack.Screen
         name="clientes/[id]/edit"
         options={{
-          title: "Editar Cliente",
+          title: "Editar cliente",
         }}
       />
     </Stack>

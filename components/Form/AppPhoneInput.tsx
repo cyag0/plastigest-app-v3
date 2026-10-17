@@ -22,7 +22,8 @@ import {
   type TextInputInstance,
   View,
 } from "react-native";
-import { Menu, TextInput } from "react-native-paper";
+import { TextInput } from "react-native-paper";
+import Menu from "@/components/App/AppMenu";
 import MakeForm from "./AppForm/hoc";
 import ReadonlyText from "./AppForm/ReadonlyText";
 import { useInputPaperTheme } from "./AppInput";

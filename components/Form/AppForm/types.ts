@@ -16,6 +16,8 @@ export interface FormFieldProps {
   optional?: boolean;
   /** Ayuda corta debajo del campo (se oculta mientras hay un error). */
   hint?: string;
+  /** Solo lectura para este campo aunque el formulario sea editable. */
+  readonly?: boolean;
   onChange?: (value: any) => void;
 }
 

@@ -25,27 +25,27 @@ export default function InventoryLayout() {
       <Stack.Screen
         name="index"
         options={{
-          title: "Inventario Semanal",
+          title: "Inventario semanal",
           headerShown: false,
         }}
       />
       <Stack.Screen
         name="form"
         options={{
-          title: "Nuevo Inventario",
+          title: "Nuevo inventario",
           presentation: "modal",
         }}
       />
       <Stack.Screen
         name="[id]/index"
         options={{
-          title: "Detalle de Inventario",
+          title: "Inventario",
         }}
       />
       <Stack.Screen
         name="[id]/edit"
         options={{
-          title: "Editar Inventario",
+          title: "Editar inventario",
           presentation: "modal",
         }}
       />

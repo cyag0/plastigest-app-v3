@@ -79,20 +79,20 @@ export default function _layout() {
       />
       <Stack.Screen
         name="weekly-inventory/form"
-        options={{ title: "Crear Inventario", headerShown: true }}
+        options={{ title: "Nuevo inventario", headerShown: true }}
       />
       <Stack.Screen
         name="weekly-inventory/[id]/edit"
-        options={{ title: "Editar Inventario", headerShown: true }}
+        options={{ title: "Editar inventario", headerShown: true }}
       />
       <Stack.Screen
         name="weekly-inventory/[id]/index"
-        options={{ title: "Detalle Inventario", headerShown: true }}
+        options={{ title: "Inventario", headerShown: true }}
       />
 
       <Stack.Screen
         name="products/index"
-        options={{ title: "Tipos de Inventario" }}
+        options={{ title: "Tipos de inventario" }}
       />
       <Stack.Screen
         name="products/type/[slug]/index"
@@ -100,23 +100,23 @@ export default function _layout() {
       />
       <Stack.Screen
         name="products/type/[slug]/form"
-        options={{ title: "Nuevo Producto" }}
+        options={{ title: "Nuevo producto" }}
       />
       <Stack.Screen
         name="products/form"
-        options={{ title: "Nuevo Producto" }}
+        options={{ title: "Nuevo producto" }}
       />
       <Stack.Screen
         name="products/[id]/index"
-        options={{ title: "Detalle del Producto" }}
+        options={{ title: "Producto" }}
       />
       <Stack.Screen
         name="products/[id]/edit"
-        options={{ title: "Editar Producto" }}
+        options={{ title: "Editar producto" }}
       />
       <Stack.Screen
         name="products/[id]/movements"
-        options={{ title: "Movimientos de Inventario" }}
+        options={{ title: "Movimientos de inventario" }}
       />
       <Stack.Screen
         name="packages/index"
@@ -124,28 +124,28 @@ export default function _layout() {
       />
       <Stack.Screen
         name="packages/form"
-        options={{ title: "Nuevo Paquete" }}
+        options={{ title: "Nuevo paquete" }}
       />
       <Stack.Screen
         name="packages/[id]/index"
-        options={{ title: "Detalle del Paquete" }}
+        options={{ title: "Paquete" }}
       />
       <Stack.Screen
         name="packages/[id]/edit"
-        options={{ title: "Editar Paquete" }}
+        options={{ title: "Editar paquete" }}
       />
       <Stack.Screen name="adjustment/index" options={{ title: "Ajustes" }} />
       <Stack.Screen
         name="adjustment/form"
-        options={{ title: "Crear Ajuste" }}
+        options={{ title: "Nuevo ajuste" }}
       />
       <Stack.Screen
         name="adjustment/[id]/index"
-        options={{ title: "Detalle Ajuste" }}
+        options={{ title: "Ajuste" }}
       />
       <Stack.Screen
         name="adjustment/[id]/edit"
-        options={{ title: "Editar Ajuste" }}
+        options={{ title: "Editar ajuste" }}
       />
     </Stack>
   );

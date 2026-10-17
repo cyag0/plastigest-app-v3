@@ -24,7 +24,7 @@ const segmentLabels: Record<string, string> = {
   clientes: "Clientes",
   closing: "Cierres anteriores",
   sessions: "Turnos de caja",
-  companies: "Compañías",
+  companies: "Empresas",
   "company-users": "Usuarios",
   "current-location": "Esta sucursal",
   edit: "Editar",
@@ -79,7 +79,7 @@ const pathLabels: Record<string, string> = {
   "/administration/current-location": "Esta sucursal",
   "/home/purchases/formv2": "Nueva compra",
   "/home/transfers/formv2": "Nueva solicitud",
-  "/inventory/weekly-inventory/form": "Crear inventario",
+  "/inventory/weekly-inventory/form": "Nuevo inventario",
   "/inventory/products/type/all": "Todos",
 };
 

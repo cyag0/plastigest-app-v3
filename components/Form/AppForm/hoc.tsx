@@ -93,11 +93,15 @@ function MakeForm<TProps extends Record<string, any>>(
           return (
             <View style={[styles.container, containerStyle]}>
               {label && options?.label !== false && (
-                <InputLabel label={label} optional={optional} />
+                <InputLabel label={label} optional={optional && !readonly} />
               )}
 
               <WrappedComponent
                 {...(restProps as unknown as TProps)}
+                // Los campos que pintan su propia etiqueta (FormSwitch,
+                // FormCheckBox) la reciben; antes se perdía y salía
+                // "Selecciona una opción".
+                {...(options?.label === false && label ? { label } : {})}
                 {...injectedProps}
               />
 

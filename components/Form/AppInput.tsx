@@ -49,7 +49,10 @@ export default function AppInput(props: AppInputProps) {
   // `error` (el texto de validación) no se reenvía al TextInput: pisaría a
   // hasError y marcaría en rojo campos que el usuario aún no ha tocado.
   const { value = "", onChange, onBlur, hasError, error: _error, ...restProps } = props;
-  const fieldProps = useFieldInputProps({ multiline: !!restProps.multiline });
+  const fieldProps = useFieldInputProps({
+    multiline: !!restProps.multiline,
+    disabled: !!restProps.disabled,
+  });
 
   const readonly = props.readonly || false;
 
@@ -82,12 +85,18 @@ export default function AppInput(props: AppInputProps) {
  * teléfono): 48 de alto, esquinas de 12 y el borde del tema, como los campos
  * de los formularios nuevos (Procesos, Compras). Las áreas de texto crecen.
  */
-export function useFieldInputProps({ multiline = false }: { multiline?: boolean } = {}) {
+export function useFieldInputProps({
+  multiline = false,
+  disabled = false,
+}: { multiline?: boolean; disabled?: boolean } = {}) {
   const { colors } = useTheme();
   const theme = useInputPaperTheme();
   const styles = useThemedStyles((c) => ({
     single: { backgroundColor: c.surface, height: 48 },
     multi: { backgroundColor: c.surface, minHeight: 96 },
+    // Deshabilitado: fondo apagado y texto gris (antes se veía igual que uno
+    // que sí se puede editar).
+    disabled: { backgroundColor: c.surfaceMuted },
     content: { fontSize: 15, color: c.text },
     contentMulti: { fontSize: 15, color: c.text, paddingTop: 12, textAlignVertical: "top" },
     outline: { borderRadius: tokens.radius.md },
@@ -96,10 +105,10 @@ export function useFieldInputProps({ multiline = false }: { multiline?: boolean 
     theme,
     outlineColor: colors.border,
     activeOutlineColor: colors.primary,
-    textColor: colors.text,
+    textColor: disabled ? colors.textMuted : colors.text,
     placeholderTextColor: colors.textMuted,
     outlineStyle: styles.outline,
-    style: multiline ? styles.multi : styles.single,
+    style: [multiline ? styles.multi : styles.single, disabled && styles.disabled],
     contentStyle: multiline ? styles.contentMulti : styles.content,
   };
 }
