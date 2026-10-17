@@ -7,6 +7,7 @@ import { FormInput } from "@/components/Form/AppInput";
 import { FormNumeric } from "@/components/Form/AppNumeric";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
@@ -71,6 +72,7 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
   const formRef = useRef<AppFormRef<UnidadFormData>>(null);
   const { company } = useSelectedCompany();
   const alerts = useAlerts();
+  const { colors } = useTheme();
   // Empresa de la unidad cargada: las globales (company_id null) solo las
   // modifica un administrador del sistema (el backend responde 403).
   const [unitCompanyId, setUnitCompanyId] = useState<unknown>(undefined);
@@ -112,7 +114,7 @@ const UnidadForm = ({ id, readonly }: UnidadFormProps) => {
     >
       <FormValueWatcher name="company_id" onChange={setUnitCompanyId} />
 
-      <View style={{ backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 } }}>
+      <View style={{ backgroundColor: colors.surface, padding: 24, shadowOffset: { width: 0, height: 0 } }}>
 
   
       <FormInput

@@ -2,17 +2,16 @@ import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { activeFilter } from "@/constants/listFilters";
-import palette from "@/constants/palette";
 import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import { generateCrudMenu } from "@/utils/routes";
 import Services from "@/utils/services";
 import { formatPhone } from "@/utils/phone";
 import { useRouter } from "expo-router";
 import * as React from "react";
-import { StyleSheet } from "react-native";
 import { Avatar } from "react-native-paper";
 
 export default function LocationsIndexScreen() {
@@ -20,6 +19,7 @@ export default function LocationsIndexScreen() {
   const { company } = useSelectedCompany();
   const { location } = useAuth();
   const alerts = useAlerts();
+  const styles = useThemedStyles(makeStyles);
   // Las acciones sin permiso no se ofrecen (permissionPrefix en la lista).
   // Quien no tiene acceso a todas las sucursales (system_admin o
   // locations_all) ve las suyas, pero solo abre, edita o elimina la actual:
@@ -113,8 +113,8 @@ export default function LocationsIndexScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   avatar: {
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
   },
-});
+}));

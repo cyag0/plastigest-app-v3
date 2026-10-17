@@ -1,10 +1,11 @@
 import { shortLocationName } from "@/utils/locations";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useCan } from "@/hooks/useCan";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import axiosClient from "@/utils/axios";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { View, useWindowDimensions } from "react-native";
 import { Button, Card, IconButton, Text } from "react-native-paper";
 import AppSelect from "../Form/AppSelect/AppSelect";
 
@@ -32,6 +33,8 @@ interface Props {
 
 export default function LocationRoleList({ value, onChange, readonly, companyId }: Props) {
   const { selectedCompany } = useAuth();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   // Sin «Roles › Listar» el backend responde 403: los roles ni se piden.
   const canListRoles = useCan().can("roles_list");
   // En celular los dos selects lado a lado cortaban los nombres
@@ -142,7 +145,7 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
                 <IconButton
                   icon="close"
                   size={16}
-                  iconColor={palette.error}
+                  iconColor={colors.error}
                   style={{ margin: 0 }}
                   onPress={() => remove(i)}
                 />
@@ -188,7 +191,7 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
           icon="plus"
           onPress={add}
           style={styles.addButton}
-          textColor={palette.primary}
+          textColor={colors.primary}
         >
           Agregar sucursal
         </Button>
@@ -202,12 +205,12 @@ export type CompanyAssignment = LocationRoleItem;
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     gap: 10,
   },
   emptyCard: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: 10,
   },
   emptyContent: {
@@ -215,15 +218,15 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
   },
   emptyText: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontStyle: "italic",
   },
   row: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: 10,
     padding: 12,
     borderLeftWidth: 3,
-    borderLeftColor: palette.primary + "66",
+    borderLeftColor: c.primary + "66",
   },
   rowHeader: {
     flexDirection: "row",
@@ -232,7 +235,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   rowLabel: {
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "600",
     flex: 1,
   },
@@ -257,22 +260,22 @@ const styles = StyleSheet.create({
     flex: 2,
   },
   fieldLabel: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginBottom: 4,
     letterSpacing: 0.3,
   },
   loadingText: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontStyle: "italic",
     paddingVertical: 12,
   },
   errorText: {
-    color: palette.error,
+    color: c.error,
   },
   addButton: {
     borderRadius: 10,
-    borderColor: palette.primary,
+    borderColor: c.primary,
     marginTop: 2,
   },
-});
+}));
 

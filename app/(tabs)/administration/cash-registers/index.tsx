@@ -2,13 +2,12 @@ import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { FilterConfig } from "@/components/App/AppList/AppListFilter";
 import StatusBadge, { type StatusBadgeProps } from "@/components/App/StatusBadge";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLocationFilter } from "@/hooks/useListFilters";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { router, useLocalSearchParams } from "expo-router";
 import * as React from "react";
-import { StyleSheet } from "react-native";
 import { Avatar } from "react-native-paper";
 
 /**
@@ -54,6 +53,7 @@ export default function CashRegistersIndexScreen() {
   const branchScope = scope === "location";
   const suffix = branchScope ? "?scope=location" : "";
   const { location } = useAuth();
+  const styles = useThemedStyles(makeStyles);
   // En «Esta sucursal» todas son de la misma: ahí no se ofrece.
   const locationFilter = useLocationFilter();
   const filters = [STATUS_FILTER, ...(!branchScope && locationFilter ? [locationFilter] : [])];
@@ -107,6 +107,6 @@ export default function CashRegistersIndexScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  avatar: { backgroundColor: palette.primary },
-});
+const makeStyles = themedStyles((c) => ({
+  avatar: { backgroundColor: c.primary },
+}));

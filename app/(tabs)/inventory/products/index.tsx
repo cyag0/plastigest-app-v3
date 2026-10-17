@@ -1,8 +1,9 @@
 import Skeleton from "@/components/SkeletonLoader";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import useInventoryTypes, {
   ALL_INVENTORY_TYPES,
 } from "@/hooks/useInventoryTypes";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -10,7 +11,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -27,6 +27,8 @@ type InventoryType = App.Entities.InventoryType;
  */
 export default function ProductsIndex() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   // Si la consulta falla, el aviso global de la app ya dice por qué (antes se
   // repetía aquí con el texto de axios).
   const { types, loading, reload } = useInventoryTypes({
@@ -53,7 +55,15 @@ export default function ProductsIndex() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.primary}
+          colors={[colors.primary]}
+          progressBackgroundColor={colors.surface}
+        />
+      }
     >
       {loading ? (
         <TypesSkeleton />
@@ -100,6 +110,8 @@ function Row({
   divider?: boolean;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const empty = count === 0;
   return (
     <Pressable
@@ -107,20 +119,21 @@ function Row({
       style={({ pressed }) => [
         styles.row,
         divider && styles.rowDivider,
-        pressed && { backgroundColor: palette.surfaceMuted },
+        pressed && { backgroundColor: colors.surfaceMuted },
       ]}
     >
-      <MaterialCommunityIcons name={icon} size={20} color={empty ? palette.textMuted : palette.textSecondary} />
+      <MaterialCommunityIcons name={icon} size={20} color={empty ? colors.textMuted : colors.textSecondary} />
       <Text style={[styles.rowTitle, empty && styles.muted]} numberOfLines={1}>
         {title}
       </Text>
       <Text style={styles.count}>{count}</Text>
-      <MaterialCommunityIcons name="chevron-right" size={18} color={palette.textMuted} />
+      <MaterialCommunityIcons name="chevron-right" size={18} color={colors.textMuted} />
     </Pressable>
   );
 }
 
 function TypesSkeleton() {
+  const styles = useThemedStyles(makeStyles);
   return (
     <View style={{ gap: 18 }}>
       <View style={[styles.group, styles.skeletonGroup]}>
@@ -135,10 +148,10 @@ function TypesSkeleton() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
   },
   content: {
     padding: 16,
@@ -151,14 +164,14 @@ const styles = StyleSheet.create({
   groupTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginTop: 14,
   },
   group: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     overflow: "hidden",
   },
   skeletonGroup: {
@@ -173,20 +186,20 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderTopWidth: 1,
-    borderTopColor: palette.border,
+    borderTopColor: c.border,
   },
   rowTitle: {
     flex: 1,
     fontSize: 15,
     fontWeight: "500",
-    color: palette.text,
+    color: c.text,
   },
   muted: {
-    color: palette.textMuted,
+    color: c.textMuted,
   },
   count: {
     fontSize: 14,
-    color: palette.textMuted,
+    color: c.textMuted,
     fontVariant: ["tabular-nums"],
   },
-});
+}));

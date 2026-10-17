@@ -3,7 +3,7 @@ import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { FilterConfig } from "@/components/App/AppList/AppListFilter";
 import PrintLabelsModal from "@/components/Products/PrintLabelsModal";
 import { activeFilter } from "@/constants/listFilters";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCategoryFilter } from "@/hooks/useListFilters";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
@@ -19,6 +19,7 @@ import { errorMessageOf } from "@/utils/errorNotice";
 export default function PackagesIndex() {
   const router = useRouter();
   const alerts = useAlerts();
+  const { colors } = useTheme();
   const { company, availableCompanies, selectCompany, isLoading } =
     useSelectedCompany();
 
@@ -80,7 +81,7 @@ export default function PackagesIndex() {
   if (isLoading || !company) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -124,7 +125,7 @@ export default function PackagesIndex() {
       align: "center",
       render: (_, item) => (
         <Text
-          style={{ fontWeight: "bold", color: item.is_active ? palette.success : palette.textMuted }}
+          style={{ fontWeight: "bold", color: item.is_active ? colors.success : colors.textMuted }}
         >
           {item.is_active ? "Activo" : "Inactivo"}
         </Text>
@@ -146,7 +147,7 @@ export default function PackagesIndex() {
           description: (
             <Text
               style={{
-                color: palette.textSecondary,
+                color: colors.textSecondary,
                 opacity: 0.7,
                 lineHeight: 14,
               }}
@@ -160,7 +161,7 @@ export default function PackagesIndex() {
             <AppList.Description
               style={{
                 fontWeight: "bold",
-                color: item.is_active ? palette.success : palette.textMuted,
+                color: item.is_active ? colors.success : colors.textMuted,
               }}
             >
               {item.is_active ? "Activo" : "Inactivo"}

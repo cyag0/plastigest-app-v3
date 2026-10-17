@@ -2,13 +2,14 @@ import { goBack } from "@/utils/navigation";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormPhoneInput } from "@/components/Form/AppPhoneInput";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { phoneSchema } from "@/utils/phone";
 import { useRouter } from "expo-router";
 import React, { useRef } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { Card, IconButton, Text } from "react-native-paper";
 import * as Yup from "yup";
 
@@ -39,6 +40,8 @@ export default function CurrentLocationScreen() {
   const { location } = useAuth();
   const router = useRouter();
   const formRef = useRef<AppFormRef<LocationFormData>>(null);
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
 
   if (!location) {
     return (
@@ -47,7 +50,7 @@ export default function CurrentLocationScreen() {
           <IconButton
             icon="alert-circle"
             size={64}
-            iconColor={palette.warning}
+            iconColor={colors.warning}
           />
           <Text variant="titleLarge" style={styles.emptyTitle}>
             Sin Sucursal Seleccionada
@@ -93,7 +96,7 @@ export default function CurrentLocationScreen() {
               <IconButton
                 icon="store"
                 size={24}
-                iconColor={palette.primary}
+                iconColor={colors.primary}
                 style={{ margin: 0 }}
               />
               <Text variant="titleMedium" style={styles.sectionTitle}>
@@ -140,7 +143,7 @@ export default function CurrentLocationScreen() {
               <IconButton
                 icon="map-marker"
                 size={24}
-                iconColor={palette.info}
+                iconColor={colors.info}
                 style={{ margin: 0 }}
               />
               <Text variant="titleMedium" style={styles.sectionTitle}>
@@ -177,7 +180,7 @@ export default function CurrentLocationScreen() {
               <IconButton
                 icon="information"
                 size={24}
-                iconColor={palette.info}
+                iconColor={colors.info}
                 style={{ margin: 0 }}
               />
               <View style={{ flex: 1 }}>
@@ -201,7 +204,7 @@ export default function CurrentLocationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     backgroundColor: "transparent" as any,
@@ -212,7 +215,7 @@ const styles = StyleSheet.create({
   },
   card: {
     marginBottom: 16,
-    backgroundColor: palette.card,
+    backgroundColor: c.surface,
     borderRadius: 12,
     elevation: 2,
   },
@@ -224,16 +227,16 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontWeight: "600",
-    color: palette.text,
+    color: c.text,
   },
   row: {
     flexDirection: "row",
     gap: 12,
   },
   infoCard: {
-    backgroundColor: palette.info + "10",
+    backgroundColor: c.info + "10",
     borderLeftWidth: 4,
-    borderLeftColor: palette.info,
+    borderLeftColor: c.info,
   },
   infoContent: {
     flexDirection: "row",
@@ -241,7 +244,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   infoText: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     lineHeight: 18,
   },
   emptyContainer: {
@@ -252,12 +255,12 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontWeight: "700",
-    color: palette.text,
+    color: c.text,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     textAlign: "center",
   },
-});
+}));

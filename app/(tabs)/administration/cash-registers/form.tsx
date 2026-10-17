@@ -4,11 +4,11 @@ import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { FormSwitch } from "@/components/Form/AppSwitch";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import palette from "@/constants/palette";
 import React, { useMemo } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Text } from "react-native-paper";
 import * as Yup from "yup";
 
@@ -27,6 +27,7 @@ export default function CashRegisterFormScreen(props: Props) {
   const params = useLocalSearchParams();
   const router = useRouter();
   const { selectedLocation } = useSelectedLocation();
+  const styles = useThemedStyles(makeStyles);
   const id = props.id ?? (params.id ? Number(params.id) : undefined);
   // Desde Administración › Esta sucursal la caja es de la sucursal actual.
   const branchScope = params.scope === "location";
@@ -65,7 +66,7 @@ export default function CashRegisterFormScreen(props: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: { gap: 8 },
-  branchNote: { color: palette.textSecondary, marginBottom: 8 },
-});
+  branchNote: { color: c.textSecondary, marginBottom: 8 },
+}));

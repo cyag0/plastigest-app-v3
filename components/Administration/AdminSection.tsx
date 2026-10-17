@@ -1,10 +1,11 @@
 import AppChip from "@/components/App/Chip";
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 
 export type AdminCategory = "system" | "company" | "location" | "catalog";
 
@@ -41,6 +42,8 @@ export default function AdminSection({
   options,
 }: AdminSectionProps) {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
 
   if (options.length === 0) return null;
 
@@ -68,7 +71,7 @@ export default function AdminSection({
               <MaterialCommunityIcons
                 name={option.icon}
                 size={20}
-                color={palette.textSecondary}
+                color={colors.textSecondary}
               />
 
               <View style={styles.optionBody}>
@@ -90,7 +93,7 @@ export default function AdminSection({
               <MaterialCommunityIcons
                 name="chevron-right"
                 size={18}
-                color={palette.textMuted}
+                color={colors.textMuted}
                 style={styles.chevron}
               />
             </TouchableOpacity>
@@ -118,7 +121,7 @@ function hexWithAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   section: {
     marginBottom: tokens.spacing[5],
   },
@@ -133,11 +136,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
   sectionSubtitle: {
     fontSize: 13,
-    color: palette.textMuted,
+    color: c.textMuted,
     flex: 1,
     minWidth: 0,
   },
@@ -146,21 +149,21 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: tokens.radius.full,
     paddingHorizontal: 6,
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
   },
   countText: {
     ...tokens.typography.micro,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontVariant: ["tabular-nums"],
   },
   optionsCard: {
     marginHorizontal: tokens.spacing[5],
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     overflow: "hidden",
   },
   optionItem: {
@@ -190,13 +193,13 @@ const styles = StyleSheet.create({
   },
   optionTitle: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     flex: 1,
     minWidth: 0,
   },
   optionDescription: {
     ...tokens.typography.caption,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     lineHeight: 16,
   },
   chevron: {
@@ -204,7 +207,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: palette.border,
+    backgroundColor: c.border,
     marginLeft: tokens.spacing[4] + 20 + tokens.spacing[3],
   },
-});
+}));

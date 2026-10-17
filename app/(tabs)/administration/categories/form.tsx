@@ -2,6 +2,7 @@ import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
+import { useTheme } from "@/contexts/ThemeContext";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -30,6 +31,7 @@ export default function CategoriesForm(props: CategoriesFormProps) {
 
   const router = useRouter();
   const { company } = useSelectedCompany();
+  const { colors } = useTheme();
   // La empresa viene ya elegida (la del contexto); antes el campo salía vacío
   // y, si no se tocaba, el guardado fallaba. Referencia estable: AppForm
   // reinicia el formulario cada vez que cambia initialValues.
@@ -50,7 +52,7 @@ export default function CategoriesForm(props: CategoriesFormProps) {
         router.replace("/administration/categories");
       }}
     >
-      <ScrollView style={{ flex: 1, backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 } }}>
+      <ScrollView style={{ flex: 1, backgroundColor: colors.surface, padding: 24, shadowOffset: { width: 0, height: 0 } }}>
         <View style={{ padding: 16 }}>
           {/* Información básica de la categoría */}
           <Text

@@ -5,7 +5,7 @@ import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import IconLabel from "@/components/App/IconLabel";
 import StatusBadge from "@/components/App/StatusBadge";
 import PrintLabelsModal from "@/components/Products/PrintLabelsModal";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import useInventoryTypes, {
@@ -31,6 +31,7 @@ export default function ProductsByTypeIndex() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const alerts = useAlerts();
+  const { colors } = useTheme();
   const { bySlug } = useInventoryTypes();
   const { can } = useCan();
   // El filtro de categoría pide categories_list; sin él no se consulta.
@@ -99,8 +100,8 @@ export default function ProductsByTypeIndex() {
                 height: 36,
                 borderRadius: 8,
                 borderWidth: 1,
-                borderColor: "#E6E1D5",
-                backgroundColor: "#F0EDE4",
+                borderColor: colors.border,
+                backgroundColor: colors.surfaceMuted,
               }}
             />
           );
@@ -113,8 +114,8 @@ export default function ProductsByTypeIndex() {
               height: 36,
               borderRadius: 8,
               borderWidth: 1,
-              borderColor: "#E6E1D5",
-              backgroundColor: "#F8F6F1",
+              borderColor: colors.border,
+              backgroundColor: colors.surfaceMuted,
               alignItems: "center",
               justifyContent: "center",
             }}
@@ -122,7 +123,7 @@ export default function ProductsByTypeIndex() {
             <MaterialCommunityIcons
               name="image-off-outline"
               size={16}
-              color="#6E6B5E"
+              color={colors.textMuted}
             />
           </View>
         );
@@ -168,7 +169,7 @@ export default function ProductsByTypeIndex() {
             : 0;
         const minStock = Number(item.minimum_stock || 0);
         const isHealthy = minStock > 0 ? stock > minStock : stock > 0;
-        const stockColor = isHealthy ? "#3F8A3A" : "#B9412C";
+        const stockColor = isHealthy ? colors.success : colors.error;
 
         return (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -314,7 +315,7 @@ export default function ProductsByTypeIndex() {
             <>
               <AppList.Description
                 numberOfLines={1}
-                style={{ color: palette.textSecondary }}
+                style={{ color: colors.textSecondary }}
               >
                 {item.description || "Sin descripción"}
               </AppList.Description>
@@ -334,10 +335,10 @@ export default function ProductsByTypeIndex() {
                   style={{
                     width: 50,
                     height: 50,
-                    backgroundColor: "#D3CCBC",
+                    backgroundColor: colors.borderStrong,
                     borderRadius: 8,
                     borderWidth: 1,
-                    borderColor: "#EEEAE0",
+                    borderColor: colors.border,
                   }}
                 />
               )}
@@ -353,7 +354,7 @@ export default function ProductsByTypeIndex() {
               {item.sale_price && (
                 <AppList.Title
                   style={{
-                    color: palette.text,
+                    color: colors.text,
                   }}
                 >
                   {"$" + item.sale_price}

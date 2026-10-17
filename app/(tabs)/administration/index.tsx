@@ -3,18 +3,21 @@ import AdminSection, {
 } from "@/components/Administration/AdminSection";
 import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
 import EmptyState from "@/components/App/EmptyState";
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useCan } from "@/hooks/useCan";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 export default function AdministrationScreen() {
   const { selectedCompany, location } = useAuth();
   const { can, canAccessRoute } = useCan();
   const allLocations = useAllLocationsAccess();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
 
   const adminOptions: AdminOption[] = [
     // === CONFIGURACION DEL SISTEMA (Solo Super Admins) ===
@@ -24,7 +27,7 @@ export default function AdministrationScreen() {
       description: "Administra todas las empresas del sistema",
       icon: "office-building-cog",
       route: "/(tabs)/administration/companies",
-      color: palette.primary,
+      color: colors.primary,
       category: "system",
       // Pide companies_list (regla de la ruta), lo que revisa el backend.
       // companies_manage no lo revisa ningún endpoint.
@@ -35,7 +38,7 @@ export default function AdministrationScreen() {
       description: "Gestiona usuarios y accesos globales",
       icon: "account-cog",
       route: "/(tabs)/administration/users",
-      color: palette.textSecondary,
+      color: colors.textSecondary,
       category: "system",
       // Ver a los de todas las empresas es del administrador del sistema
       // (con users_manage un encargado veía esta opción y solo a los suyos).
@@ -51,7 +54,7 @@ export default function AdministrationScreen() {
       route: selectedCompany
         ? `/(tabs)/administration/companies/${selectedCompany.id}/edit`
         : "/(tabs)/administration/companies",
-      color: palette.primary,
+      color: colors.primary,
       category: "company",
     },
     {
@@ -60,7 +63,7 @@ export default function AdministrationScreen() {
       description: "Gestiona usuarios con acceso a esta empresa",
       icon: "account-group",
       route: "/(tabs)/administration/company-users",
-      color: palette.textSecondary,
+      color: colors.textSecondary,
       category: "company",
     },
     {
@@ -69,7 +72,7 @@ export default function AdministrationScreen() {
       description: "Administra ubicaciones y almacenes de tu empresa",
       icon: "map-marker-multiple",
       route: "/(tabs)/administration/locations",
-      color: palette.info,
+      color: colors.info,
       category: "company",
     },
     {
@@ -78,7 +81,7 @@ export default function AdministrationScreen() {
       description: "Puntos de cobro de cada sucursal para abrir turnos",
       icon: "cash-register",
       route: "/(tabs)/administration/cash-registers",
-      color: palette.success,
+      color: colors.success,
       category: "company",
     },
     {
@@ -87,7 +90,7 @@ export default function AdministrationScreen() {
       description: "Quién hizo qué: ventas, cortes, cambios de precio y permisos",
       icon: "history",
       route: "/(stacks)/activity?user_id=all",
-      color: palette.textSecondary,
+      color: colors.textSecondary,
       category: "company",
     },
     {
@@ -96,7 +99,7 @@ export default function AdministrationScreen() {
       description: "Define roles y gestiona permisos de acceso",
       icon: "shield-account",
       route: "/(tabs)/home/roles",
-      color: palette.primary,
+      color: colors.primary,
       category: "company",
     },
     {
@@ -105,7 +108,7 @@ export default function AdministrationScreen() {
       description: "Configura qué eventos generan notificaciones y a quién",
       icon: "bell-cog-outline",
       route: "/(stacks)/notification-preferences",
-      color: palette.warning,
+      color: colors.warning,
       category: "company",
       // notifications_list para verlas (regla de la ruta), como el backend;
       // cambiarlas pide notifications_manage dentro de la pantalla.
@@ -120,7 +123,7 @@ export default function AdministrationScreen() {
       description: "Nombre, dirección y contacto de la sucursal actual",
       icon: "store-edit",
       route: `/(tabs)/administration/locations/${location?.id}/edit`,
-      color: palette.success,
+      color: colors.success,
       category: "location",
     },
     {
@@ -129,7 +132,7 @@ export default function AdministrationScreen() {
       description: "Quién tiene acceso a esta sucursal y con qué rol",
       icon: "account-group",
       route: "/(tabs)/administration/current-location/users",
-      color: palette.textSecondary,
+      color: colors.textSecondary,
       category: "location",
     },
     {
@@ -138,7 +141,7 @@ export default function AdministrationScreen() {
       description: "Puntos de cobro de esta sucursal",
       icon: "cash-register",
       route: "/(tabs)/administration/cash-registers?scope=location",
-      color: palette.success,
+      color: colors.success,
       category: "location",
     },
     {
@@ -147,7 +150,7 @@ export default function AdministrationScreen() {
       description: "Avisos de esta sucursal y a quién le llegan",
       icon: "bell-cog-outline",
       route: "/(stacks)/notification-preferences?scope=location",
-      color: palette.warning,
+      color: colors.warning,
       category: "location",
     },
     {
@@ -156,7 +159,7 @@ export default function AdministrationScreen() {
       description: "Qué se hizo en esta sucursal y quién lo hizo",
       icon: "history",
       route: "/(stacks)/activity?user_id=all&scope=location",
-      color: palette.textSecondary,
+      color: colors.textSecondary,
       category: "location",
     },
 
@@ -167,7 +170,7 @@ export default function AdministrationScreen() {
       description: "Organiza productos en grupos lógicos",
       icon: "shape",
       route: "/(tabs)/administration/categories",
-      color: palette.primary,
+      color: colors.primary,
       category: "catalog",
     },
     {
@@ -176,7 +179,7 @@ export default function AdministrationScreen() {
       description: "Define unidades para inventarios (kg, pza, caja, etc.)",
       icon: "weight-kilogram",
       route: "/(tabs)/administration/unidades",
-      color: palette.warning,
+      color: colors.warning,
       category: "catalog",
     },
     {
@@ -185,7 +188,7 @@ export default function AdministrationScreen() {
       description: "Define paquetes y presentaciones de productos",
       icon: "package-variant",
       route: "/(tabs)/administration/packages",
-      color: palette.warning,
+      color: colors.warning,
       category: "catalog",
       // Los paquetes son parte del catálogo de productos: la ruta pide
       // products_list (no existe un permiso packages_list).
@@ -196,7 +199,7 @@ export default function AdministrationScreen() {
       description: "Registra y gestiona proveedores de productos",
       icon: "truck-delivery",
       route: "/(tabs)/administration/suppliers",
-      color: palette.info,
+      color: colors.info,
       category: "catalog",
     },
     {
@@ -205,7 +208,7 @@ export default function AdministrationScreen() {
       description: "Gestiona información e historial de clientes",
       icon: "account-multiple",
       route: "/(tabs)/administration/clientes",
-      color: palette.success,
+      color: colors.success,
       category: "catalog",
     },
   ];
@@ -283,7 +286,7 @@ export default function AdministrationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     backgroundColor: "transparent" as any,
@@ -300,13 +303,13 @@ const styles = StyleSheet.create({
   headerCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     marginHorizontal: tokens.spacing[5],
     marginBottom: tokens.spacing[5],
     padding: tokens.spacing[4],
     borderRadius: tokens.radius.lg,
     borderLeftWidth: 4,
-    borderLeftColor: palette.info,
+    borderLeftColor: c.info,
     gap: tokens.spacing[3],
     ...tokens.shadow.sm,
   },
@@ -314,7 +317,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: tokens.radius.md,
-    backgroundColor: palette.infoSoft,
+    backgroundColor: c.infoSoft,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -326,12 +329,12 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
   },
   headerSubtitle: {
     ...tokens.typography.body,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginHorizontal: tokens.spacing[5],
     marginBottom: tokens.spacing[4],
   },
@@ -348,6 +351,6 @@ const styles = StyleSheet.create({
   },
   footerText: {
     ...tokens.typography.caption,
-    color: palette.textMuted,
+    color: c.textMuted,
   },
-});
+}));

@@ -2,13 +2,14 @@ import { goBack } from "@/utils/navigation";
 import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormPhoneInput } from "@/components/Form/AppPhoneInput";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { phoneSchema } from "@/utils/phone";
 import {  useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Text } from "react-native-paper";
 import * as Yup from "yup";
 
@@ -41,6 +42,8 @@ export default function LocationFormScreen(props: LocationFormProps) {
   const locationId = params.id as string;
   const isEditing = !!locationId;
   const { company: selectedCompany } = useSelectedCompany();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
 
 const router = useRouter();
 
@@ -77,7 +80,7 @@ const router = useRouter();
       readonly={locationId ? props.readonly : false}
       validationSchema={validationSchema}
     >
-<View style={{ flex: 1, backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 } }}> 
+<View style={{ flex: 1, backgroundColor: colors.surface, padding: 24, shadowOffset: { width: 0, height: 0 } }}> 
 
       {/* Información básica */}
       <View style={styles.section}>
@@ -172,7 +175,7 @@ const router = useRouter();
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     backgroundColor: "transparent" as any,
@@ -189,41 +192,41 @@ const styles = StyleSheet.create({
   },
   errorText: {
     textAlign: "center",
-    color: palette.error,
+    color: c.error,
   },
   section: {
     marginBottom: 24,
   },
   sectionTitle: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontWeight: "600",
     marginBottom: 16,
   },
   companyInfo: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     padding: 16,
     borderRadius: 12,
     borderLeftWidth: 4,
-    borderLeftColor: palette.primary,
+    borderLeftColor: c.primary,
   },
   companyLabel: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginBottom: 4,
   },
   companyName: {
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "700",
     marginBottom: 2,
   },
   companyBusinessName: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     opacity: 0.8,
   },
   switchContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     padding: 16,
     borderRadius: 8,
     elevation: 1,
@@ -233,12 +236,12 @@ const styles = StyleSheet.create({
     marginRight: 16,
   },
   switchLabel: {
-    color: palette.text,
+    color: c.text,
     fontWeight: "500",
   },
   switchDescription: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     opacity: 0.7,
     marginTop: 2,
   },
-});
+}));

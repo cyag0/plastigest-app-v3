@@ -1,7 +1,7 @@
 import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import Services from "@/utils/services";
 import { formatPhone } from "@/utils/phone";
 import { useRouter } from "expo-router";
@@ -11,6 +11,7 @@ import { Text } from "react-native-paper";
 
 export default function ClientsIndex() {
   const router = useRouter();
+  const { colors } = useTheme();
 
   const columns: AppListColumn<any>[] = [
     { title: "Nombre", dataIndex: "name", key: "name", width: 200 },
@@ -82,7 +83,7 @@ export default function ClientsIndex() {
                       style={{
                         fontSize: 14,
                         fontWeight: "500",
-                        color: palette.primary,
+                        color: colors.primary,
                       }}
                     >
                       RFC: {item.rfc}

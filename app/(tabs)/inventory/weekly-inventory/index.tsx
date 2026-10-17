@@ -5,8 +5,8 @@ import AppModal, { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
-import palette from "@/constants/palette";
 import { inventoryCountStatus } from "@/constants/statuses";
+import { useTheme } from "@/contexts/ThemeContext";
 import { AlertsDialogs, AlertsProvider } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
@@ -20,6 +20,12 @@ import { ProgressChart } from "react-native-chart-kit";
 import { Text } from "react-native-paper";
 import * as Yup from "yup";
 import { toLocalDateString, formatDate } from "@/utils/dates";
+
+/** "#RRGGBB" → "r, g, b": la gráfica pide el color con opacidad. */
+const rgbOf = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+};
 
 const inventoryColumns: AppListColumn<App.Entities.InventoryCount.InventoryCount>[] = [
   {
@@ -90,6 +96,7 @@ const inventoryFilters: FilterConfig[] = [
 export default function InventoryIndex() {
   const router = useRouter();
   const { selectedLocation } = useSelectedLocation();
+  const { colors } = useTheme();
   const modalRef = useRef<AppModalRef>(null);
   const formRef = useRef<AppFormRef<any>>(null);
   const { can } = useCan();
@@ -156,7 +163,7 @@ export default function InventoryIndex() {
               <>
                 {item.progress && item.progress.pending > 0 && (
                   <AppList.Description>
-                    <Text style={{ color: palette.warning, fontWeight: "600" }}>
+                    <Text style={{ color: colors.warning, fontWeight: "600" }}>
                       {item.progress.pending} pendiente(s)
                     </Text>
                   </AppList.Description>
@@ -219,7 +226,7 @@ export default function InventoryIndex() {
             {
               title: isDownloading ? "Descargando..." : "Descargar PDF",
               icon: "file-pdf-box",
-              color: palette.primary,
+              color: colors.primary,
               show: (item: App.Entities.InventoryCount.InventoryCount) =>
                 canDownloadPdf && item.status === "completed",
               onPress: async (
@@ -302,6 +309,7 @@ function ProgressPieChart({
   pending,
   size = 80,
 }: ProgressPieChartProps) {
+  const { colors } = useTheme();
   const total = counted + pending;
 
   console.log("ProgressPieChart - counted:", counted, "pending:", pending);
@@ -316,7 +324,7 @@ function ProgressPieChart({
           alignItems: "center",
         }}
       >
-        <Text variant="labelSmall" style={{ color: palette.textSecondary }}>
+        <Text variant="labelSmall" style={{ color: colors.textSecondary }}>
           0%
         </Text>
       </View>
@@ -347,7 +355,7 @@ function ProgressPieChart({
           backgroundGradientFromOpacity: 0,
           backgroundGradientTo: "transparent" as any,
           backgroundGradientToOpacity: 0.5,
-          color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`, // Verde para la parte contada
+          color: (opacity = 1) => `rgba(${rgbOf(colors.success)}, ${opacity})`, // Verde para la parte contada
           strokeWidth: 2, // optional, default 3
           barPercentage: 0.5,
           useShadowColorFromDataset: false, // optional
@@ -373,7 +381,7 @@ function ProgressPieChart({
             fontSize: 12,
             fontWeight: "bold",
 
-            color: palette.text,
+            color: colors.text,
           }}
         >
           {Math.round(percentage * 100)}%

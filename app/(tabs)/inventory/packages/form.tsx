@@ -6,7 +6,7 @@ import { FormInput } from "@/components/Form/AppInput";
 import { FormNumeric } from "@/components/Form/AppNumeric";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import BarcodeScanner from "@/components/Form/BarcodeScanner";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
@@ -84,6 +84,7 @@ export default function PackagesForm(props: PackagesFormProps) {
   const scannerRef = useRef<any>(null);
   const { company } = useSelectedCompany();
   const alerts = useAlerts();
+  const { colors } = useTheme();
 
   const [allProducts, setAllProducts] = useState<any[]>([]);
   const [productUnitType, setProductUnitType] = useState<string | null>(null);
@@ -181,8 +182,8 @@ export default function PackagesForm(props: PackagesFormProps) {
           <IconButton
             icon="barcode-scan"
             mode="contained"
-            containerColor={palette.primary}
-            iconColor="#fff"
+            containerColor={colors.primary}
+            iconColor={colors.primaryForeground}
             size={24}
             onPress={() => scannerRef.current?.open()}
             style={styles.scanButton}
@@ -190,8 +191,8 @@ export default function PackagesForm(props: PackagesFormProps) {
           <IconButton
             icon="auto-fix"
             mode="contained"
-            containerColor={palette.accent}
-            iconColor="#fff"
+            containerColor={colors.accent}
+            iconColor={colors.primaryForeground}
             size={24}
             onPress={generateRandomBarcode}
             style={styles.scanButton}

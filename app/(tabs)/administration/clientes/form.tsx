@@ -3,6 +3,7 @@ import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormPhoneInput } from "@/components/Form/AppPhoneInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
+import { useTheme } from "@/contexts/ThemeContext";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
 import { phoneSchema } from "@/utils/phone";
@@ -78,6 +79,7 @@ export default function ClientsForm(props: ClientsFormProps) {
   const { company } = useSelectedCompany();
 
   const router = useRouter();
+  const { colors } = useTheme();
 
   return (
     <AppForm
@@ -95,7 +97,7 @@ export default function ClientsForm(props: ClientsFormProps) {
       validationSchema={validationSchema}
     >
       
-      <ScrollView style={{ flex: 1, backgroundColor: "white", padding: 24, shadowOffset: { width: 0, height: 0 }}}>
+      <ScrollView style={{ flex: 1, backgroundColor: colors.surface, padding: 24, shadowOffset: { width: 0, height: 0 }}}>
         <View style={{ padding: 16 }}>
           <FormInput
             name="name"

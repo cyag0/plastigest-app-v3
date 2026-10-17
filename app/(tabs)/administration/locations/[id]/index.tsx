@@ -3,14 +3,15 @@ import RecordLoadError, {
   type RecordLoadProblem,
 } from "@/components/App/RecordLoadError";
 import { goBack } from "@/utils/navigation";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { formatPhone } from "@/utils/phone";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import {
   ActivityIndicator,
   Avatar,
@@ -23,6 +24,8 @@ import {
 export default function LocationDetailScreen() {
   const router = useRouter();
   const alerts = useAlerts();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { hasPermission } = useAuth();
   const params = useLocalSearchParams();
   const locationId = params.id as string;
@@ -124,7 +127,7 @@ export default function LocationDetailScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={palette.primary} />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text variant="bodyMedium" style={styles.loadingText}>
             Cargando información...
           </Text>
@@ -298,8 +301,8 @@ export default function LocationDetailScreen() {
               mode="contained"
               onPress={handleEdit}
               style={styles.editButton}
-              buttonColor={palette.primary}
-              textColor="#fff"
+              buttonColor={colors.primary}
+              textColor={colors.primaryForeground}
               icon="pencil"
             >
               Editar Sucursal
@@ -311,7 +314,7 @@ export default function LocationDetailScreen() {
               mode="outlined"
               onPress={handleDelete}
               style={styles.deleteButton}
-              textColor={palette.error}
+              textColor={colors.error}
               loading={deleting}
               disabled={deleting}
               icon="delete"
@@ -325,7 +328,7 @@ export default function LocationDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     backgroundColor: "transparent" as any,
@@ -338,11 +341,11 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
   errorText: {
     textAlign: "center",
-    color: palette.error,
+    color: c.error,
   },
   scrollContainer: {
     padding: 16,
@@ -350,7 +353,7 @@ const styles = StyleSheet.create({
   },
   headerCard: {
     marginBottom: 16,
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     elevation: 2,
   },
   headerContent: {
@@ -359,19 +362,19 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   avatar: {
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
     marginRight: 16,
   },
   headerInfo: {
     flex: 1,
   },
   locationName: {
-    color: palette.text,
+    color: c.text,
     fontWeight: "bold",
     marginBottom: 4,
   },
   description: {
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "600",
     marginBottom: 8,
   },
@@ -379,27 +382,27 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   activeChip: {
-    backgroundColor: palette.success,
+    backgroundColor: c.success,
   },
   inactiveChip: {
-    backgroundColor: palette.error,
+    backgroundColor: c.error,
   },
   statusText: {
     fontWeight: "600",
   },
   activeText: {
-    color: "#fff",
+    color: c.textInverse,
   },
   inactiveText: {
-    color: "#fff",
+    color: c.textInverse,
   },
   card: {
     marginBottom: 16,
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
     elevation: 1,
   },
   sectionTitle: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontWeight: "600",
     marginBottom: 16,
   },
@@ -409,17 +412,17 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   label: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontWeight: "500",
     width: 100,
     marginRight: 8,
   },
   value: {
-    color: palette.text,
+    color: c.text,
     flex: 1,
   },
   companyName: {
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "600",
     flex: 1,
   },
@@ -432,6 +435,6 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     borderRadius: 8,
-    borderColor: palette.error,
+    borderColor: c.error,
   },
-});
+}));
