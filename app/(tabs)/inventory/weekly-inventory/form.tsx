@@ -1,10 +1,21 @@
 import { goBack } from "@/utils/navigation";
+import EmptyState from "@/components/App/EmptyState";
+import {
+  ListGroup,
+  ListGroupSkeleton,
+  ListRow,
+} from "@/components/App/ListGroup";
+import ListSearchbar from "@/components/App/ListSearchbar";
+import StatusBadge from "@/components/App/StatusBadge";
+import { ProportionBar } from "@/components/Dashboard/BreakdownList";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, {
   AppFormRef,
   useAppForm,
 } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
+import { FormRow, FormSection } from "@/components/Form/FormLayout";
+import { inventoryCountStatus } from "@/constants/statuses";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -12,6 +23,7 @@ import useDebounce from "@/hooks/useDebounce";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
+import { formatDate } from "@/utils/dates";
 import { formatQuantity, parseQuantity } from "@/utils/format";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Redirect, useRouter } from "expo-router";
@@ -91,6 +103,21 @@ async function runChunked<T>(
     await Promise.all(chunk.map(worker));
   }
 }
+
+const plural = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
+
+// Nombre (≤ 150, como el backend) y fecha: lo que se manda al completar.
+const validationSchema = Yup.object().shape({
+  name: Yup.string()
+    .trim()
+    .required("Escribe el nombre del conteo")
+    .max(150, "Usa 150 caracteres o menos"),
+  count_date: Yup.date()
+    .typeError("Elige la fecha del conteo")
+    .required("Elige la fecha del conteo"),
+  notes: Yup.string(),
+});
 
 // ===========================================================================
 // Pantalla principal: carga productos + detalles existentes y monta el form.
@@ -202,20 +229,20 @@ function InventoryForm(props: InventoryFormProps) {
       id={props.id}
       ref={formRef}
       style={styles.screen}
-      validationSchema={Yup.object().shape({
-        name: Yup.string().required("El nombre del inventario es requerido"),
-        count_date: Yup.date().required("La fecha es requerida"),
-        notes: Yup.string(),
-      })}
+      validationSchema={validationSchema}
       submitButtonText="Completar conteo"
       showButtons={!props.readonly}
       showResetButton={false}
+      // Cada producto se guarda al momento: no hay nada que descartar con un
+      // "Cancelar" (y junto a "Cancelar conteo" confundía). Se sale con la
+      // flecha de la barra.
+      showCancelButton={false}
       additionalSubmitButtons={
         <Button
           mode="outlined"
-          compact={Platform.OS === "web"}
           textColor={colors.error}
           onPress={handleCancel}
+          style={styles.cancelCountButton}
         >
           Cancelar conteo
         </Button>
@@ -227,14 +254,14 @@ function InventoryForm(props: InventoryFormProps) {
         const missing = products.filter((p) => !details[detailKey(p.id)]?.id);
         if (missing.length > 0) {
           alerts.warning(
-            `Faltan ${missing.length} producto(s) por contar. Usa "Marcar todo como correcto" para completarlos rápido.`,
+            `Faltan ${plural(missing.length, "producto", "productos")} por contar. Cuéntalos o usa «Marcar pendientes como correctos».`,
           );
           return valuesFormData;
         }
 
         const ok = await alerts.confirm(
-          "¿Estás seguro de completar el conteo? El stock se ajustará según las diferencias.",
-          { title: "Completar conteo", okText: "Sí, completar" },
+          "Al completarlo, la existencia se ajusta con las diferencias que encontraste.",
+          { title: "¿Completar el conteo?", okText: "Sí, completar" },
         );
         if (!ok) return valuesFormData;
 
@@ -246,28 +273,12 @@ function InventoryForm(props: InventoryFormProps) {
           count_date: current?.count_date,
           notes: current?.notes,
         });
-        alerts.success("Conteo completado correctamente");
+        alerts.success("Conteo completado");
         router.navigate("/inventory/weekly-inventory");
         return valuesFormData;
       }}
     >
-      <InfoBanner styles={styles} colors={colors} />
-
-      <View style={styles.card}>
-        <FormInput
-          name="name"
-          label="Nombre del inventario"
-          placeholder="Ej: Conteo semanal almacén principal"
-        />
-        <FormDatePicker name="count_date" label="Fecha del inventario" required />
-        <FormInput
-          name="notes"
-          label="Comentarios"
-          placeholder="Observaciones adicionales"
-          multiline
-          numberOfLines={3}
-        />
-      </View>
+      <CountHeader />
 
       <CountingManager
         inventoryCountId={props.id}
@@ -275,34 +286,56 @@ function InventoryForm(props: InventoryFormProps) {
         loading={loading}
         selectedLocationId={selectedLocation?.id}
       />
+
+      <CountDataSection />
     </AppForm>
   );
 }
 
-// Banner informativo superior.
-function InfoBanner({
-  styles,
-  colors,
-}: {
-  styles: Styles;
-  colors: ReturnType<typeof useTheme>["colors"];
-}) {
+// Encabezado sin tarjeta, como el detalle de Compras: nombre, fecha y estado
+// (y las notas en el detalle). Lo que se cuenta va primero; los datos del
+// conteo se editan al final, junto a "Completar conteo".
+function CountHeader() {
+  const { readonly } = useAppForm();
+  const { values } = useFormikContext<InventoryFormData>();
+  const styles = useStyles();
+
   return (
-    <View style={styles.banner}>
-      <View style={styles.bannerIcon}>
-        <MaterialCommunityIcons
-          name="clipboard-check-outline"
-          size={20}
-          color={colors.primary}
-        />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.bannerTitle}>Inventario semanal</Text>
-        <Text style={styles.bannerText}>
-          Verifica el stock físico y confirma si coincide con el sistema.
-        </Text>
-      </View>
+    <View style={styles.header}>
+      <Text style={styles.headerTitle} accessibilityRole="header">
+        {values.name || "Conteo de inventario"}
+      </Text>
+      {!!values.count_date && (
+        <Text style={styles.headerSubtitle}>{formatDate(values.count_date)}</Text>
+      )}
+      {!!values.status && (
+        <View style={styles.headerStatus}>
+          <StatusBadge {...inventoryCountStatus(values.status)} />
+        </View>
+      )}
+      {readonly && !!values.notes && (
+        <Text style={styles.headerNotes}>{values.notes}</Text>
+      )}
     </View>
+  );
+}
+
+// Nombre, fecha y notas: se mandan al completar el conteo (no antes).
+function CountDataSection() {
+  const { readonly } = useAppForm();
+  if (readonly) return null;
+
+  return (
+    <FormSection
+      title="Datos del conteo"
+      description="El nombre, la fecha y las notas se guardan al completarlo."
+    >
+      <FormRow widths={[2, 1]}>
+        <FormInput name="name" label="Nombre" maxLength={150} />
+        <FormDatePicker name="count_date" label="Fecha" />
+      </FormRow>
+      <FormInput name="notes" label="Notas" optional multiline numberOfLines={2} />
+    </FormSection>
   );
 }
 
@@ -441,8 +474,8 @@ function CountingManager({
       return;
     }
     const ok = await alerts.confirm(
-      `Se marcarán ${pending.length} producto(s) como correctos: se toma como contada la existencia del sistema al guardar cada uno. ¿Continuar?`,
-      { title: "Marcar todo como correcto", okText: "Sí, marcar" },
+      `Se toma como contada la existencia del sistema al guardar cada uno de los ${plural(pending.length, "producto pendiente", "productos pendientes")}.`,
+      { title: "¿Marcar pendientes como correctos?", okText: "Sí, marcar" },
     );
     if (!ok) return;
 
@@ -468,10 +501,10 @@ function CountingManager({
     }
     const saved = Object.keys(updates).length;
     if (failed === 0) {
-      alerts.success(`${saved} producto(s) marcados como correctos`);
+      alerts.success(plural(saved, "producto marcado como correcto", "productos marcados como correctos"));
     } else {
       alerts.warning(
-        `${saved} producto(s) marcados como correctos; ${failed} no se pudieron guardar. Vuelve a intentarlo.`,
+        `${plural(saved, "producto marcado como correcto", "productos marcados como correctos")}; ${failed} no se pudieron guardar. Vuelve a intentarlo.`,
       );
     }
   }, [products, storeDetail, setFieldValue, alerts]);
@@ -489,163 +522,156 @@ function CountingManager({
 
   if (loading) {
     return (
-      <View style={styles.loadingBox}>
-        <ActivityIndicator color={colors.primary} />
-        <Text style={styles.loadingText}>Cargando productos...</Text>
-      </View>
+      <FormSection title="Productos">
+        <ListGroupSkeleton rows={5} />
+      </FormSection>
     );
   }
 
   return (
-    <View style={styles.content}>
-      {/* --- Resumen + progreso --- */}
-      <View style={styles.card}>
-        <View style={styles.summaryHeader}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardTitle}>Avance del conteo</Text>
-            <Text style={styles.summarySub}>
-              {stats.counted} de {stats.total} productos contados
-            </Text>
-          </View>
-          <Text style={styles.summaryPct}>
-            {Math.round(stats.progress * 100)}%
-          </Text>
-        </View>
-
-        <View style={styles.progressTrack}>
-          <View
-            style={[styles.progressFill, { width: `${stats.progress * 100}%` }]}
-          />
-        </View>
-
-        <View style={styles.statsRow}>
-          <StatPill
-            icon="check-circle"
-            label="Correctos"
-            value={stats.ok}
-            color={colors.success}
-            styles={styles}
-          />
-          <StatPill
-            icon="alert-circle"
-            label="Con diferencia"
-            value={stats.diff}
-            color={colors.warning}
-            styles={styles}
-          />
-          <StatPill
-            icon="clock-outline"
-            label="Pendientes"
-            value={stats.pending}
-            color={colors.textMuted}
-            styles={styles}
-          />
-        </View>
-
-        {!readonly && (
-          <Pressable
-            style={[styles.bulkBtn, bulkLoading && styles.bulkBtnDisabled]}
-            onPress={markAllCorrect}
-            disabled={bulkLoading || stats.pending === 0}
-          >
-            {bulkLoading ? (
-              <ActivityIndicator size={16} color={colors.primaryForeground} />
-            ) : (
-              <MaterialCommunityIcons
-                name="checkbox-multiple-marked-outline"
-                size={18}
-                color={colors.primaryForeground}
+    <View>
+      {/* --- Avance (en el detalle, el resumen) --- */}
+      <FormSection title={readonly ? "Resumen" : "Avance"} style={styles.section}>
+        <ListGroup inset={14}>
+          <View style={styles.progress}>
+            <View style={styles.progressHead}>
+              <Text style={styles.progressText}>
+                <Text style={styles.strong}>{stats.counted}</Text> de{" "}
+                {plural(stats.total, "producto contado", "productos contados")}
+              </Text>
+              <Text style={styles.progressPct}>
+                {Math.round(stats.progress * 100)}%
+              </Text>
+            </View>
+            {stats.total > 0 && (
+              <ProportionBar
+                height={8}
+                segments={[
+                  { key: "ok", value: stats.ok, color: colors.success },
+                  { key: "diff", value: stats.diff, color: colors.warning },
+                  { key: "pending", value: stats.pending, color: colors.border },
+                ]}
               />
             )}
-            <Text style={styles.bulkBtnText}>
-              {stats.pending === 0
-                ? "Todo contado"
-                : `Marcar todo como correcto (${stats.pending})`}
-            </Text>
-          </Pressable>
-        )}
-      </View>
+            <View style={styles.legend}>
+              <Legend
+                icon="check-circle-outline"
+                color={colors.success}
+                label={plural(stats.ok, "correcto", "correctos")}
+              />
+              <Legend
+                icon="alert-circle-outline"
+                color={colors.warning}
+                label={`${stats.diff} con diferencia`}
+              />
+              <Legend
+                icon="clock-outline"
+                color={colors.textMuted}
+                label={plural(stats.pending, "pendiente", "pendientes")}
+              />
+            </View>
+          </View>
 
-      {/* --- Buscador --- */}
-      <View style={styles.searchBox}>
-        <MaterialCommunityIcons
-          name="magnify"
-          size={18}
-          color={colors.textMuted}
-        />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Buscar producto..."
-          placeholderTextColor={colors.textMuted}
-          style={styles.searchInput}
-        />
-        {query.length > 0 && (
-          <Pressable onPress={() => setQuery("")} hitSlop={8}>
-            <MaterialCommunityIcons
-              name="close"
-              size={16}
-              color={colors.textMuted}
+          {!readonly && stats.pending > 0 && (
+            <ListRow
+              icon="checkbox-multiple-marked-outline"
+              iconColor={colors.primary}
+              title={
+                stats.pending === 1
+                  ? "Marcar el pendiente como correcto"
+                  : `Marcar los ${stats.pending} pendientes como correctos`
+              }
+              subtitle="Toma como contada la existencia del sistema."
+              onPress={bulkLoading ? undefined : markAllCorrect}
+              chevron={false}
+              trailing={
+                bulkLoading ? (
+                  <ActivityIndicator size={16} color={colors.primary} />
+                ) : undefined
+              }
             />
-          </Pressable>
-        )}
-      </View>
+          )}
+        </ListGroup>
+      </FormSection>
 
-      {/* --- Lista de productos --- */}
-      {visibleProducts.length === 0 ? (
-        <View style={styles.emptyState}>
-          <MaterialCommunityIcons
-            name="package-variant"
-            size={32}
-            color={colors.textMuted}
-          />
-          <Text style={styles.emptyText}>
-            {products.length === 0
-              ? "No hay productos con stock en esta ubicación"
-              : "No se encontraron productos"}
-          </Text>
+      {/* --- Productos: buscador y lista --- */}
+      <FormSection
+        title="Productos"
+        description={
+          readonly
+            ? undefined
+            : "Toca «Correcto» si lo que hay coincide con el sistema; si no, «Ajustar» y escribe lo que contaste. Cada producto se guarda al momento."
+        }
+        style={styles.section}
+      >
+        <View style={styles.productsBody}>
+          {products.length > 0 && (
+            <ListSearchbar
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Buscar por nombre o código"
+            />
+          )}
+
+          {visibleProducts.length === 0 ? (
+            <ListGroup>
+              <EmptyState
+                compact
+                icon={products.length === 0 ? "package-variant" : "magnify"}
+                title={
+                  products.length === 0
+                    ? "No hay productos activos en esta sucursal"
+                    : "Sin resultados"
+                }
+                description={
+                  products.length === 0
+                    ? undefined
+                    : `Ningún producto coincide con «${query.trim()}».`
+                }
+              />
+            </ListGroup>
+          ) : (
+            <ListGroup inset={14}>
+              {visibleProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  detail={details[detailKey(product.id)]}
+                  readonly={readonly}
+                  styles={styles}
+                  colors={colors}
+                  onSave={saveDetail}
+                />
+              ))}
+            </ListGroup>
+          )}
         </View>
-      ) : (
-        visibleProducts.map((product) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            detail={details[detailKey(product.id)]}
-            readonly={readonly}
-            styles={styles}
-            colors={colors}
-            onSave={saveDetail}
-          />
-        ))
-      )}
+      </FormSection>
     </View>
   );
 }
 
-function StatPill({
+/** Una entrada de la leyenda de la barra de avance: ícono, cifra y nombre. */
+function Legend({
   icon,
-  label,
-  value,
   color,
-  styles,
+  label,
 }: {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  label: string;
-  value: number;
   color: string;
-  styles: Styles;
+  label: string;
 }) {
+  const styles = useStyles();
   return (
-    <View style={styles.statPill}>
-      <MaterialCommunityIcons name={icon} size={16} color={color} />
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={styles.legendItem}>
+      <MaterialCommunityIcons name={icon} size={15} color={color} />
+      <Text style={styles.legendText}>{label}</Text>
     </View>
   );
 }
 
 // ===========================================================================
-// Tarjeta de producto (memoizada). Solo se re-renderiza cuando cambia su
+// Renglón de producto (memoizado). Solo se re-renderiza cuando cambia su
 // propio detalle (referencia) o el modo de tema.
 // ===========================================================================
 type Styles = ReturnType<typeof useStyles>;
@@ -794,63 +820,80 @@ const ProductCard = React.memo(function ProductCard({
   const difference = (parseQuantity(counted) ?? 0) - system;
 
   // ---- Modo lectura ----
+  // Un producto sin contar dice "Sin contar" (antes mostraba como contada
+  // la existencia del sistema).
   if (readonly) {
     const countedVal = savedCounted != null ? Number(savedCounted) : 0;
     const diff = countedVal - system;
     return (
-      <View style={styles.productCard}>
-        <ProductHeader
-          product={product}
-          system={system}
-          unit={unit}
-          styles={styles}
-          colors={colors}
-          status={savedId == null ? "pending" : diff === 0 ? "correct" : "adjust"}
-        />
-        <View style={styles.readonlyRow}>
-          <Text style={styles.readonlyLabel}>Cantidad contada</Text>
-          <Text style={styles.readonlyValue}>
-            {formatQuantity(countedVal, unit)}
-          </Text>
+      <View style={styles.row}>
+        <View style={styles.rowHead}>
+          <ProductThumb product={product} styles={styles} colors={colors} />
+          <View style={styles.rowBody}>
+            <Text style={styles.rowTitle} numberOfLines={2}>
+              {product?.name || "Producto"}
+            </Text>
+            <Text style={styles.rowMeta}>
+              Sistema {formatQuantity(system, unit)}
+              {savedId != null
+                ? ` · Contado ${formatQuantity(countedVal, unit)}`
+                : ""}
+            </Text>
+            {!!detail?.notes && (
+              <Text style={styles.rowNotes}>{detail.notes}</Text>
+            )}
+          </View>
+          {savedId == null ? (
+            <StatusBadge label="Sin contar" tone="neutral" />
+          ) : diff === 0 ? (
+            <StatusBadge label="Correcto" tone="success" icon="check" />
+          ) : (
+            <DiffBadge diff={diff} unit={unit} />
+          )}
         </View>
-        {diff !== 0 && (
-          <DiffBadge diff={diff} unit={unit} styles={styles} colors={colors} />
-        )}
-        {!!detail?.notes && (
-          <Text style={styles.readonlyNotes}>{detail.notes}</Text>
-        )}
       </View>
     );
   }
 
   // ---- Modo edición ----
   return (
-    <View style={styles.productCard}>
-      <ProductHeader
-        product={product}
-        system={system}
-        unit={unit}
-        styles={styles}
-        colors={colors}
-        status={derivedMode}
-        saving={saving}
-        flash={flash}
-      />
+    <View style={styles.row}>
+      <View style={styles.rowHead}>
+        <ProductThumb product={product} styles={styles} colors={colors} />
+        <View style={styles.rowBody}>
+          <Text style={styles.rowTitle} numberOfLines={2}>
+            {product?.name || "Producto"}
+          </Text>
+          <Text style={styles.rowMeta}>
+            Sistema {formatQuantity(system, unit)}
+          </Text>
+        </View>
+        <RowStatus
+          status={derivedMode}
+          saving={saving}
+          flash={flash}
+          styles={styles}
+          colors={colors}
+        />
+      </View>
 
       <View style={styles.segment}>
         <Pressable
           style={[styles.segmentBtn, mode === "correct" && styles.segmentOk]}
           onPress={onPressCorrect}
+          accessibilityRole="button"
+          accessibilityState={{ selected: mode === "correct" }}
+          accessibilityLabel={`${product?.name}: correcto`}
         >
           <MaterialCommunityIcons
             name="check"
             size={16}
-            color={mode === "correct" ? colors.success : colors.textSecondary}
+            color={mode === "correct" ? colors.successStrong : colors.textSecondary}
           />
           <Text
             style={[
               styles.segmentText,
-              mode === "correct" && { color: colors.success },
+              mode === "correct" && { color: colors.successStrong },
             ]}
           >
             Correcto
@@ -859,16 +902,19 @@ const ProductCard = React.memo(function ProductCard({
         <Pressable
           style={[styles.segmentBtn, mode === "adjust" && styles.segmentAdjust]}
           onPress={onPressAdjust}
+          accessibilityRole="button"
+          accessibilityState={{ selected: mode === "adjust" }}
+          accessibilityLabel={`${product?.name}: ajustar`}
         >
           <MaterialCommunityIcons
-            name="pencil"
+            name="pencil-outline"
             size={15}
-            color={mode === "adjust" ? colors.warning : colors.textSecondary}
+            color={mode === "adjust" ? colors.warningStrong : colors.textSecondary}
           />
           <Text
             style={[
               styles.segmentText,
-              mode === "adjust" && { color: colors.warning },
+              mode === "adjust" && { color: colors.warningStrong },
             ]}
           >
             Ajustar
@@ -881,13 +927,15 @@ const ProductCard = React.memo(function ProductCard({
           <Text style={styles.fieldLabel}>Cantidad contada</Text>
           <View style={styles.stepper}>
             <Pressable
-              style={[styles.stepBtn, { backgroundColor: colors.errorSoft }]}
+              style={styles.stepBtn}
               onPress={() => changeCounted((parseQuantity(counted) ?? 0) - 1)}
+              accessibilityRole="button"
+              accessibilityLabel="Uno menos"
             >
               <MaterialCommunityIcons
                 name="minus"
                 size={20}
-                color={colors.error}
+                color={colors.textSecondary}
               />
             </Pressable>
             <TextInput
@@ -896,37 +944,37 @@ const ProductCard = React.memo(function ProductCard({
               keyboardType={allowDecimal ? "decimal-pad" : "number-pad"}
               style={[styles.stepInput, invalid && { borderColor: colors.error }]}
               selectTextOnFocus
+              accessibilityLabel={`Cantidad contada de ${product?.name}`}
             />
             <Text style={styles.stepUnit}>{unit}</Text>
             <Pressable
-              style={[styles.stepBtn, { backgroundColor: colors.successSoft }]}
+              style={styles.stepBtn}
               onPress={() => changeCounted((parseQuantity(counted) ?? 0) + 1)}
+              accessibilityRole="button"
+              accessibilityLabel="Uno más"
             >
               <MaterialCommunityIcons
                 name="plus"
                 size={20}
-                color={colors.success}
+                color={colors.textSecondary}
               />
             </Pressable>
           </View>
 
           {invalid ? (
-            <Text style={[styles.fieldLabel, { color: colors.error, marginTop: 4 }]}>
+            <Text style={styles.errorText}>
               {allowDecimal
                 ? "Escribe una cantidad válida (por ejemplo 2.5)"
                 : "Escribe una cantidad entera"}
             </Text>
           ) : difference !== 0 ? (
-            <DiffBadge
-              diff={difference}
-              unit={unit}
-              styles={styles}
-              colors={colors}
-            />
+            <View style={styles.diffLine}>
+              <DiffBadge diff={difference} unit={unit} />
+            </View>
           ) : null}
 
           <Text style={[styles.fieldLabel, { marginTop: tokens.spacing[3] }]}>
-            Notas (opcional)
+            Notas <Text style={styles.optional}>(opcional)</Text>
           </Text>
           <TextInput
             defaultValue={detail?.notes || ""}
@@ -934,7 +982,7 @@ const ProductCard = React.memo(function ProductCard({
               draftRef.current.notes = t;
             }}
             onBlur={persist}
-            placeholder="Observaciones..."
+            placeholder="Por qué no coincide"
             placeholderTextColor={colors.textMuted}
             style={styles.notesInput}
             multiline
@@ -945,107 +993,71 @@ const ProductCard = React.memo(function ProductCard({
   );
 });
 
-// Encabezado del producto: imagen, nombre, stock sistema y estado.
-function ProductHeader({
+// Foto del producto o, sin foto, un ícono gris.
+function ProductThumb({
   product,
-  system,
-  unit,
   styles,
   colors,
-  status,
-  saving,
-  flash,
 }: {
   product: App.Entities.Product;
-  system: number;
-  unit: string;
   styles: Styles;
   colors: ReturnType<typeof useTheme>["colors"];
-  status: "pending" | "correct" | "adjust";
-  saving?: boolean;
-  flash?: boolean;
 }) {
-  const statusMeta = {
-    pending: { label: "Pendiente", color: colors.textMuted, icon: "clock-outline" as const },
-    correct: { label: "Correcto", color: colors.success, icon: "check-circle" as const },
-    adjust: { label: "Ajustado", color: colors.warning, icon: "pencil-circle" as const },
-  }[status];
-
-  return (
-    <View style={styles.productHeader}>
-      {product?.main_image?.uri ? (
-        <Image
-          source={{ uri: product.main_image.uri }}
-          style={styles.productImage}
-          resizeMode="cover"
-        />
-      ) : (
-        <View style={[styles.productImage, styles.productImagePlaceholder]}>
-          <MaterialCommunityIcons
-            name="package-variant"
-            size={22}
-            color={colors.textMuted}
-          />
-        </View>
-      )}
-
-      <View style={{ flex: 1 }}>
-        <Text style={styles.productName} numberOfLines={2}>
-          {product?.name || "Producto"}
-        </Text>
-        <Text style={styles.productStock}>
-          Stock sistema:{" "}
-          <Text style={{ color: colors.primary, fontWeight: "700" }}>
-            {formatQuantity(system, unit)}
-          </Text>
-        </Text>
-      </View>
-
-      <View style={[styles.statusChip, { backgroundColor: statusMeta.color + "1A" }]}>
-        {flash ? (
-          <MaterialCommunityIcons name="check" size={14} color={colors.success} />
-        ) : saving ? (
-          <ActivityIndicator size={12} color={statusMeta.color} />
-        ) : (
-          <MaterialCommunityIcons
-            name={statusMeta.icon}
-            size={14}
-            color={statusMeta.color}
-          />
-        )}
-        <Text style={[styles.statusChipText, { color: statusMeta.color }]}>
-          {flash ? "Guardado" : statusMeta.label}
-        </Text>
-      </View>
+  return product?.main_image?.uri ? (
+    <Image
+      source={{ uri: product.main_image.uri }}
+      style={styles.thumb}
+      resizeMode="cover"
+    />
+  ) : (
+    <View style={[styles.thumb, styles.thumbPlaceholder]}>
+      <MaterialCommunityIcons
+        name="package-variant"
+        size={20}
+        color={colors.textMuted}
+      />
     </View>
   );
 }
 
-// Badge de diferencia (excedente / faltante).
-function DiffBadge({
-  diff,
-  unit,
+// Estado del renglón mientras se cuenta: guardando, "Guardado" un momento y
+// luego Pendiente / Correcto / Con diferencia.
+function RowStatus({
+  status,
+  saving,
+  flash,
   styles,
   colors,
 }: {
-  diff: number;
-  unit: string;
+  status: "pending" | "correct" | "adjust";
+  saving?: boolean;
+  flash?: boolean;
   styles: Styles;
   colors: ReturnType<typeof useTheme>["colors"];
 }) {
+  if (saving) {
+    return (
+      <View style={styles.saving}>
+        <ActivityIndicator size={12} color={colors.textMuted} />
+        <Text style={styles.savingText}>Guardando</Text>
+      </View>
+    );
+  }
+  if (flash) return <StatusBadge label="Guardado" tone="success" icon="check" />;
+  if (status === "correct") return <StatusBadge label="Correcto" tone="success" />;
+  if (status === "adjust") return <StatusBadge label="Con diferencia" tone="warning" />;
+  return <StatusBadge label="Pendiente" tone="neutral" />;
+}
+
+// Diferencia contra el sistema: "Sobran 2 pz" / "Faltan 3 pz".
+function DiffBadge({ diff, unit }: { diff: number; unit: string }) {
   const positive = diff > 0;
-  const color = positive ? colors.info : colors.error;
   return (
-    <View style={[styles.diffBadge, { backgroundColor: color + "14" }]}>
-      <MaterialCommunityIcons
-        name={positive ? "arrow-up-bold" : "arrow-down-bold"}
-        size={16}
-        color={color}
-      />
-      <Text style={[styles.diffText, { color }]}>
-        {positive ? "Excedente" : "Faltante"}: {formatQuantity(Math.abs(diff), unit)}
-      </Text>
-    </View>
+    <StatusBadge
+      label={`${positive ? "Sobran" : "Faltan"} ${formatQuantity(Math.abs(diff), unit)}`}
+      tone={positive ? "info" : "warning"}
+      icon={positive ? "arrow-up" : "arrow-down"}
+    />
   );
 }
 
@@ -1056,149 +1068,70 @@ function useStyles() {
   const isWeb = Platform.OS === "web";
   return useThemedStyles((c) => ({
     screen: { backgroundColor: c.background },
-    content: { gap: tokens.spacing[4] },
+    section: { marginBottom: 22 },
+    productsBody: { gap: 8 },
+    // Mismo ancho que "Completar conteo": en el teléfono no se corta.
+    cancelCountButton: { flex: 1.4 },
 
-    // Banner
-    banner: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[3],
-      backgroundColor: c.primarySoft,
-      borderRadius: tokens.radius.lg,
-      borderLeftWidth: 4,
-      borderLeftColor: c.primary,
-      padding: tokens.spacing[3],
-      marginBottom: tokens.spacing[4],
-    },
-    bannerIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.surface,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    bannerTitle: { ...tokens.typography.bodyMd, fontWeight: "700", color: c.text },
-    bannerText: { ...tokens.typography.bodySm, color: c.textSecondary, marginTop: 2 },
-
-    // Card genérica
-    card: {
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: tokens.spacing[4],
-      marginBottom: tokens.spacing[4],
-      ...tokens.shadow.xs,
-    },
-    cardTitle: { ...tokens.typography.h3, color: c.text },
-
-    // Resumen
-    summaryHeader: { flexDirection: "row", alignItems: "center" },
-    summarySub: { ...tokens.typography.bodySm, color: c.textSecondary, marginTop: 2 },
-    summaryPct: { ...tokens.typography.h2, color: c.primary },
-    progressTrack: {
-      height: 8,
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.surfaceMuted,
-      overflow: "hidden",
-      marginTop: tokens.spacing[3],
-    },
-    progressFill: {
-      height: "100%",
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.primary,
-    },
-    statsRow: {
-      flexDirection: "row",
-      gap: tokens.spacing[2],
-      marginTop: tokens.spacing[4],
-    },
-    statPill: {
-      flex: 1,
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: 5,
-      paddingVertical: tokens.spacing[2],
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.surfaceMuted,
-    },
-    statValue: { ...tokens.typography.bodyMd, fontWeight: "700" },
-    statLabel: { ...tokens.typography.caption, color: c.textSecondary },
-
-    // Botón masivo
-    bulkBtn: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: tokens.spacing[2],
-      marginTop: tokens.spacing[4],
-      height: 46,
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.primary,
-    },
-    bulkBtnDisabled: { opacity: 0.6 },
-    bulkBtnText: {
-      ...tokens.typography.bodyMd,
+    // Encabezado del detalle (sin tarjeta, como el detalle de Compras).
+    header: { gap: 4, marginBottom: 22 },
+    headerTitle: {
+      fontSize: 22,
+      lineHeight: 28,
       fontWeight: "700",
-      color: c.primaryForeground,
-    },
-
-    // Buscador
-    searchBox: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[2],
-      height: 44,
-      paddingHorizontal: tokens.spacing[3],
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.border,
-      marginBottom: tokens.spacing[2],
-    },
-    searchInput: {
-      flex: 1,
-      ...tokens.typography.body,
       color: c.text,
-      ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
+      letterSpacing: -0.2,
     },
+    headerSubtitle: { fontSize: 14, lineHeight: 20, color: c.textSecondary },
+    headerStatus: { flexDirection: "row", marginTop: 6 },
+    headerNotes: { fontSize: 14, lineHeight: 20, color: c.text, marginTop: 8 },
 
-    // Producto
-    productCard: {
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: tokens.spacing[3],
-      marginBottom: tokens.spacing[3],
-    },
-    productHeader: {
+    strong: { fontWeight: "700", color: c.text },
+
+    // Avance
+    progress: { paddingHorizontal: 14, paddingVertical: 12, gap: 10 },
+    progressHead: {
       flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[3],
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      gap: 12,
     },
-    productImage: {
-      width: 48,
-      height: 48,
-      borderRadius: tokens.radius.md,
+    progressText: { flex: 1, fontSize: 15, lineHeight: 20, color: c.text },
+    progressPct: {
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: "600",
+      color: c.textSecondary,
+      fontVariant: ["tabular-nums"],
+    },
+    legend: { flexDirection: "row", flexWrap: "wrap", columnGap: 14, rowGap: 4 },
+    legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+    legendText: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+
+    // Renglón de producto
+    row: { paddingHorizontal: 14, paddingVertical: 12 },
+    rowHead: { flexDirection: "row", alignItems: "center", gap: 12 },
+    rowBody: { flex: 1, minWidth: 0 },
+    rowTitle: { fontSize: 15, lineHeight: 20, fontWeight: "500", color: c.text },
+    rowMeta: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: c.textSecondary,
+      marginTop: 2,
+      fontVariant: ["tabular-nums"],
+    },
+    rowNotes: { fontSize: 13, lineHeight: 18, color: c.textMuted, marginTop: 4 },
+    thumb: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
       backgroundColor: c.surfaceMuted,
     },
-    productImagePlaceholder: { alignItems: "center", justifyContent: "center" },
-    productName: { ...tokens.typography.bodyMd, fontWeight: "600", color: c.text },
-    productStock: { ...tokens.typography.bodySm, color: c.textSecondary, marginTop: 2 },
-    statusChip: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      paddingVertical: 4,
-      paddingHorizontal: tokens.spacing[2],
-      borderRadius: tokens.radius.full,
-    },
-    statusChipText: { ...tokens.typography.caption, fontWeight: "600" },
+    thumbPlaceholder: { alignItems: "center", justifyContent: "center" },
+    saving: { flexDirection: "row", alignItems: "center", gap: 6, height: 22 },
+    savingText: { fontSize: 12, lineHeight: 16, color: c.textMuted },
 
-    // Segmented
+    // Correcto / Ajustar
     segment: {
       flexDirection: "row",
       gap: tokens.spacing[2],
@@ -1210,98 +1143,76 @@ function useStyles() {
       alignItems: "center",
       justifyContent: "center",
       gap: 6,
-      height: 42,
+      height: 40,
       borderRadius: tokens.radius.md,
       borderWidth: 1,
       borderColor: c.border,
       backgroundColor: c.surface,
     },
-    segmentText: { ...tokens.typography.bodySm, fontWeight: "600", color: c.textSecondary },
+    segmentText: { fontSize: 14, fontWeight: "600", color: c.textSecondary },
     segmentOk: { borderColor: c.success, backgroundColor: c.successSoft },
     segmentAdjust: { borderColor: c.warning, backgroundColor: c.warningSoft },
 
     // Ajuste
-    adjustBox: { marginTop: tokens.spacing[3], gap: tokens.spacing[1] },
-    fieldLabel: { ...tokens.typography.bodySm, color: c.textSecondary, marginBottom: 6 },
+    adjustBox: { marginTop: tokens.spacing[3] },
+    fieldLabel: {
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: "600",
+      color: c.textSecondary,
+      marginBottom: 6,
+    },
+    optional: { fontWeight: "400", color: c.textMuted },
     stepper: {
       flexDirection: "row",
       alignItems: "center",
       gap: tokens.spacing[2],
+      maxWidth: 360,
     },
     stepBtn: {
-      width: 44,
-      height: 44,
+      width: 48,
+      height: 48,
       borderRadius: tokens.radius.md,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
       alignItems: "center",
       justifyContent: "center",
     },
     stepInput: {
       flex: 1,
-      height: 44,
+      minWidth: 0,
+      height: 48,
       borderRadius: tokens.radius.md,
       borderWidth: 1,
       borderColor: c.border,
       backgroundColor: c.surface,
       textAlign: "center",
-      ...tokens.typography.h3,
+      fontSize: 18,
+      fontWeight: "600",
       color: c.text,
       ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
     },
     stepUnit: {
-      ...tokens.typography.bodySm,
+      fontSize: 14,
       color: c.textMuted,
-      minWidth: 28,
+      minWidth: 24,
     },
+    errorText: { fontSize: 13, lineHeight: 18, color: c.error, marginTop: 6 },
+    diffLine: { flexDirection: "row", marginTop: 8 },
     notesInput: {
-      minHeight: 44,
+      minHeight: 48,
       borderRadius: tokens.radius.md,
       borderWidth: 1,
       borderColor: c.border,
       backgroundColor: c.surface,
-      paddingHorizontal: tokens.spacing[3],
-      paddingTop: tokens.spacing[2],
-      ...tokens.typography.body,
+      paddingHorizontal: 14,
+      paddingTop: 12,
+      paddingBottom: 12,
+      fontSize: 15,
       color: c.text,
+      textAlignVertical: "top",
       ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
     },
-
-    // Diferencia
-    diffBadge: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      alignSelf: "flex-start",
-      paddingVertical: 6,
-      paddingHorizontal: tokens.spacing[3],
-      borderRadius: tokens.radius.full,
-      marginTop: tokens.spacing[2],
-    },
-    diffText: { ...tokens.typography.bodySm, fontWeight: "700" },
-
-    // Lectura
-    readonlyRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginTop: tokens.spacing[3],
-    },
-    readonlyLabel: { ...tokens.typography.bodySm, color: c.textSecondary },
-    readonlyValue: { ...tokens.typography.bodyMd, fontWeight: "700", color: c.text },
-    readonlyNotes: {
-      ...tokens.typography.bodySm,
-      color: c.textSecondary,
-      marginTop: tokens.spacing[2],
-      fontStyle: "italic",
-    },
-
-    // Estados
-    loadingBox: { alignItems: "center", gap: tokens.spacing[2], paddingVertical: tokens.spacing[8] },
-    loadingText: { ...tokens.typography.bodySm, color: c.textMuted },
-    emptyState: {
-      alignItems: "center",
-      gap: tokens.spacing[2],
-      paddingVertical: tokens.spacing[8],
-    },
-    emptyText: { ...tokens.typography.body, color: c.textMuted, textAlign: "center" },
   }));
 }
