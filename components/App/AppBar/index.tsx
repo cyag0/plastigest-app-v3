@@ -26,6 +26,12 @@ export interface AppBarProps {
   rightActions?: React.ReactNode;
   leftActions?: React.ReactNode;
   /**
+   * Controles de la pantalla en el centro de la barra (p. ej. proveedor y
+   * buscador de Nueva compra): aprovechan el espacio vacío entre el título y
+   * los íconos en vez de ocupar renglones abajo.
+   */
+  centerContent?: React.ReactNode;
+  /**
    * Handler personalizado para el botón de retroceso. Si se omite, se
    * usa el comportamiento por defecto (router.back()).
    */
@@ -54,6 +60,7 @@ export default function AppBar({
   onSearchPress,
   rightActions,
   leftActions,
+  centerContent,
   onBack,
   showBreadcrumb = true,
   backgroundColor,
@@ -85,6 +92,16 @@ export default function AppBar({
     header: { height: 'auto', padding: 4, backgroundColor: "transparent", justifyContent: "space-between" },
     headerWithMenu: { paddingLeft: 52 },
     titleSlot: { flexShrink: 1 },
+    // Con controles al centro el título solo ocupa lo que mide.
+    titleCompact: { flex: 0, flexShrink: 1, maxWidth: 280 },
+    centerSlot: {
+      flex: 1,
+      minWidth: 0,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      marginHorizontal: 12,
+    },
     searchSlot: {
       flex: 1,
       maxWidth: 480,
@@ -181,8 +198,11 @@ export default function AppBar({
             title={title}
             subtitle={subtitle}
             titleStyle={styles.title}
+            style={centerContent ? styles.titleCompact : undefined}
           />
         )}
+
+        {centerContent ? <View style={styles.centerSlot}>{centerContent}</View> : null}
 
 
         {/* Spacer flexible */}

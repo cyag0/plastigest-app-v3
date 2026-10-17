@@ -1,7 +1,10 @@
+import AppBar from "@/components/App/AppBar";
 import EmptyState from "@/components/App/EmptyState";
 import { ListGroup, ListRow, ListSectionTitle } from "@/components/App/ListGroup";
+import SearchInput from "@/components/App/SearchInput";
 import AppDatePicker from "@/components/Form/AppDatePicker";
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
+import type { ListProductsHandle } from "@/components/Views/POSV3/components/ListProducts";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -13,10 +16,11 @@ import { errorMessageOf, isApiError } from "@/utils/errorNotice";
 import { formatMoney } from "@/utils/format";
 import { toLocalDateString } from "@/utils/dates";
 import { amountToCents } from "@/utils/money";
+import { goBack } from "@/utils/navigation";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -349,16 +353,17 @@ export default function PurchaseFormScreen() {
     setConfirmError(null);
   };
 
-  // En el celular el carrito va en el AppBar; el título es el folio del
-  // borrador que se abrió para seguirlo.
-  useEffect(() => {
-    navigation.setOptions({
-      title,
-      headerRight: isMobile
-        ? () => <CartHeaderButton count={lineCount} onPress={() => setCartVisible(true)} />
-        : undefined,
-    });
-  }, [navigation, title, isMobile, lineCount]);
+  // La barra de arriba la pinta la pantalla: en tableta y escritorio lleva
+  // el proveedor y el buscador del catálogo, que antes ocupaban dos renglones
+  // abajo de ella (y en la tableta solo quedaba una fila de productos). En el
+  // celular lleva el carrito; el título es el folio del borrador que se abrió.
+  const [search, setSearch] = useState("");
+  const listRef = useRef<ListProductsHandle>(null);
+  // Otro proveedor, otro catálogo: la búsqueda empieza de nuevo.
+  const selectSupplier = (supplierId: number) => {
+    setSearch("");
+    purchase.selectSupplier(supplierId);
+  };
 
   // La URL apunta al borrador en cuanto existe (el primer producto lo crea).
   // Antes se quedaba en ?new=1: al recargar en web arrancaba otra compra
@@ -488,7 +493,10 @@ export default function PurchaseFormScreen() {
     });
 
   const styles = useThemedStyles((c) => ({
+    screen: { flex: 1, backgroundColor: c.background },
     container: { flex: 1, flexDirection: "row", backgroundColor: c.background },
+    headerSupplier: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 1, minWidth: 0 },
+    headerSearch: { flex: 1, maxWidth: 460 },
     catalogSection: { flex: 1, minWidth: 0 },
     catalogBody: { flex: 1 },
     center: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -623,27 +631,57 @@ export default function PurchaseFormScreen() {
 
   // Primer paso: a quién se le compra. Va arriba del catálogo, como "Pedir a"
   // en Transferencias.
+  const supplierControl = canListSuppliers ? (
+    <Button
+      mode={supplierName ? "outlined" : "contained"}
+      onPress={() => setPickerVisible(true)}
+      icon="chevron-down"
+      contentStyle={{ flexDirection: "row-reverse" }}
+      style={{ flexShrink: 1 }}
+      accessibilityLabel={supplierName ? `Proveedor: ${supplierName}. Cambiar` : "Elegir proveedor"}
+      compact
+    >
+      {supplierName ?? "Elegir proveedor"}
+    </Button>
+  ) : (
+    <Text style={styles.supplierName} numberOfLines={1}>
+      {supplierName ?? "Sin proveedor"}
+    </Text>
+  );
+
+  // Celular: su propio renglón abajo de la barra.
   const supplierBar = (
     <View style={styles.supplierBar}>
       <MaterialCommunityIcons name="truck-outline" size={20} color={colors.primary} />
       <Text style={styles.supplierLabel}>Proveedor</Text>
-      {canListSuppliers ? (
-        <Button
-          mode={supplierName ? "outlined" : "contained"}
-          onPress={() => setPickerVisible(true)}
-          icon="chevron-down"
-          contentStyle={{ flexDirection: "row-reverse" }}
-          style={{ flexShrink: 1 }}
-          compact
-        >
-          {supplierName ?? "Elegir proveedor"}
-        </Button>
-      ) : (
-        <Text style={styles.supplierName} numberOfLines={1}>
-          {supplierName ?? "Sin proveedor"}
-        </Text>
-      )}
+      {supplierControl}
     </View>
+  );
+
+  // Tableta y escritorio: proveedor y buscador en la barra de arriba. El
+  // buscador sigue sirviendo de escáner: Enter agrega el producto del código.
+  const headerTools = (
+    <>
+      <View style={styles.headerSupplier}>
+        <MaterialCommunityIcons name="truck-outline" size={20} color={colors.primary} />
+        {supplierControl}
+      </View>
+      {!!purchase.supplierId && (
+        <SearchInput
+          placeholder="Buscar productos o escanear código"
+          value={search}
+          onChangeText={setSearch}
+          onSubmitEditing={() => listRef.current?.submitSearch()}
+          // Mantener el foco para escanear varios códigos seguidos.
+          blurOnSubmit={false}
+          returnKeyType="search"
+          showShortcut={false}
+          width="auto"
+          containerStyle={styles.headerSearch}
+          accessibilityLabel="Buscar productos o escanear código"
+        />
+      )}
+    </>
   );
 
   let catalog: React.ReactNode;
@@ -692,9 +730,13 @@ export default function PurchaseFormScreen() {
   } else {
     catalog = (
       <ListProducts
+        ref={listRef}
         // Otro proveedor, otro catálogo: sin la búsqueda ni la categoría del
         // anterior (que quizá ni existe en este y dejaba la lista vacía).
         key={purchase.supplierId}
+        // En tableta y escritorio el buscador va en la barra de arriba.
+        searchQuery={isMobile ? undefined : search}
+        onSearchQueryChange={setSearch}
         loading={purchase.loading}
         categories={purchase.categories}
         products={purchase.products}
@@ -878,98 +920,111 @@ export default function PurchaseFormScreen() {
   ) : null;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.catalogSection}>
-        {supplierBar}
-        <View style={styles.catalogBody}>{catalog}</View>
+    <View style={styles.screen}>
+      <AppBar
+        title={title}
+        showSearchButton={false}
+        onBack={() => goBack("/(tabs)/home/purchases")}
+        centerContent={isMobile ? undefined : headerTools}
+        rightActions={
+          isMobile ? (
+            <CartHeaderButton count={lineCount} onPress={() => setCartVisible(true)} />
+          ) : undefined
+        }
+      />
+      <View style={styles.container}>
+        <View style={styles.catalogSection}>
+          {isMobile && supplierBar}
+          <View style={styles.catalogBody}>{catalog}</View>
 
-        {/* En el celular la compra se abre desde aquí (o desde el carrito del
-            AppBar). Mientras se registra, el modal ya se cerró: aquí se ve. */}
-        {isMobile && (
-          <View style={styles.bottomBar}>
-            <Text style={styles.bottomSummary} numberOfLines={1}>
-              {sending === "receive"
-                ? "Registrando la compra…"
-                : sending === "order"
-                  ? "Guardando el pedido…"
-                  : lineCount === 0
-                    ? "Sin productos"
-                    : `${plural(lineCount, "producto", "productos")} · ${formatMoney(purchase.total)}`}
-            </Text>
-            <Button
-              mode="contained"
-              icon="clipboard-list-outline"
-              onPress={() => setCartVisible(true)}
-              loading={!!sending}
-              disabled={!!sending}
-            >
-              Ver compra
-            </Button>
+          {/* En el celular la compra se abre desde aquí (o desde el carrito del
+              AppBar). Mientras se registra, el modal ya se cerró: aquí se ve. */}
+          {isMobile && (
+            <View style={styles.bottomBar}>
+              <Text style={styles.bottomSummary} numberOfLines={1}>
+                {sending === "receive"
+                  ? "Registrando la compra…"
+                  : sending === "order"
+                    ? "Guardando el pedido…"
+                    : lineCount === 0
+                      ? "Sin productos"
+                      : `${plural(lineCount, "producto", "productos")} · ${formatMoney(purchase.total)}`}
+              </Text>
+              <Button
+                mode="contained"
+                icon="clipboard-list-outline"
+                onPress={() => setCartVisible(true)}
+                loading={!!sending}
+                disabled={!!sending}
+              >
+                Ver compra
+              </Button>
+            </View>
+          )}
+        </View>
+
+        {/* La compra al lado del catálogo — escritorio y tableta */}
+        {!isMobile && (
+          <View style={styles.cartSection}>
+            {cart}
+            {!keyboardOpen && <View style={styles.checkoutPinned}>{checkout}</View>}
           </View>
         )}
+
+        {/* La compra en un modal — celular */}
+        {isMobile && (
+          <Modal
+            visible={cartVisible}
+            animationType="slide"
+            // Lo que falló antes de abrirla ya se vio en el aviso de la app.
+            onShow={purchase.dismissNotice}
+            // Mientras se confirma la compra no se cierra.
+            onRequestClose={() => {
+              if (!submitting) closeCart();
+            }}
+          >
+            {/* Los menús (unidad, método de pago) se abren dentro del modal:
+                en el Portal de la app quedaban detrás. */}
+            <Portal.Host>
+              <SafeAreaView style={styles.modal} edges={["top", "bottom"]}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle} numberOfLines={1}>
+                    {title}
+                  </Text>
+                  <IconButton
+                    icon="close"
+                    iconColor={colors.text}
+                    onPress={closeCart}
+                    disabled={submitting}
+                    accessibilityLabel="Cerrar"
+                  />
+                </View>
+                {noticeBanner}
+                <KeyboardAvoidingView
+                  style={{ flex: 1 }}
+                  behavior={Platform.OS === "ios" ? "padding" : undefined}
+                >
+                  {cart}
+                </KeyboardAvoidingView>
+              </SafeAreaView>
+            </Portal.Host>
+          </Modal>
+        )}
+
+        {canListSuppliers && (
+          <SupplierPicker
+            visible={pickerVisible}
+            onDismiss={() => setPickerVisible(false)}
+            suppliers={suppliers.list}
+            loading={suppliers.loading}
+            error={suppliers.error}
+            onRetry={suppliers.retry}
+            selectedId={purchase.supplierId}
+            hasLines={lineCount > 0}
+            onSelect={selectSupplier}
+          />
+        )}
       </View>
-
-      {/* La compra al lado del catálogo — escritorio y tableta */}
-      {!isMobile && (
-        <View style={styles.cartSection}>
-          {cart}
-          {!keyboardOpen && <View style={styles.checkoutPinned}>{checkout}</View>}
-        </View>
-      )}
-
-      {/* La compra en un modal — celular */}
-      {isMobile && (
-        <Modal
-          visible={cartVisible}
-          animationType="slide"
-          // Lo que falló antes de abrirla ya se vio en el aviso de la app.
-          onShow={purchase.dismissNotice}
-          // Mientras se confirma la compra no se cierra.
-          onRequestClose={() => {
-            if (!submitting) closeCart();
-          }}
-        >
-          {/* Los menús (unidad, método de pago) se abren dentro del modal:
-              en el Portal de la app quedaban detrás. */}
-          <Portal.Host>
-            <SafeAreaView style={styles.modal} edges={["top", "bottom"]}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle} numberOfLines={1}>
-                  {title}
-                </Text>
-                <IconButton
-                  icon="close"
-                  iconColor={colors.text}
-                  onPress={closeCart}
-                  disabled={submitting}
-                  accessibilityLabel="Cerrar"
-                />
-              </View>
-              {noticeBanner}
-              <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === "ios" ? "padding" : undefined}
-              >
-                {cart}
-              </KeyboardAvoidingView>
-            </SafeAreaView>
-          </Portal.Host>
-        </Modal>
-      )}
-
-      {canListSuppliers && (
-        <SupplierPicker
-          visible={pickerVisible}
-          onDismiss={() => setPickerVisible(false)}
-          suppliers={suppliers.list}
-          loading={suppliers.loading}
-          error={suppliers.error}
-          onRetry={suppliers.retry}
-          selectedId={purchase.supplierId}
-          hasLines={lineCount > 0}
-          onSelect={purchase.selectSupplier}
-        />
-      )}
     </View>
   );
 }

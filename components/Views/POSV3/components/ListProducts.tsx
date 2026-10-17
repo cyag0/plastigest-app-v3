@@ -10,14 +10,15 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, {
   useCallback,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import {
-  Dimensions,
   FlatList,
   Image,
+  LayoutChangeEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -51,6 +52,12 @@ interface ProductCardProps {
   item: ProductListItem;
   selectedProduct?: SelectedProduct;
   compact?: boolean;
+  /**
+   * Lugar para la foto. Sin fotos en el catálogo la tarjeta es solo de texto:
+   * el cuadro de 160 px con el ícono de paquete dejaba ver una sola fila de
+   * productos en la tableta.
+   */
+  showImage?: boolean;
   /** ¿Puede cambiar cantidad/unidad de lo que ya está en el carrito? */
   canEdit?: boolean;
   /** ¿Puede quitarlo? (bajar de 1 lo quita) */
@@ -69,6 +76,7 @@ const ProductCard = React.memo(
     item,
     selectedProduct,
     compact = false,
+    showImage = true,
     canEdit = true,
     canRemove = true,
     onAddProduct,
@@ -315,56 +323,64 @@ const ProductCard = React.memo(
       );
     }
 
+    const stockChip = (
+      <AppChip
+        variant={stockVariant}
+        size="sm"
+        icon={inStock ? "package-check" : "package-variant-remove"}
+      >
+        {stockText}
+      </AppChip>
+    );
+
     return (
       <View style={styles.card}>
-        {/* Imagen del producto */}
-        <View style={styles.imageContainer}>
-          {item.main_image?.uri ? (
-            <Image
-              source={{ uri: item.main_image.uri }}
-              style={styles.image}
-              resizeMode="cover"
-            />
-          ) : (
-            <View style={styles.imagePlaceholderLarge}>
-              <MaterialCommunityIcons
-                name="package-variant"
-                size={36}
-                color={palette.textMuted}
+        {/* Imagen del producto (solo si el catálogo tiene fotos) */}
+        {showImage && (
+          <View style={styles.imageContainer}>
+            {item.main_image?.uri ? (
+              <Image
+                source={{ uri: item.main_image.uri }}
+                style={styles.image}
+                resizeMode="cover"
               />
-            </View>
-          )}
+            ) : (
+              <View style={styles.imagePlaceholderLarge}>
+                <MaterialCommunityIcons
+                  name="package-variant"
+                  size={32}
+                  color={palette.textMuted}
+                />
+              </View>
+            )}
 
-          {/* Badge de stock */}
-          <View style={styles.stockBadgeWrap}>
-            <AppChip
-              variant={stockVariant}
-              size="sm"
-              icon={inStock ? "package-check" : "package-variant-remove"}
-            >
-              {stockText}
-            </AppChip>
+            {/* Badge de stock */}
+            <View style={styles.stockBadgeWrap}>{stockChip}</View>
           </View>
-        </View>
+        )}
 
         {/* Información del producto */}
         <View style={styles.content}>
           <View style={styles.contentBody}>
-            <Text style={styles.code} numberOfLines={1}>
-              {item.code}
-            </Text>
+            {/* Sin foto, las existencias van junto al código. */}
+            <View style={styles.codeRow}>
+              <Text style={[styles.code, styles.codeText]} numberOfLines={1}>
+                {item.code}
+              </Text>
+              {!showImage && stockChip}
+            </View>
             <Text style={styles.name} numberOfLines={2}>
               {item.name}
             </Text>
             <Text style={styles.price}>{formatUnitPrice(displayPrice)}</Text>
           </View>
 
-          {/* Selector de unidades (solo para productos, no paquetes) */}
-          {unitSelector}
+          {/* Unidad y botón en un renglón; si no caben, el botón baja. */}
+          <View style={styles.actionsRow}>
+            {unitSelector ? <View style={styles.actionsUnit}>{unitSelector}</View> : null}
+            <View style={styles.actionsMain}>{quantityActions}</View>
+          </View>
         </View>
-
-        {/* Botón de agregar o controles de cantidad */}
-        <View style={styles.footer}>{quantityActions}</View>
       </View>
     );
   },
@@ -373,6 +389,7 @@ const ProductCard = React.memo(
     // Solo re-renderizar si cambia el producto o su estado de selección
     return (
       prevProps.item.id === nextProps.item.id &&
+      prevProps.showImage === nextProps.showImage &&
       prevProps.canEdit === nextProps.canEdit &&
       prevProps.canRemove === nextProps.canRemove &&
       prevProps.selectedProduct?.quantity ===
@@ -428,6 +445,13 @@ interface ListProductsProps {
    * cuando se usa un lector de código de barras tipo teclado (USB/BT).
    */
   onScanNotFound?: (code: string) => void;
+  /**
+   * Búsqueda controlada desde afuera (p. ej. un buscador en la barra de
+   * arriba): con ella no se pinta el buscador propio. El escáner (Enter) se
+   * dispara con la ref: submitSearch().
+   */
+  searchQuery?: string;
+  onSearchQueryChange?: (text: string) => void;
   loading?: boolean;
   showSearch?: boolean;
   showCategories?: boolean;
@@ -446,7 +470,17 @@ interface ListProductsProps {
 type StockFilter = "available" | "out_of_stock" | "all";
 type ViewMode = "grid" | "compact";
 
-export default function ListProducts({
+export interface ListProductsHandle {
+  /** Lo mismo que Enter en el buscador: agrega el producto del código escrito. */
+  submitSearch: () => void;
+}
+
+/** Ancho mínimo de cada columna del catálogo (tarjeta + márgenes). */
+const MIN_CARD_WIDTH = 184;
+/** Relleno a los lados de la cuadrícula (gridContent). */
+const GRID_PADDING = tokens.spacing[3] * 2;
+
+const ListProducts = React.forwardRef<ListProductsHandle, ListProductsProps>(function ListProducts({
   products,
   categories = [],
   selectedProducts = {},
@@ -454,6 +488,8 @@ export default function ListProducts({
   onRemoveProduct = () => {},
   onItemChange = () => {},
   onScanNotFound,
+  searchQuery: controlledQuery,
+  onSearchQueryChange,
   loading = false,
   showSearch = true,
   showCategories = true,
@@ -462,13 +498,19 @@ export default function ListProducts({
   autoAdjustColumns = true,
   canEditItems = true,
   canRemoveItems = true,
-}: ListProductsProps) {
-  const [searchQuery, setSearchQuery] = useState("");
+}: ListProductsProps, ref) {
+  const [ownQuery, setOwnQuery] = useState("");
+  const isControlledSearch = controlledQuery !== undefined;
+  const searchQuery = isControlledSearch ? controlledQuery : ownQuery;
+  const setSearchQuery = (text: string) => {
+    if (isControlledSearch) onSearchQueryChange?.(text);
+    else setOwnQuery(text);
+  };
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [stockFilter, setStockFilter] = useState<StockFilter>("available");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [numColumns, setNumColumns] = useState(initialNumColumns);
+  const numColumns = initialNumColumns;
   const isCompactMode = viewMode === "compact";
 
   // Las tarjetas están memoizadas y sólo se vuelven a pintar cuando cambia su
@@ -504,29 +546,28 @@ export default function ListProducts({
     (value: string) => setDebouncedSearchQuery(value),
     { time: 300 },
   );
-
   useEffect(() => {
-    if (autoAdjustColumns) {
-      updateColumns();
-      const subscription = Dimensions.addEventListener("change", updateColumns);
-      return () => subscription?.remove();
-    }
-  }, [autoAdjustColumns]);
+    if (isControlledSearch) runSearchDebounce(controlledQuery ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [controlledQuery]);
 
-  const updateColumns = () => {
-    const width = Dimensions.get("window").width;
-    if (width >= 2200) {
-      setNumColumns(6);
-    } else if (width >= 1700) {
-      setNumColumns(5);
-    } else if (width >= 1200) {
-      setNumColumns(4);
-    } else if (width >= 768) {
-      setNumColumns(3);
-    } else {
-      setNumColumns(2);
-    }
+  // Columnas según el ancho que de verdad tiene el catálogo. Antes salían del
+  // ancho de la ventana: al lado del carrito (Compras, Transferencias) en la
+  // tableta vertical eran 3 columnas en 400 px y las tarjetas no cabían.
+  const [listWidth, setListWidth] = useState(0);
+  const handleListLayout = (event: LayoutChangeEvent) => {
+    const width = Math.round(event.nativeEvent.layout.width);
+    setListWidth((current) => (current === width ? current : width));
   };
+  const gridColumns =
+    autoAdjustColumns && listWidth > 0
+      ? Math.min(6, Math.max(2, Math.floor((listWidth - GRID_PADDING) / MIN_CARD_WIDTH)))
+      : numColumns;
+  // En compacto, dos columnas de renglones si hay espacio (tableta, escritorio).
+  const columns = isCompactMode ? (listWidth >= 720 ? 2 : 1) : gridColumns;
+
+  // Sin ninguna foto en el catálogo, tarjetas solo de texto.
+  const showImages = products.some((product) => !!product.main_image?.uri);
 
   // Función para normalizar texto (sin acentos, minúsculas)
   const normalizeText = (text: string) => {
@@ -566,8 +607,6 @@ export default function ListProducts({
   const outOfStockCount = products.filter(
     (product) => Number(product.current_stock || 0) <= 0,
   ).length;
-
-  const selectedCount = Object.keys(selectedProducts).length;
 
   const hasSearchQuery = Boolean(searchQuery || debouncedSearchQuery);
   const isHidingOutOfStock =
@@ -616,14 +655,47 @@ export default function ListProducts({
     setSearchQuery("");
     setDebouncedSearchQuery("");
   };
+  const submitRef = useRef(handleSubmitSearch);
+  submitRef.current = handleSubmitSearch;
+  useImperativeHandle(ref, () => ({ submitSearch: () => submitRef.current() }), []);
+
+  const viewModeButton = (
+    <TouchableOpacity
+      style={[
+        styles.viewModeButton,
+        isCompactMode && styles.viewModeButtonActive,
+      ]}
+      onPress={() =>
+        setViewMode((current) => (current === "grid" ? "compact" : "grid"))
+      }
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={isCompactMode ? "Ver como tarjetas" : "Ver compacto"}
+    >
+      <MaterialCommunityIcons
+        name={isCompactMode ? "view-agenda" : "view-grid-outline"}
+        size={14}
+        color={isCompactMode ? "#fff" : palette.textSecondary}
+      />
+      <Text
+        style={[
+          styles.viewModeButtonText,
+          isCompactMode && styles.viewModeButtonTextActive,
+        ]}
+      >
+        {isCompactMode ? "Compacto" : "Tarjetas"}
+      </Text>
+    </TouchableOpacity>
+  );
 
   const renderProductCard = ({ item }: { item: ProductListItem }) => {
     return (
-      <View style={{ flex: isCompactMode ? 1 : 1 / numColumns }}>
+      <View style={{ flex: 1 / columns }}>
         <ProductCard
           item={item}
           selectedProduct={selectedProducts[item.id]}
           compact={isCompactMode}
+          showImage={showImages}
           canEdit={canEditItems}
           canRemove={canRemoveItems}
           onAddProduct={handleAddProduct}
@@ -636,10 +708,12 @@ export default function ListProducts({
 
   return (
     <View style={styles.container}>
-      {/* Toolbar */}
+      {/* Barra: el buscador (si la pantalla no lo pone en otro lado, como la
+          barra de arriba) y un renglón con categorías, cuántos hay y la
+          vista. Antes eran hasta cuatro renglones (buscador, resumen, vista y
+          categorías) y en la tableta solo quedaba una fila de productos. */}
       <View style={styles.toolbar}>
-        {/* Search */}
-        {showSearch && (
+        {showSearch && !isControlledSearch && (
           <View style={styles.searchWrap}>
             <SearchInput
               placeholder="Buscar productos o escanear código"
@@ -659,121 +733,77 @@ export default function ListProducts({
           </View>
         )}
 
-        {/* Summary row */}
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryText}>
-            {filteredProducts.length} visibles · {availableCount} con stock ·{" "}
-            {outOfStockCount} sin stock
-          </Text>
-          {selectedCount > 0 && (
-            <View style={styles.selectedBadge}>
-              <MaterialCommunityIcons
-                name="check-circle"
-                size={12}
-                color={palette.primary}
-              />
-              <Text style={styles.selectedSummaryText}>
-                {selectedCount} seleccionados
-              </Text>
-            </View>
-          )}
-        </View>
-
-        {/* Controls row */}
-        <View style={styles.controlsRow}>
-          {showOutOfStockFilter && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipsRow}
-            >
-              <AppChip
-                icon="package-check"
-                variant={
-                  stockFilter === "available" ? "success" : "default"
-                }
-                onPress={() => setStockFilter("available")}
-              >
-                Disponibles ({availableCount})
-              </AppChip>
-              <AppChip
-                icon="package-variant-remove"
-                variant={
-                  stockFilter === "out_of_stock" ? "error" : "default"
-                }
-                onPress={() => setStockFilter("out_of_stock")}
-              >
-                Sin stock ({outOfStockCount})
-              </AppChip>
-              <AppChip
-                icon="package-variant"
-                variant={stockFilter === "all" ? "primary" : "default"}
-                onPress={() => setStockFilter("all")}
-              >
-                Todos ({products.length})
-              </AppChip>
-            </ScrollView>
-          )}
-
-          <TouchableOpacity
-            style={[
-              styles.viewModeButton,
-              isCompactMode && styles.viewModeButtonActive,
-            ]}
-            onPress={() =>
-              setViewMode((current) =>
-                current === "grid" ? "compact" : "grid",
-              )
-            }
-            activeOpacity={0.7}
-          >
-            <MaterialCommunityIcons
-              name={isCompactMode ? "view-agenda" : "view-grid-outline"}
-              size={14}
-              color={isCompactMode ? "#fff" : palette.textSecondary}
-            />
-            <Text
-              style={[
-                styles.viewModeButtonText,
-                isCompactMode && styles.viewModeButtonTextActive,
-              ]}
-            >
-              {isCompactMode ? "Compacto" : "Tarjetas"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Categories */}
-        {showCategories && categories.length > 0 && (
+        {showOutOfStockFilter && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipsRow}
-            style={styles.categoriesScroll}
+            style={styles.stockFilterScroll}
           >
             <AppChip
-              variant={selectedCategory === null ? "primary" : "default"}
-              onPress={() => setSelectedCategory(null)}
+              icon="package-check"
+              variant={stockFilter === "available" ? "success" : "default"}
+              onPress={() => setStockFilter("available")}
             >
-              Todas
+              Disponibles ({availableCount})
             </AppChip>
-            {categories.map((category) => (
-              <AppChip
-                key={category.id}
-                variant={
-                  selectedCategory === category.id ? "primary" : "default"
-                }
-                onPress={() => setSelectedCategory(category.id)}
-              >
-                {category.name}
-              </AppChip>
-            ))}
+            <AppChip
+              icon="package-variant-remove"
+              variant={stockFilter === "out_of_stock" ? "error" : "default"}
+              onPress={() => setStockFilter("out_of_stock")}
+            >
+              Sin stock ({outOfStockCount})
+            </AppChip>
+            <AppChip
+              icon="package-variant"
+              variant={stockFilter === "all" ? "primary" : "default"}
+              onPress={() => setStockFilter("all")}
+            >
+              Todos ({products.length})
+            </AppChip>
           </ScrollView>
         )}
+
+        <View style={styles.filtersRow}>
+          {showCategories && categories.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsRow}
+              style={styles.categoriesScroll}
+            >
+              <AppChip
+                variant={selectedCategory === null ? "primary" : "default"}
+                onPress={() => setSelectedCategory(null)}
+              >
+                Todas
+              </AppChip>
+              {categories.map((category) => (
+                <AppChip
+                  key={category.id}
+                  variant={
+                    selectedCategory === category.id ? "primary" : "default"
+                  }
+                  onPress={() => setSelectedCategory(category.id)}
+                >
+                  {category.name}
+                </AppChip>
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.categoriesScroll} />
+          )}
+          <Text style={styles.countText} numberOfLines={1}>
+            {filteredProducts.length === products.length
+              ? `${products.length} ${products.length === 1 ? "producto" : "productos"}`
+              : `${filteredProducts.length} de ${products.length}`}
+          </Text>
+          {viewModeButton}
+        </View>
       </View>
 
       {/* Grid de productos */}
-      <View style={styles.productsContainer}>
+      <View style={styles.productsContainer} onLayout={handleListLayout}>
         {loading ? (
           <View style={styles.loadingWrap}>
             <MaterialCommunityIcons
@@ -814,8 +844,8 @@ export default function ListProducts({
         ) : (
           <FlatList
             data={filteredProducts}
-            key={`${viewMode}-${numColumns}`}
-            numColumns={isCompactMode ? 1 : numColumns}
+            key={`${viewMode}-${columns}`}
+            numColumns={columns}
             renderItem={renderProductCard}
             keyExtractor={(item) => item.id.toString()}
             showsVerticalScrollIndicator={false}
@@ -825,7 +855,9 @@ export default function ListProducts({
       </View>
     </View>
   );
-}
+});
+
+export default ListProducts;
 
 const styles = StyleSheet.create({
   container: {
@@ -838,7 +870,24 @@ const styles = StyleSheet.create({
     backgroundColor: palette.surface,
     borderBottomWidth: 1,
     borderBottomColor: palette.border,
-    paddingBottom: tokens.spacing[3],
+    paddingBottom: tokens.spacing[2],
+  },
+  filtersRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing[2],
+    paddingLeft: tokens.spacing[5],
+    paddingRight: tokens.spacing[3],
+    paddingTop: tokens.spacing[2],
+  },
+  countText: {
+    ...tokens.typography.caption,
+    color: palette.textSecondary,
+    flexShrink: 0,
+  },
+  stockFilterScroll: {
+    marginTop: tokens.spacing[2],
+    paddingHorizontal: tokens.spacing[5],
   },
   searchWrap: {
     paddingHorizontal: tokens.spacing[5],
@@ -848,40 +897,6 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 40,
   },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: tokens.spacing[2],
-    paddingHorizontal: tokens.spacing[5],
-    paddingTop: tokens.spacing[3],
-  },
-  summaryText: {
-    ...tokens.typography.caption,
-    color: palette.textSecondary,
-    flex: 1,
-  },
-  selectedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: palette.primarySoft,
-    borderRadius: tokens.radius.full,
-  },
-  selectedSummaryText: {
-    ...tokens.typography.micro,
-    color: palette.primary,
-    fontWeight: "600",
-  },
-  controlsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: tokens.spacing[2],
-    paddingHorizontal: tokens.spacing[5],
-    paddingTop: tokens.spacing[3],
-  },
   chipsRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -889,8 +904,8 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   categoriesScroll: {
-    marginTop: tokens.spacing[2],
-    paddingHorizontal: tokens.spacing[5],
+    flex: 1,
+    minWidth: 0,
   },
   viewModeButton: {
     flexDirection: "row",
@@ -948,7 +963,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     width: "100%",
-    height: 160,
+    height: 128,
     position: "relative",
     backgroundColor: palette.surfaceMuted,
   },
@@ -1027,6 +1042,32 @@ const styles = StyleSheet.create({
   contentBody: {
     gap: 2,
   },
+  codeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: tokens.spacing[2],
+    minHeight: 22,
+  },
+  codeText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: tokens.spacing[2],
+  },
+  // Unidad (≈60) y botón o cantidad (≈96-100): en un renglón desde ~170 de
+  // ancho útil (4 columnas en la tableta horizontal); si no, el botón baja.
+  actionsUnit: {
+    flexGrow: 1,
+    flexBasis: 60,
+  },
+  actionsMain: {
+    flexGrow: 2,
+    flexBasis: 96,
+  },
   code: {
     ...tokens.typography.micro,
     color: palette.textMuted,
@@ -1051,12 +1092,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // --- Footer (action) ---
-  footer: {
-    paddingHorizontal: tokens.spacing[3],
-    paddingBottom: tokens.spacing[3],
-    paddingTop: 0,
-  },
+  // --- Agregar (botón) ---
   addButton: {
     flexDirection: "row",
     alignItems: "center",
