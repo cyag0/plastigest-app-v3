@@ -118,13 +118,7 @@ export default function _layout() {
       <Stack.Screen
         name="change-password"
         options={{
-          title: "Cambiar Contraseña",
-        }}
-      />
-      <Stack.Screen
-        name="home/all-modules"
-        options={{
-          title: "Todos los módulos",
+          title: "Cambiar contraseña",
         }}
       />
     </Stack>

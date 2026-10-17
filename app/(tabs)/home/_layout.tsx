@@ -45,6 +45,12 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
+        name="all-modules"
+        options={{
+          title: "Todos los módulos",
+        }}
+      />
+      <Stack.Screen
         name="roles/index"
         options={{
           title: "Roles",

@@ -5,23 +5,21 @@
  * del Home. Muestra todos los módulos disponibles agrupados por
  * sección para que el usuario pueda llegar a cualquier parte sin
  * pasar por el sidebar (útil en mobile donde el sidebar está oculto).
+ *
+ * Mismo diseño que Administración y Perfil: listas agrupadas, una fila por
+ * módulo con su ícono y su nombre. La `description` no se pinta; sirve para
+ * el buscador.
  */
 
-import palette from "@/constants/palette";
-import { tokens } from "@/constants/tokens";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import EmptyState from "@/components/App/EmptyState";
+import { ListGroup, ListRow, ListSection } from "@/components/App/ListGroup";
+import ListSearchbar from "@/components/App/ListSearchbar";
 import { useCan } from "@/hooks/useCan";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
-import {
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ScrollView, View } from "react-native";
 
 interface ModuleItem {
   label: string;
@@ -87,7 +85,7 @@ const MODULE_SECTIONS: ModuleSection[] = [
         route: "/(tabs)/home/purchases",
       },
       {
-        label: "Ajustes",
+        label: "Ajustes de inventario",
         description: "Mermas y correcciones",
         icon: "clipboard-edit-outline",
         route: "/(tabs)/home/adjustment",
@@ -215,203 +213,66 @@ export default function AllModulesScreen() {
     })).filter((section) => section.items.length > 0);
   }, [query, sections]);
 
-  const totalModules = sections.reduce(
-    (acc, s) => acc + s.items.length,
-    0
-  );
+  const styles = useThemedStyles(makeStyles);
 
   return (
-    <View style={styles.container}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Todos los módulos</Text>
-          <Text style={styles.subtitle}>
-            {totalModules} módulos disponibles
-          </Text>
-        </View>
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
+      <ListSearchbar
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Buscar módulo…"
+      />
 
-        {/* Buscador */}
-        <View style={styles.searchBox}>
-          <MaterialCommunityIcons
-            name="magnify"
-            size={18}
-            color={palette.textMuted}
+      {filteredSections.length === 0 ? (
+        <View style={styles.empty}>
+          <EmptyState
+            compact
+            icon="magnify"
+            title="Sin resultados"
+            description={`Ningún módulo coincide con "${query.trim()}".`}
           />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Buscar módulo…"
-            placeholderTextColor={palette.textMuted}
-            style={styles.searchInput}
-            autoCorrect={false}
-            autoCapitalize="none"
-          />
-          {query.length > 0 && (
-            <TouchableOpacity
-              onPress={() => setQuery("")}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <MaterialCommunityIcons
-                name="close-circle"
-                size={16}
-                color={palette.textMuted}
-              />
-            </TouchableOpacity>
-          )}
         </View>
-
-        {/* Secciones */}
-        {filteredSections.length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>
-              Sin resultados para "{query}"
-            </Text>
-          </View>
-        ) : (
-          filteredSections.map((section) => (
-            <View key={section.label} style={styles.section}>
-              <Text style={styles.sectionLabel}>{section.label}</Text>
-              <View style={styles.grid}>
-                {section.items.map((item) => (
-                  <TouchableOpacity
-                    key={item.route}
-                    style={styles.card}
-                    onPress={() => router.push(item.route as any)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.iconBox}>
-                      <MaterialCommunityIcons
-                        name={item.icon}
-                        size={20}
-                        color={palette.text}
-                      />
-                    </View>
-                    <View style={styles.cardText}>
-                      <Text style={styles.cardLabel} numberOfLines={1}>
-                        {item.label}
-                      </Text>
-                      <Text
-                        style={styles.cardDescription}
-                        numberOfLines={1}
-                      >
-                        {item.description}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-          ))
-        )}
-      </ScrollView>
-    </View>
+      ) : (
+        filteredSections.map((section) => (
+          <ListSection key={section.label} title={section.label}>
+            <ListGroup>
+              {section.items.map((item) => (
+                <ListRow
+                  key={item.route}
+                  icon={item.icon}
+                  title={item.label}
+                  titleLines={1}
+                  accessibilityLabel={`${item.label}: ${item.description}`}
+                  onPress={() => router.push(item.route as any)}
+                />
+              ))}
+            </ListGroup>
+          </ListSection>
+        ))
+      )}
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "transparent" as any,
-  },
+const makeStyles = themedStyles((c) => ({
   scroll: {
     flex: 1,
+    backgroundColor: c.background,
   },
   content: {
-    padding: tokens.spacing[5],
-    maxWidth: 960,
+    padding: 16,
+    paddingBottom: 40,
+    gap: 22,
+    maxWidth: 720,
     width: "100%",
     alignSelf: "center",
-    gap: tokens.spacing[5],
-  },
-  header: {
-    gap: 2,
-  },
-  title: {
-    ...tokens.typography.h1,
-    color: palette.text,
-  },
-  subtitle: {
-    ...tokens.typography.bodySm,
-    color: palette.textSecondary,
-  },
-  searchBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: tokens.spacing[2],
-    backgroundColor: palette.surface,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: tokens.radius.md,
-    paddingHorizontal: tokens.spacing[3],
-    height: 40,
-    ...(Platform.OS === "web"
-      ? ({ transitionProperty: "border-color" } as any)
-      : {}),
-  },
-  searchInput: {
-    flex: 1,
-    ...tokens.typography.body,
-    color: palette.text,
-    padding: 0,
   },
   empty: {
-    padding: tokens.spacing[7],
-    alignItems: "center",
+    paddingTop: 24,
   },
-  emptyText: {
-    ...tokens.typography.body,
-    color: palette.textMuted,
-  },
-  section: {
-    gap: tokens.spacing[3],
-  },
-  sectionLabel: {
-    ...tokens.typography.h3,
-    color: palette.text,
-  },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: tokens.spacing[3],
-  },
-  card: {
-    flexBasis: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: tokens.spacing[3],
-    backgroundColor: palette.surface,
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: tokens.radius.md,
-    paddingVertical: tokens.spacing[3],
-    paddingHorizontal: tokens.spacing[4],
-    ...tokens.shadow.sm,
-  },
-  iconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: tokens.radius.sm,
-    backgroundColor: palette.surfaceMuted,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  cardText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  cardLabel: {
-    ...tokens.typography.bodyMd,
-    color: palette.text,
-  },
-  cardDescription: {
-    ...tokens.typography.caption,
-    color: palette.textMuted,
-    marginTop: 1,
-  },
-});
+}));
