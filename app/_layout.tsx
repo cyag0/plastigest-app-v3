@@ -1,7 +1,13 @@
 import "@/utils/silenceLogs";
 import { applyGlobalFont, WEB_FONT_STACK } from "@/utils/globalFont";
 import { useFonts } from "expo-font";
-import { Stack, usePathname } from "expo-router";
+import {
+  DarkTheme,
+  DefaultTheme,
+  ThemeProvider as NavigationThemeProvider,
+  Stack,
+  usePathname,
+} from "expo-router";
 import "react-native-reanimated";
 
 import AppUpdateGate from "@/components/App/AppUpdateGate";
@@ -25,7 +31,7 @@ import {
   PaperProvider,
 } from "react-native-paper";
 import { es, registerTranslation } from "react-native-paper-dates";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { Platform, StatusBar, View } from "react-native";
 
 // Antes de cualquier render: Text/TextInput con Inter (ver utils/globalFont).
@@ -86,10 +92,6 @@ export default function RootLayout() {
 
   return (
     <ErrorBoundary>
-      <StatusBar
-        barStyle="dark-content" // texto blanco
-      />
-
       {/* AuthProvider DEBE estar arriba de PaperProvider porque el
           <Portal> de react-native-paper renderiza su contenido fuera del
           subarbol de children del PaperProvider, pero dentro del PortalHost
@@ -124,6 +126,25 @@ function ThemedApp() {
   useEffect(() => {
     setErrorReportingRoute(pathname);
   }, [pathname]);
+  // Tema de la navegación: el fondo de cada pantalla del Stack/Tabs que no
+  // pinta el suyo. Sin esto queda el gris claro de React Navigation también
+  // en modo oscuro.
+  const navigationTheme = useMemo(() => {
+    const navBase = mode === "dark" ? DarkTheme : DefaultTheme;
+    return {
+      ...navBase,
+      colors: {
+        ...navBase.colors,
+        primary: colors.primary,
+        background: colors.background,
+        card: colors.surface,
+        text: colors.text,
+        border: colors.border,
+        notification: colors.error,
+      },
+    };
+  }, [mode, colors]);
+
   const base = mode === "dark" ? MD3DarkTheme : MD3LightTheme;
   const theme = {
     ...base,
@@ -172,73 +193,74 @@ function ThemedApp() {
   };
 
   return (
-    <PaperProvider theme={{
-      ...theme,
-    }}>
-      {/* Versión mínima del teléfono / aviso de despliegue nuevo en web. */}
-      <AppUpdateGate>
-        <SelectDataProvider>
-          <AlertsProvider>
-            <NavigationHandler>
-              {/* View raiz: fondo del tema actual. Garantiza que TODAS
-                  las pantallas tengan el bg correcto sin migrar cada
-                  una individualmente. Las vistas que usen backgroundColor
-                  explicito en su contenedor sobrescribiran este fondo. */}
-              <View
-                style={{
-                  flex: 1,
-                  backgroundColor: colors.background,
-                }}
-              >
-                {/* Desde SDK 58 los navegadores ya no aceptan
-                    initialRouteName: "/" lo resuelve app/index.tsx. No se
-                    usa unstable_settings.anchor porque metería login debajo
-                    de los enlaces profundos. */}
-                <Stack screenOptions={{ headerShown: false }}>
-                  <Stack.Screen
-                    name="login"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="forgot-password"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="reset-password-code"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="reset-password-confirm"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="(stacks)"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen
-                    name="(tabs)"
-                    options={{ headerShown: false }}
-                  />
-                  <Stack.Screen name="+not-found" />
-                </Stack>
-              </View>
-              {/* Equipo en modo kiosko: siempre de vuelta a /kiosk. */}
-              <KioskModeGate />
-            </NavigationHandler>
-            {/* Renderizar los dialogs (ConfirmDialog, AlertSnackbar) al
-                FINAL del arbol, pero DENTRO de <AlertsProvider> para que
-                AlertsDialogs pueda leer las refs imperativas del provider
-                (si queda fuera, useContext(AlertsRefsContext) devuelve null
-                y AlertsDialogs retorna null — los portales nunca se montan
-                y todos los alerts.* se vuelven no-op silenciosos).
-                Como usan <Portal> de Paper, todos los portales viven en el
-                mismo host del PaperProvider; al estar al final del subarbol
-                quedan por encima de cualquier otro modal abierto (p. ej. el
-                ContextSwitcherModal del sidebar). */}
-            <AlertsDialogs />
-          </AlertsProvider>
-        </SelectDataProvider>
-      </AppUpdateGate>
+    <PaperProvider theme={theme}>
+      <StatusBar barStyle={mode === "dark" ? "light-content" : "dark-content"} />
+      <NavigationThemeProvider value={navigationTheme}>
+        {/* Versión mínima del teléfono / aviso de despliegue nuevo en web. */}
+        <AppUpdateGate>
+          <SelectDataProvider>
+            <AlertsProvider>
+              <NavigationHandler>
+                {/* View raiz: fondo del tema actual. Garantiza que TODAS
+                    las pantallas tengan el bg correcto sin migrar cada
+                    una individualmente. Las vistas que usen backgroundColor
+                    explicito en su contenedor sobrescribiran este fondo. */}
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: colors.background,
+                  }}
+                >
+                  {/* Desde SDK 58 los navegadores ya no aceptan
+                      initialRouteName: "/" lo resuelve app/index.tsx. No se
+                      usa unstable_settings.anchor porque metería login debajo
+                      de los enlaces profundos. */}
+                  <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen
+                      name="login"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="forgot-password"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="reset-password-code"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="reset-password-confirm"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="(stacks)"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen
+                      name="(tabs)"
+                      options={{ headerShown: false }}
+                    />
+                    <Stack.Screen name="+not-found" />
+                  </Stack>
+                </View>
+                {/* Equipo en modo kiosko: siempre de vuelta a /kiosk. */}
+                <KioskModeGate />
+              </NavigationHandler>
+              {/* Renderizar los dialogs (ConfirmDialog, AlertSnackbar) al
+                  FINAL del arbol, pero DENTRO de <AlertsProvider> para que
+                  AlertsDialogs pueda leer las refs imperativas del provider
+                  (si queda fuera, useContext(AlertsRefsContext) devuelve null
+                  y AlertsDialogs retorna null — los portales nunca se montan
+                  y todos los alerts.* se vuelven no-op silenciosos).
+                  Como usan <Portal> de Paper, todos los portales viven en el
+                  mismo host del PaperProvider; al estar al final del subarbol
+                  quedan por encima de cualquier otro modal abierto (p. ej. el
+                  ContextSwitcherModal del sidebar). */}
+              <AlertsDialogs />
+            </AlertsProvider>
+          </SelectDataProvider>
+        </AppUpdateGate>
+      </NavigationThemeProvider>
     </PaperProvider>
   );
 }
