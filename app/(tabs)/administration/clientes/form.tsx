@@ -1,9 +1,11 @@
 import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
+import { FormPhoneInput } from "@/components/Form/AppPhoneInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
+import { phoneSchema } from "@/utils/phone";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useRef } from "react";
 import { ScrollView, View } from "react-native";
@@ -40,18 +42,7 @@ const validationSchema = yup.object().shape({
       if (!value || value.trim() === "") return true; // Si está vacío, es válido (nullable)
       return yup.string().email().isValidSync(value);
     }),
-  phone: yup
-    .string()
-    .nullable()
-    .max(50, "El teléfono no puede exceder 50 caracteres")
-    .test(
-      "phone-format",
-      "El teléfono solo debe contener números y caracteres válidos",
-      function (value) {
-        if (!value || value.trim() === "") return true; // Si está vacío, es válido (nullable)
-        return /^[0-9+\-\s()]+$/.test(value);
-      }
-    ),
+  phone: phoneSchema(),
   address: yup
     .string()
     .nullable()
@@ -145,12 +136,9 @@ export default function ClientsForm(props: ClientsFormProps) {
             maxLength={100}
           />
 
-          <FormInput
+          <FormPhoneInput
             name="phone"
             label="Teléfono"
-            placeholder="Ej: +52 55 1234 5678"
-            keyboardType="phone-pad"
-            maxLength={50}
           />
 
           <FormInput

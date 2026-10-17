@@ -1,9 +1,11 @@
 import { goBack } from "@/utils/navigation";
 import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
+import { FormPhoneInput } from "@/components/Form/AppPhoneInput";
 import palette from "@/constants/palette";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
+import { phoneSchema } from "@/utils/phone";
 import {  useLocalSearchParams, useRouter } from "expo-router";
 import React from "react";
 import { StyleSheet, View } from "react-native";
@@ -23,7 +25,7 @@ const validationSchema = Yup.object().shape({
     .required("La dirección es obligatoria")
     .min(5, "La dirección debe tener al menos 5 caracteres")
     .max(500, "La dirección no puede exceder 500 caracteres"),
-  phone: Yup.string().max(20, "El teléfono no puede exceder 20 caracteres"),
+  phone: phoneSchema(),
   email: Yup.string()
     .email("Debe ser un email válido")
     .max(255, "El email no puede exceder 255 caracteres"),
@@ -114,11 +116,9 @@ const router = useRouter();
           numberOfLines={2}
         />
 
-        <FormInput
+        <FormPhoneInput
           name="phone"
           label="Teléfono"
-          placeholder="Ej: +52 55 1234 5678"
-          keyboardType="phone-pad"
         />
 
         <FormInput

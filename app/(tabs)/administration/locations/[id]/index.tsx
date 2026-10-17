@@ -7,6 +7,7 @@ import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import Services from "@/utils/services";
+import { formatPhone } from "@/utils/phone";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
@@ -206,7 +207,7 @@ export default function LocationDetailScreen() {
                   Teléfono:
                 </Text>
                 <Text variant="bodyMedium" style={styles.value}>
-                  {location.phone}
+                  {formatPhone(location.phone)}
                 </Text>
               </View>
             )}

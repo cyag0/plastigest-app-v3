@@ -8,6 +8,7 @@ import { useAlerts } from "@/hooks/useAlerts";
 import { useSelectedCompany } from "@/hooks/useSelectedCompany";
 import { generateCrudMenu } from "@/utils/routes";
 import Services from "@/utils/services";
+import { formatPhone } from "@/utils/phone";
 import { useRouter } from "expo-router";
 import * as React from "react";
 import { StyleSheet } from "react-native";
@@ -59,6 +60,7 @@ export default function LocationsIndexScreen() {
       dataIndex: "phone",
       key: "phone",
       width: 140,
+      render: (value) => formatPhone(value),
     },
     {
       title: "Email",
@@ -98,7 +100,7 @@ export default function LocationsIndexScreen() {
           <ActiveBadge active={!!item.is_active} feminine />
         ),
         bottom: [
-          ...(item.phone ? [{ label: "Tel", value: item.phone }] : []),
+          ...(item.phone ? [{ label: "Tel", value: formatPhone(item.phone) }] : []),
           ...(item.email ? [{ label: "Email", value: item.email }] : []),
         ],
       })}

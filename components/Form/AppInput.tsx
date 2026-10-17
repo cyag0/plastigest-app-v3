@@ -24,7 +24,7 @@ interface AppInputProps
  * consistentes con el resto de la app, sin cambiar el comportamiento
  * interno del componente.
  */
-const paperTheme = {
+export const paperTheme = {
   colors: {
     primary: palette.primary,
     onSurfaceVariant: palette.textSecondary,

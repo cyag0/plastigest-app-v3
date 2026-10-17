@@ -1,9 +1,11 @@
 import { goBack } from "@/utils/navigation";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
+import { FormPhoneInput } from "@/components/Form/AppPhoneInput";
 import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import Services from "@/utils/services";
+import { phoneSchema } from "@/utils/phone";
 import { useRouter } from "expo-router";
 import React, { useRef } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
@@ -25,7 +27,7 @@ interface LocationFormData {
 const validationSchema = Yup.object().shape({
   name: Yup.string().required("El nombre es obligatorio"),
   address: Yup.string(),
-  phone: Yup.string(),
+  phone: phoneSchema(),
   email: Yup.string().email("Email inválido"),
   city: Yup.string(),
   state: Yup.string(),
@@ -115,11 +117,9 @@ export default function CurrentLocationScreen() {
             />
 
             <View style={styles.row}>
-              <FormInput
+              <FormPhoneInput
                 name="phone"
                 label="Teléfono"
-                placeholder="+51 999 999 999"
-                keyboardType="phone-pad"
                 containerStyle={{ flex: 1 }}
               />
               <FormInput

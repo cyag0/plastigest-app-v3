@@ -2,8 +2,10 @@ import { goBack } from "@/utils/navigation";
 import { FormCheckBox } from "@/components/Form/AppCheckBox";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
+import { FormPhoneInput } from "@/components/Form/AppPhoneInput";
 import palette from "@/constants/palette";
 import Services from "@/utils/services";
+import { phoneSchema } from "@/utils/phone";
 import { useRouter } from "expo-router";
 import React, { useRef } from "react";
 import { StyleSheet, View } from "react-native";
@@ -30,12 +32,7 @@ const validationSchema = yup.object().shape({
     .string()
     .email("Debe ser un email válido")
     .required("El email es requerido"),
-  phone: yup
-    .string()
-    .matches(
-      /^[0-9+\-\s()]+$/,
-      "El teléfono solo debe contener números y caracteres válidos"
-    ),
+  phone: phoneSchema(),
   address: yup.string(),
   is_active: yup.boolean(),
 });
@@ -117,11 +114,9 @@ export default function CompaniesForm(props: CompaniesProps) {
             autoCapitalize="none"
           />
 
-          <FormInput
+          <FormPhoneInput
             name="phone"
             label="Teléfono"
-            placeholder="+52 55 1234 5678"
-            keyboardType="phone-pad"
           />
 
           <FormInput
