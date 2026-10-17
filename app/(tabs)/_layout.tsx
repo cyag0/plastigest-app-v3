@@ -1,13 +1,17 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import type { BottomTabBarButtonProps } from "expo-router/tabs";
 import React, { useState } from "react";
 import {
   Platform,
   Pressable,
+  type PressableProps,
+  type StyleProp,
   TouchableOpacity,
+  useWindowDimensions,
   View,
+  type ViewStyle,
 } from "react-native";
-import { Appbar } from "react-native-paper";
 
 import AppBar from "@/components/App/AppBar";
 import NavigationSidebar from "@/components/App/NavigationSidebar";
@@ -38,6 +42,46 @@ const screenLayout = routeGuardLayout("(tabs)");
 const HIDDEN_TAB_OPTIONS = {
   tabBarButton: () => null,
   tabBarItemStyle: { display: "none" },
+} as const;
+
+/**
+ * Ancho máximo de las pestañas de la barra inferior. En la tableta (y en el
+ * teléfono acostado) quedan centradas en este ancho: repartidas a todo lo
+ * ancho quedaban muy separadas. El fondo y el borde siguen de lado a lado.
+ */
+const TAB_BAR_MAX_WIDTH = 640;
+
+/**
+ * Botón de cada pestaña de la barra inferior. El de la librería usa en Android
+ * un ripple sin límites: un círculo enorme que se salía de la pestaña hasta la
+ * zona de gestos. Este queda dentro de la pestaña, con esquinas redondeadas y
+ * en el verde suave de la marca.
+ */
+function TabBarButton({
+  style,
+  children,
+  android_ripple: _ripple,
+  pressColor: _pressColor,
+  pressOpacity: _pressOpacity,
+  hoverEffect: _hoverEffect,
+  href: _href,
+  ...rest
+}: BottomTabBarButtonProps) {
+  return (
+    <Pressable
+      {...(rest as PressableProps)}
+      android_ripple={{ color: palette.ring, borderless: false, foreground: true }}
+      style={[style as StyleProp<ViewStyle>, TAB_BUTTON_STYLE]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+const TAB_BUTTON_STYLE = {
+  borderRadius: 12,
+  overflow: "hidden",
+  marginHorizontal: 4,
 } as const;
 
 /**
@@ -210,6 +254,9 @@ function NativeTabLayout() {
   const hiddenUnless = (route: string) =>
     canAccessRoute(route) ? {} : HIDDEN_TAB_OPTIONS;
 
+  const { width } = useWindowDimensions();
+  const tabBarInset = Math.max(0, (width - TAB_BAR_MAX_WIDTH) / 2);
+
   return (
     <Tabs
       screenLayout={screenLayout}
@@ -225,7 +272,11 @@ function NativeTabLayout() {
             },
             default: {},
           }),
+          // Solo cuando sobra ancho: si no, se respeta el margen que la barra
+          // deja por los bordes de la pantalla (muesca).
+          ...(tabBarInset > 0 ? { paddingHorizontal: tabBarInset } : {}),
         },
+        tabBarButton: (props) => <TabBarButton {...props} />,
         headerShown: false,
       }}
     >
@@ -234,7 +285,7 @@ function NativeTabLayout() {
         options={{
           title: "Inicio",
           tabBarIcon: ({ color, focused }) => (
-            <Appbar.Action icon="home" iconColor={color} size={24} />
+            <MaterialCommunityIcons name="home" color={color as string} size={24} />
           ),
         }}
       />
@@ -245,7 +296,7 @@ function NativeTabLayout() {
           ...hiddenUnless("/(tabs)/inventory"),
           title: "Inventario",
           tabBarIcon: ({ color, focused }) => (
-            <Appbar.Action icon="archive" iconColor={color} size={24} />
+            <MaterialCommunityIcons name="archive" color={color as string} size={24} />
           ),
         }}
       />
@@ -266,7 +317,7 @@ function NativeTabLayout() {
             />
           ),
           tabBarIcon: ({ color, focused }) => (
-            <Appbar.Action icon="compass-outline" iconColor={color} size={24} />
+            <MaterialCommunityIcons name="compass-outline" color={color as string} size={24} />
           ),
         }}
       />
@@ -279,7 +330,7 @@ function NativeTabLayout() {
           // En la barra inferior no cabe completo (5 pestañas en un teléfono).
           tabBarLabel: "Admin",
           tabBarIcon: ({ color, focused }) => (
-            <Appbar.Action icon="cog" iconColor={color} size={24} />
+            <MaterialCommunityIcons name="cog" color={color as string} size={24} />
           ),
           headerShown: false,
           header: ({ options, route }) => (
@@ -306,7 +357,7 @@ function NativeTabLayout() {
             />
           ),
           tabBarIcon: ({ color, focused }) => (
-            <Appbar.Action icon="account" iconColor={color} size={24} />
+            <MaterialCommunityIcons name="account" color={color as string} size={24} />
           ),
         }}
       />

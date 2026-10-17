@@ -3,7 +3,7 @@
     "name": "GCStock",
     "slug": "plastigest",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "plastigest",
     "userInterfaceStyle": "light",

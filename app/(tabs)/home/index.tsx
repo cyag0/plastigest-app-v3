@@ -30,7 +30,7 @@ import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View } from "react-native";
 
 type Summary = App.Entities.HomeSummary;
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
@@ -47,6 +47,15 @@ const SHORTCUTS: { label: string; icon: IconName; link: string }[] = [
   { label: "Transferencias", icon: "swap-horizontal", link: "/(tabs)/home/transfers-menu" },
   { label: "Ajustes", icon: "tune-variant", link: "/(tabs)/home/adjustment" },
 ];
+
+/**
+ * Ancho del área desde el que Inicio va a dos columnas (tableta acostada,
+ * escritorio). Por debajo (tableta vertical, teléfono acostado) va en una
+ * columna como en el teléfono, centrada en ONE_COLUMN_MAX_WIDTH: a dos
+ * columnas la de tareas quedaba angosta y la gráfica apretada.
+ */
+const TWO_COLUMNS_MIN_WIDTH = 1000;
+const ONE_COLUMN_MAX_WIDTH = 680;
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
@@ -108,6 +117,11 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const { isMobile } = useResponsive();
   const styles = useStyles();
+  // Ancho real del área (en web descuenta el menú lateral); antes de medirla,
+  // el de la ventana.
+  const { width: windowWidth } = useWindowDimensions();
+  const [areaWidth, setAreaWidth] = useState<number | null>(null);
+  const twoColumns = (areaWidth ?? windowWidth) >= TWO_COLUMNS_MIN_WIDTH;
 
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -199,9 +213,13 @@ export default function HomeScreen() {
     ) : null;
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} onLayout={(e) => setAreaWidth(e.nativeEvent.layout.width)}>
       <ScrollView
-        contentContainerStyle={[styles.content, !isMobile && styles.contentWide]}
+        contentContainerStyle={[
+          styles.content,
+          !isMobile && styles.contentWide,
+          !isMobile && !twoColumns && styles.contentOneColumn,
+        ]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       >
@@ -211,8 +229,8 @@ export default function HomeScreen() {
         {loading && !summary ? (
           // Esqueleto con la forma de la pantalla: antes era un segundo spinner
           // justo después del de arranque de la app.
-          <HomeSkeleton wide={!isMobile} />
-        ) : isMobile ? (
+          <HomeSkeleton wide={twoColumns} />
+        ) : !twoColumns ? (
           <>
             {sales}
             {cash}
@@ -456,6 +474,7 @@ const useStyles = () =>
     screen: { flex: 1, backgroundColor: c.background },
     content: { padding: 16, gap: 22, paddingBottom: 40 },
     contentWide: { padding: 28, maxWidth: 1180, width: "100%", alignSelf: "center" as const },
+    contentOneColumn: { maxWidth: ONE_COLUMN_MAX_WIDTH },
     header: { gap: 2, marginTop: 4 },
     date: { fontSize: 13, color: c.textSecondary, fontWeight: "500" as const },
     branchRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: 4, alignSelf: "flex-start" as const },
