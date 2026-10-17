@@ -1,21 +1,17 @@
-import Logo from "@/components/App/Logo";
-import { tokens } from "@/constants/tokens";
+/**
+ * Recuperar contraseña, paso 2: el código de 6 dígitos que llegó al correo.
+ */
+
+import AuthField from "@/components/Auth/AuthField";
+import AuthLayout, { AuthLink } from "@/components/Auth/AuthLayout";
 import { useColors } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { authAPI, rateLimitMessage } from "@/utils/axios";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text as RNText,
-  View,
-} from "react-native";
-import { Button, HelperText, TextInput } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Text, View } from "react-native";
+import { Button } from "react-native-paper";
 
 export default function ResetPasswordCodeScreen() {
   const router = useRouter();
@@ -28,85 +24,32 @@ export default function ResetPasswordCodeScreen() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
 
-  const validateCode = (value: string) => {
-    if (value.length !== 6) {
-      setCodeError("El código debe tener 6 dígitos");
-      return false;
-    }
-    setCodeError("");
-    return true;
-  };
-
-  const paperTheme = {
-    colors: {
-      primary: colors.primary,
-      onSurfaceVariant: colors.textSecondary,
-      outline: colors.border,
-      surface: colors.surface,
-      onSurface: colors.text,
-      error: colors.error,
-    },
-  };
-
   const styles = useThemedStyles((c) => ({
-    container: { flex: 1, backgroundColor: c.background },
-    scrollContainer: {
-      flexGrow: 1,
-      justifyContent: "center",
-      padding: tokens.spacing[5],
+    strong: { color: c.text, fontWeight: "600" as const },
+    // Los dígitos grandes y separados, centrados en el campo.
+    codeInput: { fontSize: 22, letterSpacing: 8, textAlign: "center" as const },
+    submit: { borderRadius: 12 },
+    submitContent: { height: 48 },
+    submitLabel: { fontSize: 15, fontWeight: "600" as const, letterSpacing: 0 },
+    links: {
+      flexDirection: "row" as const,
+      flexWrap: "wrap" as const,
+      justifyContent: "center" as const,
+      columnGap: 20,
+      rowGap: 4,
     },
-    content: {
-      flex: 1,
-      justifyContent: "center",
-      maxWidth: 480,
-      width: "100%",
-      alignSelf: "center",
-    },
-    header: {
-      alignItems: "center",
-      marginBottom: tokens.spacing[7],
-      gap: tokens.spacing[2],
-    },
-    form: {
-      padding: tokens.spacing[7],
-      borderRadius: tokens.radius.lg,
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.border,
-      ...tokens.shadow.md,
-    },
-    formHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: tokens.spacing[4],
-      gap: tokens.spacing[3],
-    },
-    formTitle: { ...tokens.typography.h3, color: c.text },
-    formSubtitle: {
-      ...tokens.typography.bodySm,
-      color: c.textSecondary,
-      textAlign: "center",
-      marginBottom: tokens.spacing[6],
-    },
-    emailHighlight: { color: c.text, fontWeight: "700" },
-    inputContainer: { marginBottom: tokens.spacing[3] },
-    input: { backgroundColor: c.surface },
-    inputContent: {
-      ...tokens.typography.body,
-      color: c.text,
-      textAlign: "center",
-      letterSpacing: 8,
-      fontSize: 22,
-    },
-    submitButton: { marginTop: tokens.spacing[4], borderRadius: tokens.radius.md },
-    submitButtonContent: { height: 48 },
-    secondaryButton: { marginTop: tokens.spacing[3] },
   }));
 
+  const validateCode = (value: string) => {
+    const message = value.length !== 6 ? "Escribe los 6 dígitos del código." : "";
+    setCodeError(message);
+    return !message;
+  };
+
   const handleSubmit = async () => {
+    if (loading) return;
     if (!email) {
-      alerts.error("Falta el correo. Vuelve a iniciar el proceso.");
+      alerts.error("Falta el correo. Vuelve a empezar.");
       router.replace("/forgot-password" as any);
       return;
     }
@@ -120,12 +63,11 @@ export default function ResetPasswordCodeScreen() {
         params: { email, code },
       });
     } catch (error: any) {
-      const message =
+      // El motivo va bajo el campo; antes salía también en el aviso de abajo.
+      setCodeError(
         rateLimitMessage(error) ??
-        (error?.response?.data?.message ||
-          "El código es inválido o ya expiró. Intenta nuevamente.");
-      setCodeError(message);
-      alerts.error(message);
+          (error?.response?.data?.message || "El código no es válido o ya venció. Pide otro."),
+      );
     } finally {
       setLoading(false);
     }
@@ -138,112 +80,72 @@ export default function ResetPasswordCodeScreen() {
       await authAPI.forgotPassword(email);
       setCode("");
       setCodeError("");
-      alerts.success("Te enviamos un nuevo código.");
+      alerts.success("Te enviamos un código nuevo.");
     } catch (error) {
-      alerts.error(
-        rateLimitMessage(error) ?? "No se pudo reenviar el código. Intenta nuevamente."
-      );
+      alerts.error(rateLimitMessage(error) ?? "No se pudo reenviar el código. Inténtalo de nuevo.");
     } finally {
       setResending(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
+    <AuthLayout
+      title="Escribe el código"
+      subtitle={
+        email ? (
+          <>
+            Lo enviamos a <Text style={styles.strong}>{email}</Text>. Si no lo ves, revisa la carpeta de spam.
+          </>
+        ) : (
+          "Escribe el código de 6 dígitos que te enviamos por correo."
+        )
+      }
+    >
+      <AuthField
+        label="Código de 6 dígitos"
+        value={code}
+        onChangeText={(text) => {
+          const digits = text.replace(/[^0-9]/g, "").slice(0, 6);
+          setCode(digits);
+          if (codeError) validateCode(digits);
+        }}
+        keyboardType="number-pad"
+        maxLength={6}
+        autoComplete="one-time-code"
+        textContentType="oneTimeCode"
+        returnKeyType="done"
+        onSubmitEditing={handleSubmit}
+        error={codeError}
+        disabled={loading}
+        contentStyle={styles.codeInput}
+      />
+
+      <Button
+        mode="contained"
+        onPress={handleSubmit}
+        disabled={loading || resending}
+        loading={loading}
+        buttonColor={colors.primary}
+        textColor={colors.primaryForeground}
+        style={styles.submit}
+        contentStyle={styles.submitContent}
+        labelStyle={styles.submitLabel}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.content}>
-            <View style={styles.header}>
-              <Logo variant="mark" size={72} />
-            </View>
+        {loading ? "Revisando…" : "Continuar"}
+      </Button>
 
-            <View style={styles.form}>
-              <View style={styles.formHeader}>
-                <MaterialCommunityIcons
-                  name="shield-key-outline"
-                  size={22}
-                  color={colors.primary}
-                />
-                <RNText style={styles.formTitle}>Ingresa el código</RNText>
-              </View>
-
-              <RNText style={styles.formSubtitle}>
-                Escribe el código de 6 dígitos que enviamos a{" "}
-                <RNText style={styles.emailHighlight}>{email}</RNText>.
-              </RNText>
-
-              <View style={styles.inputContainer}>
-                <TextInput
-                  label="Código de verificación"
-                  value={code}
-                  onChangeText={(text) => {
-                    const digits = text.replace(/[^0-9]/g, "").slice(0, 6);
-                    setCode(digits);
-                    if (codeError) validateCode(digits);
-                  }}
-                  onBlur={() => validateCode(code)}
-                  mode="outlined"
-                  keyboardType="number-pad"
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                  error={!!codeError}
-                  disabled={loading}
-                  theme={paperTheme}
-                  outlineColor={colors.border}
-                  activeOutlineColor={colors.primary}
-                  textColor={colors.text}
-                  style={styles.input}
-                  contentStyle={styles.inputContent}
-                />
-                <HelperText type="error" visible={!!codeError}>
-                  {codeError}
-                </HelperText>
-              </View>
-
-              <Button
-                mode="contained"
-                onPress={handleSubmit}
-                style={styles.submitButton}
-                disabled={loading || resending}
-                loading={loading}
-                buttonColor={colors.primary}
-                contentStyle={styles.submitButtonContent}
-                icon={loading ? undefined : "check"}
-              >
-                {loading ? "Verificando..." : "Verificar código"}
-              </Button>
-
-              <Button
-                mode="text"
-                onPress={handleResend}
-                style={styles.secondaryButton}
-                textColor={colors.primary}
-                disabled={loading || resending}
-                loading={resending}
-                icon="email-sync-outline"
-              >
-                Reenviar código
-              </Button>
-
-              <Button
-                mode="text"
-                onPress={() => router.replace("/login")}
-                textColor={colors.textSecondary}
-                disabled={loading || resending}
-                icon="arrow-left"
-              >
-                Volver al inicio de sesión
-              </Button>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <View style={styles.links}>
+        <AuthLink
+          label={resending ? "Enviando…" : "Reenviar código"}
+          onPress={handleResend}
+          disabled={loading || resending}
+        />
+        <AuthLink
+          label="Volver a iniciar sesión"
+          onPress={() => router.replace("/login")}
+          disabled={loading || resending}
+        />
+      </View>
+    </AuthLayout>
   );
 }

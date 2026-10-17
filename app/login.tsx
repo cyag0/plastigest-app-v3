@@ -1,27 +1,23 @@
-import Logo from "@/components/App/Logo";
-import { tokens } from "@/constants/tokens";
+/**
+ * Iniciar sesión.
+ *
+ * La marca, el título y dos campos. Los errores (contraseña incorrecta,
+ * intentos, bloqueo) se dicen una sola vez, junto al formulario: antes salían
+ * también en el aviso de abajo. Ver AuthLayout para cómo se acomoda en
+ * teléfono y en pantallas anchas.
+ */
+
+import AuthField from "@/components/Auth/AuthField";
+import AuthLayout, { AuthLink } from "@/components/Auth/AuthLayout";
+import FormNote from "@/components/Auth/FormNote";
 import { useAuth } from "@/contexts/AuthContext";
 import { useColors } from "@/contexts/ThemeContext";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
-import { useAlerts } from "@/hooks/useAlerts";
 import { getAppVersionLabel } from "@/utils/appVersion";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState, useRef } from "react";
-import {
-  KeyboardAvoidingView,
-  Linking,
-  Platform,
-  ScrollView,
-  Text as RNText,
-  View,
-} from "react-native";
-import {
-  Button,
-  HelperText,
-  TextInput,
-} from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import React, { useEffect, useRef, useState } from "react";
+import { Linking, Platform, Text, View } from "react-native";
+import { Button } from "react-native-paper";
 
 // Aviso de privacidad y baja de cuenta: páginas estáticas de public/ que
 // piden las tiendas. En la web son del mismo sitio; en el teléfono se abren en
@@ -34,20 +30,20 @@ const openLegalPage = (page: string) => {
   Linking.openURL(url).catch(() => {});
 };
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function LoginScreen() {
   const { login, isLoading } = useAuth();
   // isLoading del contexto no cambia mientras se inicia sesión: el botón
   // necesita su propio estado para mostrar "cargando" y no aceptar otro Enter.
   const [submitting, setSubmitting] = useState(false);
   const busy = isLoading || submitting;
-  const alerts = useAlerts();
   const colors = useColors();
   const router = useRouter();
 
   // Estados del formulario
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
   // Rate limit — info devuelta por el backend en headers (X-RateLimit-*)
@@ -55,8 +51,6 @@ export default function LoginScreen() {
   // "Te quedan X intentos" y `retryAfter` para un contador regresivo
   // cuando el backend nos bloquea.
   const [attemptsRemaining, setAttemptsRemaining] = useState<number | null>(null);
-  const [attemptsLimit, setAttemptsLimit] = useState<number | null>(null);
-  const [retryAfter, setRetryAfter] = useState<number | null>(null);
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
 
   // Contador regresivo cuando el backend nos devuelve 429. Se reinicia
@@ -73,502 +67,190 @@ export default function LoginScreen() {
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email) {
-      setEmailError("El email es requerido");
-      return false;
-    }
-    if (!emailRegex.test(email)) {
-      setEmailError("Ingresa un email válido");
-      return false;
-    }
-    setEmailError("");
-    return true;
+  const validateEmail = (value: string) => {
+    const message = !value.trim()
+      ? "Escribe tu correo."
+      : !EMAIL_PATTERN.test(value.trim())
+        ? "Revisa el correo; debe verse como nombre@empresa.com."
+        : "";
+    setEmailError(message);
+    return !message;
   };
 
-  const validatePassword = (password: string) => {
-    if (!password) {
-      setPasswordError("La contraseña es requerida");
-      return false;
-    }
-    if (password.length < 6) {
-      setPasswordError("La contraseña debe tener al menos 6 caracteres");
-      return false;
-    }
-    setPasswordError("");
-    return true;
+  // Solo que no esté vacía: el largo mínimo es para las contraseñas nuevas
+  // (antes se exigían 6 caracteres aquí y una contraseña más corta, de antes
+  // de esa regla, no podía ni intentarse).
+  const validatePassword = (value: string) => {
+    const message = value ? "" : "Escribe tu contraseña.";
+    setPasswordError(message);
+    return !message;
   };
 
   const isBlocked = retryCountdown !== null && retryCountdown > 0;
 
-  // Tema Paper aplicado a los inputs para que el outlined mode se
-  // vea consistente con la paleta del nuevo diseno.
-  const paperTheme = {
-    colors: {
-      primary: colors.primary,
-      onSurfaceVariant: colors.textSecondary,
-      outline: colors.border,
-      surface: colors.surface,
-      onSurface: colors.text,
-      error: colors.error,
-    },
-  };
-
   const styles = useThemedStyles((c) => ({
-    container: {
-      flex: 1,
-      backgroundColor: c.background,
-    },
-    scrollContainer: {
-      flexGrow: 1,
-      justifyContent: "center",
-      padding: tokens.spacing[5],
-    },
-    content: {
-      flex: 1,
-      justifyContent: "center",
-      maxWidth: 480,
-      width: "100%",
-      alignSelf: "center",
-    },
-    header: {
-      alignItems: "center",
-      marginBottom: tokens.spacing[9],
-      gap: tokens.spacing[2],
-    },
-    logoBox: {
-      width: 64,
-      height: 64,
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.primarySoft,
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: tokens.spacing[2],
-    },
-    title: {
-      ...tokens.typography.h1,
-      color: c.text,
-      textAlign: "center",
-    },
-    subtitle: {
-      ...tokens.typography.body,
-      color: c.textSecondary,
-      textAlign: "center",
-    },
-    form: {
-      padding: tokens.spacing[7],
-      borderRadius: tokens.radius.lg,
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.border,
-      ...tokens.shadow.md,
-    },
-    formHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: tokens.spacing[7],
-      gap: tokens.spacing[3],
-    },
-    formTitle: {
-      ...tokens.typography.h3,
-      color: c.text,
-    },
-    inputContainer: {
-      marginBottom: tokens.spacing[3],
-    },
-    input: {
-      backgroundColor: c.surface,
-    },
-    inputContent: {
-      ...tokens.typography.body,
-      color: c.text,
-    },
-    errorBanner: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[2],
-      backgroundColor: c.errorSoft,
-      padding: tokens.spacing[3],
-      borderRadius: tokens.radius.md,
-      marginVertical: tokens.spacing[2],
-      borderLeftWidth: 3,
-      borderLeftColor: c.error,
-    },
-    errorText: {
-      ...tokens.typography.bodySm,
-      color: c.error,
-      flex: 1,
-    },
-    warningBanner: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[2],
-      backgroundColor: c.warningSoft,
-      padding: tokens.spacing[3],
-      borderRadius: tokens.radius.md,
-      marginVertical: tokens.spacing[2],
-      borderLeftWidth: 3,
-      borderLeftColor: c.warning,
-    },
-    warningText: {
-      ...tokens.typography.bodySm,
-      color: c.text,
-      flex: 1,
-    },
-    blockedBanner: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[2],
-      backgroundColor: c.errorSoft,
-      padding: tokens.spacing[3],
-      borderRadius: tokens.radius.md,
-      marginVertical: tokens.spacing[2],
-      borderLeftWidth: 3,
-      borderLeftColor: c.error,
-    },
-    blockedText: {
-      ...tokens.typography.bodySm,
-      color: c.error,
-      flex: 1,
-    },
-    blockedCountdown: {
-      fontWeight: "700",
-      color: c.error,
-    },
-    submitButton: {
-      marginTop: tokens.spacing[6],
-      borderRadius: tokens.radius.md,
-    },
-    submitButtonContent: {
-      height: 48,
-    },
-    forgotPassword: {
-      marginTop: tokens.spacing[3],
-      alignSelf: "center",
-    },
+    fields: { gap: 14 },
+    submit: { borderRadius: 12 },
+    submitContent: { height: 48 },
+    submitLabel: { fontSize: 15, fontWeight: "600" as const, letterSpacing: 0 },
     footer: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      marginTop: tokens.spacing[7],
-      gap: tokens.spacing[2],
+      flexDirection: "row" as const,
+      flexWrap: "wrap" as const,
+      justifyContent: "center" as const,
+      alignItems: "center" as const,
+      columnGap: 8,
+      rowGap: 4,
     },
-    footerText: {
-      ...tokens.typography.caption,
-      color: c.textMuted,
-    },
-    legalLinks: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      alignItems: "center",
-      justifyContent: "center",
-      marginTop: tokens.spacing[2],
-      gap: tokens.spacing[2],
-    },
-    legalLink: {
-      ...tokens.typography.caption,
-      color: c.textMuted,
-      textDecorationLine: "underline",
-    },
+    footerText: { fontSize: 12, lineHeight: 18, color: c.textMuted },
+    footerLink: { fontSize: 12, lineHeight: 18, color: c.textSecondary, fontWeight: "500" as const },
   }));
 
   // Enter en el correo pasa a la contraseña; Enter en la contraseña entra.
   const passwordRef = useRef<any>(null);
 
   const handleLogin = async () => {
-    // Enter repetido mientras ya se está entrando.
-    if (busy) return;
+    // Enter repetido mientras ya se está entrando, o durante el bloqueo (el
+    // aviso con la cuenta regresiva ya está a la vista).
+    if (busy || isBlocked) return;
 
-    // Limpiar errores previos
     setError("");
-
-    // Si seguimos bloqueados, no dejamos reintentar
-    if (isBlocked) {
-      alerts.error(`Espera ${retryCountdown} segundos antes de intentar de nuevo.`);
-      return;
-    }
-
-    // Validar formulario
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
-
-    if (!isEmailValid || !isPasswordValid) {
-      alerts.error("Por favor completa todos los campos correctamente");
-      return;
-    }
+    if (!isEmailValid || !isPasswordValid) return;
 
     setSubmitting(true);
     try {
-      // Intentar login
       const result = await login(email.trim().toLowerCase(), password);
 
       if (!result.success) {
         // Actualizar info de rate limit para la UI (sea 401, 429 u otro).
         if (result.rateLimit) {
-          setAttemptsLimit(result.rateLimit.limit);
           setAttemptsRemaining(result.rateLimit.remaining);
-          if (result.rateLimit.retryAfter !== undefined) {
-            setRetryAfter(result.rateLimit.retryAfter);
-            setRetryCountdown(result.rateLimit.retryAfter);
-          } else {
-            // Si no hubo 429, limpiamos cualquier bloqueo previo
-            setRetryAfter(null);
-            setRetryCountdown(null);
-          }
+          // Sin 429 se limpia cualquier bloqueo previo.
+          setRetryCountdown(result.rateLimit.retryAfter ?? null);
         }
-
         // AuthContext ya trae el motivo en español (credenciales, bloqueo
         // por intentos o falla de conexión, ver utils/axios).
-        const errorMessage =
-          result.error || "No se pudo iniciar sesión. Intenta nuevamente.";
-
-        setError(errorMessage);
-        alerts.error(errorMessage);
+        setError(result.error || "No se pudo iniciar sesión. Inténtalo de nuevo.");
       } else {
-        // Login exitoso, limpiar contadores
+        // Al entrar, la app cambia de pantalla: no hace falta otro aviso.
         setAttemptsRemaining(null);
-        setAttemptsLimit(null);
-        setRetryAfter(null);
         setRetryCountdown(null);
-        alerts.success("Sesión iniciada correctamente");
       }
     } catch {
       // login() atrapa sus errores; esto sólo cubre algo inesperado.
-      const errorMessage = "Error al iniciar sesión. Intenta nuevamente.";
-      setError(errorMessage);
-      alerts.error(errorMessage);
+      setError("No se pudo iniciar sesión. Inténtalo de nuevo.");
     } finally {
       setSubmitting(false);
     }
   };
 
+  // Con 3 o menos intentos antes del bloqueo de un minuto.
+  const showAttempts =
+    !isBlocked && attemptsRemaining !== null && attemptsRemaining > 0 && attemptsRemaining <= 3;
+
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
+    <AuthLayout
+      title="Inicia sesión"
+      tagline
+      footer={
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Versión {getAppVersionLabel()}</Text>
+          <Text style={styles.footerText}>·</Text>
+          <Text
+            style={styles.footerLink}
+            accessibilityRole="link"
+            onPress={() => openLegalPage("privacidad.html")}
+          >
+            Aviso de privacidad
+          </Text>
+          <Text style={styles.footerText}>·</Text>
+          <Text
+            style={styles.footerLink}
+            accessibilityRole="link"
+            onPress={() => openLegalPage("eliminar-cuenta.html")}
+          >
+            Eliminar mi cuenta
+          </Text>
+        </View>
+      }
+    >
+      <View style={styles.fields}>
+        <AuthField
+          label="Correo electrónico"
+          value={email}
+          onChangeText={(text) => {
+            setEmail(text);
+            if (emailError) validateEmail(text);
+          }}
+          onBlur={() => {
+            if (email) validateEmail(email);
+          }}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="email"
+          textContentType="emailAddress"
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          error={emailError}
+          disabled={busy}
+        />
+        <AuthField
+          label="Contraseña"
+          secure
+          inputRef={passwordRef}
+          value={password}
+          onChangeText={(text) => {
+            setPassword(text);
+            if (passwordError) validatePassword(text);
+          }}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="current-password"
+          textContentType="password"
+          returnKeyType="go"
+          onSubmitEditing={handleLogin}
+          error={passwordError}
+          disabled={busy}
+        />
+        <AuthLink
+          label="¿Olvidaste tu contraseña?"
+          align="right"
+          onPress={() => router.push("/forgot-password" as any)}
+          disabled={busy}
+        />
+      </View>
+
+      {isBlocked ? (
+        <FormNote tone="error" icon="timer-sand">
+          Demasiados intentos. Podrás volver a intentarlo en {retryCountdown} s.
+        </FormNote>
+      ) : error ? (
+        <FormNote tone="error">{error}</FormNote>
+      ) : null}
+
+      {showAttempts && (
+        <FormNote tone="warning" icon="shield-alert-outline">
+          {attemptsRemaining === 1 ? "Te queda 1 intento" : `Te quedan ${attemptsRemaining} intentos`}; después
+          tendrás que esperar un minuto.
+        </FormNote>
+      )}
+
+      <Button
+        mode="contained"
+        onPress={handleLogin}
+        disabled={busy || isBlocked}
+        loading={busy}
+        buttonColor={colors.primary}
+        textColor={colors.primaryForeground}
+        style={styles.submit}
+        contentStyle={styles.submitContent}
+        labelStyle={styles.submitLabel}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.content}>
-            {/* Header con logo */}
-            <View style={styles.header}>
-              <Logo
-                variant="full"
-                size={260}
-                wordmarkColor={colors.text}
-                taglineColor={colors.textSecondary}
-              />
-            </View>
-
-            {/* Formulario de login */}
-            <View style={styles.form}>
-              <View style={styles.formHeader}>
-                <MaterialCommunityIcons
-                  name="login"
-                  size={22}
-                  color={colors.primary}
-                />
-                <RNText style={styles.formTitle}>Iniciar Sesión</RNText>
-              </View>
-
-              {/* Campo Email */}
-              <View style={styles.inputContainer}>
-                <TextInput
-                  label="Email"
-                  value={email}
-                  onChangeText={(text) => {
-                    setEmail(text);
-                    if (emailError) validateEmail(text);
-                  }}
-                  onBlur={() => validateEmail(email)}
-                  mode="outlined"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => passwordRef.current?.focus()}
-                  error={!!emailError}
-                  disabled={busy}
-                  theme={paperTheme}
-                  outlineColor={colors.border}
-                  activeOutlineColor={colors.primary}
-                  textColor={colors.text}
-                  placeholderTextColor={colors.textMuted}
-                  left={
-                    <TextInput.Icon
-                      icon="email-outline"
-                      color={emailError ? colors.error : colors.primary}
-                    />
-                  }
-                  style={styles.input}
-                  contentStyle={styles.inputContent}
-                />
-                <HelperText type="error" visible={!!emailError}>
-                  {emailError}
-                </HelperText>
-              </View>
-
-              {/* Campo Contraseña */}
-              <View style={styles.inputContainer}>
-                <TextInput
-                  label="Contraseña"
-                  value={password}
-                  onChangeText={(text) => {
-                    setPassword(text);
-                    if (passwordError) validatePassword(text);
-                  }}
-                  onBlur={() => validatePassword(password)}
-                  mode="outlined"
-                  ref={passwordRef}
-                  secureTextEntry={!showPassword}
-                  autoComplete="password"
-                  returnKeyType="go"
-                  onSubmitEditing={handleLogin}
-                  error={!!passwordError}
-                  disabled={busy}
-                  theme={paperTheme}
-                  outlineColor={colors.border}
-                  activeOutlineColor={colors.primary}
-                  textColor={colors.text}
-                  placeholderTextColor={colors.textMuted}
-                  left={
-                    <TextInput.Icon
-                      icon="lock-outline"
-                      color={passwordError ? colors.error : colors.primary}
-                    />
-                  }
-                  right={
-                    <TextInput.Icon
-                      icon={showPassword ? "eye-off-outline" : "eye-outline"}
-                      onPress={() => setShowPassword(!showPassword)}
-                      color={colors.textMuted}
-                    />
-                  }
-                  style={styles.input}
-                  contentStyle={styles.inputContent}
-                />
-                <HelperText type="error" visible={!!passwordError}>
-                  {passwordError}
-                </HelperText>
-              </View>
-
-              {/* Error general */}
-              {error ? (
-                <View style={styles.errorBanner}>
-                  <MaterialCommunityIcons
-                    name="alert-circle"
-                    size={18}
-                    color={colors.error}
-                  />
-                  <RNText style={styles.errorText}>{error}</RNText>
-                </View>
-              ) : null}
-
-              {/* Aviso de intentos restantes (cuando quedan 3 o menos) */}
-              {attemptsRemaining !== null &&
-                attemptsLimit !== null &&
-                retryCountdown === null &&
-                attemptsRemaining > 0 &&
-                attemptsRemaining <= 3 && (
-                  <View style={styles.warningBanner}>
-                    <MaterialCommunityIcons
-                      name="shield-alert-outline"
-                      size={18}
-                      color={colors.warning}
-                    />
-                    <RNText style={styles.warningText}>
-                      Te {attemptsRemaining === 1 ? "queda" : "quedan"}{" "}
-                      {attemptsRemaining} de {attemptsLimit} intentos. Si
-                      excedes el límite tendrás que esperar un minuto.
-                    </RNText>
-                  </View>
-                )}
-
-              {/* Contador regresivo cuando el backend nos bloquea (429) */}
-              {retryCountdown !== null && retryCountdown > 0 && (
-                <View style={styles.blockedBanner}>
-                  <MaterialCommunityIcons
-                    name="lock-clock"
-                    size={18}
-                    color={colors.error}
-                  />
-                  <RNText style={styles.blockedText}>
-                    Demasiados intentos. Podrás volver a intentar en{" "}
-                    <RNText style={styles.blockedCountdown}>
-                      {retryCountdown}s
-                    </RNText>
-                  </RNText>
-                </View>
-              )}
-
-              {/* Botón de login */}
-              <Button
-                mode="contained"
-                onPress={handleLogin}
-                style={styles.submitButton}
-                disabled={busy || isBlocked}
-                loading={busy}
-                buttonColor={isBlocked ? colors.textMuted : colors.primary}
-                icon={busy ? undefined : "login"}
-                contentStyle={styles.submitButtonContent}
-              >
-                {busy
-                  ? "Iniciando sesión..."
-                  : isBlocked
-                    ? `Bloqueado (${retryCountdown}s)`
-                    : "Iniciar Sesión"}
-              </Button>
-
-              {/* Enlace al flujo de recuperación de contraseña */}
-              <Button
-                mode="text"
-                onPress={() => router.push("/forgot-password" as any)}
-                style={styles.forgotPassword}
-                textColor={colors.primary}
-                disabled={busy}
-                compact
-              >
-                ¿Olvidaste tu contraseña?
-              </Button>
-            </View>
-
-            {/* Footer */}
-            <View style={styles.footer}>
-              <MaterialCommunityIcons
-                name="shield-check"
-                size={14}
-                color={colors.textMuted}
-              />
-              <RNText style={styles.footerText}>
-                GCStock v{getAppVersionLabel()}
-              </RNText>
-            </View>
-            <View style={styles.legalLinks}>
-              <RNText
-                style={styles.legalLink}
-                accessibilityRole="link"
-                onPress={() => openLegalPage("privacidad.html")}
-              >
-                Aviso de privacidad
-              </RNText>
-              <RNText style={styles.footerText}>·</RNText>
-              <RNText
-                style={styles.legalLink}
-                accessibilityRole="link"
-                onPress={() => openLegalPage("eliminar-cuenta.html")}
-              >
-                Eliminar mi cuenta
-              </RNText>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        {busy ? "Entrando…" : isBlocked ? `Espera ${retryCountdown} s` : "Iniciar sesión"}
+      </Button>
+    </AuthLayout>
   );
 }

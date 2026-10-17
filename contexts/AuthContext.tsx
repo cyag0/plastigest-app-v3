@@ -717,7 +717,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
       return { success: true };
     } catch (error: any) {
-      console.error("Login error:", describeError(error));
+      // Una contraseña mal escrita es una falla esperada: a la consola sin el
+      // aviso rojo de LogBox (la pantalla ya la muestra).
+      logCaughtError("Login error:", error);
 
       // Sin respuesta del servidor: el interceptor ya dejó el motivo en
       // español (sin red o tiempo agotado).
@@ -753,10 +755,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         const seconds = rateLimit?.retryAfter ?? 60;
         errorMessage = `Demasiados intentos. Espera ${seconds} segundos antes de intentar de nuevo.`;
       } else if (error.response?.status === 401) {
-        errorMessage =
-          "Credenciales incorrectas. Verifica tu email y contraseña.";
+        errorMessage = "El correo o la contraseña no son correctos.";
       } else if (error.response?.status === 422) {
-        errorMessage = "Datos inválidos. Verifica la información ingresada.";
+        errorMessage = "Revisa el correo y la contraseña.";
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       }

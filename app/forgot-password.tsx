@@ -1,21 +1,19 @@
-import Logo from "@/components/App/Logo";
-import { tokens } from "@/constants/tokens";
+/**
+ * Recuperar contraseña, paso 1: el correo al que se manda el código.
+ * Siguen reset-password-code (el código) y reset-password-confirm (la nueva).
+ */
+
+import AuthField from "@/components/Auth/AuthField";
+import AuthLayout, { AuthLink } from "@/components/Auth/AuthLayout";
 import { useColors } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { authAPI, rateLimitMessage } from "@/utils/axios";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text as RNText,
-  View,
-} from "react-native";
-import { Button, HelperText, TextInput } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Button } from "react-native-paper";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -26,90 +24,30 @@ export default function ForgotPasswordScreen() {
   const [emailError, setEmailError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const validateEmail = (value: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!value) {
-      setEmailError("El email es requerido");
-      return false;
-    }
-    if (!emailRegex.test(value)) {
-      setEmailError("Ingresa un email válido");
-      return false;
-    }
-    setEmailError("");
-    return true;
-  };
-
-  const paperTheme = {
-    colors: {
-      primary: colors.primary,
-      onSurfaceVariant: colors.textSecondary,
-      outline: colors.border,
-      surface: colors.surface,
-      onSurface: colors.text,
-      error: colors.error,
-    },
-  };
-
-  const styles = useThemedStyles((c) => ({
-    container: { flex: 1, backgroundColor: c.background },
-    scrollContainer: {
-      flexGrow: 1,
-      justifyContent: "center",
-      padding: tokens.spacing[5],
-    },
-    content: {
-      flex: 1,
-      justifyContent: "center",
-      maxWidth: 480,
-      width: "100%",
-      alignSelf: "center",
-    },
-    header: {
-      alignItems: "center",
-      marginBottom: tokens.spacing[7],
-      gap: tokens.spacing[2],
-    },
-    form: {
-      padding: tokens.spacing[7],
-      borderRadius: tokens.radius.lg,
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.border,
-      ...tokens.shadow.md,
-    },
-    formHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: tokens.spacing[4],
-      gap: tokens.spacing[3],
-    },
-    formTitle: { ...tokens.typography.h3, color: c.text },
-    formSubtitle: {
-      ...tokens.typography.bodySm,
-      color: c.textSecondary,
-      textAlign: "center",
-      marginBottom: tokens.spacing[6],
-    },
-    inputContainer: { marginBottom: tokens.spacing[3] },
-    input: { backgroundColor: c.surface },
-    inputContent: { ...tokens.typography.body, color: c.text },
-    submitButton: { marginTop: tokens.spacing[4], borderRadius: tokens.radius.md },
-    submitButtonContent: { height: 48 },
-    backButton: { marginTop: tokens.spacing[3] },
+  const styles = useThemedStyles(() => ({
+    submit: { borderRadius: 12 },
+    submitContent: { height: 48 },
+    submitLabel: { fontSize: 15, fontWeight: "600" as const, letterSpacing: 0 },
   }));
 
+  const validateEmail = (value: string) => {
+    const message = !value.trim()
+      ? "Escribe tu correo."
+      : !EMAIL_PATTERN.test(value.trim())
+        ? "Revisa el correo; debe verse como nombre@empresa.com."
+        : "";
+    setEmailError(message);
+    return !message;
+  };
+
   const handleSubmit = async () => {
-    if (!validateEmail(email)) return;
+    if (loading || !validateEmail(email)) return;
 
     setLoading(true);
     try {
       const normalized = email.trim().toLowerCase();
       await authAPI.forgotPassword(normalized);
-      alerts.success(
-        "Si el correo está registrado, recibirás un código de recuperación."
-      );
+      alerts.success("Si el correo está registrado, te llegará un código.");
       router.push({
         pathname: "/reset-password-code" as any,
         params: { email: normalized },
@@ -117,105 +55,53 @@ export default function ForgotPasswordScreen() {
     } catch (error) {
       // 429: se pueden pedir pocos códigos por hora; el servidor dice cuánto
       // esperar.
-      alerts.error(
-        rateLimitMessage(error) ?? "No se pudo enviar el código. Intenta nuevamente."
-      );
+      alerts.error(rateLimitMessage(error) ?? "No se pudo enviar el código. Inténtalo de nuevo.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
+    <AuthLayout
+      title="Recupera tu contraseña"
+      subtitle="Escribe el correo de tu cuenta y te enviaremos un código de 6 dígitos para crear una nueva."
+    >
+      <AuthField
+        label="Correo electrónico"
+        value={email}
+        onChangeText={(text) => {
+          setEmail(text);
+          if (emailError) validateEmail(text);
+        }}
+        onBlur={() => {
+          if (email) validateEmail(email);
+        }}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="email"
+        textContentType="emailAddress"
+        returnKeyType="send"
+        onSubmitEditing={handleSubmit}
+        error={emailError}
+        disabled={loading}
+      />
+
+      <Button
+        mode="contained"
+        onPress={handleSubmit}
+        disabled={loading}
+        loading={loading}
+        buttonColor={colors.primary}
+        textColor={colors.primaryForeground}
+        style={styles.submit}
+        contentStyle={styles.submitContent}
+        labelStyle={styles.submitLabel}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.content}>
-            <View style={styles.header}>
-              <Logo variant="mark" size={72} />
-            </View>
+        {loading ? "Enviando…" : "Enviar código"}
+      </Button>
 
-            <View style={styles.form}>
-              <View style={styles.formHeader}>
-                <MaterialCommunityIcons
-                  name="lock-question"
-                  size={22}
-                  color={colors.primary}
-                />
-                <RNText style={styles.formTitle}>Recuperar contraseña</RNText>
-              </View>
-
-              <RNText style={styles.formSubtitle}>
-                Ingresa el correo de tu cuenta y te enviaremos un código de 6
-                dígitos para restablecer tu contraseña.
-              </RNText>
-
-              <View style={styles.inputContainer}>
-                <TextInput
-                  label="Email"
-                  value={email}
-                  onChangeText={(text) => {
-                    setEmail(text);
-                    if (emailError) validateEmail(text);
-                  }}
-                  onBlur={() => validateEmail(email)}
-                  mode="outlined"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoComplete="email"
-                  error={!!emailError}
-                  disabled={loading}
-                  theme={paperTheme}
-                  outlineColor={colors.border}
-                  activeOutlineColor={colors.primary}
-                  textColor={colors.text}
-                  placeholderTextColor={colors.textMuted}
-                  left={
-                    <TextInput.Icon
-                      icon="email-outline"
-                      color={emailError ? colors.error : colors.primary}
-                    />
-                  }
-                  style={styles.input}
-                  contentStyle={styles.inputContent}
-                />
-                <HelperText type="error" visible={!!emailError}>
-                  {emailError}
-                </HelperText>
-              </View>
-
-              <Button
-                mode="contained"
-                onPress={handleSubmit}
-                style={styles.submitButton}
-                disabled={loading}
-                loading={loading}
-                buttonColor={colors.primary}
-                contentStyle={styles.submitButtonContent}
-                icon={loading ? undefined : "send"}
-              >
-                {loading ? "Enviando..." : "Enviar código"}
-              </Button>
-
-              <Button
-                mode="text"
-                onPress={() => router.replace("/login")}
-                style={styles.backButton}
-                textColor={colors.textSecondary}
-                disabled={loading}
-                icon="arrow-left"
-              >
-                Volver al inicio de sesión
-              </Button>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <AuthLink label="Volver a iniciar sesión" onPress={() => router.replace("/login")} disabled={loading} />
+    </AuthLayout>
   );
 }

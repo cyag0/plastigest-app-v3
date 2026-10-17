@@ -1,31 +1,33 @@
-import Logo from "@/components/App/Logo";
-import { tokens } from "@/constants/tokens";
+/**
+ * Recuperar contraseña, paso 3: la contraseña nueva. Con los mismos
+ * requisitos a la vista que en Cambiar contraseña (PasswordRules).
+ */
+
+import AuthField from "@/components/Auth/AuthField";
+import AuthLayout, { AuthLink } from "@/components/Auth/AuthLayout";
+import PasswordRules, { passwordRules } from "@/components/Auth/PasswordRules";
 import { useColors } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { authAPI, rateLimitMessage } from "@/utils/axios";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Formik } from "formik";
-import React, { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text as RNText,
-  View,
-} from "react-native";
-import { Button, HelperText, TextInput } from "react-native-paper";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Formik, type FormikHelpers } from "formik";
+import React, { useRef } from "react";
+import { View } from "react-native";
+import { Button } from "react-native-paper";
 import * as Yup from "yup";
 
+interface Values {
+  password: string;
+  password_confirmation: string;
+}
+
+// Los mensajes no se muestran: lo dicen los requisitos (PasswordRules).
 const schema = Yup.object({
-  password: Yup.string()
-    .min(8, "La contraseña debe tener al menos 8 caracteres")
-    .required("La contraseña es requerida"),
+  password: Yup.string().min(8, "Debe tener al menos 8 caracteres.").required("Escribe la contraseña nueva."),
   password_confirmation: Yup.string()
-    .oneOf([Yup.ref("password")], "Las contraseñas no coinciden")
-    .required("Confirma tu contraseña"),
+    .oneOf([Yup.ref("password")], "Las contraseñas no coinciden.")
+    .required("Repite la contraseña nueva."),
 });
 
 export default function ResetPasswordConfirmScreen() {
@@ -36,76 +38,18 @@ export default function ResetPasswordConfirmScreen() {
     email: string;
     code: string;
   }>();
+  const confirmRef = useRef<any>(null);
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-
-  const paperTheme = {
-    colors: {
-      primary: colors.primary,
-      onSurfaceVariant: colors.textSecondary,
-      outline: colors.border,
-      surface: colors.surface,
-      onSurface: colors.text,
-      error: colors.error,
-    },
-  };
-
-  const styles = useThemedStyles((c) => ({
-    container: { flex: 1, backgroundColor: c.background },
-    scrollContainer: {
-      flexGrow: 1,
-      justifyContent: "center",
-      padding: tokens.spacing[5],
-    },
-    content: {
-      flex: 1,
-      justifyContent: "center",
-      maxWidth: 480,
-      width: "100%",
-      alignSelf: "center",
-    },
-    header: {
-      alignItems: "center",
-      marginBottom: tokens.spacing[7],
-      gap: tokens.spacing[2],
-    },
-    form: {
-      padding: tokens.spacing[7],
-      borderRadius: tokens.radius.lg,
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.border,
-      ...tokens.shadow.md,
-    },
-    formHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "center",
-      marginBottom: tokens.spacing[4],
-      gap: tokens.spacing[3],
-    },
-    formTitle: { ...tokens.typography.h3, color: c.text },
-    formSubtitle: {
-      ...tokens.typography.bodySm,
-      color: c.textSecondary,
-      textAlign: "center",
-      marginBottom: tokens.spacing[6],
-    },
-    inputContainer: { marginBottom: tokens.spacing[3] },
-    input: { backgroundColor: c.surface },
-    inputContent: { ...tokens.typography.body, color: c.text },
-    submitButton: { marginTop: tokens.spacing[4], borderRadius: tokens.radius.md },
-    submitButtonContent: { height: 48 },
-    backButton: { marginTop: tokens.spacing[3] },
+  const styles = useThemedStyles(() => ({
+    fields: { gap: 14 },
+    submit: { borderRadius: 12 },
+    submitContent: { height: 48 },
+    submitLabel: { fontSize: 15, fontWeight: "600" as const, letterSpacing: 0 },
   }));
 
-  const handleSubmit = async (
-    values: { password: string; password_confirmation: string },
-    { setSubmitting }: any
-  ) => {
+  const handleSubmit = async (values: Values, { setSubmitting }: FormikHelpers<Values>) => {
     if (!email || !code) {
-      alerts.error("Falta información del proceso. Vuelve a iniciarlo.");
+      alerts.error("Falta información del proceso. Vuelve a empezar.");
       router.replace("/forgot-password" as any);
       return;
     }
@@ -118,180 +62,91 @@ export default function ResetPasswordConfirmScreen() {
         password_confirmation: values.password_confirmation,
       });
 
-      alerts.success("Tu contraseña fue restablecida. Ya puedes iniciar sesión.");
+      alerts.success("Listo, ya puedes entrar con tu contraseña nueva.");
       router.replace("/login");
     } catch (error: any) {
-      const message =
+      alerts.error(
         rateLimitMessage(error) ??
-        (error?.response?.data?.message ||
-          "No se pudo restablecer la contraseña. Intenta nuevamente.");
-      alerts.error(message);
+          (error?.response?.data?.message || "No se pudo guardar la contraseña. Inténtalo de nuevo."),
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
+    <AuthLayout title="Crea tu contraseña nueva" subtitle="Con ella entrarás de ahora en adelante.">
+      <Formik
+        initialValues={{ password: "", password_confirmation: "" }}
+        validationSchema={schema}
+        onSubmit={handleSubmit}
       >
-        <ScrollView
-          contentContainerStyle={styles.scrollContainer}
-          keyboardShouldPersistTaps="handled"
-        >
-          <View style={styles.content}>
-            <View style={styles.header}>
-              <Logo variant="mark" size={72} />
-            </View>
-
-            <View style={styles.form}>
-              <View style={styles.formHeader}>
-                <MaterialCommunityIcons
-                  name="lock-reset"
-                  size={22}
-                  color={colors.primary}
+        {({ values, errors, handleChange, handleBlur, handleSubmit, isSubmitting, submitCount }) => {
+          const tried = submitCount > 0;
+          return (
+            <>
+              <View style={styles.fields}>
+                <AuthField
+                  label="Contraseña nueva"
+                  secure
+                  value={values.password}
+                  onChangeText={handleChange("password")}
+                  onBlur={handleBlur("password")}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                  onSubmitEditing={() => confirmRef.current?.focus()}
+                  error={tried && !!errors.password}
+                  disabled={isSubmitting}
                 />
-                <RNText style={styles.formTitle}>Nueva contraseña</RNText>
+                <AuthField
+                  label="Repite la contraseña nueva"
+                  secure
+                  inputRef={confirmRef}
+                  value={values.password_confirmation}
+                  onChangeText={handleChange("password_confirmation")}
+                  onBlur={handleBlur("password_confirmation")}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  autoComplete="new-password"
+                  textContentType="newPassword"
+                  returnKeyType="done"
+                  onSubmitEditing={() => handleSubmit()}
+                  error={tried && !!errors.password_confirmation}
+                  disabled={isSubmitting}
+                />
+                <PasswordRules
+                  rules={passwordRules(values.password, values.password_confirmation)}
+                  showErrors={tried}
+                />
               </View>
 
-              <RNText style={styles.formSubtitle}>
-                Crea una nueva contraseña para tu cuenta. Debe tener al menos 8
-                caracteres.
-              </RNText>
-
-              <Formik
-                initialValues={{ password: "", password_confirmation: "" }}
-                validationSchema={schema}
-                onSubmit={handleSubmit}
+              <Button
+                mode="contained"
+                onPress={() => handleSubmit()}
+                disabled={isSubmitting}
+                loading={isSubmitting}
+                buttonColor={colors.primary}
+                textColor={colors.primaryForeground}
+                style={styles.submit}
+                contentStyle={styles.submitContent}
+                labelStyle={styles.submitLabel}
               >
-                {({
-                  values,
-                  errors,
-                  touched,
-                  handleChange,
-                  handleBlur,
-                  handleSubmit,
-                  isSubmitting,
-                }) => (
-                  <>
-                    <View style={styles.inputContainer}>
-                      <TextInput
-                        label="Nueva contraseña"
-                        value={values.password}
-                        onChangeText={handleChange("password")}
-                        onBlur={handleBlur("password")}
-                        mode="outlined"
-                        secureTextEntry={!showPassword}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        error={touched.password && !!errors.password}
-                        disabled={isSubmitting}
-                        theme={paperTheme}
-                        outlineColor={colors.border}
-                        activeOutlineColor={colors.primary}
-                        textColor={colors.text}
-                        left={
-                          <TextInput.Icon
-                            icon="lock-plus-outline"
-                            color={colors.primary}
-                          />
-                        }
-                        right={
-                          <TextInput.Icon
-                            icon={showPassword ? "eye-off-outline" : "eye-outline"}
-                            onPress={() => setShowPassword((v) => !v)}
-                            color={colors.textMuted}
-                          />
-                        }
-                        style={styles.input}
-                        contentStyle={styles.inputContent}
-                      />
-                      <HelperText
-                        type="error"
-                        visible={touched.password && !!errors.password}
-                      >
-                        {errors.password}
-                      </HelperText>
-                    </View>
+                {isSubmitting ? "Guardando…" : "Guardar contraseña"}
+              </Button>
 
-                    <View style={styles.inputContainer}>
-                      <TextInput
-                        label="Confirmar contraseña"
-                        value={values.password_confirmation}
-                        onChangeText={handleChange("password_confirmation")}
-                        onBlur={handleBlur("password_confirmation")}
-                        mode="outlined"
-                        secureTextEntry={!showConfirm}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        error={
-                          touched.password_confirmation &&
-                          !!errors.password_confirmation
-                        }
-                        disabled={isSubmitting}
-                        theme={paperTheme}
-                        outlineColor={colors.border}
-                        activeOutlineColor={colors.primary}
-                        textColor={colors.text}
-                        left={
-                          <TextInput.Icon
-                            icon="lock-check-outline"
-                            color={colors.primary}
-                          />
-                        }
-                        right={
-                          <TextInput.Icon
-                            icon={showConfirm ? "eye-off-outline" : "eye-outline"}
-                            onPress={() => setShowConfirm((v) => !v)}
-                            color={colors.textMuted}
-                          />
-                        }
-                        style={styles.input}
-                        contentStyle={styles.inputContent}
-                      />
-                      <HelperText
-                        type="error"
-                        visible={
-                          touched.password_confirmation &&
-                          !!errors.password_confirmation
-                        }
-                      >
-                        {errors.password_confirmation}
-                      </HelperText>
-                    </View>
-
-                    <Button
-                      mode="contained"
-                      onPress={() => handleSubmit()}
-                      style={styles.submitButton}
-                      disabled={isSubmitting}
-                      loading={isSubmitting}
-                      buttonColor={colors.primary}
-                      contentStyle={styles.submitButtonContent}
-                      icon={isSubmitting ? undefined : "lock-check"}
-                    >
-                      {isSubmitting ? "Guardando..." : "Restablecer contraseña"}
-                    </Button>
-
-                    <Button
-                      mode="text"
-                      onPress={() => router.replace("/login")}
-                      style={styles.backButton}
-                      textColor={colors.textSecondary}
-                      disabled={isSubmitting}
-                      icon="arrow-left"
-                    >
-                      Volver al inicio de sesión
-                    </Button>
-                  </>
-                )}
-              </Formik>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+              <AuthLink
+                label="Volver a iniciar sesión"
+                onPress={() => router.replace("/login")}
+                disabled={isSubmitting}
+              />
+            </>
+          );
+        }}
+      </Formik>
+    </AuthLayout>
   );
 }

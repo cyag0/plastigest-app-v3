@@ -1,43 +1,82 @@
-import { goBack } from "@/utils/navigation";
-import palette from "@/constants/palette";
+/**
+ * Cambiar contraseña (desde Perfil).
+ *
+ * Como los demás formularios de la app: una nota corta de qué pasa al
+ * guardar, los campos en una superficie con borde, los requisitos de la
+ * nueva a la vista mientras se escribe y los botones abajo (a la derecha en
+ * pantallas anchas, a todo lo ancho en el teléfono). Antes llevaba una
+ * tarjeta de encabezado que repetía el título, campos subrayados, se
+ * estiraba a todo el ancho y no tenía modo oscuro.
+ *
+ * El backend pide la actual y una nueva de 8 caracteres o más, confirmada.
+ * Al cambiarla revoca todas las sesiones, así que aquí se cierra la sesión.
+ */
+
+import AuthField from "@/components/Auth/AuthField";
+import PasswordRules, { passwordRules } from "@/components/Auth/PasswordRules";
+import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useResponsive } from "@/hooks/useResponsive";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { authAPI } from "@/utils/axios";
+import { goBack } from "@/utils/navigation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { Formik } from "formik";
-import React, { useState } from "react";
-import { SafeAreaView, ScrollView, StyleSheet, View } from "react-native";
-import { Button, Card, HelperText, Text, TextInput } from "react-native-paper";
+import { Formik, type FormikHelpers } from "formik";
+import React, { useRef } from "react";
+import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
+import { Button } from "react-native-paper";
 import * as Yup from "yup";
 
+interface Values {
+  current_password: string;
+  new_password: string;
+  new_password_confirmation: string;
+}
+
+// Los mensajes de la nueva y su confirmación no se muestran: lo dicen los
+// requisitos de abajo (PasswordRules), que se marcan en rojo al intentar.
 const schema = Yup.object({
-  current_password: Yup.string().required("La contraseña actual es requerida"),
-  new_password: Yup.string()
-    .min(8, "La nueva contraseña debe tener al menos 8 caracteres")
-    .required("La nueva contraseña es requerida"),
+  current_password: Yup.string().required("Escribe tu contraseña actual."),
+  new_password: Yup.string().min(8, "Debe tener al menos 8 caracteres.").required("Escribe la contraseña nueva."),
   new_password_confirmation: Yup.string()
-    .oneOf([Yup.ref("new_password")], "Las contraseñas no coinciden")
-    .required("Confirma tu nueva contraseña"),
+    .oneOf([Yup.ref("new_password")], "Las contraseñas no coinciden.")
+    .required("Repite la contraseña nueva."),
 });
 
 export default function ChangePasswordScreen() {
-  const router = useRouter();
   const { logout } = useAuth();
+  const { colors } = useTheme();
   const alerts = useAlerts();
+  const { isMobile } = useResponsive();
+  const newRef = useRef<any>(null);
+  const confirmRef = useRef<any>(null);
 
-  const [showCurrent, setShowCurrent] = useState(false);
-  const [showNew, setShowNew] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-
-  const handleSubmit = async (
-    values: {
-      current_password: string;
-      new_password: string;
-      new_password_confirmation: string;
+  const styles = useThemedStyles((c) => ({
+    screen: { flex: 1, backgroundColor: c.background },
+    flex: { flex: 1 },
+    content: { padding: 16, paddingBottom: 40, gap: 16, width: "100%" as const, maxWidth: 560, alignSelf: "center" as const },
+    contentWide: { padding: 28 },
+    intro: { flexDirection: "row" as const, gap: 10, alignItems: "flex-start" as const },
+    introText: { flex: 1, fontSize: 14, lineHeight: 20, color: c.textSecondary },
+    card: {
+      backgroundColor: c.surface,
+      borderRadius: tokens.radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      padding: 20,
+      gap: 14,
     },
-    { setFieldError, setSubmitting }: any
-  ) => {
+    divider: { height: 1, backgroundColor: c.border, marginVertical: 4 },
+    actions: { gap: 8 },
+    actionsWide: { flexDirection: "row" as const, justifyContent: "flex-end" as const, alignItems: "center" as const },
+    button: { borderRadius: 12 },
+    buttonContent: { height: 46, paddingHorizontal: 8 },
+    buttonLabel: { fontSize: 15, fontWeight: "600" as const, letterSpacing: 0 },
+  }));
+
+  const handleSubmit = async (values: Values, { setFieldError, setSubmitting }: FormikHelpers<Values>) => {
     let changed = false;
     try {
       // Nombres que valida el backend (antes se mandaba `password` y la
@@ -55,12 +94,11 @@ export default function ChangePasswordScreen() {
       if (status === 422 && errors?.current_password) {
         setFieldError("current_password", errors.current_password[0]);
       } else if (status === 422 && errors?.new_password) {
-        setFieldError("new_password", errors.new_password[0]);
+        // Las reglas de la nueva ya se revisan aquí; si el backend pide algo
+        // más, se dice tal cual.
+        alerts.error(errors.new_password[0]);
       } else {
-        alerts.error(
-          error?.response?.data?.message ||
-            "No se pudo cambiar la contraseña. Inténtalo de nuevo.",
-        );
+        alerts.error(error?.response?.data?.message || "No se pudo cambiar la contraseña. Inténtalo de nuevo.");
       }
     } finally {
       setSubmitting(false);
@@ -70,222 +108,139 @@ export default function ChangePasswordScreen() {
       // El backend revoca todos los tokens: se cierra la sesión aquí mismo.
       // Antes era un Alert.alert con botón, que en web no hace nada: la
       // sesión quedaba muerta y el usuario atorado en esta pantalla.
-      alerts.success(
-        "Contraseña actualizada. Por seguridad se cerró la sesión en todos los dispositivos; inicia sesión con tu nueva contraseña.",
-      );
+      alerts.success("Listo, cambiaste tu contraseña. Entra de nuevo con la nueva.");
       await logout();
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Header card */}
-        <Card style={styles.headerCard}>
-          <Card.Content style={styles.headerContent}>
-            <MaterialCommunityIcons
-              name="lock-reset"
-              size={48}
-              color={palette.primary}
-            />
-            <Text variant="titleLarge" style={styles.headerTitle}>
-              Cambiar Contraseña
-            </Text>
-            <Text variant="bodyMedium" style={styles.headerSubtitle}>
-              Al cambiar tu contraseña, se cerrará la sesión en todos los
-              dispositivos vinculados.
-            </Text>
-          </Card.Content>
-        </Card>
-
-        {/* Form */}
-        <Formik
-          initialValues={{
-            current_password: "",
-            new_password: "",
-            new_password_confirmation: "",
-          }}
-          validationSchema={schema}
-          onSubmit={handleSubmit}
+    <View style={styles.screen}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
+        <ScrollView
+          contentContainerStyle={[styles.content, !isMobile && styles.contentWide]}
+          keyboardShouldPersistTaps="handled"
         >
-          {({
-            values,
-            errors,
-            touched,
-            handleChange,
-            handleBlur,
-            handleSubmit,
-            isSubmitting,
-          }) => (
-            <Card style={styles.formCard}>
-              <Card.Content style={styles.formContent}>
-                {/* Current password */}
-                <View style={styles.fieldWrapper}>
-                  <TextInput
-                    label="Contraseña actual"
-                    value={values.current_password}
-                    onChangeText={handleChange("current_password")}
-                    onBlur={handleBlur("current_password")}
-                    secureTextEntry={!showCurrent}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    left={<TextInput.Icon icon="lock-outline" />}
-                    right={
-                      <TextInput.Icon
-                        icon={showCurrent ? "eye-off" : "eye"}
-                        onPress={() => setShowCurrent((v) => !v)}
-                      />
-                    }
-                    error={touched.current_password && !!errors.current_password}
-                    style={styles.input}
-                  />
-                  {touched.current_password && errors.current_password && (
-                    <HelperText type="error" visible>
-                      {errors.current_password}
-                    </HelperText>
-                  )}
-                </View>
+          <View style={styles.intro}>
+            <MaterialCommunityIcons name="information-outline" size={18} color={colors.textMuted} style={{ marginTop: 1 }} />
+            <Text style={styles.introText}>
+              Al cambiarla se cerrará tu sesión en todos tus dispositivos, también en este. Después entra con la
+              contraseña nueva.
+            </Text>
+          </View>
 
-                {/* New password */}
-                <View style={styles.fieldWrapper}>
-                  <TextInput
-                    label="Nueva contraseña"
-                    value={values.new_password}
-                    onChangeText={handleChange("new_password")}
-                    onBlur={handleBlur("new_password")}
-                    secureTextEntry={!showNew}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    left={<TextInput.Icon icon="lock-plus-outline" />}
-                    right={
-                      <TextInput.Icon
-                        icon={showNew ? "eye-off" : "eye"}
-                        onPress={() => setShowNew((v) => !v)}
-                      />
-                    }
-                    error={touched.new_password && !!errors.new_password}
-                    style={styles.input}
-                  />
-                  {touched.new_password && errors.new_password && (
-                    <HelperText type="error" visible>
-                      {errors.new_password}
-                    </HelperText>
-                  )}
-                </View>
+          <Formik
+            initialValues={{ current_password: "", new_password: "", new_password_confirmation: "" }}
+            validationSchema={schema}
+            onSubmit={handleSubmit}
+          >
+            {({ values, errors, touched, handleChange, handleBlur, handleSubmit, isSubmitting, submitCount }) => {
+              const tried = submitCount > 0;
+              const rules = passwordRules(values.new_password, values.new_password_confirmation);
+              return (
+                <>
+                  <View style={styles.card}>
+                    <AuthField
+                      label="Contraseña actual"
+                      secure
+                      value={values.current_password}
+                      onChangeText={handleChange("current_password")}
+                      onBlur={handleBlur("current_password")}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="current-password"
+                      textContentType="password"
+                      returnKeyType="next"
+                      submitBehavior="submit"
+                      onSubmitEditing={() => newRef.current?.focus()}
+                      error={(touched.current_password || tried) && errors.current_password}
+                      disabled={isSubmitting}
+                    />
 
-                {/* Confirm new password */}
-                <View style={styles.fieldWrapper}>
-                  <TextInput
-                    label="Confirmar nueva contraseña"
-                    value={values.new_password_confirmation}
-                    onChangeText={handleChange("new_password_confirmation")}
-                    onBlur={handleBlur("new_password_confirmation")}
-                    secureTextEntry={!showConfirm}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    left={<TextInput.Icon icon="lock-check-outline" />}
-                    right={
-                      <TextInput.Icon
-                        icon={showConfirm ? "eye-off" : "eye"}
-                        onPress={() => setShowConfirm((v) => !v)}
-                      />
-                    }
-                    error={
-                      touched.new_password_confirmation &&
-                      !!errors.new_password_confirmation
-                    }
-                    style={styles.input}
-                  />
-                  {touched.new_password_confirmation &&
-                    errors.new_password_confirmation && (
-                      <HelperText type="error" visible>
-                        {errors.new_password_confirmation}
-                      </HelperText>
+                    <View style={styles.divider} />
+
+                    <AuthField
+                      label="Contraseña nueva"
+                      secure
+                      inputRef={newRef}
+                      value={values.new_password}
+                      onChangeText={handleChange("new_password")}
+                      onBlur={handleBlur("new_password")}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="new-password"
+                      textContentType="newPassword"
+                      returnKeyType="next"
+                      submitBehavior="submit"
+                      onSubmitEditing={() => confirmRef.current?.focus()}
+                      error={tried && !!errors.new_password}
+                      disabled={isSubmitting}
+                    />
+                    <AuthField
+                      label="Repite la contraseña nueva"
+                      secure
+                      inputRef={confirmRef}
+                      value={values.new_password_confirmation}
+                      onChangeText={handleChange("new_password_confirmation")}
+                      onBlur={handleBlur("new_password_confirmation")}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="new-password"
+                      textContentType="newPassword"
+                      returnKeyType="done"
+                      onSubmitEditing={() => handleSubmit()}
+                      error={tried && !!errors.new_password_confirmation}
+                      disabled={isSubmitting}
+                    />
+                    <PasswordRules rules={rules} showErrors={tried} />
+                  </View>
+
+                  <View style={[styles.actions, !isMobile && styles.actionsWide]}>
+                    {!isMobile && (
+                      <Button
+                        mode="text"
+                        onPress={() => goBack()}
+                        disabled={isSubmitting}
+                        textColor={colors.textSecondary}
+                        style={styles.button}
+                        contentStyle={styles.buttonContent}
+                        labelStyle={styles.buttonLabel}
+                      >
+                        Cancelar
+                      </Button>
                     )}
-                </View>
-
-                {/* Actions */}
-                <View style={styles.actions}>
-                  <Button
-                    mode="outlined"
-                    onPress={() => goBack()}
-                    style={styles.cancelButton}
-                    disabled={isSubmitting}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    mode="contained"
-                    onPress={() => handleSubmit()}
-                    loading={isSubmitting}
-                    disabled={isSubmitting}
-                    style={styles.submitButton}
-                    buttonColor={palette.primary}
-                  >
-                    Cambiar contraseña
-                  </Button>
-                </View>
-              </Card.Content>
-            </Card>
-          )}
-        </Formik>
-      </ScrollView>
-    </SafeAreaView>
+                    <Button
+                      mode="contained"
+                      onPress={() => handleSubmit()}
+                      loading={isSubmitting}
+                      disabled={isSubmitting}
+                      buttonColor={colors.primary}
+                      textColor={colors.primaryForeground}
+                      style={styles.button}
+                      contentStyle={styles.buttonContent}
+                      labelStyle={styles.buttonLabel}
+                    >
+                      Cambiar contraseña
+                    </Button>
+                    {isMobile && (
+                      <Button
+                        mode="text"
+                        onPress={() => goBack()}
+                        disabled={isSubmitting}
+                        textColor={colors.textSecondary}
+                        style={styles.button}
+                        contentStyle={styles.buttonContent}
+                        labelStyle={styles.buttonLabel}
+                      >
+                        Cancelar
+                      </Button>
+                    )}
+                  </View>
+                </>
+              );
+            }}
+          </Formik>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: palette.surface,
-  },
-  scrollContent: {
-    padding: 16,
-    gap: 16,
-  },
-  headerCard: {
-    backgroundColor: palette.primary + "15",
-  },
-  headerContent: {
-    alignItems: "center",
-    paddingVertical: 24,
-    gap: 8,
-  },
-  headerTitle: {
-    fontWeight: "bold",
-    color: palette.text,
-    textAlign: "center",
-  },
-  headerSubtitle: {
-    color: palette.textSecondary,
-    textAlign: "center",
-    marginTop: 4,
-  },
-  formCard: {
-    backgroundColor: "#fff",
-  },
-  formContent: {
-    gap: 4,
-    paddingVertical: 16,
-  },
-  fieldWrapper: {
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: "transparent",
-  },
-  actions: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 16,
-  },
-  cancelButton: {
-    flex: 1,
-  },
-  submitButton: {
-    flex: 2,
-  },
-});

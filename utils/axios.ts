@@ -844,8 +844,11 @@ export const onSessionChangedInOtherTab = (
 
 // Funciones de API específicas para autenticación
 export const authAPI = {
+  // Iniciar sesión, cambiar la contraseña y revisar el código de
+  // recuperación muestran su error junto al formulario (login,
+  // change-password, reset-password-code): el aviso global lo repetía.
   login: (credentials: { email: string; password: string }) =>
-    axiosClient.post("/auth/login", credentials),
+    axiosClient.post("/auth/login", credentials, { silent: true }),
 
   // Cerrar sesión es de mejor esfuerzo (la sesión local se borra igual) y
   // /auth/me es la revisión de sesión en segundo plano: sus fallas no se
@@ -864,14 +867,14 @@ export const authAPI = {
     current_password: string;
     new_password: string;
     new_password_confirmation: string;
-  }) => axiosClient.post("/auth/change-password", passwordData),
+  }) => axiosClient.post("/auth/change-password", passwordData, { silent: true }),
 
   // Recuperación de contraseña (flujo "olvidé mi contraseña") vía código OTP.
   forgotPassword: (email: string) =>
     axiosClient.post("/auth/forgot-password", { email }),
 
   verifyResetCode: (email: string, code: string) =>
-    axiosClient.post("/auth/verify-reset-code", { email, code }),
+    axiosClient.post("/auth/verify-reset-code", { email, code }, { silent: true }),
 
   resetPassword: (data: {
     email: string;
