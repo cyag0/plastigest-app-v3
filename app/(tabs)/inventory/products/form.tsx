@@ -40,6 +40,8 @@ interface ProductFormData {
   minimum_stock?: string;
   maximum_stock?: string;
   product_images?: any[]; // Para imágenes del producto
+  /** La lista de fotos es la completa: vacía = quitarlas todas (backend). */
+  product_images_sync?: number;
   attachments?: any[]; // Para documentos adicionales
   // Receta de envasado: el producto se obtiene envasando un granel y
   // consumiendo material. Se aplica al registrar la producción o al envasar.
@@ -165,6 +167,9 @@ export default function ProductsForm(props: ProductsFormProps) {
       current_stock: "0", // Stock inicial
       minimum_stock: "0", // Stock mínimo por defecto
       maximum_stock: "", // Stock máximo opcional
+      // Sin esta marca, quitar la última foto no la borraba: una lista vacía
+      // no se manda y el backend no sabía que había que quitarla.
+      product_images_sync: 1,
     }),
     [company?.id, selectedLocation?.id, presetTypeId]
   );
