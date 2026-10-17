@@ -1,10 +1,9 @@
+import LocationForm from "@/components/Administration/Locations/LocationForm";
 import { useLocalSearchParams } from "expo-router";
 import React from "react";
-import LocationFormScreen from "../form";
 
-export default function edit() {
-  const params = useLocalSearchParams();
-  const id = params.id as string;
+export default function EditLocationScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
 
-  return <LocationFormScreen id={parseInt(id)} readonly={false} />;
+  return <LocationForm id={Number(id)} />;
 }
