@@ -1,12 +1,13 @@
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { ActivityIndicator, Button, Card, Chip, Divider, Text } from "react-native-paper";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -27,7 +28,8 @@ const notificationFlows: {
   /** Va a personas concretas (no a todos los que tienen un permiso). */
   direct?: boolean;
   icon: string;
-  color: string;
+  /** Color de la paleta para el ícono. */
+  tone: "error" | "warning" | "primary" | "info";
 }[] = [
   {
     event: "low_stock",
@@ -35,7 +37,7 @@ const notificationFlows: {
     trigger: "Cuando un movimiento deja un producto por debajo de su stock mínimo en la sucursal.",
     recipients: "Usuarios con permiso de inventario en esa sucursal (o los elegidos en Preferencias).",
     icon: "package-variant-remove",
-    color: palette.error,
+    tone: "error",
   },
   {
     event: "inventory_adjustment",
@@ -43,7 +45,7 @@ const notificationFlows: {
     trigger: "Cuando alguien registra un ajuste de existencias.",
     recipients: "Usuarios con permiso de inventario en esa sucursal, excepto quien hizo el ajuste.",
     icon: "tune-variant",
-    color: palette.warning,
+    tone: "warning",
   },
   {
     event: "inventory_count_discrepancy",
@@ -51,7 +53,7 @@ const notificationFlows: {
     trigger: "Cuando un conteo encuentra cantidades distintas al stock esperado.",
     recipients: "Usuarios con permiso de inventario en esa sucursal (o los elegidos en Preferencias).",
     icon: "clipboard-alert-outline",
-    color: palette.warning,
+    tone: "warning",
   },
   {
     event: "purchase_update",
@@ -59,7 +61,7 @@ const notificationFlows: {
     trigger: "Cuando una compra sale en camino (en tránsito) o queda recibida.",
     recipients: "Usuarios con permiso de compras en esa sucursal (o los elegidos en Preferencias).",
     icon: "truck-delivery-outline",
-    color: palette.primary,
+    tone: "primary",
   },
   {
     event: "transfer_update",
@@ -68,7 +70,7 @@ const notificationFlows: {
     recipients: "Quien pidió la transferencia; cuando se recibe, también quien la envió. Quien debe aprobar, enviar o recibir se entera por su tarea.",
     direct: true,
     icon: "swap-horizontal",
-    color: palette.blue,
+    tone: "info",
   },
   {
     event: "task_event",
@@ -77,7 +79,7 @@ const notificationFlows: {
     recipients: "Asignada, por vencer y vencida: a quien la tiene asignada. Completada: a quien la creó. Comentario: al asignado y al creador (no a quien comenta).",
     direct: true,
     icon: "checkbox-marked-circle-outline",
-    color: palette.blue,
+    tone: "info",
   },
   {
     event: "reminder",
@@ -86,7 +88,7 @@ const notificationFlows: {
     recipients: "El usuario al que está asignado el recordatorio.",
     direct: true,
     icon: "calendar-clock",
-    color: palette.warning,
+    tone: "warning",
   },
 ];
 
@@ -185,13 +187,16 @@ function InfoRow({
   icon,
   title,
   body,
-  color = palette.primary,
+  color: colorProp,
 }: {
   icon: string;
   title: string;
   body: string;
   color?: string;
 }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const color = colorProp ?? colors.primary;
   return (
     <View style={styles.infoRow}>
       <View style={[styles.iconBubble, { backgroundColor: color + "22" }]}>
@@ -222,13 +227,15 @@ function UsersBlock({
   emptyText: string;
   showTaskLoad?: boolean;
 }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   if (!branchReady) {
     return (
       <View style={styles.usersEmptyRow}>
         <MaterialCommunityIcons
           name="map-marker-alert-outline"
           size={17}
-          color={palette.warning}
+          color={colors.warning}
         />
         <Text variant="bodySmall" style={styles.usersEmptyText}>
           Selecciona una sucursal para ver usuarios.
@@ -240,7 +247,7 @@ function UsersBlock({
   if (loading) {
     return (
       <View style={styles.usersEmptyRow}>
-        <ActivityIndicator size="small" color={palette.primary} />
+        <ActivityIndicator size="small" color={colors.primary} />
         <Text variant="bodySmall" style={styles.usersEmptyText}>
           Cargando usuarios de la sucursal...
         </Text>
@@ -254,7 +261,7 @@ function UsersBlock({
         <MaterialCommunityIcons
           name="account-off-outline"
           size={17}
-          color={palette.textSecondary}
+          color={colors.textSecondary}
         />
         <Text variant="bodySmall" style={styles.usersEmptyText}>
           {emptyText}
@@ -293,6 +300,8 @@ function UsersBlock({
 
 export default function TaskNotificationGuideScreen() {
   const alerts = useAlerts();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const {
     user,
@@ -501,7 +510,7 @@ export default function TaskNotificationGuideScreen() {
             <MaterialCommunityIcons
               name="bell-check-outline"
               size={34}
-              color="#fff"
+              color={colors.primaryForeground}
             />
           </View>
           <View style={styles.heroCopy}>
@@ -519,7 +528,7 @@ export default function TaskNotificationGuideScreen() {
           <MaterialCommunityIcons
             name={branchReady ? "map-marker-check-outline" : "map-marker-alert-outline"}
             size={18}
-            color={branchReady ? palette.primary : palette.warning}
+            color={branchReady ? colors.primary : colors.warning}
           />
           <Text variant="bodySmall" style={styles.locationNoticeText}>
             {branchReady
@@ -569,7 +578,7 @@ export default function TaskNotificationGuideScreen() {
             <MaterialCommunityIcons
               name="map-marker-alert-outline"
               size={18}
-              color={palette.warning}
+              color={colors.warning}
             />
             <Text variant="bodySmall" style={styles.permissionText}>
               Para crear la prueba elige empresa y sucursal.
@@ -582,7 +591,7 @@ export default function TaskNotificationGuideScreen() {
             <MaterialCommunityIcons
               name="alert-circle-outline"
               size={18}
-              color={palette.error}
+              color={colors.error}
             />
             <Text variant="bodySmall" style={styles.permissionText}>
               {usersError}
@@ -596,7 +605,7 @@ export default function TaskNotificationGuideScreen() {
               <MaterialCommunityIcons
                 name="timeline-check-outline"
                 size={24}
-                color={palette.primary}
+                color={colors.primary}
               />
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 Cómo fluye una tarea
@@ -623,7 +632,7 @@ export default function TaskNotificationGuideScreen() {
               <MaterialCommunityIcons
                 name="bell-ring-outline"
                 size={24}
-                color={palette.blue}
+                color={colors.info}
               />
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 Notificaciones activas
@@ -635,7 +644,7 @@ export default function TaskNotificationGuideScreen() {
                   icon={item.icon}
                   title={item.title}
                   body={`${item.trigger} Llega a: ${item.recipients}`}
-                  color={item.color}
+                  color={colors[item.tone]}
                 />
                 <View style={styles.chipLine}>
                   <Chip compact mode="flat" style={styles.typeChip}>
@@ -669,7 +678,7 @@ export default function TaskNotificationGuideScreen() {
               <MaterialCommunityIcons
                 name="clipboard-check-multiple-outline"
                 size={24}
-                color={palette.primary}
+                color={colors.primary}
               />
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 Tareas que genera el sistema
@@ -681,7 +690,7 @@ export default function TaskNotificationGuideScreen() {
                   icon={item.icon}
                   title={item.title}
                   body={`${item.trigger} Responsable: ${item.owner}`}
-                  color={index % 2 === 0 ? palette.primary : palette.blue}
+                  color={index % 2 === 0 ? colors.primary : colors.info}
                 />
                 <View style={styles.chipLine}>
                   <Chip compact mode="flat" style={styles.typeChip}>
@@ -712,7 +721,7 @@ export default function TaskNotificationGuideScreen() {
               <MaterialCommunityIcons
                 name="account-filter-outline"
                 size={24}
-                color={palette.warning}
+                color={colors.warning}
               />
               <Text variant="titleMedium" style={styles.sectionTitle}>
                 Permisos y alcance
@@ -738,10 +747,10 @@ export default function TaskNotificationGuideScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   safeArea: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
   },
   container: {
     flex: 1,
@@ -757,7 +766,7 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 18,
     borderRadius: 8,
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
   },
   heroIcon: {
     width: 58,
@@ -765,18 +774,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.18)",
+    backgroundColor: c.primaryForeground + "2E",
   },
   heroCopy: {
     flex: 1,
     gap: 4,
   },
   heroTitle: {
-    color: "#fff",
+    color: c.primaryForeground,
     fontWeight: "700",
   },
   heroText: {
-    color: "#fff",
+    color: c.primaryForeground,
     opacity: 0.9,
     lineHeight: 20,
   },
@@ -786,7 +795,7 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 12,
     borderRadius: 8,
-    backgroundColor: palette.primary + "14",
+    backgroundColor: c.primary + "14",
   },
   locationWarning: {
     flexDirection: "row",
@@ -794,11 +803,11 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 12,
     borderRadius: 8,
-    backgroundColor: palette.warning + "18",
+    backgroundColor: c.warning + "18",
   },
   locationNoticeText: {
     flex: 1,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     lineHeight: 18,
   },
   actionsRow: {
@@ -808,11 +817,11 @@ const styles = StyleSheet.create({
   },
   primaryAction: {
     borderRadius: 8,
-    backgroundColor: palette.textSecondary,
+    backgroundColor: c.textSecondary,
   },
   secondaryAction: {
     borderRadius: 8,
-    borderColor: palette.textSecondary,
+    borderColor: c.textSecondary,
   },
   actionContent: {
     minHeight: 44,
@@ -823,15 +832,15 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 12,
     borderRadius: 8,
-    backgroundColor: palette.error + "14",
+    backgroundColor: c.error + "14",
   },
   permissionText: {
-    color: palette.error,
+    color: c.error,
     flex: 1,
   },
   card: {
     borderRadius: 8,
-    backgroundColor: palette.card,
+    backgroundColor: c.surface,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -841,7 +850,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontWeight: "700",
-    color: palette.text,
+    color: c.text,
   },
   stepList: {
     gap: 12,
@@ -857,16 +866,16 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
   },
   stepNumber: {
-    color: "#fff",
+    color: c.primaryForeground,
     fontWeight: "700",
     fontSize: 13,
   },
   stepText: {
     flex: 1,
-    color: palette.text,
+    color: c.text,
     lineHeight: 20,
   },
   infoRow: {
@@ -886,11 +895,11 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     fontWeight: "700",
-    color: palette.text,
+    color: c.text,
     marginBottom: 3,
   },
   rowBody: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     lineHeight: 18,
   },
   chipLine: {
@@ -899,7 +908,7 @@ const styles = StyleSheet.create({
     marginLeft: 54,
   },
   typeChip: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
   },
   usersBlock: {
     marginTop: 10,
@@ -907,7 +916,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   usersTitle: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontWeight: "700",
     letterSpacing: 0,
   },
@@ -920,7 +929,7 @@ const styles = StyleSheet.create({
     gap: 9,
     padding: 9,
     borderRadius: 8,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
   },
   userAvatar: {
     width: 30,
@@ -928,10 +937,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: palette.primary + "20",
+    backgroundColor: c.primary + "20",
   },
   userAvatarText: {
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "700",
     fontSize: 13,
   },
@@ -940,15 +949,15 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   userName: {
-    color: palette.text,
+    color: c.text,
     fontWeight: "700",
   },
   userEmail: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontSize: 11,
   },
   taskCountChip: {
-    backgroundColor: palette.primary + "18",
+    backgroundColor: c.primary + "18",
   },
   usersEmptyRow: {
     flexDirection: "row",
@@ -956,20 +965,20 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 10,
     borderRadius: 8,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
   },
   usersEmptyText: {
     flex: 1,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     lineHeight: 18,
   },
   divider: {
     marginVertical: 14,
-    backgroundColor: palette.border,
+    backgroundColor: c.border,
   },
   paragraph: {
-    color: palette.textSecondary,
+    color: c.textSecondary,
     lineHeight: 21,
     marginBottom: 10,
   },
-});
+}));

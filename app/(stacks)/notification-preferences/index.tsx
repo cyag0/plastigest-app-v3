@@ -1,7 +1,8 @@
 import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import NotificationPermissionBanner from "@/components/Notifications/NotificationPermissionBanner";
 import {
   fetchEligibleUsersQuietly,
@@ -14,7 +15,6 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
-  StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -58,6 +58,8 @@ function AssignUsersModal({
   onSave: (ids: number[] | null) => void;
   onClose: () => void;
 }) {
+  const { colors } = useTheme();
+  const modalStyles = useThemedStyles(makeModalStyles);
   const [search, setSearch] = useState("");
   // El modal se monta cada vez que se abre: null → todos seleccionados.
   const [selected, setSelected] = useState<Set<number>>(
@@ -103,7 +105,7 @@ function AssignUsersModal({
               Seleccionar destinatarios
             </Text>
             <TouchableOpacity onPress={onClose} style={modalStyles.closeBtn}>
-              <Icon source="close" size={22} color={palette.textSecondary} />
+              <Icon source="close" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -122,11 +124,11 @@ function AssignUsersModal({
 
           {/* Seleccionar / deseleccionar todos */}
           <View style={modalStyles.bulkRow}>
-            <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
+            <Text variant="bodySmall" style={{ color: colors.textSecondary }}>
               {selectedEligible} de {allUsers.length} seleccionado{selectedEligible !== 1 ? "s" : ""}
             </Text>
             <TouchableOpacity onPress={allChecked ? clearAll : selectAll}>
-              <Text variant="labelSmall" style={{ color: palette.primary, fontWeight: "600" }}>
+              <Text variant="labelSmall" style={{ color: colors.primary, fontWeight: "600" }}>
                 {allChecked ? "Quitar todos" : "Seleccionar todos"}
               </Text>
             </TouchableOpacity>
@@ -138,8 +140,8 @@ function AssignUsersModal({
           <ScrollView style={modalStyles.list} keyboardShouldPersistTaps="handled">
             {filtered.length === 0 ? (
               <View style={modalStyles.emptyRow}>
-                <Icon source="account-off-outline" size={20} color={palette.textSecondary} />
-                <Text variant="bodySmall" style={{ color: palette.textSecondary }}>
+                <Icon source="account-off-outline" size={20} color={colors.textSecondary} />
+                <Text variant="bodySmall" style={{ color: colors.textSecondary }}>
                   Sin resultados
                 </Text>
               </View>
@@ -157,17 +159,17 @@ function AssignUsersModal({
                     </Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text variant="bodyMedium" style={{ color: palette.text, fontWeight: "500" }}>
+                    <Text variant="bodyMedium" style={{ color: colors.text, fontWeight: "500" }}>
                       {user.name}
                     </Text>
-                    <Text variant="bodySmall" style={{ color: palette.textSecondary, fontSize: 12 }}>
+                    <Text variant="bodySmall" style={{ color: colors.textSecondary, fontSize: 12 }}>
                       {user.email}
                     </Text>
                   </View>
                   <Checkbox
                     status={selected.has(user.id) ? "checked" : "unchecked"}
                     onPress={() => toggle(user.id)}
-                    color={palette.primary}
+                    color={colors.primary}
                   />
                 </TouchableOpacity>
               ))
@@ -196,22 +198,22 @@ function AssignUsersModal({
   );
 }
 
-const modalStyles = StyleSheet.create({
-  overlay:    { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", paddingHorizontal: 20 },
-  sheet:      { backgroundColor: palette.card, borderRadius: 20, padding: 20, maxHeight: "85%", width: "100%", maxWidth: 520 },
+const makeModalStyles = themedStyles((c) => ({
+  overlay:    { flex: 1, backgroundColor: c.overlay, justifyContent: "center", alignItems: "center", paddingHorizontal: 20 },
+  sheet:      { backgroundColor: c.surface, borderRadius: 20, padding: 20, maxHeight: "85%", width: "100%", maxWidth: 520 },
   header:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
-  title:      { color: palette.text, fontWeight: "700" },
-  hint:       { color: palette.textSecondary, marginBottom: 12 },
+  title:      { color: c.text, fontWeight: "700" },
+  hint:       { color: c.textSecondary, marginBottom: 12 },
   closeBtn:   { padding: 4 },
-  searchbar:  { backgroundColor: palette.surface, marginBottom: 12, height: 44, elevation: 0 },
+  searchbar:  { backgroundColor: c.surface, marginBottom: 12, height: 44, elevation: 0 },
   bulkRow:    { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   list:       { maxHeight: 320 },
   emptyRow:   { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 16, justifyContent: "center" },
   userRow:    { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderRadius: 8 },
-  avatar:     { width: 38, height: 38, borderRadius: 19, backgroundColor: palette.primary + "25", justifyContent: "center", alignItems: "center" },
-  avatarText: { color: palette.primary, fontWeight: "700", fontSize: 15 },
+  avatar:     { width: 38, height: 38, borderRadius: 19, backgroundColor: c.primary + "25", justifyContent: "center", alignItems: "center" },
+  avatarText: { color: c.primary, fontWeight: "700", fontSize: 15 },
   actions:    { flexDirection: "row", gap: 12, marginTop: 14 },
-});
+}));
 
 // ─── Catálogo de eventos ────────────────────────────────────────────────────
 // La lista de eventos la manda el backend (uno por cada tipo, con valores por
@@ -335,6 +337,8 @@ function EventPreferenceCard({
   /** Solo en la sucursal: volver a la configuración de la empresa. */
   onRestore?: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const config = getEventConfig(pref.event_type);
   const isActive = pref.is_active;
   const allowedIds = pref.allowed_user_ids;
@@ -357,19 +361,19 @@ function EventPreferenceCard({
           <View
             style={[
               styles.eventIcon,
-              { backgroundColor: isActive ? palette.primary + "20" : palette.surface },
+              { backgroundColor: isActive ? colors.primary + "20" : colors.surface },
             ]}
           >
             <Icon
               source={config.icon}
               size={22}
-              color={isActive ? palette.primary : palette.textSecondary}
+              color={isActive ? colors.primary : colors.textSecondary}
             />
           </View>
           <View style={{ flex: 1 }}>
             <Text
               variant="titleSmall"
-              style={[styles.eventLabel, !isActive && { color: palette.textSecondary }]}
+              style={[styles.eventLabel, !isActive && { color: colors.textSecondary }]}
             >
               {config.label}
             </Text>
@@ -381,7 +385,7 @@ function EventPreferenceCard({
             value={isActive}
             onValueChange={(value) => onChange({ is_active: value })}
             disabled={disabled}
-            color={palette.primary}
+            color={colors.primary}
           />
         </View>
 
@@ -391,11 +395,11 @@ function EventPreferenceCard({
             <Icon
               source={pref.is_customized ? "store-edit-outline" : "link-variant"}
               size={14}
-              color={pref.is_customized ? palette.primary : palette.textMuted}
+              color={pref.is_customized ? colors.primary : colors.textMuted}
             />
             <Text
               variant="bodySmall"
-              style={[styles.scopeText, pref.is_customized && { color: palette.primary }]}
+              style={[styles.scopeText, pref.is_customized && { color: colors.primary }]}
             >
               {pref.is_customized ? "Personalizado en esta sucursal" : "Igual que en la empresa"}
             </Text>
@@ -440,8 +444,8 @@ function EventPreferenceCard({
             </View>
             {noChannels && (
               <View style={styles.infoRow}>
-                <Icon source="bell-off-outline" size={16} color={palette.error} />
-                <Text variant="bodySmall" style={[styles.infoText, { color: palette.error }]}>
+                <Icon source="bell-off-outline" size={16} color={colors.error} />
+                <Text variant="bodySmall" style={[styles.infoText, { color: colors.error }]}>
                   Sin canales: este aviso no le llegará a nadie.
                 </Text>
               </View>
@@ -452,7 +456,7 @@ function EventPreferenceCard({
             {/* Destinatarios */}
             {!hasPermissionFilter ? (
               <View style={styles.infoRow}>
-                <Icon source="information-outline" size={16} color={palette.textSecondary} />
+                <Icon source="information-outline" size={16} color={colors.textSecondary} />
                 <Text variant="bodySmall" style={styles.infoText}>
                   {config.directRecipients ??
                     "Este aviso se envía directamente a las personas involucradas."}
@@ -466,7 +470,7 @@ function EventPreferenceCard({
                   </Text>
                   {canManage && eligibleUsers !== null && (
                     <TouchableOpacity onPress={onOpenModal} disabled={loadingUsers || saving}>
-                      <Text variant="labelSmall" style={{ color: palette.primary, fontWeight: "600" }}>
+                      <Text variant="labelSmall" style={{ color: colors.primary, fontWeight: "600" }}>
                         Gestionar
                       </Text>
                     </TouchableOpacity>
@@ -474,7 +478,7 @@ function EventPreferenceCard({
                 </View>
 
                 {loadingUsers ? (
-                  <ActivityIndicator size="small" color={palette.primary} style={{ marginVertical: 8 }} />
+                  <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: 8 }} />
                 ) : eligibleUsers === null ? (
                   <Text variant="bodySmall" style={styles.infoText}>
                     {allowedIds === null
@@ -483,8 +487,8 @@ function EventPreferenceCard({
                   </Text>
                 ) : assignedUsers.length === 0 ? (
                   <View style={styles.infoRow}>
-                    <Icon source="bell-off-outline" size={16} color={palette.error} />
-                    <Text variant="bodySmall" style={[styles.infoText, { color: palette.error }]}>
+                    <Icon source="bell-off-outline" size={16} color={colors.error} />
+                    <Text variant="bodySmall" style={[styles.infoText, { color: colors.error }]}>
                       Sin destinatarios — nadie recibirá esta notificación
                     </Text>
                   </View>
@@ -524,6 +528,8 @@ function EventPreferenceCard({
 
 export default function NotificationPreferencesScreen() {
   const alerts = useAlerts();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { hasPermission, location } = useAuth();
   const navigation = useNavigation();
   // ?scope=location: los avisos de la sucursal actual (Administración › Esta
@@ -701,8 +707,8 @@ export default function NotificationPreferencesScreen() {
     return (
       <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={palette.primary} />
-          <Text variant="bodyMedium" style={{ color: palette.textSecondary, marginTop: 12 }}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text variant="bodyMedium" style={{ color: colors.textSecondary, marginTop: 12 }}>
             Cargando preferencias...
           </Text>
         </View>
@@ -720,7 +726,7 @@ export default function NotificationPreferencesScreen() {
 
         {loadError ? (
           <View style={styles.errorBox}>
-            <Icon source="lock-outline" size={20} color={palette.textSecondary} />
+            <Icon source="lock-outline" size={20} color={colors.textSecondary} />
             <Text variant="bodyMedium" style={styles.errorText}>
               {loadError}
             </Text>
@@ -747,7 +753,7 @@ export default function NotificationPreferencesScreen() {
 
             {!canManage && (
               <View style={styles.readOnlyNote}>
-                <Icon source="lock-outline" size={16} color={palette.textSecondary} />
+                <Icon source="lock-outline" size={16} color={colors.textSecondary} />
                 <Text variant="bodySmall" style={styles.infoText}>
                   {companyLocked && hasPermission("notifications_manage")
                     ? `Solo lectura: la configuración de la empresa la cambia quien tiene acceso a todas las sucursales. Los avisos de ${location?.name ?? "tu sucursal"} están en Administración › Esta sucursal.`
@@ -780,7 +786,7 @@ export default function NotificationPreferencesScreen() {
                 onPress={handleReset}
                 style={styles.resetButton}
                 icon="refresh"
-                textColor={palette.error}
+                textColor={colors.error}
               >
                 {branchScope
                   ? "Usar la configuración de la empresa en todo"
@@ -806,42 +812,42 @@ export default function NotificationPreferencesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container:        { flex: 1, backgroundColor: palette.background },
+const makeStyles = themedStyles((c) => ({
+  container:        { flex: 1, backgroundColor: c.background },
   scrollContent:    { padding: 16, paddingBottom: 40 },
   centered:         { flex: 1, justifyContent: "center", alignItems: "center" },
-  intro:            { color: palette.textSecondary, marginTop: 12, marginBottom: 16, lineHeight: 20 },
-  readOnlyNote:     { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 12, backgroundColor: palette.surface, marginBottom: 16 },
+  intro:            { color: c.textSecondary, marginTop: 12, marginBottom: 16, lineHeight: 20 },
+  readOnlyNote:     { flexDirection: "row", alignItems: "flex-start", gap: 8, padding: 12, borderRadius: 12, backgroundColor: c.surface, marginBottom: 16 },
   errorBox:         { alignItems: "center", gap: 12, padding: 24, marginTop: 12 },
-  errorText:        { color: palette.textSecondary, textAlign: "center" },
+  errorText:        { color: c.textSecondary, textAlign: "center" },
 
-  card:             { marginBottom: 16, backgroundColor: palette.card, borderRadius: 16, elevation: 0 },
+  card:             { marginBottom: 16, backgroundColor: c.surface, borderRadius: 16, elevation: 0 },
   cardInactive:     { opacity: 0.65 },
   cardHeader:       { flexDirection: "row", alignItems: "center", gap: 12 },
   eventIcon:        { width: 44, height: 44, borderRadius: 12, justifyContent: "center", alignItems: "center" },
-  eventLabel:       { color: palette.text, fontWeight: "600", marginBottom: 2 },
-  eventDescription: { color: palette.textSecondary, fontSize: 12, lineHeight: 16 },
+  eventLabel:       { color: c.text, fontWeight: "600", marginBottom: 2 },
+  eventDescription: { color: c.textSecondary, fontSize: 12, lineHeight: 16 },
 
-  divider:          { marginVertical: 12, backgroundColor: palette.border },
+  divider:          { marginVertical: 12, backgroundColor: c.border },
 
   channelsRow:      { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  channelChip:      { backgroundColor: palette.surface },
-  channelChipOn:    { backgroundColor: palette.primary + "22" },
-  channelChipText:  { color: palette.textSecondary, fontSize: 12 },
-  channelChipTextOn:{ color: palette.primary, fontWeight: "600" },
+  channelChip:      { backgroundColor: c.surface },
+  channelChipOn:    { backgroundColor: c.primary + "22" },
+  channelChipText:  { color: c.textSecondary, fontSize: 12 },
+  channelChipTextOn:{ color: c.primary, fontWeight: "600" },
 
   assignedHeader:   { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
-  usersLabel:       { color: palette.textSecondary, fontSize: 10, fontWeight: "700", letterSpacing: 1 },
+  usersLabel:       { color: c.textSecondary, fontSize: 10, fontWeight: "700", letterSpacing: 1 },
 
   chipsRow:         { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  chip:             { backgroundColor: palette.primary + "18" },
-  chipText:         { color: palette.primary, fontSize: 12 },
+  chip:             { backgroundColor: c.primary + "18" },
+  chipText:         { color: c.primary, fontSize: 12 },
 
   infoRow:          { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 4 },
   scopeRow:         { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 10 },
-  scopeText:        { color: palette.textMuted, fontSize: 12 },
-  scopeLink:        { color: palette.primary, fontWeight: "600", marginLeft: 4 },
-  infoText:         { color: palette.textSecondary, flex: 1, lineHeight: 18 },
+  scopeText:        { color: c.textMuted, fontSize: 12 },
+  scopeLink:        { color: c.primary, fontWeight: "600", marginLeft: 4 },
+  infoText:         { color: c.textSecondary, flex: 1, lineHeight: 18 },
 
-  resetButton:      { marginTop: 8, borderColor: palette.error },
-});
+  resetButton:      { marginTop: 8, borderColor: c.error },
+}));
