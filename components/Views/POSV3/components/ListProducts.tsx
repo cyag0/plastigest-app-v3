@@ -603,8 +603,16 @@ export default function ListProducts({
     }
 
     // onAddProduct (handleAddProduct) valida stock y muestra su propia
-    // alerta de éxito o de stock insuficiente.
-    onAddProduct(match, match.available_units?.[0]?.id || match.unit_id || 0);
+    // alerta de éxito o de stock insuficiente. En la unidad del producto,
+    // como la tarjeta: antes era available_units[0], que viene en orden
+    // alfabético, y un producto por pieza entraba como 1 caja o decena.
+    onAddProduct(
+      match,
+      match.available_units?.find((u) => u.id === match.unit_id)?.id ||
+        match.available_units?.[0]?.id ||
+        match.unit_id ||
+        0,
+    );
     setSearchQuery("");
     setDebouncedSearchQuery("");
   };

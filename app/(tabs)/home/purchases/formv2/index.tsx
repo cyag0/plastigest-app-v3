@@ -1,594 +1,975 @@
-import { formatMoney, formatQuantity } from "@/utils/format";
-import { FormDatePicker } from "@/components/Form/AppDatePicker";
-import { FormInput } from "@/components/Form/AppInput";
-import AppDependency from "@/components/Form/AppDependency";
-import AppForm from "@/components/Form/AppForm/AppForm";
-import { FormProSelect } from "@/components/Form/AppProSelect";
-import { FormSelectSimple } from "@/components/Form/AppSelect/AppSelect";
-import { FormSwitch } from "@/components/Form/AppSwitch";
-import palette from "@/constants/palette";
-import { tokens } from "@/constants/tokens";
+import EmptyState from "@/components/App/EmptyState";
+import { ListGroup, ListRow, ListSectionTitle } from "@/components/App/ListGroup";
+import AppDatePicker from "@/components/Form/AppDatePicker";
+import { Cart, ListProducts } from "@/components/Views/POSV3/components";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { useResponsive } from "@/hooks/useResponsive";
-import { useSelectedLocation } from "@/hooks/useSelectedLocation";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useNavigation, useRouter } from "expo-router";
-import { useFormikContext } from "formik";
-import React, { useEffect, useState } from "react";
-import { Image, StyleSheet, Text as RNText, TouchableOpacity, View } from "react-native";
-import { Button, Text } from "react-native-paper";
-import { usePurchase } from "./PurchaseContext";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { errorMessageOf, isApiError } from "@/utils/errorNotice";
+import { formatMoney } from "@/utils/format";
 import { toLocalDateString } from "@/utils/dates";
+import { amountToCents } from "@/utils/money";
+import Services from "@/utils/services";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import {
+  Button,
+  IconButton,
+  Menu,
+  Portal,
+  Modal as SheetModal,
+  Switch,
+} from "react-native-paper";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { type PaymentMethod, usePurchase } from "./PurchaseContext";
 
-interface PurchasesFormProps {
-  id?: number;
-  readonly?: boolean;
+/**
+ * Compra en una sola pantalla, como Transferencias: arriba el proveedor, el
+ * catálogo de lo que se le compra y, al lado (en el celular, en un modal), la
+ * compra con sus datos y cómo se registra. Antes eran tres pantallas
+ * (formulario → productos → carrito) y toda compra quedaba pedida: había que
+ * marcarla en tránsito y recibirla aunque ya se tuviera la mercancía.
+ */
+
+const PAYMENT_OPTIONS: { value: PaymentMethod; label: string }[] = [
+  { value: "cash", label: "Efectivo" },
+  { value: "card", label: "Tarjeta" },
+  { value: "transfer", label: "Transferencia" },
+  { value: "other", label: "Otro" },
+];
+
+const plural = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
+
+/** Sin acentos ni mayúsculas, para buscar. */
+const normalize = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+const listData = (response: any): any[] => {
+  const data = response?.data;
+  if (Array.isArray(data)) return data;
+  return Array.isArray(data?.data) ? data.data : [];
+};
+
+/** Proveedores de la empresa (suppliers_list), para elegir a quién se le compra. */
+function useSuppliers(enabled: boolean) {
+  const [list, setList] = useState<App.Entities.Supplier[]>([]);
+  const [loading, setLoading] = useState(enabled);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // silent: si falla, la lista de proveedores lo dice y ofrece reintentar.
+        const response = await Services.suppliers.index(
+          { all: true, sort_by: "name", sort_direction: "asc" },
+          { silent: true },
+        );
+        if (!cancelled) setList(listData(response));
+      } catch (e) {
+        if (!cancelled) setError(errorMessageOf(e, "No se pudieron cargar los proveedores."));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, attempt]);
+
+  return {
+    list,
+    loading: enabled && loading,
+    error,
+    retry: () => setAttempt((n) => n + 1),
+  };
+}
+
+/** ¿Está abierto el teclado en pantalla? (en web no hay eventos: no). */
+function useKeyboardOpen() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setOpen(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return open;
 }
 
 function CartHeaderButton({ count, onPress }: { count: number; onPress: () => void }) {
+  const styles = useThemedStyles((c) => ({
+    btn: { padding: 8, marginRight: 4 },
+    badge: {
+      position: "absolute",
+      top: 2,
+      right: 2,
+      minWidth: 18,
+      height: 18,
+      borderRadius: 9,
+      backgroundColor: c.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 3,
+    },
+    badgeText: { color: c.primaryForeground, fontSize: 10, fontWeight: "700" },
+  }));
+  const { colors } = useTheme();
+
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
-      style={cartBtnStyles.btn}
-      activeOpacity={0.7}
+      style={({ pressed }) => [styles.btn, pressed && { opacity: 0.7 }]}
       accessibilityRole="button"
-      accessibilityLabel="Ver carrito"
+      accessibilityLabel="Ver compra"
     >
-      <MaterialCommunityIcons name="cart-outline" size={24} color={palette.text} />
+      <MaterialCommunityIcons name="cart-outline" size={24} color={colors.text} />
       {count > 0 && (
-        <View style={cartBtnStyles.badge}>
-          <RNText style={cartBtnStyles.badgeText}>{count > 99 ? "99+" : count}</RNText>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{count > 99 ? "99+" : count}</Text>
         </View>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
-const cartBtnStyles = StyleSheet.create({
-  btn: { padding: 8, marginRight: 4 },
-  badge: {
-    position: "absolute",
-    top: 2,
-    right: 2,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: palette.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 3,
-  },
-  badgeText: { color: "#fff", fontSize: 10, fontWeight: "700" as const },
-});
+interface SupplierPickerProps {
+  visible: boolean;
+  onDismiss: () => void;
+  suppliers: App.Entities.Supplier[];
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
+  selectedId: number | null;
+  /** Ya hay productos en la compra: se avisa que se quedan. */
+  hasLines: boolean;
+  onSelect: (supplierId: number) => void;
+}
 
-export default function PurchaseFormScreen(props: PurchasesFormProps) {
-  const router = useRouter();
-  const alerts = useAlerts();
-  const navigation = useNavigation();
-  const { isMobile } = useResponsive();
-
-  const purchaseContext = usePurchase();
-  const { selectedLocation } = useSelectedLocation();
-  // Los productos se guardan en el borrador al agregarlos; confirmar la
-  // compra (POST purchases-v2/{id}/confirm) pide purchases_update.
-  const canConfirm = useCan().can("purchases_update");
-
-  const cartItemCount = purchaseContext.cartItems?.length ?? 0;
-
-  // En mobile inyectamos botón del carrito en el AppBar.
-  useEffect(() => {
-    if (!isMobile) return;
-    navigation.setOptions({
-      headerRight: () => (
-        <CartHeaderButton
-          count={cartItemCount}
-          onPress={() => router.push("/(tabs)/home/purchases/formv2/carrito" as any)}
-        />
-      ),
-    });
-  }, [isMobile, cartItemCount]);
-
-  // La compra que se edita la carga el contexto (la de la ruta o el último
-  // borrador) y llena el formulario. Si ya cargó antes de montar el formulario
-  // (se entró por productos), se arranca con ella.
-  const [initialFormValues] = useState(() => ({
-    supplier_id: "",
-    purchase_date: toLocalDateString(),
-    notes: "",
-    document_number: "",
-    payment_method: "other",
-    paid_from_cash: true,
-    ...(purchaseContext.getDraftHeader() ?? {}),
+/** Elegir el proveedor: lista con búsqueda, como el buscador de productos de Producción. */
+function SupplierPicker({
+  visible,
+  onDismiss,
+  suppliers,
+  loading,
+  error,
+  onRetry,
+  selectedId,
+  hasLines,
+  onSelect,
+}: SupplierPickerProps) {
+  const { colors } = useTheme();
+  const [search, setSearch] = useState("");
+  const styles = useThemedStyles((c) => ({
+    card: {
+      alignSelf: "center",
+      width: "94%",
+      maxWidth: 520,
+      maxHeight: "86%",
+      backgroundColor: c.background,
+      borderRadius: 16,
+      padding: 16,
+      gap: 12,
+    },
+    title: { fontSize: 18, fontWeight: "700", color: c.text },
+    hint: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+    field: {
+      height: 46,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: c.borderStrong,
+      paddingHorizontal: 12,
+      fontSize: 16,
+      color: c.text,
+      backgroundColor: c.surface,
+      ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : null),
+    },
+    empty: { fontSize: 14, color: c.textSecondary, paddingVertical: 16, textAlign: "center" },
+    error: { fontSize: 14, lineHeight: 20, color: c.error, paddingVertical: 8 },
   }));
 
-  const handleSubmit = async (values: FormData) => {
-    try {
-      console.log("Submitting purchase form with values:", values);
+  const query = normalize(search.trim());
+  // Los inactivos no se ofrecen (salvo el que ya tiene la compra).
+  const rows = suppliers.filter(
+    (supplier) =>
+      (supplier.is_active !== false || supplier.id === selectedId) &&
+      (!query ||
+        normalize(`${supplier.name} ${supplier.business_name ?? ""}`).includes(query)),
+  );
 
-      // Validar que haya productos en el carrito
-      if (
-        !purchaseContext.cartItems ||
-        purchaseContext.cartItems.length === 0
-      ) {
-        alerts.error("Debes agregar al menos un producto al carrito");
-        return false;
-      }
-
-      // Validar campos requeridos
-      if (!values.has("supplier_id")) {
-        alerts.error("Debes seleccionar un proveedor");
-        return false;
-      }
-
-      if (!values.has("purchase_date")) {
-        alerts.error("Debes especificar la fecha de compra");
-        return false;
-      }
-
-      // Confirmar la compra usando el contexto: primero manda los cambios
-      // pendientes y verifica que el servidor tenga lo que muestra el carrito.
-      // Solo una compra en efectivo puede salir de la caja; con tarjeta,
-      // transferencia u otro medio nunca toca el corte.
-      const paymentMethod = values.get("payment_method")?.toString();
-      const confirmed = await purchaseContext.confirmPurchase({
-        supplier_id: values.get("supplier_id")?.toString(),
-        purchase_date: values.get("purchase_date")?.toString(),
-        document_number: values.get("document_number")?.toString(),
-        payment_method: paymentMethod,
-        paid_from_cash:
-          paymentMethod === "cash" && values.get("paid_from_cash")?.toString() !== "0",
-        notes: values.get("notes")?.toString() ?? "",
-      });
-      // Ya había una confirmación en curso (doble toque).
-      if (!confirmed) return false;
-
-      router.replace(`/(tabs)/home/purchases` as any);
-      alerts.success("Compra confirmada exitosamente");
-
-      return true;
-    } catch (error: any) {
-      console.error("Error confirming purchase:", error);
-
-      // El motivo del servidor (message o error) o el de la verificación del
-      // carrito; nunca el texto en inglés de axios.
-      const data = error?.response?.data;
-      const errorMessage =
-        (error?.isAxiosError && !error.response
-          ? "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo."
-          : null) ||
-        (data?.errors ? (Object.values(data.errors).flat()[0] as string) : null) ||
-        data?.message ||
-        data?.error ||
-        (!error?.response ? error?.message : null) ||
-        "Error al confirmar la compra";
-      alerts.error(errorMessage);
-      return false;
-    }
+  const close = () => {
+    setSearch("");
+    onDismiss();
   };
 
   return (
-    <AppForm
-      // El contexto llena el formulario con el borrador guardado (proveedor,
-      // fecha, forma de pago); sin la ref, al reabrir un borrador el carrito
-      // tenía productos pero el proveedor quedaba vacío.
-      ref={purchaseContext.formRef}
-      submitButtonText="Confirmar Compra"
-      showSubmitButton={canConfirm}
-      initialValues={initialFormValues}
-      onSubmit={async (values: any) => {
-        const res = await alerts.confirm("¿Deseas confirmar esta compra?", {
-          title: "Confirmar Compra",
-          okText: "Confirmar",
-          cancelText: "Cancelar",
-        });
+    <Portal>
+      <SheetModal visible={visible} onDismiss={close} contentContainerStyle={styles.card}>
+        <Text style={styles.title}>Proveedor</Text>
+        {hasLines && (
+          <Text style={styles.hint}>Los productos que ya agregaste se quedan en la compra.</Text>
+        )}
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Buscar proveedor"
+          placeholderTextColor={colors.textMuted}
+          autoCorrect={false}
+          returnKeyType="search"
+          style={styles.field}
+        />
 
-        if (res) {
-          await handleSubmit(values);
-        }
-      }}
-      containerStyle={{
-        paddingBottom: 24,
-      }}
-      showResetButton={false}
-    >
-      <View style={styles.formCard}>
-        <View style={styles.header}>
-          <MaterialCommunityIcons
-            name="cash-register"
-            size={48}
-            color={palette.primary}
-          />
-          <Text variant="headlineMedium" style={styles.title}>
-            {purchaseContext.currentPurchaseId
-              ? `Compra #${purchaseContext.currentPurchaseId}`
-              : "Nueva compra"}
-          </Text>
-          {/* La compra entra a la sucursal actual (antes había selects de
-              compañía y ubicación deshabilitados y vacíos). */}
-          {selectedLocation?.name ? (
-            <Text variant="bodyMedium" style={styles.subtitle}>
-              Se recibe en {selectedLocation.name}
+        <ScrollView style={{ flexGrow: 0 }} keyboardShouldPersistTaps="handled">
+          {loading ? (
+            <ActivityIndicator color={colors.primary} style={{ paddingVertical: 24 }} />
+          ) : error ? (
+            <View>
+              <Text style={styles.error}>{error}</Text>
+              <Button mode="outlined" onPress={onRetry} style={{ alignSelf: "flex-start" }}>
+                Reintentar
+              </Button>
+            </View>
+          ) : rows.length === 0 ? (
+            <Text style={styles.empty}>
+              {query ? "Sin resultados." : "No hay proveedores activos: dalos de alta en Proveedores."}
             </Text>
-          ) : null}
-          {!canConfirm ? (
-            <Text variant="bodySmall" style={styles.subtitle}>
-              La compra queda guardada como borrador. Confirmarla requiere
-              permiso para actualizar compras.
-            </Text>
-          ) : null}
-        </View>
+          ) : (
+            <ListGroup inset={14}>
+              {rows.map((supplier) => (
+                <ListRow
+                  key={supplier.id}
+                  title={supplier.name}
+                  subtitle={
+                    supplier.business_name && supplier.business_name !== supplier.name
+                      ? supplier.business_name
+                      : undefined
+                  }
+                  chevron={false}
+                  onPress={() => {
+                    if (supplier.id !== selectedId) onSelect(supplier.id);
+                    close();
+                  }}
+                  trailing={
+                    supplier.id === selectedId ? (
+                      <MaterialCommunityIcons name="check" size={18} color={colors.primary} />
+                    ) : undefined
+                  }
+                />
+              ))}
+            </ListGroup>
+          )}
+        </ScrollView>
 
-        <FormDatePicker
-          name="purchase_date"
-          label="Fecha de Compra"
-          placeholder="YYYY-MM-DD"
-          required
-        />
-
-        <FormProSelect
-          name="supplier_id"
-          label="Proveedor"
-          onChange={(value) => {
-            purchaseContext.loadData(value);
-          }}
-          model="suppliers"
-          placeholder="Seleccionar proveedor"
-        />
-
-        <FormSelectSimple
-          name="payment_method"
-          label="Método de pago"
-          data={[
-            { value: "cash",     label: "Efectivo" },
-            { value: "card",     label: "Tarjeta" },
-            { value: "transfer", label: "Transferencia" },
-            { value: "other",    label: "Otro" },
-          ]}
-        />
-
-        {/* Una compra grande pagada por el dueño o desde el banco no debe
-            dejar la caja en negativo: solo se descuenta si salió de ella. */}
-        <AppDependency name="payment_method">
-          {(value) =>
-            value === "cash" ? (
-              <FormSwitch
-                name="paid_from_cash"
-                text="Pagado con dinero de la caja (se descuenta en el corte)"
-              />
-            ) : null
-          }
-        </AppDependency>
-
-        <AppDependency name="supplier_id">
-          {(value) => {
-            if (!value) {
-              return (
-                <View style={styles.emptyMessage}>
-                  <MaterialCommunityIcons
-                    name="information"
-                    size={20}
-                    color={palette.textSecondary}
-                  />
-                  <Text variant="bodySmall" style={styles.emptyText}>
-                    Selecciona un proveedor para agregar productos
-                  </Text>
-                </View>
-              );
-            }
-
-            return <PurchasesContent supplier_id={value} />;
-          }}
-        </AppDependency>
-
-        <FormInput
-          name="notes"
-          label="Notas (opcional)"
-          placeholder="Observaciones de la compra"
-          multiline
-          numberOfLines={3}
-        />
-      </View>
-    </AppForm>
+        <Button mode="text" onPress={close}>
+          Cerrar
+        </Button>
+      </SheetModal>
+    </Portal>
   );
 }
 
-interface PurchasesContentProps {
-  supplier_id: number;
-}
-
-function PurchasesContent(props: PurchasesContentProps) {
+export default function PurchaseFormScreen() {
   const router = useRouter();
-  const formContext = useFormikContext<any>();
+  const alerts = useAlerts();
+  const navigation = useNavigation();
+  const { id: routeId } = useLocalSearchParams<{ id?: string }>();
+  const { isMobile } = useResponsive();
+  const { colors } = useTheme();
+  const { can } = useCan();
+  const { location } = useAuth();
+  const purchase = usePurchase();
+  const { header, updateHeader } = purchase;
 
-  const purchaseContext = usePurchase();
+  // Los productos se guardan en el borrador al agregarlos (purchases_create);
+  // confirmar la compra (POST purchases-v2/{id}/confirm) pide purchases_update.
+  const canConfirm = can("purchases_update");
+  const canListSuppliers = can("suppliers_list");
+  const suppliers = useSuppliers(canListSuppliers);
 
-  const cartItems = purchaseContext.cartItems || [];
-  const cartTotal = cartItems.reduce((sum, item) => sum + (item.total || 0), 0);
+  // Candado de los dos botones: un doble toque abría otra confirmación.
+  const { submitting, run } = useSubmitGuard();
+  const [sending, setSending] = useState<"receive" | "order" | null>(null);
+  const [cartVisible, setCartVisible] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [paymentMenuVisible, setPaymentMenuVisible] = useState(false);
+  // Por qué no se pudo confirmar, dentro del modal (celular).
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  // En la tableta, con el teclado abierto, el total y los botones fijos no
+  // dejaban ver el renglón que se escribe.
+  const keyboardOpen = useKeyboardOpen();
 
-  return (
-    <>
-      <View style={styles.statsContainer}>
-        <View style={styles.statItem}>
-          <Text variant="bodySmall" style={styles.statLabel}>
-            Productos en carrito
-          </Text>
-          <Text variant="headlineSmall" style={styles.statValue}>
-            {cartItems.length}
-          </Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text variant="bodySmall" style={styles.statLabel}>
-            Total
-          </Text>
-          <Text
-            variant="headlineSmall"
-            style={[styles.statValue, { color: palette.primary }]}
-          >
-            {formatMoney(cartTotal)}
-          </Text>
-        </View>
-      </View>
+  const lineCount = purchase.cartItems.length;
+  const title = purchase.draftLabel ?? "Nueva compra";
+  const supplierName =
+    suppliers.list.find((supplier) => supplier.id === purchase.supplierId)?.name ??
+    purchase.draftSupplierName ??
+    (purchase.supplierId
+      ? suppliers.loading
+        ? "Cargando proveedor…"
+        : `Proveedor #${purchase.supplierId}`
+      : null);
+  const paymentLabel =
+    PAYMENT_OPTIONS.find((option) => option.value === header.payment_method)?.label ?? "Otro";
+  const paidFromCash = header.payment_method === "cash" && header.paid_from_cash;
 
-      <View style={styles.actionsContainer}>
+  const dismissNotices = () => {
+    setConfirmError(null);
+    purchase.dismissNotice();
+  };
+
+  const closeCart = () => {
+    setCartVisible(false);
+    setConfirmError(null);
+  };
+
+  // En el celular el carrito va en el AppBar; el título es el folio del
+  // borrador que se abrió para seguirlo.
+  useEffect(() => {
+    navigation.setOptions({
+      title,
+      headerRight: isMobile
+        ? () => <CartHeaderButton count={lineCount} onPress={() => setCartVisible(true)} />
+        : undefined,
+    });
+  }, [navigation, title, isMobile, lineCount]);
+
+  // La URL apunta al borrador en cuanto existe (el primer producto lo crea).
+  // Antes se quedaba en ?new=1: al recargar en web arrancaba otra compra
+  // vacía y el borrador quedaba en la lista sin verse aquí.
+  const purchaseId = purchase.currentPurchaseId;
+  useEffect(() => {
+    if (purchaseId && String(purchaseId) !== routeId) {
+      navigation.setParams({ id: String(purchaseId), new: undefined } as any);
+    }
+  }, [navigation, purchaseId, routeId]);
+
+  // Lo que falta para poder confirmar (los botones quedan deshabilitados).
+  const blocker =
+    lineCount === 0
+      ? "Agrega al menos un producto."
+      : !purchase.supplierId
+        ? "Elige el proveedor de la compra."
+        : !header.purchase_date
+          ? "Elige la fecha de la compra."
+          : null;
+
+  const handleConfirm = (receiveNow: boolean) =>
+    run(async () => {
+      if (blocker) return;
+      setConfirmError(null);
+      // Lo que ya llegó no puede tener fecha posterior a hoy: el backend lo
+      // rechaza (el stock entra hoy y el egreso quedaría en el futuro).
+      if (receiveNow && header.purchase_date > toLocalDateString()) {
+        alerts.error("Una compra que ya llegó no puede tener fecha posterior a hoy.");
+        return;
+      }
+
+      // En centavos, como se guarda: $0.004/g queda en $0.00 y antes no se
+      // contaba porque no era exactamente 0.
+      const zeroCount = purchase.cartItems.filter((item) => amountToCents(item.price) <= 0).length;
+      const zeroNote =
+        zeroCount === 0
+          ? ""
+          : zeroCount === 1
+            ? `\n\nUn producto va a ${formatMoney(0)}: ${receiveNow ? "revisa que ese sea el precio que pagaste." : "revisa su precio antes de recibirla."}`
+            : `\n\n${zeroCount} productos van a ${formatMoney(0)}: ${receiveNow ? "revisa que esos sean los precios que pagaste." : "revisa sus precios antes de recibirla."}`;
+      const summary = `${plural(lineCount, "producto", "productos")} por ${formatMoney(purchase.total)}`;
+      // El pago siempre, también cuando no sale de la caja: el método por
+      // defecto es «Otro» y los datos quedan debajo de los productos, fuera de
+      // la vista. Antes solo se mencionaba la caja con efectivo. El egreso va
+      // al turno abierto de quien la recibe; si no tiene, a ningún corte (el
+      // servidor lo dice al registrarla).
+      const paymentNote = paidFromCash
+        ? receiveNow
+          ? "Pago: efectivo de la caja, se descuenta de tu turno abierto."
+          : "Pago: efectivo de la caja, se descuenta del turno de quien la reciba."
+        : `Pago: ${paymentLabel} (no sale de la caja).`;
+
+      // El diálogo vive en el Portal de la app: con el modal de la compra
+      // abierto (celular) quedaba detrás y el botón parecía no hacer nada.
+      setCartVisible(false);
+      const confirmed = await alerts.confirm(
+        receiveNow
+          ? `${summary} ${lineCount === 1 ? "entra" : "entran"} al inventario${location?.name ? ` de ${location.name}` : ""} ahora.\n\n${paymentNote}${zeroNote}`
+          : `La compra ${supplierName ? `a ${supplierName}` : "al proveedor"} queda pedida: ${summary}. Cuando llegue, recíbela desde su detalle para que entre al inventario.\n\n${paymentNote}${zeroNote}`,
+        receiveNow
+          ? { title: "Registrar compra recibida", okText: "Registrar", cancelText: "Cancelar" }
+          : { title: "Guardar como pedido", okText: "Guardar pedido", cancelText: "Cancelar" },
+      );
+      if (!confirmed) {
+        if (isMobile) setCartVisible(true);
+        return;
+      }
+
+      setSending(receiveNow ? "receive" : "order");
+      try {
+        // Primero se mandan los cambios pendientes y se verifica que el
+        // servidor tenga lo que muestra el carrito. Solo una compra en
+        // efectivo puede salir de la caja; con tarjeta, transferencia u otro
+        // medio nunca toca el corte.
+        const result = await purchase.confirmPurchase({
+          supplier_id: purchase.supplierId ?? undefined,
+          purchase_date: header.purchase_date,
+          payment_method: header.payment_method,
+          paid_from_cash: paidFromCash,
+          notes: header.notes.trim(),
+          document_number: header.document_number || undefined,
+          receive_now: receiveNow,
+        });
+        // Ya había una confirmación en curso.
+        if (!result) return;
+
+        if (!receiveNow) {
+          alerts.success(
+            result.whatsappSent ? "Pedido guardado y enviado al proveedor por WhatsApp" : "Pedido guardado",
+          );
+        } else if (!result.received) {
+          // El servidor la dejó pedida (una versión que no recibe al confirmar).
+          alerts.warning("La compra quedó como pedido: recíbela desde su detalle.");
+        } else if (result.cashOutOfShift) {
+          // El egreso quedó sin turno: ningún corte lo descuenta y la caja de
+          // donde salió el efectivo sale con faltante. Antes solo se decía
+          // «Compra registrada» y el diálogo prometía descontarlo en el corte.
+          alerts.alert(
+            "Compra registrada, pero no tienes turno abierto: el pago no se descuenta en ningún corte.",
+            { type: "warning", duration: 8000 },
+          );
+        } else {
+          alerts.success("Compra registrada: ya entró al inventario");
+        }
+        // De vuelta a la lista: si se abrió desde el detalle de un borrador
+        // («Continuar compra»), quita también ese detalle viejo de la pila
+        // (con replace quedaba lista → detalle → lista).
+        router.dismissTo("/(tabs)/home/purchases" as any);
+      } catch (error: any) {
+        console.error("Error confirming purchase:", error);
+        // El motivo del servidor o el de la verificación del carrito; nunca el
+        // texto en inglés de axios.
+        const message = isApiError(error)
+          ? errorMessageOf(error, "No se pudo confirmar la compra.")
+          : error?.message || "No se pudo confirmar la compra.";
+        alerts.error(message);
+        // En el celular se vuelve a abrir la compra para corregirla, con el
+        // motivo adentro (el aviso de la app queda detrás del modal).
+        if (isMobile) {
+          setConfirmError(message);
+          setCartVisible(true);
+        }
+      } finally {
+        setSending(null);
+      }
+    });
+
+  const styles = useThemedStyles((c) => ({
+    container: { flex: 1, flexDirection: "row", backgroundColor: c.background },
+    catalogSection: { flex: 1, minWidth: 0 },
+    catalogBody: { flex: 1 },
+    center: { flex: 1, alignItems: "center", justifyContent: "center" },
+
+    supplierBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      backgroundColor: c.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    supplierLabel: { fontSize: 14, fontWeight: "600", color: c.text },
+    supplierName: { fontSize: 14, color: c.textSecondary, flexShrink: 1 },
+
+    bottomBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      backgroundColor: c.surface,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    bottomSummary: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 15,
+      fontWeight: "600",
+      color: c.text,
+      fontVariant: ["tabular-nums"],
+    },
+
+    cartSection: {
+      width: 400,
+      borderLeftWidth: 1,
+      borderLeftColor: c.border,
+      backgroundColor: c.surface,
+    },
+    checkoutPinned: {
+      padding: 16,
+      gap: 14,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+      backgroundColor: c.surface,
+    },
+    extras: {
+      padding: 16,
+      gap: 20,
+      borderTopWidth: 1,
+      borderTopColor: c.border,
+    },
+    section: { gap: 8 },
+    selectRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    rowLabel: { fontSize: 15, lineHeight: 20, fontWeight: "500", color: c.text },
+    rowValue: { flexDirection: "row", alignItems: "center", gap: 4 },
+    rowValueText: { fontSize: 15, lineHeight: 20, color: c.textSecondary },
+    switchRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+    },
+    notes: {
+      minHeight: 80,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: c.border,
+      backgroundColor: c.surface,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      fontSize: 15,
+      color: c.text,
+      textAlignVertical: "top",
+      ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : null),
+    },
+
+    checkout: { gap: 14 },
+    totalRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    totalLabel: { fontSize: 15, fontWeight: "600", color: c.text },
+    totalMeta: { fontSize: 13, color: c.textSecondary, marginTop: 2 },
+    totalValue: { fontSize: 18, fontWeight: "700", color: c.text, fontVariant: ["tabular-nums"] },
+    decision: { gap: 10 },
+    choice: { gap: 4 },
+    hint: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+
+    modal: { flex: 1, backgroundColor: c.background },
+    modalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingLeft: 16,
+      paddingRight: 4,
+      paddingVertical: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+      backgroundColor: c.surface,
+    },
+    modalTitle: { flex: 1, fontSize: 18, fontWeight: "600", color: c.text },
+    notice: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 8,
+      marginHorizontal: 16,
+      marginTop: 12,
+      padding: 12,
+      borderRadius: 12,
+    },
+    noticeError: { backgroundColor: c.errorSoft },
+    noticeWarning: { backgroundColor: c.warningSoft },
+    noticeText: { flex: 1, fontSize: 14, lineHeight: 20 },
+  }));
+
+  /* ─── Proveedor y catálogo ─── */
+
+  // Primer paso: a quién se le compra. Va arriba del catálogo, como "Pedir a"
+  // en Transferencias.
+  const supplierBar = (
+    <View style={styles.supplierBar}>
+      <MaterialCommunityIcons name="truck-outline" size={20} color={colors.primary} />
+      <Text style={styles.supplierLabel}>Proveedor</Text>
+      {canListSuppliers ? (
         <Button
-          mode="outlined"
-          onPress={() =>
-            router.push(
-              `/(tabs)/home/purchases/formv2/productos?supplier_id=${props.supplier_id}` as any,
-            )
-          }
-          style={styles.button}
-          icon="package-variant"
+          mode={supplierName ? "outlined" : "contained"}
+          onPress={() => setPickerVisible(true)}
+          icon="chevron-down"
+          contentStyle={{ flexDirection: "row-reverse" }}
+          style={{ flexShrink: 1 }}
+          compact
         >
-          {cartItems.length === 0 ? "Agregar productos" : "Editar productos"}
+          {supplierName ?? "Elegir proveedor"}
         </Button>
+      ) : (
+        <Text style={styles.supplierName} numberOfLines={1}>
+          {supplierName ?? "Sin proveedor"}
+        </Text>
+      )}
+    </View>
+  );
+
+  let catalog: React.ReactNode;
+  if (!purchase.ready) {
+    catalog = (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  } else if (!purchase.supplierId) {
+    catalog = canListSuppliers ? (
+      <EmptyState
+        icon="truck-outline"
+        title="Elige el proveedor"
+        description="Verás los productos que le compras para armar la compra."
+        actionLabel="Elegir proveedor"
+        onAction={() => setPickerVisible(true)}
+      />
+    ) : (
+      <EmptyState
+        icon="truck-outline"
+        title="Elige el proveedor"
+        description="No tienes permiso para ver los proveedores: pide que te lo den para armar la compra."
+      />
+    );
+  } else if (purchase.catalogError) {
+    catalog = (
+      <EmptyState
+        icon="alert-circle-outline"
+        title="No se pudo cargar el catálogo"
+        description={purchase.catalogError}
+        actionLabel="Reintentar"
+        onAction={purchase.reloadCatalog}
+      />
+    );
+  } else if (!purchase.loading && purchase.products.length === 0) {
+    catalog = (
+      <EmptyState
+        icon="package-variant-closed"
+        title="Este proveedor no tiene productos"
+        description="Para comprarle un producto, asígnale este proveedor en el producto (Inventario)."
+        actionLabel={canListSuppliers ? "Cambiar proveedor" : undefined}
+        onAction={canListSuppliers ? () => setPickerVisible(true) : undefined}
+      />
+    );
+  } else {
+    catalog = (
+      <ListProducts
+        // Otro proveedor, otro catálogo: sin la búsqueda ni la categoría del
+        // anterior (que quizá ni existe en este y dejaba la lista vacía).
+        key={purchase.supplierId}
+        loading={purchase.loading}
+        categories={purchase.categories}
+        products={purchase.products}
+        selectedProducts={purchase.selectedProducts}
+        onAddProduct={purchase.handleAddProduct}
+        onRemoveProduct={purchase.handleRemoveProduct}
+        onItemChange={purchase.handleItemChange}
+        onScanNotFound={(code) => alerts.error(`${supplierName ?? "Este proveedor"} no tiene un producto con el código ${code}`)}
+        canEditItems={purchase.canEditLines}
+        canRemoveItems={purchase.canRemoveLines}
+      />
+    );
+  }
+
+  /* ─── La compra (carrito) ─── */
+
+  const purchaseData = (
+    <View style={styles.section}>
+      <ListSectionTitle title="Datos de la compra" />
+      <AppDatePicker
+        label="Fecha de compra"
+        value={header.purchase_date}
+        onChange={(value) => updateHeader({ purchase_date: value })}
+      />
+      <ListGroup inset={14}>
+        <Menu
+          visible={paymentMenuVisible}
+          onDismiss={() => setPaymentMenuVisible(false)}
+          contentStyle={{ backgroundColor: colors.surface }}
+          anchor={
+            <Pressable
+              onPress={() => setPaymentMenuVisible(true)}
+              style={({ pressed }) => [styles.selectRow, pressed && { backgroundColor: colors.surfaceMuted }]}
+              accessibilityRole="button"
+              accessibilityLabel={`Método de pago: ${paymentLabel}`}
+            >
+              <Text style={styles.rowLabel}>Método de pago</Text>
+              <View style={styles.rowValue}>
+                <Text style={styles.rowValueText}>{paymentLabel}</Text>
+                <MaterialCommunityIcons name="chevron-down" size={18} color={colors.textMuted} />
+              </View>
+            </Pressable>
+          }
+        >
+          {PAYMENT_OPTIONS.map((option) => (
+            <Menu.Item
+              key={option.value}
+              title={option.label}
+              leadingIcon={option.value === header.payment_method ? "check" : undefined}
+              titleStyle={{ color: colors.text }}
+              onPress={() => {
+                updateHeader({ payment_method: option.value });
+                setPaymentMenuVisible(false);
+              }}
+            />
+          ))}
+        </Menu>
+        {/* Una compra grande pagada por el dueño o desde el banco no debe
+            dejar la caja en negativo: solo se descuenta si salió de ella. */}
+        {header.payment_method === "cash" && (
+          <View style={styles.switchRow}>
+            <Text style={[styles.rowLabel, { flex: 1 }]}>
+              Pagado con dinero de la caja (se descuenta en el corte)
+            </Text>
+            <Switch
+              value={header.paid_from_cash}
+              onValueChange={(value) => updateHeader({ paid_from_cash: value })}
+              color={colors.primary}
+              accessibilityLabel="Pagado con dinero de la caja"
+            />
+          </View>
+        )}
+      </ListGroup>
+      <TextInput
+        value={header.notes}
+        onChangeText={(notes) => updateHeader({ notes })}
+        placeholder="Notas (opcional)"
+        placeholderTextColor={colors.textMuted}
+        accessibilityLabel="Notas"
+        multiline
+        maxLength={2000}
+        style={styles.notes}
+      />
+    </View>
+  );
+
+  const checkout = (
+    <View style={styles.checkout}>
+      <View style={styles.totalRow}>
+        <View>
+          <Text style={styles.totalLabel}>Total</Text>
+          {lineCount > 0 && (
+            <Text style={styles.totalMeta}>{plural(lineCount, "producto", "productos")}</Text>
+          )}
+        </View>
+        <Text style={styles.totalValue}>{formatMoney(purchase.total)}</Text>
       </View>
 
-      {/* Lista de productos en el carrito - modo solo lectura */}
-      {cartItems.length > 0 ? (
-        <View style={styles.cartPreview}>
-          <View style={styles.cartPreviewHeader}>
-            <MaterialCommunityIcons
-              name="cart-outline"
-              size={16}
-              color={palette.textSecondary}
-            />
-            <Text style={styles.cartPreviewTitle}>
-              PRODUCTOS ({cartItems.length})
-            </Text>
+      {canConfirm ? (
+        <View style={styles.decision}>
+          <ListSectionTitle title="¿Ya tienes la mercancía?" />
+          {!!blocker && <Text style={styles.hint}>{blocker}</Text>}
+          <View style={styles.choice}>
+            <Button
+              mode="contained"
+              icon="package-variant-closed-check"
+              onPress={() => handleConfirm(true)}
+              loading={sending === "receive"}
+              disabled={!!blocker || submitting}
+            >
+              Registrar compra recibida
+            </Button>
+            <Text style={styles.hint}>Entra al inventario ahora.</Text>
           </View>
-
-          <View style={styles.cartPreviewList}>
-            {cartItems.map((item, index) => (
-              <View
-                key={item.id ?? `${item.product_id}-${item.unit_id}-${index}`}
-                style={[
-                  styles.cartPreviewItem,
-                  index < cartItems.length - 1 && styles.cartPreviewItemDivider,
-                ]}
-              >
-                <View style={styles.cartPreviewImageWrap}>
-                  {item.main_image?.uri ? (
-                    <Image
-                      source={{ uri: item.main_image.uri }}
-                      style={styles.cartPreviewImage}
-                    />
-                  ) : (
-                    <View style={styles.cartPreviewImagePlaceholder}>
-                      <MaterialCommunityIcons
-                        name="package-variant"
-                        size={18}
-                        color={palette.textMuted}
-                      />
-                    </View>
-                  )}
-                </View>
-
-                <View style={styles.cartPreviewInfo}>
-                  <Text
-                    style={styles.cartPreviewName}
-                    numberOfLines={1}
-                  >
-                    {item.name}
-                  </Text>
-                  <Text style={styles.cartPreviewCode}>
-                    {item.code}
-                    {item.unit_abbreviation
-                      ? ` · ${item.unit_abbreviation}`
-                      : ""}
-                  </Text>
-                </View>
-
-                <View style={styles.cartPreviewNumbers}>
-                  <Text style={styles.cartPreviewQty}>
-                    {formatQuantity(item.quantity)} × {formatMoney(item.price)}
-                  </Text>
-                  <Text style={styles.cartPreviewTotal}>
-                    {formatMoney(item.total)}
-                  </Text>
-                </View>
-              </View>
-            ))}
+          <View style={styles.choice}>
+            <Button
+              mode="outlined"
+              icon="truck-delivery-outline"
+              onPress={() => handleConfirm(false)}
+              loading={sending === "order"}
+              disabled={!!blocker || submitting}
+            >
+              Guardar como pedido
+            </Button>
+            <Text style={styles.hint}>Llega después y se recibe desde el detalle.</Text>
           </View>
         </View>
       ) : (
-        <View style={styles.emptyMessage}>
-          <MaterialCommunityIcons
-            name="information"
-            size={20}
-            color={palette.textSecondary}
-          />
-          <Text variant="bodySmall" style={styles.emptyText}>
-            Agrega productos para comenzar una compra
-          </Text>
+        <Text style={styles.hint}>
+          La compra queda guardada como borrador. Confirmarla requiere permiso para actualizar compras.
+        </Text>
+      )}
+    </View>
+  );
+
+  const cart = (
+    <Cart
+      // Con el tema: los datos y los botones de la compra (del tema) se leen
+      // en modo oscuro. Antes el carrito era blanco fijo y quedaban crema
+      // sobre blanco.
+      themed
+      title="Productos"
+      count={lineCount}
+      items={purchase.cartItems}
+      onRemoveItem={purchase.handleRemoveProduct}
+      onItemChange={purchase.handleItemChange}
+      canEditItems={purchase.canEditLines}
+      canRemoveItems={purchase.canRemoveLines}
+      canEditPrice={purchase.canEditLines}
+      onPriceChange={(itemId, price) => purchase.handleItemChange(itemId, "price", price)}
+      showFooter={false}
+      // Los productos y los datos se desplazan juntos; en el celular también
+      // el total y los botones (con el teclado abierto no queda espacio para
+      // tenerlos fijos).
+      scrollAll
+    >
+      {(canConfirm || isMobile) && (
+        <View style={styles.extras}>
+          {/* Sin permiso para confirmar los datos no se guardarían. */}
+          {canConfirm && purchaseData}
+          {isMobile && checkout}
         </View>
       )}
-    </>
+    </Cart>
+  );
+
+  // Último error del carrito o de la confirmación: en el celular los avisos
+  // de la app quedan detrás del modal.
+  const notice = confirmError
+    ? { text: confirmError, tone: "error" as const }
+    : purchase.notice;
+  const noticeColor = notice?.tone === "warning" ? colors.warningStrong : colors.errorStrong;
+  const noticeBanner = notice ? (
+    <View style={[styles.notice, notice.tone === "warning" ? styles.noticeWarning : styles.noticeError]}>
+      <MaterialCommunityIcons name="alert-circle-outline" size={18} color={noticeColor} />
+      <Text style={[styles.noticeText, { color: noticeColor }]}>{notice.text}</Text>
+      <Pressable onPress={dismissNotices} hitSlop={8} accessibilityRole="button" accessibilityLabel="Cerrar aviso">
+        <MaterialCommunityIcons name="close" size={16} color={noticeColor} />
+      </Pressable>
+    </View>
+  ) : null;
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.catalogSection}>
+        {supplierBar}
+        <View style={styles.catalogBody}>{catalog}</View>
+
+        {/* En el celular la compra se abre desde aquí (o desde el carrito del
+            AppBar). Mientras se registra, el modal ya se cerró: aquí se ve. */}
+        {isMobile && (
+          <View style={styles.bottomBar}>
+            <Text style={styles.bottomSummary} numberOfLines={1}>
+              {sending === "receive"
+                ? "Registrando la compra…"
+                : sending === "order"
+                  ? "Guardando el pedido…"
+                  : lineCount === 0
+                    ? "Sin productos"
+                    : `${plural(lineCount, "producto", "productos")} · ${formatMoney(purchase.total)}`}
+            </Text>
+            <Button
+              mode="contained"
+              icon="clipboard-list-outline"
+              onPress={() => setCartVisible(true)}
+              loading={!!sending}
+              disabled={!!sending}
+            >
+              Ver compra
+            </Button>
+          </View>
+        )}
+      </View>
+
+      {/* La compra al lado del catálogo — escritorio y tableta */}
+      {!isMobile && (
+        <View style={styles.cartSection}>
+          {cart}
+          {!keyboardOpen && <View style={styles.checkoutPinned}>{checkout}</View>}
+        </View>
+      )}
+
+      {/* La compra en un modal — celular */}
+      {isMobile && (
+        <Modal
+          visible={cartVisible}
+          animationType="slide"
+          // Lo que falló antes de abrirla ya se vio en el aviso de la app.
+          onShow={purchase.dismissNotice}
+          // Mientras se confirma la compra no se cierra.
+          onRequestClose={() => {
+            if (!submitting) closeCart();
+          }}
+        >
+          {/* Los menús (unidad, método de pago) se abren dentro del modal:
+              en el Portal de la app quedaban detrás. */}
+          <Portal.Host>
+            <SafeAreaView style={styles.modal} edges={["top", "bottom"]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle} numberOfLines={1}>
+                  {title}
+                </Text>
+                <IconButton
+                  icon="close"
+                  iconColor={colors.text}
+                  onPress={closeCart}
+                  disabled={submitting}
+                  accessibilityLabel="Cerrar"
+                />
+              </View>
+              {noticeBanner}
+              <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+              >
+                {cart}
+              </KeyboardAvoidingView>
+            </SafeAreaView>
+          </Portal.Host>
+        </Modal>
+      )}
+
+      {canListSuppliers && (
+        <SupplierPicker
+          visible={pickerVisible}
+          onDismiss={() => setPickerVisible(false)}
+          suppliers={suppliers.list}
+          loading={suppliers.loading}
+          error={suppliers.error}
+          onRetry={suppliers.retry}
+          selectedId={purchase.supplierId}
+          hasLines={lineCount > 0}
+          onSelect={purchase.selectSupplier}
+        />
+      )}
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "transparent" as any,
-  },
-  // Card que envuelve todo el contenido del formulario de compras.
-  // Limita el ancho maximo para mantener legibilidad en pantallas
-  // grandes y desactiva la sombra (sombra transparente) para un
-  // look mas limpio, dejando que el border sutil defina los limites.
-  formCard: {
-    width: "100%",
-    maxWidth: 800,
-    alignSelf: "center",
-    backgroundColor: palette.surface,
-    borderRadius: tokens.radius.lg,
-    borderWidth: 1,
-    borderColor: palette.border,
-    padding: tokens.spacing[5],
-    shadowColor: "transparent",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
-    gap: tokens.spacing[3],
-  },
-  card: {
-    backgroundColor: "#fff",
-  },
-  header: {
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  title: {
-    fontWeight: "bold",
-    color: palette.text,
-    marginTop: 16,
-  },
-  subtitle: {
-    color: palette.textSecondary,
-    marginTop: 4,
-  },
-  statsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 24,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: palette.border,
-  },
-  statItem: {
-    alignItems: "center",
-  },
-  statLabel: {
-    color: palette.textSecondary,
-    marginBottom: 8,
-  },
-  statValue: {
-    fontWeight: "bold",
-    color: palette.text,
-  },
-  actionsContainer: {
-    gap: 12,
-  },
-  button: {
-    borderRadius: 8,
-  },
-  emptyMessage: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: "transparent" as any,
-    borderRadius: 8,
-  },
-  emptyText: {
-    color: palette.textSecondary,
-  },
-
-  // --- Cart preview (read-only) ---
-  cartPreview: {
-    backgroundColor: palette.surface,
-    borderRadius: tokens.radius.md,
-    borderWidth: 1,
-    borderColor: palette.border,
-    padding: tokens.spacing[3],
-    gap: tokens.spacing[2],
-  },
-  cartPreviewHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingBottom: tokens.spacing[2],
-  },
-  cartPreviewTitle: {
-    ...tokens.typography.micro,
-    color: palette.textSecondary,
-    fontWeight: "600",
-  },
-  cartPreviewList: {
-    gap: 0,
-  },
-  cartPreviewItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: tokens.spacing[3],
-    paddingVertical: tokens.spacing[2] + 2,
-  },
-  cartPreviewItemDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: palette.border,
-  },
-  cartPreviewImageWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: tokens.radius.sm,
-    overflow: "hidden",
-    backgroundColor: palette.surfaceMuted,
-    flexShrink: 0,
-  },
-  cartPreviewImage: {
-    width: "100%",
-    height: "100%",
-  },
-  cartPreviewImagePlaceholder: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: palette.surfaceMuted,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  cartPreviewInfo: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  cartPreviewName: {
-    ...tokens.typography.bodyMd,
-    color: palette.text,
-    fontWeight: "600",
-  },
-  cartPreviewCode: {
-    ...tokens.typography.micro,
-    color: palette.textMuted,
-  },
-  cartPreviewNumbers: {
-    alignItems: "flex-end",
-    gap: 2,
-    flexShrink: 0,
-  },
-  cartPreviewQty: {
-    ...tokens.typography.micro,
-    color: palette.textSecondary,
-    fontVariant: ["tabular-nums"],
-  },
-  cartPreviewTotal: {
-    ...tokens.typography.bodyMd,
-    color: palette.text,
-    fontWeight: "700",
-    fontVariant: ["tabular-nums"],
-  },
-});

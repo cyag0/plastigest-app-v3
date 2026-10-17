@@ -190,8 +190,6 @@ export const ROUTE_PERMISSIONS: Readonly<Record<string, RouteRule>> = {
   "(tabs)/home/purchases/index": "purchases_list",
   "(tabs)/home/purchases/[id]": "purchases_read",
   "(tabs)/home/purchases/formv2/index": "purchases_create",
-  "(tabs)/home/purchases/formv2/productos": "purchases_create",
-  "(tabs)/home/purchases/formv2/carrito": "purchases_create",
   "(tabs)/home/purchases/formv2/PurchaseContext": "purchases_create",
   "(tabs)/home/reminders/index": "reminders_list",
   "(tabs)/home/reminders/form": byParam("id", "reminders_read", "reminders_create"),
