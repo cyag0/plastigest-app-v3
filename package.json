@@ -62,7 +62,7 @@
     "react-native-chart-kit": "^6.12.0",
     "react-native-gesture-handler": "~3.3.0",
     "react-native-pager-view": "9.0.7",
-    "react-native-paper": "^5.14.5",
+    "react-native-paper": "^5.15.3",
     "react-native-paper-dates": "^0.22.46",
     "react-native-reanimated": "4.7.1",
     "react-native-safe-area-context": "~5.10.1",
