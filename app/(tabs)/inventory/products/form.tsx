@@ -9,7 +9,6 @@ import BarcodeScanner from "@/components/Form/BarcodeScanner";
 import EditableTable, {
   EditableTableColumn,
 } from "@/components/Form/EditableTable/EditableTable";
-import IngredientsTable from "@/components/Form/IngredientsTable/IngredientsTable";
 import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import useInventoryTypes from "@/hooks/useInventoryTypes";
@@ -41,13 +40,8 @@ interface ProductFormData {
   maximum_stock?: string;
   product_images?: any[]; // Para imágenes del producto
   attachments?: any[]; // Para documentos adicionales
-  ingredients?: {
-    ingredient_id: number;
-    quantity: number;
-    notes?: string;
-  }[];
-  // Receta de empaque: el producto se obtiene empacando un granel y
-  // consumiendo material. Se ejecuta en producción, ya terminado el proceso.
+  // Receta de envasado: el producto se obtiene envasando un granel y
+  // consumiendo material. Se aplica al registrar la producción o al envasar.
   requires_packaging?: boolean;
   packaging_source_product_id?: number;
   packaging_source_quantity?: string;
@@ -124,7 +118,6 @@ export default function ProductsForm(props: ProductsFormProps) {
       company_id: company?.id || undefined,
       location_id: selectedLocation?.id || undefined,
       inventory_type_id: presetTypeId, // precargado desde la ruta, si viene
-      ingredients: [], // Array vacío por defecto
       requires_packaging: false, // El paso de empaque se activa por producto
       packaging_materials: [], // Material que consume cada unidad al empacarse
       for_sale: true, // Por defecto disponible para venta
@@ -319,31 +312,9 @@ export default function ProductsForm(props: ProductsFormProps) {
         <FormSwitch name="for_sale" text="Producto Disponible para Venta" />
       </Section>
 
-      {/* ───────────── Receta: sólo lo que se fabrica ───────────── */}
-      <AppDependency name="inventory_type_id">
-        {(value) => {
-          const type = value ? inventoryTypesById[Number(value)] : undefined;
-
-          if (!type?.is_producible) return null;
-
-          return (
-            <Section
-              icon="flask-outline"
-              color={colors.chart4}
-              title="Receta"
-              subtitle={`Insumos que se consumen para producir ${type.name.toLowerCase()}`}
-            >
-              <IngredientsTable
-                name="ingredients"
-                label="Ingredientes"
-                required
-              />
-            </Section>
-          );
-        }}
-      </AppDependency>
-
-      {/* ───────── Empaque: sólo lo que se fabrica y se empaca ───────── */}
+      {/* ───────── Presentación: lo que se envasa de un granel ─────────
+          Cómo se hace el granel va en Producción → Procesos; aquí, en qué se
+          envasa (antes había además una "Receta" que nada usaba). */}
       <AppDependency name="inventory_type_id">
         {(value) => {
           const type = value ? inventoryTypesById[Number(value)] : undefined;
@@ -354,12 +325,12 @@ export default function ProductsForm(props: ProductsFormProps) {
             <Section
               icon="package-variant-closed"
               color={colors.info}
-              title="Empaque"
-              subtitle="Qué se consume al empacar una unidad. El empaque se registra en producción, después de terminar el proceso"
+              title="Presentación"
+              subtitle="De qué granel se envasa, cuánto lleva cada pieza y qué material de empaque usa. Se envasa al registrar la producción o desde «Envasar granel»"
             >
               <FormSwitch
                 name="requires_packaging"
-                text="Este producto se empaca"
+                text="Se envasa de un granel (botella, bolsa, galón…)"
               />
 
               {/* El resto sólo aparece cuando hay algo que empacar. */}
@@ -446,11 +417,11 @@ export default function ProductsForm(props: ProductsFormProps) {
 }
 
 /**
- * Receta de empaque: de qué granel sale el producto, cuánto granel lleva cada
- * unidad y qué material se consume (frasco, tapa, etiqueta).
+ * Receta de envasado: de qué granel sale el producto, cuánto granel lleva cada
+ * pieza y qué material se consume (botella, tapa, etiqueta).
  *
- * El granel se filtra por `is_producible` porque siempre es una salida de una
- * fórmula, y el material por el tipo `packaging_material`.
+ * El granel se filtra por el tipo "Semiterminado (granel)" y el material por
+ * "Material de empaque": así el empaque no se mezcla con los ingredientes.
  */
 function PackagingFields({
   isWide,
@@ -465,10 +436,10 @@ function PackagingFields({
         <Field isWide={isWide} styles={styles}>
           <FormProSelect
             name="packaging_source_product_id"
-            label="Se empaca a partir de"
+            label="Se envasa de"
             model="products"
-            placeholder="Granel del que sale (opcional)"
-            fetchParams={{ is_producible: 1 }}
+            placeholder="Granel (agua de coco, horchata…)"
+            fetchParams={{ inventory_type_code: "semi_finished" }}
             selectedLabelField="packaging_source_product.name"
           />
         </Field>
@@ -476,7 +447,7 @@ function PackagingFields({
         <Field isWide={isWide} styles={styles} span="third">
           <FormInput
             name="packaging_source_quantity"
-            label="Granel por unidad"
+            label="Contenido por pieza"
             placeholder="0.00"
             keyboardType="numeric"
           />
@@ -485,7 +456,7 @@ function PackagingFields({
         <Field isWide={isWide} styles={styles} span="third">
           <FormProSelect
             name="packaging_source_unit_id"
-            label="Unidad del granel"
+            label="Unidad del contenido"
             model="home.unidades"
             placeholder="Unidad"
             selectedLabelField="packaging_source_unit.name"
@@ -499,7 +470,7 @@ function PackagingFields({
         columns={PACKAGING_MATERIAL_COLUMNS}
         defaultRow={DEFAULT_PACKAGING_MATERIAL}
         addLabel="Agregar material"
-        emptyMessage="Agrega el material que lleva cada unidad: frasco, tapa, etiqueta, caja…"
+        emptyMessage="Agrega el material que lleva cada pieza: botella, tapa, etiqueta, caja…"
       />
     </View>
   );

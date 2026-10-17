@@ -155,38 +155,38 @@ export default function _layout() {
       <Stack.Screen
         name="production/form"
         options={{
-          title: "Nueva Producción",
+          title: "Registrar producción",
         }}
       />
       <Stack.Screen
         name="production/[id]/edit"
         options={{
-          title: "Editar Producción",
+          title: "Continuar producción",
         }}
       />
       <Stack.Screen
         name="production/[id]/index"
         options={{
-          title: "Ver Producción",
+          title: "Producción",
         }}
       />
       <Stack.Screen
-        name="production/[id]/packaging"
+        name="production/pack"
         options={{
-          title: "Empacar Producción",
+          title: "Envasar granel",
         }}
       />
       <Stack.Screen
         name="production/formulas/index"
         options={{
-          title: "Fórmulas",
+          title: "Procesos",
           animation: "none",
         }}
       />
       <Stack.Screen
         name="production/formulas/form"
         options={({ route }: any) => ({
-          title: route.params?.id ? "Detalle de Fórmula" : "Nueva Fórmula",
+          title: route.params?.id ? "Proceso" : "Nuevo proceso",
         })}
       />
 

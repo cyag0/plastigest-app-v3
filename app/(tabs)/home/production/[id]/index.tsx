@@ -1,496 +1,331 @@
-import RecordLoadError, {
-  recordLoadProblem,
-  type RecordLoadProblem,
-} from "@/components/App/RecordLoadError";
-import { goBack } from "@/utils/navigation";
-import ProductionStatusBadge from "@/components/Production/ProductionStatusBadge";
-import palette from "@/constants/palette";
+/**
+ * Detalle de una producción o de un envasado.
+ *
+ * Arriba qué fue y en qué quedó; luego el rendimiento (litros de agua por
+ * coco contra lo esperado), qué entró, qué salió, qué se envasó y la merma.
+ * Un pendiente se registra o se continúa desde aquí; imprimir la hoja y
+ * cancelar van en el menú ⋮.
+ */
+
+import { ListGroup, ListRow, ListSection } from "@/components/App/ListGroup";
+import RecordLoadError, { recordLoadProblem, type RecordLoadProblem } from "@/components/App/RecordLoadError";
+import RowMenu, { type RowMenuAction } from "@/components/App/RowMenu";
+import { dayTitle, lineText, meaningfulYields, piecesYield, qty, shortName, yieldComparison, yieldText } from "@/components/Production/productionFormat";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
-import Services from "@/utils/services";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { errorMessageOf } from "@/utils/errorNotice";
 import { printPdf } from "@/utils/printDocument";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import Services from "@/utils/services";
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import React, { useCallback, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
-import { Button, Card, DataTable, Divider, Text } from "react-native-paper";
-import { parseLocalDate } from "@/utils/dates";
-
-/** Motivo que manda el backend: `error` trae el detalle cuando `message` es genérico. */
-function apiMessage(error: any, fallback: string): string {
-  if (error?.isAxiosError && !error.response) {
-    return "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.";
-  }
-  const data = error?.response?.data;
-  const fieldError = data?.errors
-    ? (Object.values(data.errors).flat()[0] as string | undefined)
-    : undefined;
-  return fieldError || data?.error || data?.message || fallback;
-}
+import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { Button } from "react-native-paper";
 
 export default function ProductionDetail() {
   const params = useLocalSearchParams<{ id: string }>();
+  const id = parseInt(params.id, 10);
   const router = useRouter();
+  const navigation = useNavigation();
   const alerts = useAlerts();
-  // Editar, completar y empacar piden production_orders_update.
-  const canUpdate = useCan().can("production_orders_update");
-  const [order, setOrder] = useState<any | null>(null);
-  const [variance, setVariance] = useState<any | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [completing, setCompleting] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
-  const [printing, setPrinting] = useState(false);
-  const loadedRef = useRef(false);
-  // La primera carga falló: 404 (borrada u otra sucursal) o 5xx/red.
-  const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
+  const { colors } = useTheme();
+  const { can } = useCan();
+  const canUpdate = can("production_orders_update");
+  const canCreate = can("production_orders_create");
 
-  const loadOrder = useCallback(async () => {
-    // Spinner solo en la primera carga; al volver de editar o empacar se
-    // refresca sin parpadeo.
-    const firstLoad = !loadedRef.current;
+  const [order, setOrder] = useState<App.Entities.ProductionOrder | null>(null);
+  const [problem, setProblem] = useState<RecordLoadProblem | null>(null);
+  const [busy, setBusy] = useState<null | "complete" | "cancel" | "print">(null);
+  const loaded = useRef(false);
+
+  const load = useCallback(async () => {
     try {
-      if (firstLoad) setLoading(true);
-      // silent: la falla de la primera carga se explica en la pantalla.
-      const r: any = await Services.productionOrders.show(parseInt(params.id, 10), undefined, {
-        silent: true,
-      });
-      const loaded = r?.data?.data ?? r?.data;
-      setOrder(loaded);
-      setLoadProblem(null);
-      loadedRef.current = true;
-      if (loaded?.formula_id) {
-        try {
-          const v: any = await Services.productionOrders.getVariance(parseInt(params.id, 10));
-          setVariance(v.data);
-        } catch (e) {
-          // ignore
-        }
-      }
-    } catch (e: any) {
-      if (firstLoad) {
-        setLoadProblem(recordLoadProblem(e, "No se pudo cargar la producción. Inténtalo de nuevo."));
-      } else {
-        alerts.error(apiMessage(e, "No se pudo cargar la producción"));
-      }
-    } finally {
-      setLoading(false);
+      const r: any = await Services.productionOrders.show(id, undefined, { silent: true });
+      setOrder(r?.data?.data ?? r?.data);
+      setProblem(null);
+      loaded.current = true;
+    } catch (e) {
+      if (!loaded.current) setProblem(recordLoadProblem(e, "No se pudo cargar la producción."));
+      else alerts.error(errorMessageOf(e, "No se pudo actualizar la producción."));
     }
-  }, [params.id, alerts]);
+  }, [id, alerts]);
 
-  // Se recarga cada vez que la pantalla recupera el foco: antes se cargaba una
-  // sola vez y al volver de "Editar" o del empaque mostraba datos viejos.
+  // Al volver de continuar un pendiente, se ve lo guardado.
   useFocusEffect(
     useCallback(() => {
-      loadOrder();
-    }, [loadOrder]),
+      load();
+    }, [load]),
   );
 
-  const handleCancel = async () => {
-    if (!order || cancelling) return;
-    const ok = await alerts.confirm(
-      `¿Cancelar la producción ${order.folio}? Se revertirá el stock.`,
-      { title: "Cancelar producción", okText: "Sí, cancelar", cancelText: "Volver" },
-    );
+  const complete = async () => {
+    if (!order || busy) return;
+    const ok = await alerts.confirm("Se descuentan los insumos, se suma lo que salió y se aplica el envasado.", {
+      title: "¿Registrar la producción?",
+      okText: "Registrar",
+      cancelText: "Volver",
+    });
     if (!ok) return;
     try {
-      setCancelling(true);
-      await Services.productionOrders.cancel(order.id);
-      alerts.success("Producción cancelada");
-      goBack();
-    } catch (e: any) {
-      alerts.error("No se pudo cancelar: " + apiMessage(e, "Error"));
+      setBusy("complete");
+      await Services.productionOrders.complete(order.id);
+      alerts.success("Producción registrada");
+      await load();
+    } catch {
+      // El aviso global dice qué faltó (stock, material…).
     } finally {
-      setCancelling(false);
+      setBusy(null);
     }
   };
 
-  // Hoja para la planta: en borrador, qué producir y qué sacar del almacén con
-  // espacios para anotar lo real; ya completada, lo producido contra lo esperado.
-  const handlePrintSheet = async () => {
-    if (!order || printing) return;
+  const cancel = async () => {
+    if (!order || busy) return;
+    const produced = order.status !== "draft";
+    const ok = await alerts.confirm(
+      produced
+        ? "Se devuelve lo que se usó, se retira lo que salió y se deshace el envasado."
+        : "El pendiente queda cancelado; no se movió inventario.",
+      { title: `¿Cancelar ${order.folio}?`, okText: "Sí, cancelar", cancelText: "Volver" },
+    );
+    if (!ok) return;
     try {
-      setPrinting(true);
+      setBusy("cancel");
+      await Services.productionOrders.cancel(order.id);
+      alerts.success(produced ? "Producción cancelada y stock devuelto" : "Pendiente cancelado");
+      await load();
+    } catch {
+      // Aviso global (p. ej. ya se vendió lo envasado).
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const print = async () => {
+    if (!order || busy) return;
+    try {
+      setBusy("print");
       const url = await Services.print.productionSheetUrl(order.id);
       await printPdf(url, `hoja-produccion-${order.folio}.pdf`);
-    } catch (e: any) {
-      alerts.error("No se pudo generar la hoja de producción. " + apiMessage(e, ""));
+    } catch (e) {
+      alerts.error(errorMessageOf(e, "No se pudo generar la hoja de producción."));
     } finally {
-      setPrinting(false);
+      setBusy(null);
     }
   };
 
-  // Un borrador no afecta inventario hasta completarse: aquí se descuentan
-  // los consumos, se suman los resultados y se registran las mermas.
-  const handleComplete = async () => {
-    if (!order || completing) return;
-    const ok = await alerts.confirm(
-      `¿Completar la producción ${order.folio}? Se descontarán los insumos y se sumará lo producido al inventario.`,
-      { title: "Completar producción", okText: "Completar", cancelText: "Volver" },
-    );
-    if (!ok) return;
-    try {
-      setCompleting(true);
-      const r: any = await Services.productionOrders.complete(order.id);
-      setOrder(r?.data ?? order);
-      alerts.success(r?.message ?? "Producción completada");
-      // Variación y estado de empaque cambian al completar.
-      loadOrder();
-    } catch (e: any) {
-      alerts.error(
-        "No se pudo completar la producción. " + apiMessage(e, "Error desconocido"),
-      );
-    } finally {
-      setCompleting(false);
-    }
-  };
+  const menu: RowMenuAction[] = order
+    ? [
+        ...(order.status !== "cancelled" ? [{ label: "Imprimir hoja", icon: "printer" as const, onPress: print }] : []),
+        ...(canUpdate && order.status !== "cancelled"
+          ? [{ label: order.status === "draft" ? "Cancelar pendiente" : "Cancelar producción", icon: "cancel" as const, onPress: cancel, destructive: true }]
+          : []),
+      ]
+    : [];
 
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color={palette.primary} />
-        <Text style={{ marginTop: 8, color: palette.textSecondary }}>
-          Cargando producción…
-        </Text>
-      </View>
-    );
-  }
+  useFocusEffect(
+    useCallback(() => {
+      navigation.setOptions({ headerRight: () => (menu.length ? <RowMenu actions={menu} /> : null) });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [navigation, order?.status, canUpdate]),
+  );
 
-  if (!order && loadProblem) {
+  const styles = useThemedStyles((c) => ({
+    screen: { flex: 1, backgroundColor: c.background },
+    center: { flex: 1, alignItems: "center", justifyContent: "center" },
+    content: { padding: 16, paddingBottom: 40, gap: 22, maxWidth: 680, width: "100%", alignSelf: "center" },
+    header: { gap: 4 },
+    title: { fontSize: 24, lineHeight: 30, fontWeight: "700", color: c.text, letterSpacing: -0.3 },
+    subtitle: { fontSize: 14, color: c.textSecondary },
+    statusRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 },
+    dot: { width: 8, height: 8, borderRadius: 4 },
+    status: { fontSize: 14, fontWeight: "600" },
+    actions: { flexDirection: "row", gap: 10, flexWrap: "wrap" },
+    action: { flexGrow: 1, flexBasis: 150 },
+    notes: { fontSize: 14, lineHeight: 20, color: c.text },
+    hint: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+  }));
+
+  if (problem) {
     return (
       <RecordLoadError
-        problem={loadProblem}
+        problem={problem}
         notFoundTitle="No se encontró la producción"
         errorTitle="No se pudo cargar la producción"
-        onRetry={loadOrder}
+        onRetry={load}
       />
     );
   }
-
   if (!order) {
     return (
       <View style={styles.center}>
-        <Text style={{ color: palette.textSecondary }}>Producción no encontrada</Text>
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
 
+  const draft = order.status === "draft";
+  const cancelled = order.status === "cancelled";
+  const statusColor = draft ? colors.warning : cancelled ? colors.error : colors.success;
+  const statusText = draft
+    ? "Pendiente de registrar: todavía no mueve inventario"
+    : cancelled
+      ? "Cancelada: el inventario se devolvió"
+      : order.kind === "packaging"
+        ? "Envasado registrado"
+        : "Registrada";
+  const yields = meaningfulYields(order.yields);
+  const pieces = yields.length === 0 ? piecesYield(order.yields) : null;
+  const packagings = order.packagings ?? [];
+  const planned = order.planned_packagings ?? [];
+  const wastes = (order.wastes ?? []).filter((w) => !w.reverted || cancelled);
+  // El granel que salió: lo que no se envasó se envasa después desde «Envasar».
+  const bulkOutputs = (order.outputs ?? []).filter((o) => o.is_bulk);
+
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: "transparent" as any }}
-      contentContainerStyle={{ padding: 12, paddingBottom: 80, maxWidth: 600, width: "100%", alignSelf: "center" }}
-    >
-      <Card style={styles.card}>
-        <Card.Content>
-          <View style={styles.headerRow}>
-            <View style={{ flex: 1 }}>
-              <Text variant="titleLarge" style={{ color: palette.text, fontWeight: "700" }}>
-                {order.folio}
-              </Text>
-              <Text style={{ color: palette.textSecondary, marginTop: 2 }}>
-                {parseLocalDate(order.production_date).toLocaleDateString("es-MX", {
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                })}
-              </Text>
-            </View>
-            <ProductionStatusBadge status={order.status} />
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.title}>{order.title}</Text>
+          <Text style={styles.subtitle}>
+            {[order.folio, dayTitle(order.production_date), order.responsible_name].filter(Boolean).join(" · ")}
+          </Text>
+          <View style={styles.statusRow}>
+            <View style={[styles.dot, { backgroundColor: statusColor }]} />
+            <Text style={[styles.status, { color: statusColor }]}>{statusText}</Text>
           </View>
+        </View>
 
-          <Divider style={{ marginVertical: 12, backgroundColor: palette.border }} />
-
-          <View style={styles.metaRow}>
-            <MetaItem icon="account" label="Responsable" value={order.responsible_name ?? "—"} />
-            <MetaItem icon="map-marker" label="Sucursal" value={order.location_name ?? "—"} />
-          </View>
-
-          {order.status !== "cancelled" ? (
+        {draft && canUpdate && (
+          <View style={styles.actions}>
+            <Button mode="contained" icon="check" onPress={complete} loading={busy === "complete"} disabled={!!busy} style={styles.action}>
+              Registrar
+            </Button>
             <Button
               mode="outlined"
-              icon="printer"
-              onPress={handlePrintSheet}
-              loading={printing}
-              disabled={printing}
-              style={{ marginTop: 8, alignSelf: "flex-start" }}
+              icon="pencil-outline"
+              onPress={() => router.push(`/(tabs)/home/production/${order.id}/edit` as any)}
+              disabled={!!busy}
+              style={styles.action}
             >
-              {order.status === "draft" ? "Imprimir hoja para planta" : "Imprimir hoja de producción"}
+              Continuar
             </Button>
-          ) : null}
-  
-          {order.notes ? (
-            <View style={styles.notesBlock}>
-              <Text style={{ color: palette.textSecondary, fontSize: 12, marginBottom: 2 }}>
-                Observaciones
-              </Text>
-              <Text style={{ color: palette.text }}>{order.notes}</Text>
-            </View>
-          ) : null}
-        </Card.Content>
-      </Card>
+          </View>
+        )}
 
-      <SectionTitle icon="package-variant-closed" title={`Consumos (${order.consumptions?.length ?? 0})`} />
-      <Card style={styles.card}>
-        <DataTable>
-          <DataTable.Header>
-            <DataTable.Title>Producto</DataTable.Title>
-            <DataTable.Title numeric>Cantidad</DataTable.Title>
-          </DataTable.Header>
-          {(order.consumptions ?? []).map((c: any, i: number) => (
-            <DataTable.Row key={i}>
-              <DataTable.Cell>
-                <Text style={{ color: palette.text }}>{c.product_name}</Text>
-                <Text style={{ color: palette.textSecondary, fontSize: 11 }}>{" " + c.unit_name}</Text>
-              </DataTable.Cell>
-              <DataTable.Cell numeric>
-                <Text style={{ color: palette.error, fontWeight: "600" }}>
-                  −{Number(c.quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })}
-                </Text>
-              </DataTable.Cell>
-            </DataTable.Row>
-          ))}
-          {(!order.consumptions || order.consumptions.length === 0) ? (
-            <View style={styles.empty}><Text style={{ color: palette.textSecondary }}>Sin consumos registrados</Text></View>
-          ) : null}
-        </DataTable>
-      </Card>
-
-      <SectionTitle icon="package-variant" title={`Productos (${order.outputs?.length ?? 0})`} />
-      <Card style={styles.card}>
-        <DataTable>
-          <DataTable.Header>
-            <DataTable.Title>Producto</DataTable.Title>
-            <DataTable.Title numeric>Cantidad</DataTable.Title>
-          </DataTable.Header>
-          {(order.outputs ?? []).map((o: any, i: number) => (
-            <DataTable.Row key={i}>
-              <DataTable.Cell>
-                <Text style={{ color: palette.text }}>{o.product_name}</Text>
-                <Text style={{ color: palette.textSecondary, fontSize: 11 }}>{" " + o.unit_name}</Text>
-              </DataTable.Cell>
-              <DataTable.Cell numeric>
-                <Text style={{ color: palette.success, fontWeight: "600" }}>
-                  +{Number(o.quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })}
-                </Text>
-              </DataTable.Cell>
-       
-            </DataTable.Row>
-          ))}
-          {(!order.outputs || order.outputs.length === 0) ? (
-            <View style={styles.empty}><Text style={{ color: palette.textSecondary }}>Sin productos registrados</Text></View>
-          ) : null}
-        </DataTable>
-      </Card>
-
-      {/* ── Empaque: sólo tiene sentido con la producción ya terminada ── */}
-      {order.can_pack || (order.packagings?.length ?? 0) > 0 ? (
-        <>
-          <SectionTitle
-            icon="package-variant-closed"
-            title={`Empaque (${order.packagings?.length ?? 0})`}
-          />
-          <Card style={styles.card}>
-            <Card.Content>
-              {(order.packagings ?? []).map((p: any, i: number) => (
-                <View key={i} style={styles.packagingRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: palette.text, fontWeight: "600" }}>
-                      {Number(p.quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })}{" "}
-                      {p.unit_name} · {p.product_name}
-                    </Text>
-                    {p.source_product_name ? (
-                      <Text style={{ color: palette.textSecondary, fontSize: 11 }}>
-                        {Number(p.source_quantity ?? 0).toLocaleString("es-MX", {
-                          maximumFractionDigits: 2,
-                        })}{" "}
-                        {p.source_unit_name} de {p.source_product_name}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
+        {(yields.length > 0 || !!pieces) && !cancelled && (
+          <ListSection title="Rendimiento">
+            <ListGroup inset={14}>
+              {!!pieces && <ListRow title={pieces} chevron={false} />}
+              {yields.map((y) => (
+                <ListRow
+                  key={y.product_id}
+                  title={yieldText(y)}
+                  titleLines={2}
+                  subtitle={yieldComparison(y) ?? undefined}
+                  warning={y.variance_pct != null && y.variance_pct <= -10 ? "Rindió bastante menos de lo esperado" : undefined}
+                  chevron={false}
+                />
               ))}
+            </ListGroup>
+          </ListSection>
+        )}
 
-              {(order.packagings?.length ?? 0) === 0 ? (
-                <Text style={{ color: palette.textSecondary }}>
-                  La producción ya terminó: el granel está en inventario y se
-                  puede empacar.
-                </Text>
-              ) : null}
-
-              {order.can_pack && canUpdate ? (
-                <Button
-                  mode="contained"
-                  icon="package-variant-closed"
-                  onPress={() =>
-                    router.push(`/(tabs)/home/production/${order.id}/packaging` as any)
-                  }
-                  buttonColor={palette.primary}
-                  textColor="#fff"
-                  style={{ marginTop: 12 }}
-                >
-                  {(order.packagings?.length ?? 0) === 0
-                    ? "Empacar productos"
-                    : "Seguir empacando"}
-                </Button>
-              ) : null}
-            </Card.Content>
-          </Card>
-        </>
-      ) : null}
-
-      {(order.wastes?.length ?? 0) > 0 ? (
-        <>
-          <SectionTitle icon="trash-can-outline" title={`Mermas (${order.wastes.length})`} />
-          <Card style={[styles.card, { borderLeftWidth: 4, borderLeftColor: palette.error }]}>
-            <DataTable>
-              <DataTable.Header>
-                <DataTable.Title>Producto</DataTable.Title>
-                <DataTable.Title>Cantidad</DataTable.Title>
-                <DataTable.Title>Tipo</DataTable.Title>
-              </DataTable.Header>
-              {order.wastes.map((w: any, i: number) => (
-                <DataTable.Row key={i}>
-                  <DataTable.Cell>
-                    <Text style={{ color: palette.text }}>{w.product_name}</Text>
-                  </DataTable.Cell>
-                  <DataTable.Cell>
-                    <Text style={{ color: palette.error, fontWeight: "600" }}>
-                      −{Number(w.quantity).toLocaleString("es-MX", { maximumFractionDigits: 2 })} {w.unit_name}
-                    </Text>
-                  </DataTable.Cell>
-                  <DataTable.Cell>
-                    <Text style={{ color: palette.textSecondary, fontSize: 11 }}>
-                      {w.reason_label}
-                    </Text>
-                  </DataTable.Cell>
-                </DataTable.Row>
+        {!!order.consumptions?.length && (
+          <ListSection title={draft ? "Se va a usar" : "Entró"}>
+            <ListGroup inset={14}>
+              {order.consumptions.map((c) => (
+                <ListRow key={c.id ?? c.product_id} title={c.product_name ?? "Insumo"} subtitle={qty(c.quantity, c.unit_abbreviation)} chevron={false} />
               ))}
-            </DataTable>
-          </Card>
-        </>
-      ) : null}
+            </ListGroup>
+          </ListSection>
+        )}
 
-      {variance ? (
-        <>
-          <SectionTitle icon="chart-line-variant" title="Varianza vs Fórmula" />
-          <Card style={styles.card}>
-            <DataTable>
-              <DataTable.Header>
-                <DataTable.Title>Producto</DataTable.Title>
-                <DataTable.Title numeric>Real</DataTable.Title>
-                <DataTable.Title numeric>Esperado</DataTable.Title>
-                <DataTable.Title numeric>% Var</DataTable.Title>
-              </DataTable.Header>
-              {[...(variance.consumptions ?? []), ...(variance.outputs ?? [])].map(
-                (v: any, i: number) => (
-                  <DataTable.Row key={i}>
-                    <DataTable.Cell>
-                      <Text style={{ color: palette.text }}>{v.product_name}</Text>
-                    </DataTable.Cell>
-                    <DataTable.Cell numeric>
-                      <Text style={{ color: palette.text }}>
-                        {Number(v.actual).toLocaleString("es-MX", { maximumFractionDigits: 2 })}
-                      </Text>
-                    </DataTable.Cell>
-                    <DataTable.Cell numeric>
-                      <Text style={{ color: palette.textSecondary }}>
-                        {v.expected != null
-                          ? Number(v.expected).toLocaleString("es-MX", { maximumFractionDigits: 2 })
-                          : "—"}
-                      </Text>
-                    </DataTable.Cell>
-                    <DataTable.Cell numeric>
-                      <Text
-                        style={{
-                          color:
-                            (v.variance_pct ?? 0) > 10
-                              ? palette.error
-                              : (v.variance_pct ?? 0) < -10
-                                ? palette.warning
-                                : palette.success,
-                          fontWeight: "600",
-                        }}
-                      >
-                        {v.variance_pct != null ? `${v.variance_pct}%` : "—"}
-                      </Text>
-                    </DataTable.Cell>
-                  </DataTable.Row>
-                ),
-              )}
-            </DataTable>
-          </Card>
-        </>
-      ) : null}
+        {!!order.outputs?.length && (
+          <ListSection title={draft ? "Va a salir" : "Salió"}>
+            <ListGroup inset={14}>
+              {order.outputs.map((o) => (
+                <ListRow
+                  key={o.id ?? o.product_id}
+                  title={o.product_name ?? "Producto"}
+                  subtitle={qty(o.quantity, o.unit_abbreviation)}
+                  meta={o.expected_quantity ? `Esperado ${qty(o.expected_quantity, o.unit_abbreviation)}` : undefined}
+                  chevron={false}
+                />
+              ))}
+            </ListGroup>
+          </ListSection>
+        )}
 
-      <View style={styles.actionBar}>
-        {order.status === "draft" && canUpdate ? (
-          <Button
-            mode="outlined"
-            onPress={() => router.push(`/(tabs)/home/production/${order.id}/edit` as any)}
-            style={{ flex: 1, marginRight: 8 }}
-            icon="pencil"
-          >
-            Editar
-          </Button>
-        ) : null}
-        {order.status === "draft" && canUpdate ? (
-          <Button
-            mode="contained"
-            onPress={handleComplete}
-            loading={completing}
-            disabled={completing}
-            style={{ flex: 1 }}
-            icon="check-circle"
-          >
-            Completar
-          </Button>
-        ) : null}
-      </View>
-    </ScrollView>
-  );
-}
+        {packagings.length > 0 && (
+          <ListSection title="Envasado">
+            <ListGroup inset={14}>
+              {packagings.map((p) => (
+                <ListRow
+                  key={p.id}
+                  title={p.product_name ?? "Presentación"}
+                  subtitle={`${qty(p.quantity, p.unit_abbreviation)}${
+                    p.source_product_name ? ` · ${qty(p.source_quantity, p.source_unit_abbreviation)} de ${shortName(p.source_product_name).toLowerCase()}` : ""
+                  }`}
+                  meta={p.materials?.length ? p.materials.map((m) => lineText(m)).join(" · ") : undefined}
+                  chevron={false}
+                />
+              ))}
+            </ListGroup>
+          </ListSection>
+        )}
 
-function MetaItem({ icon, label, value, valueColor }: { icon: string; label: string; value: string; valueColor?: string }) {
-  return (
-    <View style={{ flex: 1, flexDirection: "row", alignItems: "center", marginVertical: 4 }}>
-      <MaterialCommunityIcons name={icon as any} size={18} color={palette.primary} />
-      <View style={{ marginLeft: 8, flex: 1 }}>
-        <Text style={{ color: palette.textSecondary, fontSize: 11 }}>{label}</Text>
-        <Text style={{ color: valueColor ?? palette.text, fontWeight: "600" }}>{value}</Text>
-      </View>
+        {draft && planned.length > 0 && (
+          <ListSection title="Se va a envasar">
+            <ListGroup inset={14}>
+              {planned.map((p) => (
+                <ListRow key={p.product_id} title={p.product_name ?? "Presentación"} subtitle={qty(p.quantity, p.unit_abbreviation)} chevron={false} />
+              ))}
+            </ListGroup>
+          </ListSection>
+        )}
+
+        {wastes.length > 0 && (
+          <ListSection title="Merma">
+            <ListGroup inset={14}>
+              {wastes.map((w, i) => (
+                <ListRow
+                  key={w.id ?? i}
+                  title={w.product_name ?? "Producto"}
+                  subtitle={qty(w.quantity, w.unit_abbreviation)}
+                  meta={(w.notes ?? "").replace(/^\[[^\]]*\]\s*/, "") || w.reason_label || undefined}
+                  chevron={false}
+                />
+              ))}
+            </ListGroup>
+          </ListSection>
+        )}
+
+        {order.status === "completed" && order.kind === "process" && bulkOutputs.length > 0 && canCreate && (
+          <ListSection title="¿Quedó granel?">
+            <ListGroup>
+              {bulkOutputs.map((o) => (
+                <ListRow
+                  key={o.product_id}
+                  icon="package-variant"
+                  title={`Envasar ${shortName(o.product_name).toLowerCase()}`}
+                  subtitle="Lo que no se envasó sigue en inventario"
+                  onPress={() => router.push(`/(tabs)/home/production/pack?source=${o.product_id}` as any)}
+                />
+              ))}
+            </ListGroup>
+          </ListSection>
+        )}
+
+        {!!order.notes && (
+          <ListSection title="Notas">
+            <Text style={styles.notes}>{order.notes}</Text>
+          </ListSection>
+        )}
+
+        {cancelled && order.cancelled_at && (
+          <Text style={styles.hint}>Se canceló el {new Date(order.cancelled_at).toLocaleString("es-MX")}.</Text>
+        )}
+      </ScrollView>
     </View>
   );
 }
-
-function SectionTitle({ icon, title }: { icon: string; title: string }) {
-  return (
-    <View style={styles.sectionTitle}>
-      <MaterialCommunityIcons name={icon as any} size={18} color={palette.primary} />
-      <Text style={{ marginLeft: 8, color: palette.text, fontWeight: "700", fontSize: 14 }}>
-        {title}
-      </Text>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  card: {
-    backgroundColor: palette.card,
-    borderRadius: 12,
-    marginBottom: 8,
-  },
-  headerRow: { flexDirection: "row", alignItems: "flex-start" },
-  metaRow: { flexDirection: "row", marginVertical: 4 },
-  notesBlock: { marginTop: 12, padding: 8, backgroundColor: palette.surface, borderRadius: 8 },
-  sectionTitle: { flexDirection: "row", alignItems: "center", marginTop: 12, marginBottom: 6 },
-  empty: { padding: 12, alignItems: "center" },
-  packagingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.border,
-  },
-  actionBar: { flexDirection: "row", marginTop: 16 },
-});

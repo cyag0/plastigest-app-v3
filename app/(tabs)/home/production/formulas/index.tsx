@@ -1,180 +1,172 @@
-import ActiveBadge from "@/components/App/ActiveBadge";
-import AppList from "@/components/App/AppList/AppList";
-import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
-import PermissionGate from "@/components/App/PermissionGate";
-import palette from "@/constants/palette";
-import Services from "@/utils/services";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Text } from "react-native-paper";
-
 /**
- * Todos los productos que entrega el proceso.
- *
- * Las fórmulas anteriores al rediseño multi-salida no traen `outputs`; el
- * backend sigue exponiendo la salida principal suelta, y de ahí se toma.
+ * Procesos de producción: qué entra y qué sale de cada uno (Abrir cocos:
+ * coco → agua y pulpa). Son la plantilla del registro diario y la base del
+ * rendimiento esperado.
  */
-function formatOutputs(formula: any): string {
-  const outputs = formula?.outputs ?? [];
 
-  if (outputs.length > 0) {
-    return outputs
-      .map((o: any) => o.product_name ?? o.product?.name)
-      .filter(Boolean)
-      .join(" · ");
-  }
+import AppBar from "@/components/App/AppBar";
+import EmptyState from "@/components/App/EmptyState";
+import { ListGroup, ListGroupSkeleton, ListRow } from "@/components/App/ListGroup";
+import RowMenu from "@/components/App/RowMenu";
+import { shortName } from "@/components/Production/productionFormat";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
+import Services from "@/utils/services";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
+import React, { useCallback, useState } from "react";
+import { RefreshControl, ScrollView, Text, View } from "react-native";
 
-  return formula?.product_name ?? "—";
-}
-
-const FORMULAS_COLUMNS: AppListColumn<any>[] = [
-  {
-    title: "Nombre",
-    dataIndex: "name",
-    key: "name",
-    width: 280,
-  },
-  {
-    title: "Resultados",
-    dataIndex: "outputs",
-    key: "outputs",
-    width: 260,
-    render: (_value: any, record: any) => (
-      <Text
-        numberOfLines={2}
-        ellipsizeMode="tail"
-        style={{ color: palette.text, fontSize: 13 }}
-      >
-        {formatOutputs(record)}
-      </Text>
-    ),
-  },
-  {
-    title: "Versión",
-    dataIndex: "version",
-    key: "version",
-    width: 110,
-    align: "center",
-    render: (value: any) => (
-      <Text style={{ color: palette.textSecondary, fontSize: 13 }}>
-        v{value ?? 1}
-      </Text>
-    ),
-  },
-  {
-    title: "Ingredientes",
-    dataIndex: "items",
-    key: "items",
-    width: 130,
-    align: "center",
-    render: (value: any) => {
-      const count = Array.isArray(value) ? value.length : 0;
-      return (
-        <Text style={{ color: palette.text, fontSize: 13, fontWeight: "600" }}>
-          {count}
-        </Text>
-      );
-    },
-  },
-  {
-    title: "Estado",
-    dataIndex: "is_active",
-    key: "is_active",
-    width: 130,
-    align: "center",
-    render: (value: any) => <ActiveBadge active={!!value} feminine />,
-  },
-  {
-    title: "Descripción",
-    dataIndex: "description",
-    key: "description",
-    width: 280,
-    render: (value: any) =>
-      value ? (
-        <Text
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          style={{ color: palette.textSecondary, fontSize: 12 }}
-        >
-          {String(value)}
-        </Text>
-      ) : (
-        <Text style={{ color: palette.textSecondary, fontSize: 12 }}>—</Text>
-      ),
-  },
-];
-
-export default function FormulasIndex() {
+export default function ProcessesIndex() {
   const router = useRouter();
+  const navigation = useNavigation();
+  const alerts = useAlerts();
+  const { colors } = useTheme();
+  const { can } = useCan();
+  const canCreate = can("formulas_create");
+  const canUpdate = can("formulas_update");
+
+  const [processes, setProcesses] = useState<App.Entities.Formula[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const r: any = await Services.formulas.index({ sort_by: "name", sort_direction: "asc" });
+      const rows = r?.data?.data ?? r?.data ?? [];
+      setProcesses(Array.isArray(rows) ? rows : []);
+    } catch {
+      // Aviso global.
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      navigation.setOptions({
+        headerRight: () =>
+          canCreate ? (
+            <AppBar.Action icon="plus" iconColor={colors.primary} onPress={() => router.push("/(tabs)/home/production/formulas/form" as any)} />
+          ) : null,
+      });
+    }, [navigation, canCreate, colors.primary, router]),
+  );
+
+  const toggleActive = async (formula: App.Entities.Formula) => {
+    try {
+      await Services.formulas.update(formula.id, { is_active: !formula.is_active } as any);
+      alerts.success(formula.is_active ? "Proceso desactivado: ya no aparece al registrar" : "Proceso activado");
+      load();
+    } catch {
+      // Aviso global.
+    }
+  };
+
+  const duplicate = async (formula: App.Entities.Formula) => {
+    try {
+      const r: any = await Services.formulas.clone(formula.id, `${formula.name} (copia)`);
+      const copy = r?.data ?? r;
+      alerts.success("Proceso duplicado");
+      if (copy?.id) router.push(`/(tabs)/home/production/formulas/form?id=${copy.id}` as any);
+      else load();
+    } catch {
+      // Aviso global.
+    }
+  };
+
+  const styles = useThemedStyles((c) => ({
+    screen: { flex: 1, backgroundColor: c.background },
+    content: { padding: 16, paddingBottom: 40, gap: 14, maxWidth: 760, width: "100%", alignSelf: "center" },
+    intro: { fontSize: 14, lineHeight: 20, color: c.textSecondary },
+  }));
 
   return (
-    <PermissionGate permission="formulas_list">
-      <AppList
-        title="Fórmulas"
-        service={Services.formulas}
-        permissionPrefix="formulas"
-        columns={FORMULAS_COLUMNS}
-        actionColumnTitle="Acciones"
-        actionColumnWidth={140}
-        renderCard={({ item }: { item: any }) => ({
-          title: item.name,
-          description: (
-            <View>
-              <Text style={{ color: palette.textSecondary, fontSize: 12 }}>
-                {formatOutputs(item)}  ·  v{item.version}
-              </Text>
-              {item.description ? (
-                <Text
-                  style={{ color: palette.textSecondary, fontSize: 11, marginTop: 2 }}
-                  numberOfLines={2}
-                >
-                  {item.description}
-                </Text>
-              ) : null}
-              {item.items ? (
-                <Text
-                  style={{ color: palette.text, fontSize: 12, marginTop: 4 }}
-                >
-                  {item.items.length} {item.items.length === 1 ? "ingrediente" : "ingredientes"}
-                  {(item.outputs?.length ?? 0) > 1
-                    ? ` · ${item.outputs.length} resultados`
-                    : ""}
-                </Text>
-              ) : null}
-            </View>
-          ),
-          left: (
-            <View
-              style={{
-                width: 50,
-                height: 50,
-                borderRadius: 12,
-                backgroundColor: palette.accent + "22",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <MaterialCommunityIcons name="flask" size={26} color={palette.accent} />
-            </View>
-          ),
-          right: <ActiveBadge active={!!item.is_active} feminine />,
-        })}
-        onItemPress={(item: any) =>
-          router.push(`/(tabs)/home/production/formulas/form?id=${item.id}` as any)
+    <View style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              load();
+            }}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
         }
-        menu={{
-          onEdit: (item: any) =>
-            router.push(`/(tabs)/home/production/formulas/form?id=${item.id}` as any),
-        }}
-        onPressCreate={() =>
-          router.push("/(tabs)/home/production/formulas/form" as any)
-        }
-        fabLabel="Nueva Fórmula"
-      />
-    </PermissionGate>
+      >
+        <Text style={styles.intro}>
+          Cada proceso dice qué entra y qué sale. Lo que sale a granel se envasa en sus presentaciones (botellas, bolsas), que se configuran en cada producto.
+        </Text>
+
+        {loading ? (
+          <ListGroupSkeleton rows={4} />
+        ) : processes.length === 0 ? (
+          <EmptyState
+            icon="pot-steam-outline"
+            title="Todavía no hay procesos"
+            description="Por ejemplo, «Abrir cocos»: entra coco entero y sale agua y pulpa."
+            actionLabel={canCreate ? "Crear proceso" : undefined}
+            onAction={canCreate ? () => router.push("/(tabs)/home/production/formulas/form" as any) : undefined}
+          />
+        ) : (
+          <ListGroup>
+            {processes.map((f) => {
+              const outputs = f.outputs ?? [];
+              const presentations = outputs.reduce((n, o) => n + (o.presentations?.length ?? 0), 0);
+              return (
+                <ListRow
+                  key={f.id}
+                  icon="pot-steam-outline"
+                  iconColor={f.is_active ? colors.primary : colors.textMuted}
+                  title={f.name}
+                  subtitle={`${(f.items ?? []).map((i) => shortName(i.product_name)).slice(0, 2).join(", ")} → ${outputs
+                    .slice(0, 3)
+                    .map((o) => shortName(o.product_name))
+                    .join(", ")}${outputs.length > 3 ? ` y ${outputs.length - 3} más` : ""}`}
+                  subtitleLines={2}
+                  meta={[
+                    f.is_active ? null : "Inactivo",
+                    presentations ? `${presentations} ${presentations === 1 ? "presentación" : "presentaciones"}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || undefined}
+                  alignTop
+                  onPress={() => router.push(`/(tabs)/home/production/formulas/form?id=${f.id}` as any)}
+                  trailing={
+                    canUpdate || canCreate ? (
+                      <RowMenu
+                        actions={[
+                          ...(canCreate ? [{ label: "Duplicar", icon: "content-copy" as const, onPress: () => duplicate(f) }] : []),
+                          ...(canUpdate
+                            ? [
+                                {
+                                  label: f.is_active ? "Desactivar" : "Activar",
+                                  icon: (f.is_active ? "eye-off-outline" : "eye-outline") as any,
+                                  onPress: () => toggleActive(f),
+                                },
+                              ]
+                            : []),
+                        ]}
+                      />
+                    ) : undefined
+                  }
+                />
+              );
+            })}
+          </ListGroup>
+        )}
+      </ScrollView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({});
