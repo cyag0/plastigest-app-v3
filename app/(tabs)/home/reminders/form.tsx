@@ -1,39 +1,132 @@
-import { toLocalDateString } from "@/utils/dates";
-import { parseMoney } from "@/utils/format";
-import { goBack } from "@/utils/navigation";
+/**
+ * Recordatorio: algo que hay que hacer en una fecha (pagarle a un proveedor,
+ * renovar un servicio, revisar una caducidad). Es de una persona: solo ella lo
+ * ve y a ella le llegan los avisos.
+ *
+ *   Título, tipo, fecha (y monto si es un pago o una renovación), descripción
+ *   y a quién se le asigna.
+ *   Repetición: al completarlo se crea el siguiente (cada N días, semanas…).
+ *   Avisos: N días antes y otro el mismo día (0 = solo el mismo día).
+ */
+
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
+import { InputLabel } from "@/components/Form/AppForm/hoc";
+import ReadonlyText from "@/components/Form/AppForm/ReadonlyText";
+import AppDatePicker from "@/components/Form/AppDatePicker";
+import AppInput from "@/components/Form/AppInput";
 import AppSelect from "@/components/Form/AppSelect";
+import AppSwitch from "@/components/Form/AppSwitch";
+import { FORM_MAX_WIDTH, FormFooter, FormRow, FormSection } from "@/components/Form/FormLayout";
+import AmountPreview from "@/components/Pos/AmountPreview";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
-import Services from "@/utils/services";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
+import { formatDate, parseLocalDate, toLocalDateString } from "@/utils/dates";
+import { claimErrorAlert, errorMessageOf } from "@/utils/errorNotice";
+import { formatMoney, parseMoney } from "@/utils/format";
+import { goBack } from "@/utils/navigation";
+import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { useLocalSearchParams, useNavigation } from "expo-router";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Button,
-  Card,
-  Switch,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   Text,
-  TextInput,
-  HelperText,
-} from "react-native-paper";
-import { DatePickerInput } from "react-native-paper-dates";
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
+import { Button } from "react-native-paper";
 
 interface ReminderFormProps {
   id?: number;
 }
 
+/** Los tipos del backend, en oración (el servidor los manda en mayúsculas). */
+const TYPE_LABELS: Record<string, string> = {
+  payment: "Pago a proveedor",
+  renewal: "Renovación de servicio",
+  expiration: "Vencimiento de producto",
+  other: "Otro",
+};
+
+/** Solo los pagos y las renovaciones llevan monto. */
+const TYPES_WITH_AMOUNT = ["payment", "renewal"];
+
+/**
+ * Cada cuánto se repite. La fecha del siguiente se calcula como en el backend
+ * (Reminder::createNextRecurrence, con Carbon): el 31 de enero más un mes cae
+ * en marzo, igual que con Date.
+ */
+const PERIODS: Record<string, { one: string; many: string; add: (date: Date, n: number) => void }> =
+  {
+    daily: { one: "Día", many: "Días", add: (d, n) => d.setDate(d.getDate() + n) },
+    weekly: { one: "Semana", many: "Semanas", add: (d, n) => d.setDate(d.getDate() + 7 * n) },
+    monthly: { one: "Mes", many: "Meses", add: (d, n) => d.setMonth(d.getMonth() + n) },
+    yearly: { one: "Año", many: "Años", add: (d, n) => d.setFullYear(d.getFullYear() + n) },
+  };
+
+const TITLE_MAX = 255;
+
+const listRoute = "/(tabs)/home/reminders";
+
+const toOptions = (labels: Record<string, string>) =>
+  Object.entries(labels).map(([value, label]) => ({ value, label }));
+
+/** Solo dígitos (cada cuántos, días antes). */
+const digits = (text: string) => text.replace(/\D/g, "");
+
+/**
+ * Etiqueta, campo y, debajo, el error (al intentar guardar) o una ayuda
+ * corta: lo mismo que pintan los campos de AppForm.
+ */
+function Field({
+  label,
+  optional,
+  error,
+  hint,
+  children,
+  style,
+}: {
+  label: string;
+  optional?: boolean;
+  error?: string | null;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={[styles.field, style]}>
+      <InputLabel label={label} optional={optional} />
+      {children}
+      {error ? (
+        <Text style={styles.error}>{error}</Text>
+      ) : typeof hint === "string" ? (
+        <Text style={styles.hint}>{hint}</Text>
+      ) : (
+        (hint ?? null)
+      )}
+    </View>
+  );
+}
+
 export default function ReminderForm(props: ReminderFormProps) {
   const params = useLocalSearchParams();
-  const reminderId =
-    props.id || (params.id ? parseInt(params.id as string) : undefined);
+  const reminderId = props.id || (params.id ? parseInt(params.id as string) : undefined);
   const alerts = useAlerts();
+  const navigation = useNavigation();
 
-  const { location, user: me } = useAuth();
+  const { user: me } = useAuth();
   // Abrir uno existente pide reminders_read (guard de rutas); guardarlo,
   // reminders_update. Sin él el formulario queda de solo lectura.
   const { canUpdate } = useCan();
@@ -41,14 +134,20 @@ export default function ReminderForm(props: ReminderFormProps) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
 
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(!!reminderId);
+  // No se pudo cargar (borrado, de otra empresa, red…): se explica en lugar
+  // de un formulario vacío que parecía nuevo.
+  const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
+  // Candado del guardado: un doble toque no crea dos recordatorios.
+  const { submitting: saving, run } = useSubmitGuard();
+  // Se intentó guardar: desde ahí se marcan los campos que faltan.
+  const [attempted, setAttempted] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  // Form fields
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState("other");
-  const [reminderDate, setReminderDate] = useState<Date>(new Date());
+  const [reminderDate, setReminderDate] = useState(toLocalDateString());
   const [amount, setAmount] = useState("");
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrenceType, setRecurrenceType] = useState("monthly");
@@ -61,44 +160,33 @@ export default function ReminderForm(props: ReminderFormProps) {
   // Quien lo tenía asignado al abrirlo, por si ya no viene en la lista.
   const [assignedUserName, setAssignedUserName] = useState<string | null>(null);
 
-  const [types, setTypes] = useState<Array<{ label: string; value: string }>>(
-    [],
+  const [types, setTypes] = useState(toOptions(TYPE_LABELS));
+  const [recurrenceLabels, setRecurrenceLabels] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(PERIODS).map(([value, period]) => [value, period.one])),
   );
-  const [recurrenceTypes, setRecurrenceTypes] = useState<
-    Array<{ label: string; value: string }>
-  >([]);
-  const [users, setUsers] = useState<Array<{ label: string; value: string }>>(
-    [],
-  );
+  const [users, setUsers] = useState<{ label: string; value: string }[]>([]);
 
-  useEffect(() => {
-    loadTypes();
-    loadUsers();
-    if (reminderId) {
-      loadReminder();
-    }
-  }, [reminderId]);
+  // Título de la barra en el teléfono (en web lo ponen las migas de la ruta).
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: !reminderId ? "Nuevo recordatorio" : readOnly ? "Recordatorio" : "Editar recordatorio",
+    });
+  }, [navigation, reminderId, readOnly]);
 
+  // Los tipos y las frecuencias que acepta el backend; los textos, los de aquí.
   const loadTypes = async () => {
     try {
       const [typesRes, recurrenceRes] = await Promise.all([
         Services.reminders.getTypes(),
         Services.reminders.getRecurrenceTypes(),
       ]);
-
       setTypes(
-        Object.entries(typesRes.data).map(([value, label]) => ({
-          label: label as string,
+        Object.entries(typesRes.data as Record<string, string>).map(([value, label]) => ({
           value,
+          label: TYPE_LABELS[value] ?? label,
         })),
       );
-
-      setRecurrenceTypes(
-        Object.entries(recurrenceRes.data).map(([value, label]) => ({
-          label: label as string,
-          value,
-        })),
-      );
+      setRecurrenceLabels(recurrenceRes.data as Record<string, string>);
     } catch (error) {
       console.error("Error loading types:", error);
     }
@@ -113,7 +201,7 @@ export default function ReminderForm(props: ReminderFormProps) {
         ? body
         : Array.isArray(body?.data)
           ? body.data
-          : body?.data?.data ?? [];
+          : (body?.data?.data ?? []);
 
       setUsers(
         usersData.map((user: any) => ({
@@ -134,8 +222,8 @@ export default function ReminderForm(props: ReminderFormProps) {
     if (!reminderId) return;
 
     try {
-      setLoading(true);
-      const response = await Services.reminders.show(reminderId);
+      // silent: si falla, la pantalla lo explica en lugar del formulario.
+      const response = await Services.reminders.show(reminderId, undefined, { silent: true });
       // El backend responde un ReminderResource: { data: { ...recordatorio } }.
       const body: any = response.data;
       const reminder: App.Entities.Reminder = body?.data ?? body;
@@ -143,430 +231,372 @@ export default function ReminderForm(props: ReminderFormProps) {
       setTitle(reminder.title ?? "");
       setDescription(reminder.description || "");
       setType(reminder.type);
-      setReminderDate(new Date(reminder.reminder_date + "T00:00:00"));
+      setReminderDate(toLocalDateString(parseLocalDate(reminder.reminder_date)));
       setAmount(reminder.amount?.toString() || "");
       setIsRecurring(Boolean(reminder.is_recurring));
       setRecurrenceType(reminder.recurrence_type || "monthly");
       setRecurrenceInterval(reminder.recurrence_interval?.toString() || "1");
       setNotifyEnabled(Boolean(reminder.notify_enabled));
-      setNotifyDaysBefore(reminder.notify_days_before?.toString() || "1");
+      setNotifyDaysBefore(reminder.notify_days_before?.toString() ?? "1");
       setAssignedUserId(reminder.user_id?.toString() || "");
       setAssignedUserName(reminder.user?.name ?? null);
     } catch (error) {
-      console.error("Error loading reminder:", error);
-      alerts.error("Error al cargar el recordatorio");
+      setLoadProblem(
+        recordLoadProblem(error, "No se pudo cargar el recordatorio. Inténtalo de nuevo."),
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async () => {
-    // Validations
-    if (!title.trim()) {
-      alerts.error("Ingresa un título");
-      return;
-    }
-    if (!type) {
-      alerts.error("Selecciona un tipo");
-      return;
-    }
+  // Al abrir, `loading` ya empieza en true si hay recordatorio que cargar.
+  useEffect(() => {
+    void (async () => {
+      await Promise.all([loadTypes(), loadUsers(), loadReminder()]);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reminderId]);
 
-    // Monto en formato mexicano ("1,500.50"); antes parseFloat leía 1.
-    const withAmount = type === "payment" || type === "renewal";
-    const parsedAmount = withAmount && amount.trim() ? parseMoney(amount) : null;
-    if (withAmount && amount.trim() && (parsedAmount === null || parsedAmount < 0)) {
-      alerts.error("El monto no es válido");
-      return;
-    }
-
-    try {
-      setSaving(true);
-
-      // Los opcionales vacíos viajan como "" (el backend los guarda como
-      // null): si no se mandaban, al editar no había forma de borrarlos.
-      const data: any = {
-        title,
-        type,
-        reminder_date: toLocalDateString(reminderDate),
-        is_recurring: isRecurring === true ? 1 : 0,
-        notify_enabled: notifyEnabled === true ? 1 : 0,
-        notify_days_before: parseInt(notifyDaysBefore) || 1,
-        description: description.trim(),
-        amount: parsedAmount ?? "",
-        recurrence_type: isRecurring && recurrenceType ? recurrenceType : "",
-        recurrence_interval: isRecurring ? parseInt(recurrenceInterval) || 1 : "",
-      };
-
-      // Sin elegir a nadie el backend lo asigna a quien lo guarda.
-      if (assignedUserId && assignedUserId.trim()) {
-        data.user_id = parseInt(assignedUserId);
-      }
-
-      if (reminderId) {
-        await Services.reminders.update(reminderId, data);
-        alerts.success("Recordatorio actualizado correctamente");
-      } else {
-        await Services.reminders.store(data);
-        alerts.success("Recordatorio creado correctamente");
-      }
-
-      goBack();
-    } catch (error: any) {
-      console.error("Error saving reminder:", error);
-      console.error("Error response:", error.response?.data);
-      console.error("Validation errors:", error.response?.data?.errors);
-
-      // Errores de validación: los mensajes (ya en español), sin el nombre
-      // técnico del campo; si no, el mensaje o el error del backend.
-      const responseData = error.response?.data;
-      if (responseData?.errors) {
-        const errorMessages = (Object.values(responseData.errors) as any[])
-          .flat()
-          .join("\n");
-        alerts.error(errorMessages || "Revisa los datos del recordatorio");
-      } else {
-        alerts.error(
-          responseData?.message || responseData?.error || "Error al guardar el recordatorio",
-        );
-      }
-    } finally {
-      setSaving(false);
-    }
+  const retryLoad = () => {
+    setLoadProblem(null);
+    setLoading(true);
+    loadReminder();
   };
+
+  // Monto en formato mexicano ("1,500.50"); antes parseFloat leía 1.
+  const withAmount = TYPES_WITH_AMOUNT.includes(type);
+  const parsedAmount = withAmount && amount.trim() ? parseMoney(amount) : null;
+  const interval = parseInt(recurrenceInterval, 10);
+  const daysBefore = parseInt(notifyDaysBefore, 10);
+
+  // Lo que falta o está mal; se marca después del primer intento de guardar.
+  const problems = {
+    title: !title.trim() ? "Escribe el título" : null,
+    type: !type ? "Elige el tipo" : null,
+    amount:
+      withAmount && amount.trim() && (parsedAmount === null || parsedAmount < 0)
+        ? "Escríbelo como 1500 o 1,500.50"
+        : null,
+    interval: isRecurring && !(interval >= 1) ? "Escribe cada cuántos (1 o más)" : null,
+    daysBefore:
+      notifyEnabled && !(daysBefore >= 0) ? "Escribe cuántos días antes (0 es el mismo día)" : null,
+  };
+  const invalid = Object.values(problems).some(Boolean);
+  const shown = (key: keyof typeof problems) => (attempted ? problems[key] : null);
+
+  const handleSubmit = () =>
+    run(async () => {
+      setAttempted(true);
+      setServerError(null);
+      if (invalid) return;
+
+      try {
+        // Los opcionales vacíos viajan como "" (el backend los guarda como
+        // null): si no se mandaban, al editar no había forma de borrarlos.
+        const data: any = {
+          title: title.trim(),
+          type,
+          reminder_date: reminderDate,
+          is_recurring: isRecurring ? 1 : 0,
+          notify_enabled: notifyEnabled ? 1 : 0,
+          // 0 = solo el mismo día (antes se convertía en 1).
+          notify_days_before: Number.isNaN(daysBefore) ? 1 : daysBefore,
+          description: description.trim(),
+          amount: parsedAmount ?? "",
+          recurrence_type: isRecurring && recurrenceType ? recurrenceType : "",
+          recurrence_interval: isRecurring ? interval || 1 : "",
+        };
+
+        // Sin elegir a nadie el backend lo asigna a quien lo guarda.
+        if (assignedUserId && assignedUserId.trim()) {
+          data.user_id = parseInt(assignedUserId);
+        }
+
+        if (reminderId) {
+          await Services.reminders.update(reminderId, data);
+        } else {
+          await Services.reminders.store(data);
+        }
+        alerts.success("Recordatorio guardado");
+        goBack(listRoute);
+      } catch (error: any) {
+        console.error("Error saving reminder:", error);
+        // El motivo del servidor (con el primer error de validación) va en la
+        // barra de abajo: que el aviso global de la app no salga encima (en el
+        // teléfono tapaba los botones). store/update no aceptan `silent`.
+        const message = errorMessageOf(error, "No se pudo guardar el recordatorio.");
+        claimErrorAlert(message);
+        setServerError(message);
+      }
+    });
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ marginTop: 16 }}>Cargando recordatorio...</Text>
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
 
+  if (loadProblem) {
+    return (
+      <RecordLoadError
+        problem={loadProblem}
+        notFoundTitle="No se encontró el recordatorio"
+        errorTitle="No se pudo cargar el recordatorio"
+        onRetry={retryLoad}
+      />
+    );
+  }
+
+  // Quien lo tenía asignado aunque ya no venga en la lista (desactivado o
+  // fuera de la empresa): que se vea su nombre.
+  const userOptions =
+    assignedUserId && assignedUserName && !users.some((u) => u.value === assignedUserId)
+      ? [...users, { label: assignedUserName, value: assignedUserId }]
+      : users;
+
+  // "Cada 1 mes", "cada 2 meses".
+  const periodOptions = Object.entries(recurrenceLabels).map(([value, label]) => {
+    const period = PERIODS[value];
+    return { value, label: period ? (interval > 1 ? period.many : period.one) : label };
+  });
+
+  // Cuándo quedaría el siguiente al completar este.
+  let nextDate: string | null = null;
+  if (isRecurring && interval >= 1 && PERIODS[recurrenceType] && reminderDate) {
+    const next = parseLocalDate(reminderDate);
+    PERIODS[recurrenceType].add(next, interval);
+    nextDate = formatDate(next);
+  }
+
+  const daysHint =
+    daysBefore === 0
+      ? "Avisa solo el mismo día."
+      : daysBefore === 1
+        ? "Avisa 1 día antes y el mismo día."
+        : daysBefore > 1
+          ? `Avisa ${daysBefore} días antes y el mismo día.`
+          : undefined;
+
+  const note =
+    serverError ??
+    (attempted && invalid ? "Falta completar o corregir los campos marcados." : null);
+
   return (
-    <View style={{ flex: 1, backgroundColor: "transparent" as any }}>
-      <ScrollView style={styles.container}>
-        <Card style={styles.card}>
-          <Card.Content>
-            {/* Tipo */}
-            <View style={styles.input}>
-              <Text variant="labelLarge" style={styles.fieldLabel}>Tipo de Recordatorio</Text>
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
+        <View style={styles.column}>
+          <FormSection>
+            <Field label="Título" error={shown("title")}>
+              <AppInput
+                value={title}
+                onChange={setTitle}
+                placeholder="Por ejemplo, Pagar la renta del local"
+                maxLength={TITLE_MAX}
+                hasError={!!shown("title")}
+                readonly={readOnly}
+              />
+            </Field>
+
+            <Field label="Tipo" error={shown("type")}>
               <AppSelect
                 value={type}
                 onChange={(value) => setType(String(value))}
-                readonly={readOnly}
                 data={types}
-                placeholder="Selecciona un tipo"
+                placeholder="Elige el tipo"
+                hideSearchBox
+                readonly={readOnly}
               />
-            </View>
+            </Field>
 
-            {/* Usuario asignado */}
-            <View style={styles.input}>
-              <Text variant="labelLarge" style={styles.fieldLabel}>Asignar a</Text>
+            <FormRow>
+              <Field label="Fecha">
+                <AppDatePicker
+                  value={reminderDate}
+                  onChange={(value) => setReminderDate(value)}
+                  readonly={readOnly}
+                />
+              </Field>
+              {withAmount && (
+                <Field
+                  label="Monto"
+                  // «(opcional)» solo cuando se puede escribir.
+                  optional={!readOnly}
+                  error={shown("amount")}
+                  hint={
+                    !readOnly && parsedAmount !== null && parsedAmount >= 0 ? (
+                      <AmountPreview value={amount} label="Se guardará" />
+                    ) : undefined
+                  }
+                >
+                  {readOnly ? (
+                    <ReadonlyText text={parsedAmount !== null ? formatMoney(parsedAmount) : ""} />
+                  ) : (
+                    <AppInput
+                      value={amount}
+                      onChange={setAmount}
+                      placeholder="0.00"
+                      keyboardType="decimal-pad"
+                      inputMode="decimal"
+                      hasError={!!shown("amount")}
+                    />
+                  )}
+                </Field>
+              )}
+            </FormRow>
+
+            <Field label="Descripción" optional={!readOnly}>
+              <AppInput
+                value={description}
+                onChange={setDescription}
+                multiline
+                numberOfLines={3}
+                readonly={readOnly}
+              />
+            </Field>
+
+            <Field
+              label="Asignar a"
+              hint={readOnly ? undefined : "Solo esa persona lo ve y le llegan los avisos."}
+            >
               <AppSelect
                 value={assignedUserId}
                 onChange={(value) => setAssignedUserId(String(value ?? ""))}
-                readonly={readOnly}
-                data={
-                  // Quien lo tenía asignado aunque ya no venga en la lista
-                  // (desactivado o fuera de la empresa): que se vea su nombre.
-                  assignedUserId &&
-                  assignedUserName &&
-                  !users.some((u) => u.value === assignedUserId)
-                    ? [...users, { label: assignedUserName, value: assignedUserId }]
-                    : users
-                }
+                data={userOptions}
                 placeholder="Yo (si no eliges a nadie)"
+                hideSearchBox={userOptions.length < 8}
+                readonly={readOnly}
               />
-              <Text
-                variant="bodySmall"
-                style={{ color: colors.textSecondary, marginTop: 4 }}
-              >
-                El recordatorio solo será visible para el usuario seleccionado
-              </Text>
-            </View>
+            </Field>
+          </FormSection>
 
-            {/* Título */}
-            <TextInput
-              label="Título"
-              value={title}
-              onChangeText={setTitle}
-              editable={!readOnly}
-              mode="outlined"
-              style={styles.input}
-              left={<TextInput.Icon icon="text" />}
-              placeholder="Ej: Pago de renta mensual"
-            />
-
-            {/* Descripción */}
-            <TextInput
-              label="Descripción (Opcional)"
-              value={description}
-              onChangeText={setDescription}
-              editable={!readOnly}
-              multiline
-              numberOfLines={3}
-              mode="outlined"
-              style={styles.input}
-              placeholder="Detalles adicionales..."
-            />
-
-            {/* Fecha */}
-            <DatePickerInput
-              locale="es"
-              label="Fecha del Recordatorio"
-              value={reminderDate}
-              onChange={(date) => date && setReminderDate(date)}
-              disabled={readOnly}
-              inputMode="start"
-              mode="outlined"
-              style={styles.input}
-            />
-
-            {/* Monto (opcional) */}
-            {(type === "payment" || type === "renewal") && (
-              <TextInput
-                label="Monto (Opcional)"
-                value={amount}
-                onChangeText={setAmount}
-                editable={!readOnly}
-                keyboardType="decimal-pad"
-                mode="outlined"
-                style={styles.input}
-                left={<TextInput.Icon icon="currency-usd" />}
+          <FormSection title="Repetición">
+            <View style={styles.field}>
+              <AppSwitch
+                label="Se repite"
+                description="Al completarlo se crea el siguiente."
+                value={isRecurring}
+                onChange={setIsRecurring}
+                readonly={readOnly}
               />
-            )}
-          </Card.Content>
-        </Card>
-
-        {/* Recurrencia */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <View style={styles.sectionHeader}>
-              <MaterialCommunityIcons
-                name="refresh"
-                size={24}
-                color={colors.primary}
-              />
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Recurrencia
-              </Text>
-            </View>
-
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1 }}>
-                <Text variant="bodyLarge">Recordatorio Recurrente</Text>
-                <Text
-                  variant="bodySmall"
-                  style={{ color: colors.textSecondary }}
-                >
-                  Se creará automáticamente el siguiente
-                </Text>
-              </View>
-              <Switch value={isRecurring} onValueChange={setIsRecurring} disabled={readOnly} />
             </View>
 
             {isRecurring && (
-              <>
-                <View style={styles.input}>
-                  <Text variant="labelLarge" style={styles.fieldLabel}>Frecuencia</Text>
+              <FormRow widths={[1, 2]}>
+                <Field label="Cada" error={shown("interval")}>
+                  <AppInput
+                    value={recurrenceInterval}
+                    onChange={(text) => setRecurrenceInterval(digits(text))}
+                    keyboardType="number-pad"
+                    inputMode="numeric"
+                    maxLength={3}
+                    hasError={!!shown("interval")}
+                    readonly={readOnly}
+                  />
+                </Field>
+                <Field
+                  label="Periodo"
+                  hint={!readOnly && nextDate ? `El siguiente sería el ${nextDate}.` : undefined}
+                >
                   <AppSelect
                     value={recurrenceType}
                     onChange={(value) => setRecurrenceType(String(value))}
+                    data={periodOptions}
+                    hideSearchBox
                     readonly={readOnly}
-                    data={recurrenceTypes}
-                    placeholder="Selecciona frecuencia"
                   />
-                </View>
-
-                <TextInput
-                  label="Cada cuántos"
-                  value={recurrenceInterval}
-                  onChangeText={setRecurrenceInterval}
-                  editable={!readOnly}
-                  keyboardType="number-pad"
-                  mode="outlined"
-                  style={styles.input}
-                  left={<TextInput.Icon icon="numeric" />}
-                />
-                <HelperText type="info" visible>
-                  {`Se repetirá cada ${recurrenceInterval} ${
-                    recurrenceTypes.find((r) => r.value === recurrenceType)
-                      ?.label || "período"
-                  }`}
-                </HelperText>
-              </>
+                </Field>
+              </FormRow>
             )}
-          </Card.Content>
-        </Card>
+          </FormSection>
 
-        {/* Notificaciones */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <View style={styles.sectionHeader}>
-              <MaterialCommunityIcons
-                name="bell-ring"
-                size={24}
-                color={colors.primary}
+          <FormSection title="Avisos">
+            <View style={styles.field}>
+              <AppSwitch
+                label="Enviar avisos"
+                description="Le llegan a quien lo tiene asignado."
+                value={notifyEnabled}
+                onChange={setNotifyEnabled}
+                readonly={readOnly}
               />
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Notificaciones
-              </Text>
-            </View>
-
-            <View style={styles.switchRow}>
-              <View style={{ flex: 1 }}>
-                <Text variant="bodyLarge">Activar Notificaciones</Text>
-                <Text
-                  variant="bodySmall"
-                  style={{ color: colors.textSecondary }}
-                >
-                  Recibe alertas antes de la fecha
-                </Text>
-              </View>
-              <Switch value={notifyEnabled} onValueChange={setNotifyEnabled} disabled={readOnly} />
             </View>
 
             {notifyEnabled && (
-              <>
-                <TextInput
-                  label="Notificar días antes"
-                  value={notifyDaysBefore}
-                  onChangeText={setNotifyDaysBefore}
-                  editable={!readOnly}
-                  keyboardType="number-pad"
-                  mode="outlined"
-                  style={styles.input}
-                  left={<TextInput.Icon icon="calendar-alert" />}
-                />
-                <HelperText type="info" visible>
-                  {`Recibirás una notificación ${notifyDaysBefore} días antes`}
-                </HelperText>
-              </>
-            )}
-          </Card.Content>
-        </Card>
-
-        {location && (
-          <Card style={styles.card}>
-            <Card.Content>
-              <View style={styles.infoSection}>
-                <MaterialCommunityIcons
-                  name="map-marker"
-                  size={16}
-                  color={colors.textSecondary}
-                />
-                <Text
-                  variant="bodySmall"
-                  style={{ color: colors.textSecondary }}
+              <FormRow>
+                <Field
+                  label="Días antes"
+                  error={shown("daysBefore")}
+                  hint={readOnly ? undefined : daysHint}
                 >
-                  Ubicación: {location.name}
-                </Text>
-              </View>
-            </Card.Content>
-          </Card>
-        )}
-
-        {readOnly && (
-          <View
-            style={[styles.readOnlyNote, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          >
-            <MaterialCommunityIcons name="lock-outline" size={16} color={colors.textMuted} />
-            <Text variant="bodySmall" style={[styles.readOnlyText, { color: colors.textSecondary }]}>
-              Solo lectura: no tienes permiso para editar recordatorios.
-            </Text>
-          </View>
-        )}
-
-        <View style={styles.actions}>
-          <Button
-            mode="outlined"
-            onPress={() => goBack()}
-            style={styles.button}
-            disabled={saving}
-          >
-            {readOnly ? "Volver" : "Cancelar"}
-          </Button>
-          {!readOnly && (
-            <Button
-              mode="contained"
-              onPress={handleSubmit}
-              style={styles.button}
-              loading={saving}
-              disabled={saving}
-              buttonColor={colors.primary}
-            >
-              {reminderId ? "Actualizar" : "Guardar"}
-            </Button>
-          )}
+                  <AppInput
+                    value={notifyDaysBefore}
+                    onChange={(text) => setNotifyDaysBefore(digits(text))}
+                    keyboardType="number-pad"
+                    inputMode="numeric"
+                    maxLength={3}
+                    hasError={!!shown("daysBefore")}
+                    readonly={readOnly}
+                  />
+                </Field>
+                {/* En pantallas anchas el campo ocupa media fila. */}
+                <View />
+              </FormRow>
+            )}
+          </FormSection>
         </View>
       </ScrollView>
-    </View>
+
+      {readOnly ? (
+        <FormFooter>
+          <Button mode="outlined" onPress={() => goBack(listRoute)} style={{ flex: 1 }}>
+            Volver
+          </Button>
+          <View style={styles.readOnlyHint}>
+            <MaterialCommunityIcons name="lock-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.readOnlyText}>Solo lectura</Text>
+          </View>
+        </FormFooter>
+      ) : (
+        <FormFooter
+          onCancel={() => goBack(listRoute)}
+          submitLabel={reminderId ? "Guardar cambios" : "Guardar recordatorio"}
+          onSubmit={handleSubmit}
+          loading={saving}
+          note={note}
+        />
+      )}
+    </KeyboardAvoidingView>
   );
 }
 
 const makeStyles = themedStyles((c) => ({
-  fieldLabel: {
-    color: c.textSecondary,
-    marginBottom: 6,
-  },
-  container: {
+  screen: { flex: 1, backgroundColor: c.background },
+  center: {
     flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "transparent" as any,
+    backgroundColor: c.background,
   },
-  card: {
-    backgroundColor: c.surface,
-    marginBottom: 16,
-  },
-  input: {
-    marginBottom: 16,
-    backgroundColor: c.surface,
-  },
-  sectionHeader: {
+  content: { padding: 16, paddingBottom: 32 },
+  // La columna mide lo mismo que la de la barra de abajo.
+  column: { width: "100%", maxWidth: FORM_MAX_WIDTH, alignSelf: "center" },
+  field: { marginBottom: 18 },
+  error: { color: c.error, fontSize: 13, lineHeight: 18, marginTop: 6 },
+  hint: { color: c.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 6 },
+  readOnlyHint: {
+    flex: 1.4,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 16,
+    justifyContent: "center",
+    gap: 6,
   },
-  sectionTitle: {
-    fontWeight: "600",
-  },
-  switchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  infoSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    padding: 12,
-    backgroundColor: "transparent" as any,
-    borderRadius: 8,
-  },
-  actions: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 32,
-  },
-  readOnlyNote: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    marginBottom: 16,
-  },
-  readOnlyText: { flex: 1, lineHeight: 18 },
-  button: {
-    flex: 1,
-  },
+  readOnlyText: { fontSize: 13, color: c.textMuted },
 }));
