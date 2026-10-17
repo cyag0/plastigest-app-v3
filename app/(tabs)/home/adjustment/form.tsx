@@ -29,9 +29,8 @@ import { useThemedStyles } from "@/hooks/useThemedStyles";
 import { formatDate, parseLocalDate, toLocalDateString } from "@/utils/dates";
 import { errorMessageOf } from "@/utils/errorNotice";
 import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
-import { goBack } from "@/utils/navigation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useNavigation, usePathname } from "expo-router";
+import { useNavigation, usePathname, useRouter } from "expo-router";
 import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -60,9 +59,13 @@ const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1
 
 export default function AdjustmentForm() {
   const navigation = useNavigation();
+  const router = useRouter();
   const pathname = usePathname();
-  // También se abre desde Inventario (inventory/adjustment/form).
+  // También se abre desde Inventario (inventory/adjustment/form). Solo se
+  // llega desde la lista: al cancelar o registrar se vuelve a ella (también
+  // si se recargó la página, cuando "atrás" llevaba a Inicio).
   const listRoute = pathname.startsWith("/inventory") ? "/(tabs)/inventory/adjustment" : "/(tabs)/home/adjustment";
+  const toList = () => router.dismissTo(listRoute as any);
   const alerts = useAlerts();
   const { colors } = useTheme();
   const { location } = useAuth();
@@ -174,7 +177,7 @@ export default function AdjustmentForm() {
         });
         await createAdjustments(form);
         alerts.success(lines.length === 1 ? "Ajuste registrado" : `${lines.length} ajustes registrados`);
-        goBack(listRoute);
+        toList();
       } catch (error) {
         setServerError(errorMessageOf(error, "No se pudo registrar el ajuste. Inténtalo de nuevo."));
       }
@@ -236,7 +239,7 @@ export default function AdjustmentForm() {
             siempre se cortaba. */}
         <Button
           mode="outlined"
-          onPress={() => goBack(listRoute)}
+          onPress={toList}
           disabled={submitting}
           compact={narrow}
           style={narrow ? undefined : { flex: 1 }}
