@@ -1,16 +1,46 @@
+/**
+ * Un rol y sus permisos: alta, edición y detalle (el detalle abre este mismo
+ * formulario en solo lectura).
+ *
+ * Arriba el nombre y la descripción; luego los permisos: una plantilla por
+ * puesto para empezar, el alcance (todas las sucursales, administrador del
+ * sistema) y los módulos agrupados por área, cada uno en un renglón que dice
+ * qué tiene marcado y se abre para cambiarlo. Antes eran una tarjeta con
+ * sombra por módulo, chips de colores, un contador con barra de progreso y
+ * plantillas que no decían qué marcaban.
+ *
+ * Lo que se manda no cambia: `permissions` es el mapa {id_del_permiso: true|false}.
+ */
+
+import { ListGroup, ListRow, ListSectionTitle } from "@/components/App/ListGroup";
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
+import FormNote from "@/components/Auth/FormNote";
 import AppForm, { AppFormRef, useAppForm } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
-import { tokens } from "@/constants/tokens";
+import { FormSection } from "@/components/Form/FormLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { useAsync } from "@/hooks/AHooks";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { useFormikContext } from "formik";
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { Platform, Pressable, Text, TextInput, View } from "react-native";
-import { ActivityIndicator, Switch } from "react-native-paper";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  type LayoutChangeEvent,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Button, Modal, Portal, Switch } from "react-native-paper";
+import * as Yup from "yup";
 
 // ---------------------------------------------------------------------------
 // Tipos locales. El backend agrupa los permisos por recurso y devuelve la
@@ -35,6 +65,8 @@ interface RoleValues {
   name: string;
   description: string;
   permissions: Record<string, boolean>;
+  /** Solo al editar o ver: el rol del sistema (Super Admin) no se cambia. */
+  is_system?: boolean;
 }
 
 interface RoleProps {
@@ -42,19 +74,46 @@ interface RoleProps {
   readonly?: boolean;
 }
 
-// Etiquetas cortas para las acciones (lo que se muestra en cada chip).
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
+
+/** AppForm también expone setReadonly (el «Editar» del detalle). */
+type RoleFormRef = AppFormRef<RoleValues> & { setReadonly?: (value: boolean) => void };
+
+const LIST_ROUTE = "/(tabs)/home/roles";
+
+// Referencia estable: AppForm vuelve a cargar el rol cada vez que cambia.
+const INITIAL_VALUES: RoleValues = { permissions: {}, name: "", description: "" };
+
+/** Tamaños de las columnas (roles.name 100, roles.description 255). */
+const LIMITS = { name: 100, description: 255 };
+
+const tooLong = (max: number) => `Máximo ${max} caracteres`;
+
+const validationSchema = Yup.object({
+  name: Yup.string()
+    .trim()
+    .required("Escribe el nombre del rol")
+    .max(LIMITS.name, tooLong(LIMITS.name)),
+  description: Yup.string().nullable().max(LIMITS.description, tooLong(LIMITS.description)),
+});
+
+// Lo que dice cada casilla según la acción del permiso.
 const ACTION_LABELS: Record<string, string> = {
-  create: "Crear",
-  read: "Leer",
-  update: "Actualizar",
-  delete: "Eliminar",
   list: "Listar",
+  read: "Ver detalle",
+  create: "Crear",
+  update: "Editar",
+  delete: "Eliminar",
   export: "Exportar",
   import: "Importar",
   view: "Ver",
   manage: "Gestionar",
   admin: "Administrar",
 };
+
+// Orden de las casillas dentro de un módulo (el backend los manda revueltos).
+// Las acciones propias del módulo (punto de venta, descuentos…) van primero.
+const ACTION_ORDER = ["view", "list", "read", "create", "update", "delete", "export", "import", "manage", "admin"];
 
 // Permisos que amplían hasta dónde llega el rol. Se buscan por nombre (no por
 // módulo) y ninguna plantilla de puesto los marca:
@@ -63,26 +122,58 @@ const ACTION_LABELS: Record<string, string> = {
 //   «Ubicaciones › Listar».
 // - system_admin: administrador del sistema (todas las empresas). Solo se da
 //   a mano, ni siquiera con «Acceso total».
+// Se marcan en «Alcance» y no entre las casillas de su módulo: «Marcar todos»
+// en Configuración ya no hace a nadie administrador del sistema sin decirlo.
 const ALL_LOCATIONS = "locations_all";
 const SYSTEM_ADMIN = "system_admin";
+const SCOPE_PERMISSIONS = [ALL_LOCATIONS, SYSTEM_ADMIN];
 
-// Etiqueta del chip de los permisos cuya acción no dice lo que hacen.
+// Etiqueta de los permisos cuya acción no dice lo que hacen.
 const PERMISSION_LABELS: Record<string, string> = {
   [ALL_LOCATIONS]: "Todas las sucursales",
   [SYSTEM_ADMIN]: "Administrador del sistema",
   sales_pos: "Punto de venta",
   sales_kiosk: "Usar el kiosko de autoservicio",
   sales_discount: "Precios y descuentos",
+  // Registrar, corregir y deshacer ajustes (InventoryAdjustmentController);
+  // también decide quién recibe los avisos de inventario.
+  inventory_manage: "Hacer ajustes",
+  // Solo decide quién recibe los avisos de compras.
+  purchases_manage: "Recibir avisos",
+  // Cambiar las preferencias de notificaciones.
+  notifications_manage: "Configurar avisos",
 };
 
-// Módulos que en la app se llaman distinto que en el backend.
+// Módulos que en la app se llaman distinto que en el backend. Los demás solo
+// pasan a minúsculas ("Turnos de Caja" → "Turnos de caja").
 const RESOURCE_OVERRIDES: Record<string, Partial<ResourceItem>> = {
   locations: {
     label: "Sucursales",
     description:
-      "Datos de las sucursales. «Listar» solo muestra la lista; entrar y trabajar en todas las sucursales es «Todas las sucursales».",
+      "Datos de las sucursales. «Listar» solo muestra la lista; para entrar y trabajar en todas, activa «Todas las sucursales» en Alcance.",
   },
+  formulas: {
+    label: "Procesos",
+    description: "Lo que entra y lo que sale en cada proceso de producción.",
+  },
+  sales_orders: { label: "Pedidos" },
+  transfers: { label: "Transferencias" },
+  dashboard: { label: "Dashboard" },
 };
+
+// Áreas en que se agrupan los módulos (antes era una sola lista de 30). Lo
+// que el backend agregue después y no esté aquí va en «Otros».
+const MODULE_GROUPS: { title: string; keys: string[] }[] = [
+  {
+    title: "Ventas y caja",
+    keys: ["sales", "sales_orders", "customers", "cash_registers", "cash_register_sessions", "cash_movements", "expenses"],
+  },
+  { title: "Inventario y compras", keys: ["inventory", "movements", "transfers", "purchases", "suppliers"] },
+  { title: "Producción", keys: ["production", "production_orders", "formulas"] },
+  { title: "Catálogo", keys: ["products", "categories", "units", "inventory_types"] },
+  { title: "Reportes, tareas y avisos", keys: ["dashboard", "reports", "tasks", "reminders", "notifications"] },
+  { title: "Administración", keys: ["users", "roles", "permissions", "companies", "locations", "settings"] },
+];
 
 // Módulos de administración. Las plantillas "Operativo" y "Solo lectura" no
 // los tocan: gestionar usuarios, roles, empresas o sucursales no es operación
@@ -188,21 +279,23 @@ const isOperational = (p: PermissionInfo) =>
   p.name !== ALL_LOCATIONS &&
   p.name !== SYSTEM_ADMIN;
 
-// Plantillas rápidas: marcan un conjunto de permisos de una sola vez para
-// acelerar el llenado; luego se ajusta lo que haga falta.
-const PRESETS: {
+interface Preset {
   key: string;
   label: string;
   description: string;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  icon: IconName;
   match: (p: PermissionInfo) => boolean;
-}[] = [
+}
+
+// Plantillas rápidas: marcan un conjunto de permisos de una sola vez para
+// acelerar el llenado; luego se ajusta lo que haga falta.
+const PRESETS: Preset[] = [
   {
     key: "all",
     label: "Acceso total",
     description:
       "Todos los permisos, en todas las sucursales. No lo hace administrador del sistema.",
-    icon: "shield-check",
+    icon: "shield-check-outline",
     match: (p) => p.name !== SYSTEM_ADMIN,
   },
   {
@@ -210,7 +303,7 @@ const PRESETS: {
     label: "Encargado de sucursal",
     description:
       "Todo lo de su sucursal: ventas y descuentos, caja y turnos, inventario y ajustes, compras, producción, transferencias y su personal. Sin otras sucursales ni cambios al catálogo.",
-    icon: "account-tie",
+    icon: "account-tie-outline",
     match: (p) => ENCARGADO.includes(p.name),
   },
   {
@@ -225,7 +318,7 @@ const PRESETS: {
     key: "produccion",
     label: "Producción",
     description:
-      "Órdenes de producción, consultar fórmulas, productos y existencias, y pedir insumos por transferencia.",
+      "Órdenes de producción, consultar procesos, productos y existencias, y pedir insumos por transferencia.",
     icon: "factory",
     match: (p) => PRODUCCION.includes(p.name),
   },
@@ -275,47 +368,134 @@ function actionLabel(perm: PermissionItem): string {
   );
 }
 
+/** Las acciones propias primero, luego listar, ver, crear, editar, eliminar… */
+function sortPermissions(perms: PermissionItem[]): PermissionItem[] {
+  const rank = (p: PermissionItem) => ACTION_ORDER.indexOf(getAction(p));
+  return perms
+    .map((p, index) => ({ p, index }))
+    .sort((a, b) => rank(a.p) - rank(b.p) || a.index - b.index)
+    .map(({ p }) => p);
+}
+
+/** "Turnos de Caja" → "Turnos de caja". */
+function sentenceCase(text: string): string {
+  return text ? text.charAt(0).toUpperCase() + text.slice(1).toLowerCase() : text;
+}
+
+/** ["Listar", "Ver detalle", "Crear"] → "Listar, ver detalle y crear". */
+function joinLabels(labels: string[]): string {
+  const words = labels.map((label, i) => (i === 0 ? label : label.charAt(0).toLowerCase() + label.slice(1)));
+  if (words.length <= 1) return words.join("");
+  return `${words.slice(0, -1).join(", ")} y ${words[words.length - 1]}`;
+}
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+
 // ===========================================================================
-// Pantalla principal. Carga los permisos y monta el formulario. La lógica
-// pesada vive en <PermissionsManager/>, que ya está dentro del contexto de
-// Formik (AppForm) y por eso puede leer/escribir los valores de forma reactiva.
+// Pantalla: carga el catálogo de permisos y monta el formulario. Lo demás
+// vive en <RoleEditor/>, dentro de Formik (AppForm), para leer y escribir los
+// valores de forma reactiva.
 // ===========================================================================
 export default function CreateRoleScreen(props: RoleProps) {
   const { colors } = useTheme();
-  const [permissionsByResource, setPermissionsByResource] = useState<
-    Record<string, PermissionItem[]>
-  >({});
-  const [resources, setResources] = useState<ResourceItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const navigation = useNavigation();
+  const [catalog, setCatalog] = useState<{
+    permissionsByResource: Record<string, PermissionItem[]>;
+    resources: ResourceItem[];
+  } | null>(null);
+  const [problem, setProblem] = useState<RecordLoadProblem | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  // El rol no se puede guardar: tiene permisos que quien edita no tiene, o es
+  // el rol del sistema. La barra de abajo solo deja "Volver".
+  const [locked, setLocked] = useState(false);
+  const formRef = useRef<RoleFormRef>(null);
 
-  const formRef = useRef<AppFormRef<RoleValues>>(null);
+  const styles = useThemedStyles((c) => ({
+    center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: c.background },
+    back: { flex: 1 },
+  }));
 
-  const styles = useStyles();
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        setProblem(null);
+        const data = await Services.admin.permissions.getByResource();
+        if (!alive) return;
+        setCatalog({
+          permissionsByResource:
+            (data.permissions_by_resource as Record<string, PermissionItem[]>) || {},
+          resources: ((data.resources as ResourceItem[]) || []).map((r) => ({
+            ...r,
+            label: sentenceCase(r.label),
+            ...RESOURCE_OVERRIDES[r.key],
+          })),
+        });
+      } catch (error) {
+        // Antes la pantalla quedaba sin módulos y sin decir por qué.
+        if (alive) setProblem(recordLoadProblem(error, "No se pudieron cargar los permisos."));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [attempt]);
 
-  useAsync(async () => {
-    try {
-      setLoading(true);
-      const data = await Services.admin.permissions.getByResource();
-      setPermissionsByResource(
-        (data.permissions_by_resource as Record<string, PermissionItem[]>) || {},
-      );
-      setResources(
-        ((data.resources as ResourceItem[]) || []).map((r) => ({
-          ...r,
-          ...RESOURCE_OVERRIDES[r.key],
-        })),
-      );
-    } catch (error) {
-      console.log("Error fetching permissions:", error);
-    } finally {
-      setLoading(false);
+  // A la lista o al detalle de donde se vino. Si la pantalla se abrió por
+  // enlace o se recargó, la pila empieza en Inicio: se va a la lista (o al
+  // detalle del rol).
+  const fallback = props.id ? `${LIST_ROUTE}/${props.id}` : LIST_ROUTE;
+  const leave = useCallback(() => {
+    const state = navigation.getState?.();
+    const previous = state && state.index > 0 ? state.routes[state.index - 1]?.name : undefined;
+    if (previous && String(previous).startsWith("roles/")) navigation.goBack();
+    else router.replace(fallback as any);
+  }, [navigation, router, fallback]);
+
+  // El detalle se vuelve a pedir al regresar de editar el rol.
+  const focusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!props.readonly) return;
+      if (focusedOnce.current) formRef.current?.reload();
+      focusedOnce.current = true;
+    }, [props.readonly]),
+  );
+
+  // Editado en el mismo detalle («Editar»): vuelve a verse en solo lectura.
+  const handleSuccess = () => {
+    if (props.readonly) {
+      formRef.current?.setReadonly?.(true);
+      formRef.current?.reload();
+    } else {
+      leave();
     }
-  });
+  };
+  const handleCancel = () => {
+    if (props.readonly) {
+      formRef.current?.resetForm();
+      formRef.current?.setReadonly?.(true);
+      setLocked(false);
+    } else {
+      leave();
+    }
+  };
 
-  if (loading) {
+  if (problem) {
     return (
-      <View style={[styles.screen, styles.center]}>
-        <ActivityIndicator size="large" color={colors.primary} />
+      <RecordLoadError
+        problem={problem}
+        errorTitle="No se pudieron cargar los permisos"
+        onRetry={() => setAttempt((n) => n + 1)}
+      />
+    );
+  }
+
+  if (!catalog) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
@@ -327,29 +507,46 @@ export default function CreateRoleScreen(props: RoleProps) {
       id={props.id}
       api={Services.admin.roles}
       ref={formRef}
-      style={styles.screen}
-      initialValues={{ permissions: {}, name: "", description: "" }}
+      validationSchema={validationSchema}
+      initialValues={INITIAL_VALUES}
+      submitButtonText={props.id ? "Guardar cambios" : "Guardar rol"}
+      successMessage={props.id ? "Cambios guardados" : "Rol guardado"}
+      onSuccess={handleSuccess}
+      onCancel={handleCancel}
+      // Sin guardar, la barra solo deja regresar.
+      showSubmitButton={!locked}
+      showCancelButton={!locked}
+      additionalSubmitButtons={
+        locked ? (
+          <Button mode="outlined" onPress={handleCancel} style={styles.back}>
+            Volver
+          </Button>
+        ) : undefined
+      }
     >
-      <PermissionsManager
-        resources={resources}
-        permissionsByResource={permissionsByResource}
+      <RoleEditor
+        resources={catalog.resources}
+        permissionsByResource={catalog.permissionsByResource}
         editing={!!props.id}
+        onLockedChange={setLocked}
       />
     </AppForm>
   );
 }
 
 // ===========================================================================
-// Gestor de permisos. Vive dentro de AppForm/Formik.
+// Editor del rol. Vive dentro de AppForm/Formik.
 // ===========================================================================
-function PermissionsManager({
+function RoleEditor({
   resources,
   permissionsByResource,
   editing,
+  onLockedChange,
 }: {
   resources: ResourceItem[];
   permissionsByResource: Record<string, PermissionItem[]>;
   editing: boolean;
+  onLockedChange: (locked: boolean) => void;
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
@@ -360,18 +557,23 @@ function PermissionsManager({
   // Ref con los valores más recientes para que los callbacks sean estables
   // (no se recrean en cada tecleo) sin perder acceso al estado actual.
   const valuesRef = useRef(values);
-  valuesRef.current = values;
+  useLayoutEffect(() => {
+    valuesRef.current = values;
+  });
 
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  // Plantilla recién aplicada (para explicar qué marcó).
-  const [appliedPreset, setAppliedPreset] = useState<{
-    label: string;
-    description: string;
-    skipped: number;
-  } | null>(null);
+  const [presetsOpen, setPresetsOpen] = useState(false);
+  // Qué hizo la última plantilla (o "Ninguno"): se explica debajo.
+  const [applied, setApplied] = useState<string | null>(null);
+  // Casillas de dos en dos en el teléfono, de tres en tres con más ancho.
+  const [columns, setColumns] = useState(2);
+  const onLayout = (e: LayoutChangeEvent) => {
+    const next = e.nativeEvent.layout.width >= 520 ? 3 : 2;
+    if (next !== columns) setColumns(next);
+  };
 
-  // Lista plana de permisos (para presets y contadores globales).
+  // Lista plana de permisos (para plantillas y contadores).
   const allPermissions = useMemo(
     () => Object.values(permissionsByResource).flat(),
     [permissionsByResource],
@@ -379,7 +581,7 @@ function PermissionsManager({
 
   // El backend no deja dar ni quitar a un rol permisos que uno no tiene
   // (403 "No puedes quitar permisos que tú no tienes."), salvo al
-  // administrador del sistema: esos chips quedan con candado, marcados o no.
+  // administrador del sistema: esas casillas quedan con candado.
   const isSystemAdmin = myPermissions.includes(SYSTEM_ADMIN);
   const lockedIds = useMemo(() => {
     if (isSystemAdmin) return new Set<number>();
@@ -403,28 +605,69 @@ function PermissionsManager({
     [allPermissions, selectedMap],
   );
   const totalCount = allPermissions.length;
-  const progress = totalCount ? selectedCount / totalCount : 0;
   // Permisos del rol que quien edita no tiene: con ellos el backend rechaza
   // el guardado completo (no se pueden conservar ni quitar), así que el rol
-  // queda de solo lectura para él: plantillas, "Limpiar" y casillas apagadas.
+  // queda de solo lectura para él.
   const lockedSelected = useMemo(
     () => allPermissions.filter((p) => selectedMap[p.id] && lockedIds.has(p.id)).length,
     [allPermissions, selectedMap, lockedIds],
   );
   const frozen = !readonly && lockedSelected > 0;
+  // El rol del sistema siempre tiene todos los permisos (el backend no deja cambiarlo).
+  const systemRole = !!values.is_system;
+  const locked = !readonly && (frozen || systemRole);
 
-  // Módulos visibles según el buscador. En modo lectura solo se muestran los
-  // que tienen al menos un permiso asignado (resumen de lo que el rol puede).
-  const visibleResources = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return resources.filter((r) => {
-      const perms = permissionsByResource[r.key] || [];
-      if (perms.length === 0) return false;
-      if (readonly && !perms.some((p) => selectedMap[p.id])) return false;
-      if (!q) return true;
-      return r.label.toLowerCase().includes(q);
+  useEffect(() => {
+    onLockedChange(locked);
+  }, [locked, onLockedChange]);
+
+  // Casillas de cada módulo, en orden y sin las de alcance (van en «Alcance»).
+  const modulePermissions = useMemo(() => {
+    const map: Record<string, PermissionItem[]> = {};
+    Object.entries(permissionsByResource).forEach(([key, perms]) => {
+      map[key] = sortPermissions(perms.filter((p) => !SCOPE_PERMISSIONS.includes(p.name)));
     });
-  }, [resources, permissionsByResource, query, readonly, selectedMap]);
+    return map;
+  }, [permissionsByResource]);
+
+  // Áreas con sus módulos visibles según el buscador. En solo lectura solo
+  // los que tienen algo marcado (resumen de lo que el rol puede).
+  const groups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const byKey = new Map(resources.map((r) => [r.key, r]));
+    const used = new Set<string>();
+    const list = MODULE_GROUPS.map((group) => {
+      const items = group.keys
+        .map((key) => byKey.get(key))
+        .filter((r): r is ResourceItem => !!r);
+      items.forEach((r) => used.add(r.key));
+      return { title: group.title, items };
+    });
+    const others = resources.filter((r) => !used.has(r.key));
+    if (others.length) list.push({ title: "Otros", items: others });
+
+    return list
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((r) => {
+          const perms = modulePermissions[r.key] || [];
+          if (perms.length === 0) return false;
+          if (readonly && !perms.some((p) => selectedMap[p.id])) return false;
+          return !q || r.label.toLowerCase().includes(q);
+        }),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [resources, modulePermissions, query, readonly, selectedMap]);
+
+  const visibleKeys = useMemo(
+    () => groups.flatMap((group) => group.items.map((r) => r.key)),
+    [groups],
+  );
+  const allExpanded = visibleKeys.length > 0 && visibleKeys.every((key) => expanded[key]);
+  const anyModuleSelected = useMemo(
+    () => Object.values(modulePermissions).some((perms) => perms.some((p) => selectedMap[p.id])),
+    [modulePermissions, selectedMap],
+  );
 
   // --- Callbacks estables -------------------------------------------------
   const setPermission = useCallback(
@@ -460,7 +703,7 @@ function PermissionsManager({
   }, []);
 
   const applyPreset = useCallback(
-    (preset: (typeof PRESETS)[number]) => {
+    (preset: Preset) => {
       const current = valuesRef.current.permissions || {};
       const map: Record<string, boolean> = {};
       let skipped = 0;
@@ -473,14 +716,20 @@ function PermissionsManager({
             action: getAction(p),
             resource: p.resource || resource,
           });
-          const locked = lockedIds.has(p.id);
-          if (matches && locked && !current[p.id]) skipped++;
+          const isLocked = lockedIds.has(p.id);
+          if (matches && isLocked && !current[p.id]) skipped++;
           // Un permiso bloqueado se queda como estaba.
-          map[p.id] = locked ? !!current[p.id] : matches;
+          map[p.id] = isLocked ? !!current[p.id] : matches;
         });
       });
       setFieldValue("permissions", map);
-      setAppliedPreset({ label: preset.label, description: preset.description, skipped });
+      setPresetsOpen(false);
+      setApplied(
+        `Se marcaron los permisos de «${preset.label}». Revisa cada módulo y ajusta lo que haga falta.` +
+          (skipped
+            ? ` ${plural(skipped, "Quedó fuera 1 permiso que tú no tienes.", `Quedaron fuera ${skipped} permisos que tú no tienes.`)}`
+            : ""),
+      );
     },
     [lockedIds, permissionsByResource, setFieldValue],
   );
@@ -493,263 +742,249 @@ function PermissionsManager({
       if (current[id]) map[id] = true;
     });
     setFieldValue("permissions", map);
-    setAppliedPreset(null);
+    setPresetsOpen(false);
+    setApplied("Se quitaron todos los permisos. Marca en cada módulo lo que necesite.");
   }, [lockedIds, setFieldValue]);
 
   const setAllExpanded = useCallback(
     (value: boolean) => {
       const next: Record<string, boolean> = {};
-      visibleResources.forEach((r) => {
-        next[r.key] = value;
+      visibleKeys.forEach((key) => {
+        next[key] = value;
       });
       setExpanded(next);
     },
-    [visibleResources],
+    [visibleKeys],
   );
 
+  // «Administrador del sistema» solo lo puede dar otro administrador del
+  // sistema; en el detalle sale solo si el rol lo tiene.
+  const showSystemAdmin =
+    !!systemAdminPerm && (!!selectedMap[systemAdminPerm.id] || (isSystemAdmin && !readonly));
+  const showScope = !!allLocationsPerm || showSystemAdmin;
+  const canEdit = !readonly && !locked;
+  // En el detalle, el buscador solo cuando hay muchos módulos con permisos.
+  const showSearch = !readonly || query.length > 0 || visibleKeys.length > 6;
+
   return (
-    <View style={styles.content}>
-      {/* --- Identidad del rol --- */}
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <View style={styles.cardIcon}>
-            <MaterialCommunityIcons
-              name="shield-account"
-              size={20}
-              color={colors.primary}
-            />
-          </View>
-          <Text style={styles.cardTitle}>Datos del rol</Text>
+    <View onLayout={onLayout}>
+      {systemRole && (
+        <View style={styles.note}>
+          <FormNote icon="shield-crown-outline">
+            Es el rol del sistema: siempre tiene todos los permisos y no se puede cambiar.
+          </FormNote>
         </View>
-        <FormInput name="name" label="Nombre del rol" required />
-        <FormInput
-          name="description"
-          label="Descripción"
-          multiline
-          numberOfLines={2}
-        />
-      </View>
-
-      {/* --- Resumen + progreso --- */}
-      <View style={styles.card}>
-        <View style={styles.summaryHeader}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardTitle}>Permisos</Text>
-            <Text style={styles.summarySub}>
-              {selectedCount} de {totalCount} permisos seleccionados
-            </Text>
-          </View>
-          <View style={styles.countBadge}>
-            <Text style={styles.countBadgeText}>{selectedCount}</Text>
-          </View>
-        </View>
-
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-        </View>
-
-        {!readonly && !frozen && (
-          <>
-            <Text style={styles.presetsLabel}>Plantillas rápidas</Text>
-            <View style={styles.presetsRow}>
-              {PRESETS.map((preset) => (
-                <Pressable
-                  key={preset.key}
-                  style={styles.presetChip}
-                  onPress={() => applyPreset(preset)}
-                  accessibilityHint={preset.description}
-                >
-                  <MaterialCommunityIcons
-                    name={preset.icon}
-                    size={15}
-                    color={colors.primary}
-                  />
-                  <Text style={styles.presetChipText}>{preset.label}</Text>
-                </Pressable>
-              ))}
-              <Pressable style={styles.clearChip} onPress={clearAll}>
-                <MaterialCommunityIcons
-                  name="close-circle-outline"
-                  size={15}
-                  color={colors.error}
-                />
-                <Text style={styles.clearChipText}>Limpiar</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.presetHint}>
-              {appliedPreset
-                ? `«${appliedPreset.label}»: ${appliedPreset.description} Ajusta lo que haga falta.`
-                : editing
-                  ? "Una plantilla reemplaza los permisos marcados; luego ajusta lo que haga falta."
-                  : "Elige la plantilla más parecida al puesto y luego ajusta los permisos."}
-            </Text>
-            {!!appliedPreset?.skipped && (
-              <Text style={styles.presetHint}>
-                {appliedPreset.skipped === 1
-                  ? "Quedó fuera 1 permiso que tú no tienes."
-                  : `Quedaron fuera ${appliedPreset.skipped} permisos que tú no tienes.`}
-              </Text>
+      )}
+      {frozen && !systemRole && (
+        <View style={styles.note}>
+          <FormNote tone="warning" icon="lock-outline">
+            {plural(
+              lockedSelected,
+              "Este rol tiene 1 permiso que tú no tienes, así que no puedes guardar cambios en él. Pide al administrador que lo edite.",
+              `Este rol tiene ${lockedSelected} permisos que tú no tienes, así que no puedes guardar cambios en él. Pide al administrador que lo edite.`,
             )}
-          </>
-        )}
+          </FormNote>
+        </View>
+      )}
 
-        {!readonly && !isSystemAdmin && !frozen && (
-          <Text style={styles.presetHint}>
-            Solo puedes dar o quitar permisos que tú tienes; los demás aparecen con candado.
-          </Text>
-        )}
-        {frozen && (
-          <View style={styles.warningBox}>
-            <MaterialCommunityIcons name="lock-outline" size={18} color={colors.warning} />
-            <Text style={styles.warningText}>
-              {lockedSelected === 1
-                ? "Este rol tiene 1 permiso que tú no tienes: no puedes cambiarlo ni quitarlo, así que no puedes guardar cambios en este rol. Pide al administrador que lo edite."
-                : `Este rol tiene ${lockedSelected} permisos que tú no tienes: no puedes cambiarlos ni quitarlos, así que no puedes guardar cambios en este rol. Pide al administrador que lo edite.`}
-            </Text>
-          </View>
-        )}
-      </View>
+      <FormInput
+        name="name"
+        label="Nombre"
+        placeholder="Por ejemplo, Cajero de mostrador"
+        maxLength={LIMITS.name}
+        autoCapitalize="sentences"
+        readonly={locked || undefined}
+      />
+      <FormInput
+        name="description"
+        label="Descripción"
+        optional
+        multiline
+        numberOfLines={2}
+        placeholder="Qué hace quien tiene este rol"
+        maxLength={LIMITS.description}
+        readonly={locked || undefined}
+      />
 
-      {/* --- Alcance: todas las sucursales / administrador del sistema --- */}
-      {(allLocationsPerm || (systemAdminPerm && (isSystemAdmin || selectedMap[systemAdminPerm.id]))) && (
-        <View style={styles.card}>
-          <View style={styles.cardHeaderRow}>
-            <View style={styles.cardIcon}>
-              <MaterialCommunityIcons name="store-marker-outline" size={20} color={colors.primary} />
+      <FormSection
+        title="Permisos"
+        description={
+          readonly
+            ? `${selectedCount} de ${totalCount} ${plural(totalCount, "permiso", "permisos")}.`
+            : `Lo que puede ver y hacer quien tenga este rol. Hay ${selectedCount} de ${totalCount} marcados.`
+        }
+        style={styles.sectionLast}
+      >
+        <View style={styles.blocks}>
+          {canEdit && (
+            <View style={styles.block}>
+              <ListGroup>
+                <ListRow
+                  icon="clipboard-account-outline"
+                  title="Usar una plantilla"
+                  subtitle={
+                    editing
+                      ? "Cambia los permisos marcados por los de un puesto"
+                      : "Marca los permisos de un puesto: encargado, cajero, producción…"
+                  }
+                  onPress={() => setPresetsOpen(true)}
+                />
+              </ListGroup>
+              {!!applied && <FormNote>{applied}</FormNote>}
             </View>
-            <Text style={styles.cardTitle}>Alcance</Text>
-          </View>
-          {allLocationsPerm && (
-            <ScopeRow
-              title="Acceso a todas las sucursales"
-              description={
-                readonly
-                  ? selectedMap[allLocationsPerm.id]
-                    ? "Quien tenga este rol entra y trabaja en cualquier sucursal de la empresa y administra al personal de todas."
-                    : "Quien tenga este rol solo entra a las sucursales que tenga asignadas."
-                  : "Entra y trabaja en cualquier sucursal de la empresa y administra al personal de todas. Sin esto, cada persona solo entra a las sucursales que tenga asignadas."
-              }
-              value={!!selectedMap[allLocationsPerm.id]}
-              disabled={readonly || frozen || lockedIds.has(allLocationsPerm.id)}
-              onChange={(value) => setPermission(allLocationsPerm.id, value)}
-              styles={styles}
-              colors={colors}
-            />
           )}
-          {systemAdminPerm && (isSystemAdmin || selectedMap[systemAdminPerm.id]) && (
-            <ScopeRow
-              title="Administrador del sistema"
-              description="Puede todo en todas las empresas, también administrar a otros administradores. Solo para el dueño del sistema."
-              value={!!selectedMap[systemAdminPerm.id]}
-              disabled={readonly || frozen || lockedIds.has(systemAdminPerm.id)}
-              onChange={(value) => setPermission(systemAdminPerm.id, value)}
-              danger
-              divider={!!allLocationsPerm}
-              styles={styles}
-              colors={colors}
-            />
-          )}
-        </View>
-      )}
 
-      {/* --- Buscador + expandir/contraer --- */}
-      <View style={styles.toolbar}>
-        <View style={styles.searchBox}>
-          <MaterialCommunityIcons
-            name="magnify"
-            size={18}
-            color={colors.textMuted}
-          />
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Buscar módulo..."
-            placeholderTextColor={colors.textMuted}
-            style={styles.searchInput}
-          />
-          {query.length > 0 && (
-            <Pressable onPress={() => setQuery("")} hitSlop={8}>
-              <MaterialCommunityIcons
-                name="close"
-                size={16}
-                color={colors.textMuted}
+          {showScope && (
+            <View style={styles.block}>
+              <ListSectionTitle title="Alcance" />
+              <ListGroup>
+                {allLocationsPerm && (
+                  <ScopeRow
+                    icon="store-marker-outline"
+                    title="Todas las sucursales"
+                    description={
+                      readonly
+                        ? selectedMap[allLocationsPerm.id]
+                          ? "Entra y trabaja en cualquier sucursal y administra al personal de todas"
+                          : "Solo entra a las sucursales que tenga asignadas"
+                        : "Entra y trabaja en cualquier sucursal y administra al personal de todas"
+                    }
+                    value={!!selectedMap[allLocationsPerm.id]}
+                    readonly={readonly}
+                    disabled={locked || lockedIds.has(allLocationsPerm.id)}
+                    locked={lockedIds.has(allLocationsPerm.id)}
+                    onChange={(value) => setPermission(allLocationsPerm.id, value)}
+                  />
+                )}
+                {showSystemAdmin && systemAdminPerm && (
+                  <ScopeRow
+                    icon="shield-crown-outline"
+                    title="Administrador del sistema"
+                    description="Puede todo en todas las empresas, también administrar a otros administradores"
+                    value={!!selectedMap[systemAdminPerm.id]}
+                    readonly={readonly}
+                    disabled={locked || lockedIds.has(systemAdminPerm.id)}
+                    locked={lockedIds.has(systemAdminPerm.id)}
+                    danger
+                    onChange={(value) => setPermission(systemAdminPerm.id, value)}
+                  />
+                )}
+              </ListGroup>
+              {canEdit && (
+                <Text style={styles.hint}>
+                  Sin «Todas las sucursales», cada persona solo entra a las sucursales que tenga asignadas.
+                  {showSystemAdmin ? " «Administrador del sistema» es solo para el dueño del sistema." : ""}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {readonly && !anyModuleSelected ? (
+            <ListGroup>
+              <ListRow
+                icon="shield-off-outline"
+                title="Sin permisos en los módulos"
+                subtitle="Quien tenga este rol no puede ver ni hacer nada en ellos."
+                chevron={false}
               />
-            </Pressable>
+            </ListGroup>
+          ) : (
+            <>
+              {showSearch && (
+              <View style={styles.block}>
+                <View style={styles.toolbar}>
+                  <View style={styles.searchBox}>
+                    <MaterialCommunityIcons name="magnify" size={18} color={colors.textMuted} />
+                    <TextInput
+                      value={query}
+                      onChangeText={setQuery}
+                      placeholder="Buscar módulo"
+                      placeholderTextColor={colors.textMuted}
+                      style={styles.searchInput}
+                      accessibilityLabel="Buscar módulo"
+                    />
+                    {query.length > 0 && (
+                      <Pressable
+                        onPress={() => setQuery("")}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Borrar búsqueda"
+                      >
+                        <MaterialCommunityIcons name="close" size={16} color={colors.textMuted} />
+                      </Pressable>
+                    )}
+                  </View>
+                  {!readonly && visibleKeys.length > 0 && (
+                    <Pressable
+                      onPress={() => setAllExpanded(!allExpanded)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      style={styles.expandAll}
+                    >
+                      <Text style={styles.link}>{allExpanded ? "Contraer todo" : "Expandir todo"}</Text>
+                    </Pressable>
+                  )}
+                </View>
+                {canEdit && lockedIds.size > 0 && (
+                  <Text style={styles.hint}>
+                    Los que tienen candado no los puedes dar ni quitar: tú no los tienes.
+                  </Text>
+                )}
+              </View>
+              )}
+
+              {groups.length === 0 ? (
+                <Text style={styles.empty}>Ningún módulo coincide con «{query.trim()}».</Text>
+              ) : (
+                groups.map((group) => (
+                  <View key={group.title} style={styles.block}>
+                    <ListSectionTitle title={group.title} />
+                    <ListGroup>
+                      {group.items.map((resource) => {
+                        const perms = modulePermissions[resource.key] || [];
+                        return (
+                          <ModuleRow
+                            key={resource.key}
+                            resource={resource}
+                            permissions={perms}
+                            signature={perms.map((p) => (selectedMap[p.id] ? "1" : "0")).join("")}
+                            lockedSignature={perms.map((p) => (lockedIds.has(p.id) ? "1" : "0")).join("")}
+                            expanded={!readonly && !!expanded[resource.key]}
+                            readonly={readonly}
+                            frozen={locked}
+                            columns={columns}
+                            onToggleExpand={toggleExpand}
+                            onSetModule={setModule}
+                            onTogglePermission={togglePermission}
+                          />
+                        );
+                      })}
+                    </ListGroup>
+                  </View>
+                ))
+              )}
+            </>
           )}
         </View>
-        {!readonly && (
-          <Pressable
-            style={styles.expandToggle}
-            onPress={() => setAllExpanded(!visibleResources.every((r) => expanded[r.key]))}
-          >
-            <MaterialCommunityIcons
-              name="unfold-more-horizontal"
-              size={16}
-              color={colors.textSecondary}
-            />
-            <Text style={styles.expandToggleText}>Expandir</Text>
-          </Pressable>
-        )}
-      </View>
+      </FormSection>
 
-      {/* --- Lista de módulos --- */}
-      {visibleResources.length === 0 ? (
-        <View style={styles.emptyState}>
-          <MaterialCommunityIcons
-            name="shield-search"
-            size={32}
-            color={colors.textMuted}
-          />
-          <Text style={styles.emptyText}>
-            {readonly
-              ? "Este rol no tiene permisos asignados"
-              : "No se encontraron módulos"}
-          </Text>
-        </View>
-      ) : (
-        visibleResources.map((resource) => {
-          const perms = permissionsByResource[resource.key] || [];
-          const signature = perms
-            .map((p) => (selectedMap[p.id] ? "1" : "0"))
-            .join("");
-          const lockedSignature = perms
-            .map((p) => (lockedIds.has(p.id) ? "1" : "0"))
-            .join("");
-          const isExpanded = readonly
-            ? signature.includes("1")
-            : !!expanded[resource.key];
-
-          return (
-            <ModuleCard
-              key={resource.key}
-              resource={resource}
-              permissions={perms}
-              signature={signature}
-              lockedSignature={lockedSignature}
-              expanded={isExpanded}
-              readonly={readonly}
-              frozen={frozen}
-              styles={styles}
-              colors={colors}
-              onToggleExpand={toggleExpand}
-              onSetModule={setModule}
-              onTogglePermission={togglePermission}
-            />
-          );
-        })
-      )}
+      <PresetSheet
+        visible={presetsOpen}
+        editing={editing}
+        onDismiss={() => setPresetsOpen(false)}
+        onApply={applyPreset}
+        onClear={clearAll}
+      />
     </View>
   );
 }
 
 // ===========================================================================
-// Tarjeta de módulo (memoizada). Solo se re-renderiza cuando cambia su propia
-// selección (`signature`) o su estado de expansión, no en cada tecleo del
-// nombre/descripción del rol.
+// Renglón de un módulo (memoizado). Solo se vuelve a pintar cuando cambia su
+// propia selección (`signature`) o si está abierto, no en cada tecleo del
+// nombre o la descripción del rol.
 // ===========================================================================
-type Styles = ReturnType<typeof useStyles>;
-
-interface ModuleCardProps {
+interface ModuleRowProps {
   resource: ResourceItem;
   permissions: PermissionItem[];
   signature: string;
@@ -757,16 +992,15 @@ interface ModuleCardProps {
   lockedSignature: string;
   expanded: boolean;
   readonly: boolean;
-  /** El rol tiene permisos que quien edita no tiene: se ve pero no se cambia. */
+  /** El rol no se puede guardar: se ve pero no se cambia. */
   frozen: boolean;
-  styles: Styles;
-  colors: ReturnType<typeof useTheme>["colors"];
+  columns: number;
   onToggleExpand: (key: string) => void;
   onSetModule: (ids: number[], value: boolean) => void;
   onTogglePermission: (id: number) => void;
 }
 
-const ModuleCard = React.memo(function ModuleCard({
+const ModuleRow = React.memo(function ModuleRow({
   resource,
   permissions,
   signature,
@@ -774,105 +1008,100 @@ const ModuleCard = React.memo(function ModuleCard({
   expanded,
   readonly,
   frozen,
-  styles,
-  colors,
+  columns,
   onToggleExpand,
   onSetModule,
   onTogglePermission,
-}: ModuleCardProps) {
+}: ModuleRowProps) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const [highlighted, setHighlighted] = useState(false);
+
+  const granted = permissions.filter((_, index) => signature[index] === "1");
   const total = permissions.length;
-  const selected = (signature.match(/1/g) || []).length;
-  const allOn = selected === total && total > 0;
-  const state: "checked" | "partial" | "unchecked" =
-    allOn ? "checked" : selected > 0 ? "partial" : "unchecked";
-  // La casilla del módulo marca lo que se puede dar; si eso ya está todo
-  // marcado, desmarca (si no, con permisos bloqueados nunca se apagaría).
+  const summary =
+    granted.length === 0
+      ? "Ninguno"
+      : granted.length === total
+        ? "Todos"
+        : joinLabels(granted.map(actionLabel));
+  // Abierto, las casillas ya dicen cuáles: arriba solo cuántos.
+  const caption = expanded ? `${granted.length} de ${total} marcados` : summary;
+  // «Marcar todos» marca lo que se puede dar; si eso ya está todo marcado,
+  // desmarca (si no, con permisos bloqueados nunca se apagaría).
   const allGrantableOn = permissions.every(
     (_, index) => lockedSignature[index] === "1" || signature[index] === "1",
   );
-
+  const editable = !readonly && !frozen;
   const ids = permissions.map((p) => p.id);
 
   return (
-    <View style={styles.moduleCard}>
+    <View>
       <Pressable
-        style={styles.moduleHeader}
-        onPress={() => onToggleExpand(resource.key)}
+        onPress={readonly ? undefined : () => onToggleExpand(resource.key)}
+        disabled={readonly}
+        onHoverIn={() => setHighlighted(true)}
+        onHoverOut={() => setHighlighted(false)}
+        onPressIn={() => setHighlighted(true)}
+        onPressOut={() => setHighlighted(false)}
+        accessibilityRole={readonly ? undefined : "button"}
+        accessibilityState={readonly ? undefined : { expanded }}
+        accessibilityLabel={`${resource.label}: ${summary}`}
+        style={[styles.moduleRow, !readonly && highlighted && styles.rowHighlight]}
       >
-        <View
-          style={[
-            styles.moduleIconWrap,
-            selected > 0 && styles.moduleIconWrapActive,
-          ]}
-        >
-          <MaterialCommunityIcons
-            name={resource.icon as keyof typeof MaterialCommunityIcons.glyphMap}
-            size={20}
-            color={selected > 0 ? colors.primary : colors.textSecondary}
-          />
-        </View>
-
-        <View style={styles.moduleHeaderText}>
+        <MaterialCommunityIcons
+          name={(resource.icon as IconName) || "shape-outline"}
+          size={20}
+          color={colors.textSecondary}
+        />
+        <View style={styles.moduleBody}>
           <Text style={styles.moduleTitle}>{resource.label}</Text>
-          <Text style={styles.moduleMeta}>
-            {selected > 0
-              ? `${selected} de ${total} permisos`
-              : `${total} permisos disponibles`}
+          <Text
+            style={[styles.moduleSummary, granted.length === 0 && styles.muted]}
+            numberOfLines={2}
+          >
+            {caption}
           </Text>
         </View>
-
-        {!readonly && !frozen && (
-          <Pressable
-            hitSlop={8}
-            onPress={() => onSetModule(ids, !allGrantableOn)}
-            disabled={allGrantableOn && selected === 0}
-            style={styles.triBox}
-          >
-            <MaterialCommunityIcons
-              name={
-                state === "checked"
-                  ? "checkbox-marked"
-                  : state === "partial"
-                    ? "minus-box"
-                    : "checkbox-blank-outline"
-              }
-              size={24}
-              color={state === "unchecked" ? colors.borderStrong : colors.primary}
-            />
-          </Pressable>
+        {!readonly && (
+          <MaterialCommunityIcons
+            name={expanded ? "chevron-up" : "chevron-down"}
+            size={20}
+            color={colors.textMuted}
+          />
         )}
-
-        <MaterialCommunityIcons
-          name={expanded ? "chevron-up" : "chevron-down"}
-          size={22}
-          color={colors.textMuted}
-        />
       </Pressable>
 
       {expanded && (
-        <View style={styles.moduleBody}>
-          {!readonly && (
-            <Text style={styles.moduleDesc}>{resource.description}</Text>
-          )}
-          <View style={styles.chipsWrap}>
-            {permissions.map((perm, index) => {
-              const active = signature[index] === "1";
-              // En modo lectura solo mostramos los permisos concedidos.
-              if (readonly && !active) return null;
-              return (
-                <ActionChip
-                  key={perm.id}
-                  label={actionLabel(perm)}
-                  active={active}
-                  readonly={readonly || frozen}
-                  locked={lockedSignature[index] === "1"}
-                  scope={perm.name === ALL_LOCATIONS || perm.name === SYSTEM_ADMIN}
-                  styles={styles}
-                  colors={colors}
-                  onPress={() => onTogglePermission(perm.id)}
-                />
-              );
-            })}
+        <View style={styles.moduleDetail}>
+          <View style={styles.moduleDetailHeader}>
+            {!!resource.description && (
+              <Text style={styles.moduleDescription}>{resource.description}</Text>
+            )}
+            {editable && (
+              <Pressable
+                onPress={() => onSetModule(ids, !allGrantableOn)}
+                disabled={allGrantableOn && granted.length === 0}
+                hitSlop={8}
+                accessibilityRole="button"
+                style={styles.moduleToggleAll}
+              >
+                <Text style={styles.link}>{allGrantableOn && granted.length > 0 ? "Quitar todos" : "Marcar todos"}</Text>
+              </Pressable>
+            )}
+          </View>
+          <View style={styles.grid}>
+            {permissions.map((perm, index) => (
+              <PermissionToggle
+                key={perm.id}
+                label={actionLabel(perm)}
+                active={signature[index] === "1"}
+                locked={lockedSignature[index] === "1"}
+                disabled={!editable}
+                width={`${100 / columns}%`}
+                onPress={() => onTogglePermission(perm.id)}
+              />
+            ))}
           </View>
         </View>
       )}
@@ -881,418 +1110,261 @@ const ModuleCard = React.memo(function ModuleCard({
 });
 
 // ===========================================================================
-// Chip seleccionable de acción.
+// Casilla de un permiso.
 // ===========================================================================
-function ActionChip({
+function PermissionToggle({
   label,
   active,
-  readonly,
   locked,
-  scope,
-  styles,
-  colors,
+  disabled,
+  width,
   onPress,
 }: {
   label: string;
   active: boolean;
-  readonly: boolean;
-  /** Quien edita no tiene este permiso: no lo puede dar. */
-  locked?: boolean;
-  /** Amplía el alcance del rol (todas las sucursales, admin del sistema). */
-  scope?: boolean;
-  styles: Styles;
-  colors: ReturnType<typeof useTheme>["colors"];
+  /** Quien edita no tiene este permiso: no lo puede dar ni quitar. */
+  locked: boolean;
+  disabled: boolean;
+  width: `${number}%`;
   onPress: () => void;
 }) {
-  const activeColor = scope ? colors.warning : colors.primary;
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const inactive = disabled || locked;
+  const color = locked
+    ? active
+      ? colors.textMuted
+      : colors.border
+    : active
+      ? colors.primary
+      : colors.borderStrong;
   return (
     <Pressable
-      onPress={readonly || locked ? undefined : onPress}
-      disabled={readonly || locked}
-      accessibilityState={{ checked: active, disabled: readonly || locked }}
-      style={[
-        styles.chip,
-        active && (scope ? styles.chipScopeActive : styles.chipActive),
-        locked && styles.chipLocked,
-      ]}
+      onPress={inactive ? undefined : onPress}
+      disabled={inactive}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: active, disabled: inactive }}
+      accessibilityLabel={locked ? `${label}, no lo tienes` : label}
+      style={[styles.toggle, { width }]}
     >
       <MaterialCommunityIcons
-        name={locked ? "lock-outline" : active ? "check" : "plus"}
-        size={14}
-        color={active ? activeColor : colors.textMuted}
+        name={active ? "checkbox-marked" : "checkbox-blank-outline"}
+        size={20}
+        color={color}
       />
-      <Text
-        style={[
-          styles.chipText,
-          active && styles.chipTextActive,
-          active && scope && { color: colors.warning },
-        ]}
-      >
-        {label}
-      </Text>
+      <Text style={[styles.toggleText, locked && styles.muted]}>{label}</Text>
+      {locked && <MaterialCommunityIcons name="lock-outline" size={14} color={colors.textMuted} style={styles.toggleLock} />}
     </Pressable>
   );
 }
 
 // ===========================================================================
-// Renglón de la tarjeta «Alcance»: título, explicación y un switch.
+// Renglón de «Alcance»: título, una línea de qué hace y el interruptor (en
+// solo lectura, Sí / No).
 // ===========================================================================
 function ScopeRow({
+  icon,
   title,
   description,
   value,
+  readonly,
   disabled,
+  locked,
   danger,
-  divider,
   onChange,
-  styles,
-  colors,
 }: {
+  icon: IconName;
   title: string;
   description: string;
   value: boolean;
+  readonly: boolean;
   disabled?: boolean;
+  locked?: boolean;
   danger?: boolean;
-  divider?: boolean;
   onChange: (value: boolean) => void;
-  styles: Styles;
-  colors: ReturnType<typeof useTheme>["colors"];
 }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
+  const accent = danger ? colors.error : colors.primary;
   return (
-    <View style={[styles.scopeRow, divider && styles.scopeDivider]}>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={[styles.scopeTitle, danger && value && { color: colors.error }]}>
-          {title}
-        </Text>
-        <Text style={styles.scopeDescription}>{description}</Text>
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onChange}
-        disabled={disabled}
-        color={danger ? colors.error : colors.warning}
-        accessibilityLabel={title}
-      />
-    </View>
+    <ListRow
+      icon={icon}
+      iconColor={value ? accent : undefined}
+      title={title}
+      subtitle={description}
+      meta={!readonly && locked ? "No lo puedes dar ni quitar: tú no lo tienes" : undefined}
+      chevron={false}
+      onPress={readonly || disabled ? undefined : () => onChange(!value)}
+      accessibilityLabel={`${title}: ${value ? "sí" : "no"}`}
+      trailing={
+        readonly ? (
+          <Text style={styles.scopeValue}>{value ? "Sí" : "No"}</Text>
+        ) : (
+          <Switch
+            value={value}
+            onValueChange={onChange}
+            disabled={disabled}
+            color={accent}
+            accessibilityLabel={title}
+          />
+        )
+      }
+    />
   );
 }
 
 // ===========================================================================
-// Estilos (reactivos al tema).
+// Plantillas por puesto: cada una con lo que marca (antes solo se leía al
+// pasar el lector de pantalla).
+// ===========================================================================
+function PresetSheet({
+  visible,
+  editing,
+  onDismiss,
+  onApply,
+  onClear,
+}: {
+  visible: boolean;
+  editing: boolean;
+  onDismiss: () => void;
+  onApply: (preset: Preset) => void;
+  onClear: () => void;
+}) {
+  const styles = useStyles();
+  return (
+    <Portal>
+      <Modal visible={visible} onDismiss={onDismiss} contentContainerStyle={styles.sheet}>
+        <Text style={styles.sheetTitle} accessibilityRole="header">
+          Usar una plantilla
+        </Text>
+        <Text style={styles.sheetText}>
+          {editing
+            ? "Cambia los permisos marcados por los del puesto. Después ajustas lo que haga falta."
+            : "Marca los permisos del puesto más parecido. Después ajustas lo que haga falta."}
+        </Text>
+        <ScrollView style={styles.sheetScroll}>
+          <ListGroup>
+            {PRESETS.map((preset) => (
+              <ListRow
+                key={preset.key}
+                icon={preset.icon}
+                title={preset.label}
+                subtitle={preset.description}
+                alignTop
+                onPress={() => onApply(preset)}
+              />
+            ))}
+          </ListGroup>
+          <ListGroup style={styles.sheetGroup}>
+            <ListRow
+              icon="checkbox-blank-off-outline"
+              title="Ninguno"
+              subtitle="Quita todos los permisos para empezar de cero"
+              onPress={onClear}
+            />
+          </ListGroup>
+        </ScrollView>
+        <Button mode="text" onPress={onDismiss}>
+          Cerrar
+        </Button>
+      </Modal>
+    </Portal>
+  );
+}
+
+// ===========================================================================
+// Estilos (siguen al tema).
 // ===========================================================================
 function useStyles() {
   const isWeb = Platform.OS === "web";
   return useThemedStyles((c) => ({
-    screen: {
-      backgroundColor: c.background,
-    },
-    center: {
-      flex: 1,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    content: {
-      gap: tokens.spacing[4],
-    },
+    note: { marginBottom: 18 },
+    sectionLast: { marginBottom: 0 },
+    blocks: { gap: 22 },
+    block: { gap: 8 },
+    hint: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+    empty: { fontSize: 14, lineHeight: 20, color: c.textSecondary, textAlign: "center", paddingVertical: 16 },
+    link: { fontSize: 14, lineHeight: 20, fontWeight: "600", color: c.primary },
+    muted: { color: c.textMuted },
 
-    // Cards genéricas (identidad + resumen)
-    card: {
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      borderWidth: 1,
-      borderColor: c.border,
-      padding: tokens.spacing[4],
-      ...tokens.shadow.xs,
-    },
-    cardHeaderRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[2],
-      marginBottom: tokens.spacing[3],
-    },
-    cardIcon: {
-      width: 34,
-      height: 34,
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.primarySoft,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    cardTitle: {
-      ...tokens.typography.h3,
-      color: c.text,
-    },
-
-    // Resumen
-    summaryHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[3],
-    },
-    summarySub: {
-      ...tokens.typography.bodySm,
-      color: c.textSecondary,
-      marginTop: 2,
-    },
-    countBadge: {
-      minWidth: 40,
-      height: 40,
-      paddingHorizontal: tokens.spacing[2],
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.primary,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    countBadgeText: {
-      ...tokens.typography.h3,
-      color: c.primaryForeground,
-    },
-    progressTrack: {
-      height: 6,
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.surfaceMuted,
-      overflow: "hidden",
-      marginTop: tokens.spacing[3],
-    },
-    progressFill: {
-      height: "100%",
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.primary,
-    },
-
-    // Plantillas
-    presetsLabel: {
-      ...tokens.typography.micro,
-      color: c.textMuted,
-      textTransform: "uppercase",
-      marginTop: tokens.spacing[4],
-      marginBottom: tokens.spacing[2],
-    },
-    presetsRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: tokens.spacing[2],
-    },
-    presetChip: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      paddingVertical: tokens.spacing[2],
-      paddingHorizontal: tokens.spacing[3],
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.primarySoft,
-      borderWidth: 1,
-      borderColor: c.primarySoft,
-    },
-    presetChipText: {
-      ...tokens.typography.bodySm,
-      fontWeight: "600",
-      color: c.primary,
-    },
-    clearChip: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-      paddingVertical: tokens.spacing[2],
-      paddingHorizontal: tokens.spacing[3],
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.border,
-    },
-    clearChipText: {
-      ...tokens.typography.bodySm,
-      fontWeight: "600",
-      color: c.error,
-    },
-    presetHint: {
-      ...tokens.typography.caption,
-      color: c.textSecondary,
-      marginTop: tokens.spacing[2],
-    },
-    warningBox: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      gap: tokens.spacing[2],
-      marginTop: tokens.spacing[3],
-      padding: tokens.spacing[3],
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.warningSoft,
-    },
-    warningText: {
-      ...tokens.typography.bodySm,
-      color: c.text,
-      flex: 1,
-    },
-
-    // Alcance
-    scopeRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[3],
-      paddingVertical: tokens.spacing[2],
-    },
-    scopeDivider: {
-      borderTopWidth: 1,
-      borderTopColor: c.border,
-      marginTop: tokens.spacing[2],
-      paddingTop: tokens.spacing[3],
-    },
-    scopeTitle: {
-      ...tokens.typography.bodyMd,
-      fontWeight: "600",
-      color: c.text,
-    },
-    scopeDescription: {
-      ...tokens.typography.caption,
-      color: c.textSecondary,
-      marginTop: 2,
-    },
-
-    // Toolbar (buscador)
-    toolbar: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[2],
-    },
+    // Buscador
+    toolbar: { flexDirection: "row", alignItems: "center", gap: 12 },
     searchBox: {
       flex: 1,
       flexDirection: "row",
       alignItems: "center",
-      gap: tokens.spacing[2],
+      gap: 8,
       height: 44,
-      paddingHorizontal: tokens.spacing[3],
-      borderRadius: tokens.radius.md,
+      paddingHorizontal: 12,
+      borderRadius: 12,
       backgroundColor: c.surface,
       borderWidth: 1,
       borderColor: c.border,
     },
     searchInput: {
       flex: 1,
-      ...tokens.typography.body,
+      minWidth: 0,
+      fontSize: 15,
       color: c.text,
-      // RN web añade un outline azul por defecto al enfocar
+      // RN web añade un contorno azul al enfocar.
       ...(isWeb ? ({ outlineStyle: "none" } as any) : {}),
     },
-    expandToggle: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      height: 44,
-      paddingHorizontal: tokens.spacing[3],
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.border,
-    },
-    expandToggleText: {
-      ...tokens.typography.bodySm,
-      fontWeight: "600",
-      color: c.textSecondary,
-    },
+    expandAll: { paddingVertical: 4 },
 
     // Módulo
-    moduleCard: {
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      borderWidth: 1,
-      borderColor: c.border,
-      overflow: "hidden",
-    },
-    moduleHeader: {
+    moduleRow: {
       flexDirection: "row",
       alignItems: "center",
-      gap: tokens.spacing[3],
-      padding: tokens.spacing[3],
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
     },
-    moduleIconWrap: {
-      width: 40,
-      height: 40,
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.surfaceMuted,
-      alignItems: "center",
-      justifyContent: "center",
+    rowHighlight: { backgroundColor: c.surfaceMuted },
+    moduleBody: { flex: 1, minWidth: 0 },
+    moduleTitle: { fontSize: 15, lineHeight: 20, fontWeight: "500", color: c.text },
+    moduleSummary: { fontSize: 13, lineHeight: 18, color: c.textSecondary, marginTop: 2 },
+    moduleDetail: {
+      paddingLeft: 46,
+      paddingRight: 14,
+      paddingBottom: 12,
+      gap: 8,
     },
-    moduleIconWrapActive: {
-      backgroundColor: c.primarySoft,
-    },
-    moduleHeaderText: {
-      flex: 1,
-    },
-    moduleTitle: {
-      ...tokens.typography.bodyMd,
-      fontWeight: "600",
-      color: c.text,
-    },
-    moduleMeta: {
-      ...tokens.typography.caption,
-      color: c.textMuted,
-      marginTop: 2,
-    },
-    triBox: {
-      padding: 2,
-    },
-    moduleBody: {
-      paddingHorizontal: tokens.spacing[3],
-      paddingBottom: tokens.spacing[3],
-      borderTopWidth: 1,
-      borderTopColor: c.border,
-      paddingTop: tokens.spacing[3],
-    },
-    moduleDesc: {
-      ...tokens.typography.bodySm,
-      color: c.textSecondary,
-      marginBottom: tokens.spacing[3],
-    },
-    chipsWrap: {
+    moduleDetailHeader: {
       flexDirection: "row",
-      flexWrap: "wrap",
-      gap: tokens.spacing[2],
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 12,
     },
-
-    // Chips de acción
-    chip: {
+    moduleDescription: { flex: 1, fontSize: 13, lineHeight: 18, color: c.textMuted },
+    moduleToggleAll: { marginLeft: "auto" },
+    grid: { flexDirection: "row", flexWrap: "wrap", rowGap: 2 },
+    toggle: {
       flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
+      alignItems: "flex-start",
+      gap: 8,
       paddingVertical: 7,
-      paddingHorizontal: tokens.spacing[3],
-      borderRadius: tokens.radius.full,
-      borderWidth: 1,
-      borderColor: c.border,
-      backgroundColor: c.surface,
+      paddingRight: 8,
     },
-    chipActive: {
-      borderColor: c.primary,
-      backgroundColor: c.primarySoft,
-    },
-    chipScopeActive: {
-      borderColor: c.warning,
-      backgroundColor: c.warningSoft,
-    },
-    chipLocked: {
-      opacity: 0.55,
-      borderStyle: "dashed",
-    },
-    chipText: {
-      ...tokens.typography.bodySm,
-      color: c.textSecondary,
-    },
-    chipTextActive: {
-      color: c.primary,
-      fontWeight: "600",
-    },
+    toggleText: { flexShrink: 1, fontSize: 14, lineHeight: 20, color: c.text },
+    toggleLock: { marginTop: 3 },
 
-    // Vacío
-    emptyState: {
-      alignItems: "center",
-      justifyContent: "center",
-      gap: tokens.spacing[2],
-      paddingVertical: tokens.spacing[8],
+    // Alcance
+    scopeValue: { fontSize: 14, lineHeight: 20, fontWeight: "500", color: c.text, paddingRight: 6 },
+
+    // Plantillas
+    sheet: {
+      alignSelf: "center",
+      width: "94%",
+      maxWidth: 560,
+      maxHeight: "86%",
+      backgroundColor: c.background,
+      borderRadius: 16,
+      padding: 16,
+      gap: 10,
     },
-    emptyText: {
-      ...tokens.typography.body,
-      color: c.textMuted,
-    },
+    sheetTitle: { fontSize: 18, lineHeight: 24, fontWeight: "700", color: c.text },
+    sheetText: { fontSize: 14, lineHeight: 20, color: c.textSecondary },
+    sheetScroll: { flexGrow: 0 },
+    sheetGroup: { marginTop: 12 },
   }));
 }
