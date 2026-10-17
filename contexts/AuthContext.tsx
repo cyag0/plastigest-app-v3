@@ -125,6 +125,8 @@ interface AuthContextType {
   selectCompany: (company: Company) => Promise<void>;
   clearCompanySelection: () => Promise<void>;
   selectLocation: (location: any | null) => Promise<void>;
+  /** Datos nuevos de la sucursal actual (al editarla); otra sucursal se ignora. */
+  refreshSelectedLocation: (updated: Partial<App.Entities.Location> & { id: number }) => Promise<void>;
   location: App.Entities.Location | null;
   // Estado de las notificaciones push (web principalmente).
   // "default" = nunca se ha pedido (o el registro falló y hay que reintentar),
@@ -460,6 +462,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       console.error("Error selecting location:", error);
     } finally {
       setIsSwitchingLocation(false);
+    }
+  };
+
+  // Al editar la sucursal en la que se está, el menú y los encabezados toman
+  // los datos nuevos sin volver a elegirla: antes el nombre viejo seguía ahí
+  // hasta cambiar de sucursal.
+  const refreshSelectedLocation = async (
+    updated: Partial<App.Entities.Location> & { id: number },
+  ) => {
+    if (!location || Number(location.id) !== Number(updated.id)) return;
+    const next = { ...location, ...updated } as App.Entities.Location;
+    setLocation(next);
+    try {
+      await storeSelectedLocation(next);
+    } catch (error) {
+      console.error("Error updating selected location:", error);
     }
   };
 
@@ -889,6 +907,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     selectCompany,
     clearCompanySelection,
     selectLocation,
+    refreshSelectedLocation,
     location,
     notificationPermission: permissionStatus,
     requestNotificationPermission: requestPermission,

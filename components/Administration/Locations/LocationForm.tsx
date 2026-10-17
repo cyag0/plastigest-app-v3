@@ -12,6 +12,7 @@
  */
 
 import EmptyState from "@/components/App/EmptyState";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
 import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
@@ -65,6 +66,7 @@ export default function LocationForm({ id, title }: LocationFormProps) {
   const isEditing = !!id;
   const navigation = useNavigation();
   const { company } = useSelectedCompany();
+  const { refreshSelectedLocation } = useAuth();
   const allLocations = useAllLocationsAccess();
 
   useLayoutEffect(() => {
@@ -98,7 +100,11 @@ export default function LocationForm({ id, title }: LocationFormProps) {
       validationSchema={validationSchema}
       submitButtonText={isEditing ? "Guardar cambios" : "Guardar sucursal"}
       successMessage={isEditing ? "Cambios guardados" : "Sucursal guardada"}
-      onSuccess={() => goBack("/(tabs)/administration/locations")}
+      onSuccess={(response) => {
+        // Si es la sucursal en la que se está, el menú toma el nombre nuevo.
+        if (response?.data?.id) refreshSelectedLocation(response.data);
+        goBack("/(tabs)/administration/locations");
+      }}
     >
       <FormInput
         name="name"
