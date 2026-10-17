@@ -97,9 +97,13 @@ export default function _layout() {
         name="cash/form"
         // Con ?id= es un movimiento que ya existe (antes decía "Nuevo").
         options={({ route }: any) => ({
-          title: route.params?.id ? "Detalle del Movimiento" : "Nuevo Movimiento",
+          title: route.params?.id ? "Movimiento de caja" : "Nuevo movimiento",
         })}
       />
+      {/* Gastos y recordatorios ponen su título desde la pantalla; esto es
+          lo que se ve mientras carga (antes, en el teléfono, "expenses/form"). */}
+      <Stack.Screen name="expenses/form" options={{ title: "Gasto" }} />
+      <Stack.Screen name="reminders/form" options={{ title: "Recordatorio" }} />
       <Stack.Screen
         name="cash/sessions/index"
         options={{ title: "Turnos de caja" }}
@@ -242,7 +246,8 @@ export default function _layout() {
       <Stack.Screen
         name="transfers/formv2/index"
         options={{
-          title: "Nueva solicitud de transferencia",
+          // "Nueva solicitud de transferencia" se cortaba en el teléfono.
+          title: "Nueva solicitud",
         }}
       />
       <Stack.Screen

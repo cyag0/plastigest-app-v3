@@ -23,13 +23,8 @@ import { useLeaveScreen } from "./useLeaveScreen";
 
 export type PartyKind = "customer" | "supplier";
 
-/**
- * Lo que cabe en las tablas customers y suppliers (lo mismo que valida el
- * backend). Ojo: la razón social es de 20 en la base, y una razón social
- * completa ("Cocos del Pacífico SA de CV") no cabe; hay que ampliar la
- * columna en el backend.
- */
-const LIMITS = { name: 150, business_name: 255, social_reason: 20, email: 100, address: 255 };
+/** Lo que cabe en las tablas customers y suppliers (lo mismo que valida el backend). */
+const LIMITS = { name: 150, business_name: 255, social_reason: 255, email: 100, address: 255 };
 
 /** RFC de persona moral (12) o física (13). */
 const RFC = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/i;

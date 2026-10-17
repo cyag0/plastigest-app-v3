@@ -254,6 +254,8 @@ export default function ProductsForm(props: ProductsFormProps) {
                 label="Categoría"
                 optional
                 model="categories"
+                // Solo las activas; la que ya tenga el producto se sigue viendo.
+                fetchParams={{ is_active: true }}
                 placeholder="Sin categoría"
                 selectedLabelField="category_name"
               />
@@ -263,6 +265,7 @@ export default function ProductsForm(props: ProductsFormProps) {
                   label="Proveedor"
                   optional
                   model="suppliers"
+                  fetchParams={{ is_active: true }}
                   placeholder="Sin proveedor"
                   selectedLabelField="supplier_name"
                   hint="Aparece en su catálogo al registrar una compra."

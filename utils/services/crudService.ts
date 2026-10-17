@@ -67,10 +67,11 @@ export interface CrudService<T> {
     params?: Record<string, any>,
     options?: RequestOptions
   ) => Promise<AxiosResponse<LaravelResponse<T>>>;
-  store: (data: Partial<T>) => Promise<AxiosResponse<LaravelResponse<T>>>;
+  store: (data: Partial<T>, options?: RequestOptions) => Promise<AxiosResponse<LaravelResponse<T>>>;
   update: (
     id: number | string,
-    data: Partial<T>
+    data: Partial<T>,
+    options?: RequestOptions
   ) => Promise<AxiosResponse<LaravelResponse<T>>>;
   destroy: (id: number | string) => Promise<AxiosResponse<{ message: string }>>;
 }
@@ -157,8 +158,9 @@ export function createCrudService<T = any>(endpoint: string): CrudService<T> {
      * Crear un nuevo recurso
      * @param data - Datos del recurso a crear
      */
-    store: (data: Partial<T>) => {
-      return axiosClient.post<LaravelResponse<T>>(baseUrl, data);
+    store: (data: Partial<T>, options?: RequestOptions) => {
+      // options.silent: la pantalla muestra el error ella misma.
+      return axiosClient.post<LaravelResponse<T>>(baseUrl, data, options);
     },
 
     /**
@@ -166,14 +168,14 @@ export function createCrudService<T = any>(endpoint: string): CrudService<T> {
      * @param id - ID del recurso
      * @param data - Datos a actualizar
      */
-    update: (id: number | string, data: Partial<T>) => {
+    update: (id: number | string, data: Partial<T>, options?: RequestOptions) => {
       if (data instanceof FormData) {
         data.append("_method", "PUT");
       } else {
         data = { ...data, _method: "PUT" };
       }
 
-      return axiosClient.post<LaravelResponse<T>>(`${baseUrl}/${id}`, data);
+      return axiosClient.post<LaravelResponse<T>>(`${baseUrl}/${id}`, data, options);
     },
 
     /**
