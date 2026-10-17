@@ -811,6 +811,10 @@ const makeStyles = themedStyles((c) => ({
   quantityInput: {
     ...tokens.typography.bodyMd,
     minWidth: 48,
+    // En web un TextInput mide unos 20 caracteres: en el carrito al lado del
+    // catálogo (Compras, Transferencias) empujaba el importe y el botón de
+    // quitar fuera del panel.
+    ...(Platform.OS === "web" ? { width: 64 } : null),
     height: 28,
     paddingVertical: 0,
     paddingHorizontal: 4,
