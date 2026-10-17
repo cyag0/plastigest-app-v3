@@ -3,7 +3,7 @@ import React from "react";
 import ClientsForm from "../form";
 
 export default function EditClient() {
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams<{ id: string }>();
 
-  return <ClientsForm id={parseInt(id as string)} />;
+  return <ClientsForm id={parseInt(id, 10)} />;
 }
