@@ -23,14 +23,14 @@ import { useNavigation } from "expo-router";
 import React, { useLayoutEffect, useRef } from "react";
 import * as yup from "yup";
 
-/**
- * Lo que cabe en la tabla companies (el backend valida 255 en el nombre y en
- * el correo, y 500 en la dirección, pero las columnas guardan 150, 100 y 255).
- */
+/** Lo que cabe en la tabla companies (el backend valida lo mismo). */
 const LIMITS = { name: 150, business_name: 255, rfc: 13, email: 100, address: 255 };
 
-/** El mismo patrón que valida el backend: 12 caracteres (empresa) o 13 (persona física). */
-const RFC_PATTERN = /^[A-Z]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
+/**
+ * El mismo patrón que valida el backend: 12 caracteres (empresa) o 13
+ * (persona física); la Ñ y el & existen en RFC reales.
+ */
+const RFC_PATTERN = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
 
 const tooLong = (max: number) => `Máximo ${max} caracteres`;
 
@@ -40,10 +40,12 @@ const validationSchema = yup.object({
     .trim()
     .required("Escribe el nombre de la empresa")
     .max(LIMITS.name, tooLong(LIMITS.name)),
+  // Razón social, RFC y correo son opcionales: un negocio sin RFC también
+  // tiene que poder guardar su dirección.
   email: yup
     .string()
     .trim()
-    .required("Escribe un correo de contacto")
+    .nullable()
     .email("Revisa el correo; parece incompleto")
     .max(LIMITS.email, tooLong(LIMITS.email)),
   phone: phoneSchema(),
@@ -51,13 +53,16 @@ const validationSchema = yup.object({
   business_name: yup
     .string()
     .trim()
-    .required("Escribe la razón social")
+    .nullable()
     .max(LIMITS.business_name, tooLong(LIMITS.business_name)),
   rfc: yup
     .string()
     .trim()
-    .required("Escribe el RFC")
-    .matches(RFC_PATTERN, "Revisa el RFC: son 12 caracteres si es empresa o 13 si es persona física"),
+    .nullable()
+    .matches(RFC_PATTERN, {
+      message: "Revisa el RFC: son 12 caracteres si es empresa o 13 si es persona física",
+      excludeEmptyString: true,
+    }),
   is_active: yup.boolean(),
 });
 
@@ -162,6 +167,7 @@ function CompanyFields({ isEditing, showActive }: { isEditing: boolean; showActi
             autoComplete="email"
             autoCorrect={false}
             maxLength={LIMITS.email}
+            optional={optional}
           />
           <FormPhoneInput name="phone" label="Teléfono" optional={optional} />
         </FormRow>
@@ -182,6 +188,7 @@ function CompanyFields({ isEditing, showActive }: { isEditing: boolean; showActi
             label="Razón social"
             placeholder="Cocos Francisco SA de CV"
             maxLength={LIMITS.business_name}
+            optional={optional}
           />
           <FormRfcInput
             name="rfc"
@@ -189,6 +196,7 @@ function CompanyFields({ isEditing, showActive }: { isEditing: boolean; showActi
             placeholder="CFR180312AB1"
             autoCapitalize="characters"
             autoCorrect={false}
+            optional={optional}
           />
         </FormRow>
       </FormSection>
