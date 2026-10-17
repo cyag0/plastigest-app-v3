@@ -17,7 +17,6 @@ const segmentLabels: Record<string, string> = {
   administration: "Administración",
   adjustment: "Ajustes",
   "all-modules": "Todos los módulos",
-  carrito: "Carrito",
   cash: "Caja",
   categories: "Categorías",
   "change-password": "Cambiar contraseña",
@@ -54,7 +53,6 @@ const segmentLabels: Record<string, string> = {
   products: "Productos",
   production: "Producción",
   profile: "Perfil",
-  productos: "Productos",
   purchases: "Compras",
   reminders: "Recordatorios",
   reports: "Dashboard",
@@ -123,6 +121,11 @@ function getSegmentLabel(segment: string, href: string, nextSegment?: string) {
 // Formularios que con ?id= muestran un registro existente: "Detalle", no "Nuevo".
 const formSegments = new Set(["form", "formv2"]);
 
+// Los que con ?id= siguen armando el registro (no lo muestran): su propia miga.
+const recordPathLabels: Record<string, string> = {
+  "/home/purchases/formv2": "Borrador de compra",
+};
+
 function buildBreadcrumbs(pathname: string, hasRecordId = false): BreadcrumbItem[] {
   const cleanPath = pathname.split("?")[0].split("#")[0];
   const rawSegments = cleanPath.split("/").filter((segment) => !hiddenSegments.has(segment));
@@ -145,7 +148,7 @@ function buildBreadcrumbs(pathname: string, hasRecordId = false): BreadcrumbItem
     const isLast = index === rawSegments.length - 1;
     const label =
       isLast && hasRecordId && formSegments.has(segment)
-        ? "Detalle"
+        ? recordPathLabels[href] ?? "Detalle"
         : getSegmentLabel(segment, href, nextSegment);
 
     if (!label || skippedSegments.has(segment)) {

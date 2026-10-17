@@ -1,830 +1,723 @@
-import { formatDate } from "@/utils/dates";
+/**
+ * Detalle de una compra.
+ *
+ * Arriba de quién es, en qué quedó y cómo se pagó; luego los productos con lo
+ * pedido, el precio pagado y lo que llegó. Antes toda compra se confirmaba
+ * como pedido, se marcaba en tránsito y se recibía desde aquí; ahora:
+ * - Borrador: se continúa en el formulario, donde se registra recibida
+ *   (entra al inventario de una vez) o se guarda como pedido.
+ * - Pedida o en tránsito: se recibe aquí mismo, con lo que llegó de cada
+ *   producto. Marcar en tránsito es opcional y va en el menú ⋮.
+ * Imprimir y cancelar también van en el menú ⋮.
+ */
+
+import EmptyState from "@/components/App/EmptyState";
 import IconLabel from "@/components/App/IconLabel";
-import StatusBadge, { toneColors } from "@/components/App/StatusBadge";
-import palette from "@/constants/palette";
-import { paymentMethod, purchaseStatus } from "@/constants/statuses";
+import {
+  LIST_TEXT_INSET,
+  ListGroup,
+  ListRow,
+  ListSection,
+  ListValueRow,
+} from "@/components/App/ListGroup";
+import RecordLoadError, {
+  recordLoadProblem,
+  type RecordLoadProblem,
+} from "@/components/App/RecordLoadError";
+import RowMenu, { type RowMenuAction } from "@/components/App/RowMenu";
+import StatusBadge from "@/components/App/StatusBadge";
+import {
+  SkeletonBlock,
+  SkeletonSection,
+  SummaryColumns,
+  useSummaryLayout,
+} from "@/components/App/SummaryLayout";
+import PurchaseLineRow from "@/components/Purchases/PurchaseLineRow";
+import {
+  backendDateTime,
+  historyEvent,
+  lineImage,
+  lineUnit,
+  purchasePaymentMethod,
+  receivedTotals,
+  receiveRow,
+  receiveSummary,
+  resolutionLabel,
+  statusHistory,
+  toNum,
+  type PurchaseRecord,
+} from "@/components/Purchases/purchaseFormat";
+import { fetchPurchase } from "@/components/Purchases/purchaseRequests";
+import { purchaseStatus } from "@/constants/statuses";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
-import { formatQuantity, parseQuantity } from "@/utils/format";
-import { centsToAmount, lineTotalCents, sumCents } from "@/utils/money";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
+import { formatDate, formatDateTime } from "@/utils/dates";
+import { errorMessageOf } from "@/utils/errorNotice";
+import { formatMoney, formatQuantity } from "@/utils/format";
+import { printPdf } from "@/utils/printDocument";
 import Services from "@/utils/services";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useLocalSearchParams } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
-import { Image, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { Button, Chip, Divider, Surface, Text } from "react-native-paper";
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ScrollView, Text, View } from "react-native";
+import { Button } from "react-native-paper";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-const fmt = (value: number) =>
-  new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(value);
-
-const toNum = (v: any): number => {
-  const n = parseFloat(v);
-  return isNaN(n) ? 0 : n;
-};
-
-/** Motivo que manda el backend; nunca el texto en inglés de axios. */
-const apiMessage = (error: any, fallback: string): string => {
-  if (error?.isAxiosError && !error.response) {
-    return "Sin conexión con el servidor. Revisa tu internet e intenta de nuevo.";
+/** Qué significa el estado para el inventario (el badge ya dice cuál es). */
+function statusHint(status: string, shortCount: number): string {
+  switch (status) {
+    case "draft":
+      return "Todavía no entra al inventario.";
+    case "ordered":
+    case "in_transit":
+      return "Entra al inventario cuando se registre la recepción.";
+    case "received":
+      return shortCount > 0 ? "Entró al inventario solo lo que llegó." : "Ya entró al inventario.";
+    case "cancelled":
+      return "Se canceló sin mover inventario.";
+    default:
+      return "";
   }
-  const data = error?.response?.data;
-  const fieldError = data?.errors
-    ? (Object.values(data.errors).flat()[0] as string | undefined)
-    : undefined;
-  return fieldError || data?.message || data?.error || fallback;
-};
-
-/** ¿Los renglones son los mismos (cantidad, unidad y precio)? */
-const sameDetails = (a: any[] = [], b: any[] = []): boolean =>
-  a.length === b.length &&
-  a.every((detail) => {
-    const other = b.find((d) => d.id === detail.id);
-    return (
-      !!other &&
-      Number(other.unit_id) === Number(detail.unit_id) &&
-      toNum(other.quantity) === toNum(detail.quantity) &&
-      toNum(other.unit_price) === toNum(detail.unit_price)
-    );
-  });
-
-interface ReceiveRow {
-  detail: any;
-  ordered: number;
-  /** Lo que llegó, ya validado; null si lo capturado no es válido. */
-  received: number | null;
-  error: string | null;
 }
 
-// ── Estado ────────────────────────────────────────────────────────────────────
-// Etiqueta y tono: purchaseStatus. Aquí solo el ícono de cada paso del progreso.
-const FLOW_STEPS = ["draft", "ordered", "in_transit", "received"] as const;
-
-const STEP_ICONS: Record<(typeof FLOW_STEPS)[number], keyof typeof MaterialCommunityIcons.glyphMap> = {
-  draft:      "file-document-edit-outline",
-  ordered:    "cart-check",
-  in_transit: "truck-delivery",
-  received:   "package-variant-closed-check",
-};
-
-/** Método de pago de la compra: "Otro" solo existe en compras. */
-const purchasePaymentMethod = (value: string) =>
-  value === "other"
-    ? { label: "Otro", icon: "dots-horizontal" as const }
-    : paymentMethod(value);
-
 export default function PurchaseDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const params = useLocalSearchParams<{ id: string }>();
+  const id = Number(params.id);
+  const router = useRouter();
+  const navigation = useNavigation();
   const alerts = useAlerts();
   const { colors } = useTheme();
-  // Confirmar, marcar en tránsito, recibir y cancelar piden purchases_update.
-  const canUpdate = useCan().can("purchases_update");
-  const [purchase, setPurchase] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  // Candado de las acciones (confirmar, en tránsito, recibir, cancelar): un
+  const { can, canAccessRoute } = useCan();
+  // Recibir, marcar en tránsito y cancelar piden purchases_update. Continuar
+  // un borrador abre el formulario: lo que pida su ruta (purchases_create).
+  const canUpdate = can("purchases_update");
+  const canContinue = canAccessRoute("/(tabs)/home/purchases/formv2");
+  const layout = useSummaryLayout();
+  const styles = useThemedStyles(makeStyles);
+
+  const [purchase, setPurchase] = useState<PurchaseRecord | null>(null);
+  const [problem, setProblem] = useState<RecordLoadProblem | null>(null);
+  // Lo que llegó de cada renglón y el precio pagado, tal como se escriben
+  // (por id de detalle).
+  const [receivedText, setReceivedText] = useState<Record<number, string>>({});
+  const [priceText, setPriceText] = useState<Record<number, string>>({});
+  const loaded = useRef(false);
+  // Se abrió el formulario («Continuar compra»): un segundo toque no abre
+  // otro sobre el mismo borrador, y al volver se recarga dos veces (abajo).
+  const openedForm = useRef(false);
+  // Candado de las acciones (recibir, en tránsito, cancelar, imprimir): un
   // doble toque no las manda dos veces.
   const { submitting: busy, run } = useSubmitGuard();
-  // Lo que llegó de cada renglón, tal como se escribe (por id de detalle).
-  const [receivedText, setReceivedText] = useState<Record<number, string>>({});
 
-  useEffect(() => {
-    loadPurchase();
-  }, [id]);
-
-  const applyPurchase = (data: any) => {
-    setPurchase(data);
-    // Por omisión llegó todo lo pedido; quien recibe corrige lo que faltó.
-    const initial: Record<number, string> = {};
-    (data?.details ?? []).forEach((d: any) => {
-      initial[d.id] = String(toNum(d.quantity));
-    });
-    setReceivedText(initial);
-  };
-
-  const loadPurchase = async () => {
-    try {
-      setLoading(true);
-      const response = await Services.purchasesV2.show(Number(id));
-      applyPurchase(response.data.data);
-    } catch (e: any) {
-      alerts.error(apiMessage(e, "Error al cargar la compra"));
-    } finally {
-      setLoading(false);
+  const load = useCallback(async () => {
+    if (!Number.isInteger(id) || id <= 0) {
+      setProblem({ kind: "not_found", message: "" });
+      return;
     }
-  };
+    try {
+      const data = await fetchPurchase(id);
+      setPurchase(data);
+      // Por omisión llegó todo lo pedido; quien recibe corrige lo que faltó.
+      // Al recargar (volver a la pantalla) se queda lo que ya se escribió.
+      setReceivedText((prev) => {
+        const next: Record<number, string> = {};
+        (data.details ?? []).forEach((line) => {
+          next[line.id] = prev[line.id] ?? String(toNum(line.quantity));
+        });
+        return next;
+      });
+      // El precio, por omisión el del pedido.
+      setPriceText((prev) => {
+        const next: Record<number, string> = {};
+        (data.details ?? []).forEach((line) => {
+          next[line.id] = prev[line.id] ?? String(toNum(line.unit_price));
+        });
+        return next;
+      });
+      setProblem(null);
+      loaded.current = true;
+    } catch (e) {
+      // La primera carga explica la falla en la pantalla (404, sin permiso,
+      // red); después se avisa y se queda lo que ya se veía.
+      if (!loaded.current) setProblem(recordLoadProblem(e, "No se pudo cargar la compra."));
+      else alerts.error(errorMessageOf(e, "No se pudo actualizar la compra."));
+    }
+  }, [id, alerts]);
 
-  // Captura de lo recibido: solo para quien puede recibir.
-  const receiving = purchase?.status === "in_transit" && canUpdate;
-
-  // Cada renglón con lo que llegó: entre 0 y lo pedido (los paquetes, enteros).
-  const receiveRows = useMemo<ReceiveRow[]>(
-    () =>
-      (purchase?.details ?? []).map((detail: any) => {
-        const ordered = toNum(detail.quantity);
-        const parsed = parseQuantity(receivedText[detail.id] ?? "");
-        let error: string | null = null;
-        if (parsed === null) error = "Escribe cuánto llegó";
-        else if (parsed < 0) error = "No puede ser negativo";
-        else if (parsed > ordered + 1e-9)
-          error = `No puede ser más de lo pedido (${formatQuantity(ordered)})`;
-        else if (detail.package_id && !Number.isInteger(parsed))
-          error = "Los paquetes se reciben enteros";
-        return {
-          detail,
-          ordered,
-          received: error || parsed === null ? null : Math.round(parsed * 1000) / 1000,
-          error,
-        };
-      }),
-    [purchase, receivedText],
+  // Se recarga cada vez que se vuelve a la pantalla. Al volver del
+  // formulario, el último cambio (un precio recién escrito) se manda cuando
+  // el formulario se cierra, después de este GET: se pide otra vez un
+  // momento después para no dejar el precio de antes.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      if (!openedForm.current) return;
+      openedForm.current = false;
+      const timer = setTimeout(load, 1500);
+      return () => clearTimeout(timer);
+    }, [load]),
   );
 
-  const receiveSummary = useMemo(() => {
-    const short = receiveRows.filter(
-      (row) => row.received !== null && row.received < row.ordered,
-    );
-    const orderedCents = sumCents(
-      receiveRows.map((row) => lineTotalCents(row.ordered, row.detail.unit_price)),
-    );
-    const receivedCents = sumCents(
-      receiveRows.map((row) => lineTotalCents(row.received ?? 0, row.detail.unit_price)),
-    );
-    return {
-      short,
-      received: centsToAmount(receivedCents),
-      difference: centsToAmount(orderedCents - receivedCents),
-    };
-  }, [receiveRows]);
+  const status = purchase?.status ?? "";
+  // Antes solo se recibía una compra en tránsito; ahora también una pedida:
+  // marcar en tránsito es opcional. La captura, solo para quien puede recibir.
+  const receiving = (status === "ordered" || status === "in_transit") && canUpdate;
+
+  const receiveRows = useMemo(
+    () =>
+      (purchase?.details ?? []).map((line) =>
+        receiveRow(line, receivedText[line.id] ?? "", priceText[line.id]),
+      ),
+    [purchase, receivedText, priceText],
+  );
+  const summary = useMemo(() => receiveSummary(receiveRows), [receiveRows]);
 
   // Solo una compra en efectivo pagada con la caja registra egreso al recibir.
-  const paidFromCash =
-    purchase?.payment_method === "cash" && purchase?.paid_from_cash !== false;
+  const paidFromCash = purchase?.payment_method === "cash" && purchase?.paid_from_cash !== false;
+  const folio = purchase ? purchase.purchase_number || `#${purchase.id}` : "";
 
-  const handleConfirmOrder = () =>
+  const continuePurchase = () => {
+    if (!purchase || openedForm.current) return;
+    openedForm.current = true;
+    router.push(`/(tabs)/home/purchases/formv2?id=${purchase.id}` as any);
+  };
+
+  const printPurchase = () =>
     run(async () => {
-      if (
-        !await alerts.confirm("¿Confirmar el pedido de compra?", {
-          title: "Confirmar Pedido",
-          okText: "Confirmar",
-          cancelText: "Cancelar",
-        })
-      )
-        return;
+      if (!purchase) return;
       try {
-        // Se confirma lo que se ve: si la compra cambió mientras tanto (otro
-        // dispositivo, cambios que apenas se guardaron), se muestra lo nuevo.
-        const fresh = (await Services.purchasesV2.show(Number(id)))?.data?.data;
-        if (
-          !fresh ||
-          fresh.status !== "draft" ||
-          !sameDetails(purchase?.details, fresh.details)
-        ) {
-          if (fresh) applyPurchase(fresh);
-          alerts.warning(
-            "La compra cambió mientras la veías: revisa los productos y vuelve a confirmar.",
-          );
-          return;
-        }
-        const response = await Services.purchasesV2.confirm(Number(id));
-        if (response.success) {
-          alerts.success("Pedido confirmado exitosamente");
-          await loadPurchase();
-        } else {
-          alerts.error(response.message || "Error al confirmar el pedido");
-        }
-      } catch (e: any) {
-        alerts.error(apiMessage(e, "Error al confirmar el pedido"));
+        const { url } = await Services.purchasesV2.pdfUrl(purchase.id);
+        if (!url) throw new Error("Sin URL del PDF");
+        await printPdf(url, `compra-${purchase.purchase_number || purchase.id}.pdf`);
+      } catch (e) {
+        alerts.error(errorMessageOf(e, "No se pudo generar el PDF de la compra."));
       }
     });
 
-  const handleMarkInTransit = () =>
+  const markInTransit = () =>
     run(async () => {
-      if (
-        !await alerts.confirm("¿Marcar la compra como en tránsito?", {
-          title: "En Tránsito",
-          okText: "Confirmar",
-          cancelText: "Cancelar",
-        })
-      )
-        return;
+      if (!purchase) return;
+      const ok = await alerts.confirm("Queda en camino y se crea la tarea de recibirla.", {
+        title: "¿Marcar en tránsito?",
+        okText: "Marcar",
+        cancelText: "Volver",
+      });
+      if (!ok) return;
       try {
-        const response = await Services.purchasesV2.markInTransit(Number(id));
-        if (response.success) {
-          alerts.success("Compra marcada como en tránsito");
-          await loadPurchase();
+        const response = await Services.purchasesV2.markInTransit(purchase.id);
+        if (response?.success === false) {
+          alerts.error(response.message || "No se pudo marcar la compra en tránsito.");
         } else {
-          alerts.error(response.message || "Error al actualizar el estado");
+          alerts.success("Compra marcada en tránsito");
         }
-      } catch (e: any) {
-        alerts.error(apiMessage(e, "Error al actualizar el estado"));
+      } catch (e) {
+        alerts.error(errorMessageOf(e, "No se pudo marcar la compra en tránsito."));
       }
+      // También si falló: puede que ya haya cambiado (p. ej. el proveedor
+      // contestó por WhatsApp y quedó en tránsito).
+      await load();
     });
 
   // Antes siempre se mandaba lo pedido como recibido: un faltante subía al
   // stock lo que no llegó y el egreso de caja era por lo pedido.
-  const handleReceivePurchase = () =>
+  const receivePurchase = () =>
     run(async () => {
-      if (!purchase?.details?.length) {
+      if (!purchase) return;
+      if (receiveRows.length === 0) {
         alerts.error("No hay productos para recibir");
         return;
       }
-      const invalid = receiveRows.find((row) => row.error);
+      const invalid = receiveRows.find((row) => row.error || row.priceError);
       if (invalid) {
         alerts.error(
-          `Revisa lo que llegó de ${invalid.detail.product_name || "un producto"}: ${invalid.error}.`,
+          invalid.error
+            ? `Revisa lo que llegó de ${invalid.line.product_name || "un producto"}: ${invalid.error}.`
+            : `Revisa el precio de ${invalid.line.product_name || "un producto"}: ${invalid.priceError}.`,
         );
         return;
       }
       if (receiveRows.every((row) => row.received === 0)) {
         alerts.error(
-          "Todos los productos están en 0. Si no llegó nada, deja la compra en tránsito o cancélala.",
+          "Todos los productos están en 0. Si no llegó nada, deja la compra pendiente o cancélala.",
         );
         return;
       }
 
-      const { short, received } = receiveSummary;
-      const cashText = paidFromCash
-        ? ` y se registrará un egreso de caja por ${fmt(received)}`
-        : "";
+      const { short, received } = summary;
+      const cashText = paidFromCash ? ` y sale un egreso de caja por ${formatMoney(received)}` : "";
+      const repricedCount = receiveRows.filter((row) => row.repriced).length;
+      const repricedNote =
+        repricedCount > 0
+          ? `\n\nSe guarda el precio que pagaste en ${repricedCount} ${repricedCount === 1 ? "producto" : "productos"}, distinto al del pedido.`
+          : "";
       const message =
         short.length > 0
-          ? `Llegó menos de lo pedido en ${short.length} producto(s):\n` +
+          ? `Llegó menos de lo pedido en ${short.length} ${short.length === 1 ? "producto" : "productos"}:\n` +
             short
               .map(
                 (row) =>
-                  `• ${row.detail.product_name}: ${formatQuantity(row.received)} de ${formatQuantity(row.ordered)} ${row.detail.unit_abbreviation ?? ""}`.trimEnd(),
+                  `• ${row.line.product_name || "Producto"}: ${formatQuantity(row.received)} de ${formatQuantity(row.ordered, lineUnit(row.line))}`,
               )
               .join("\n") +
-            `\n\nEl stock subirá solo por lo que llegó${cashText}. Quedará una tarea para aclarar la diferencia con el proveedor. ¿Confirmar recepción?`
-          : `¿Confirmar que llegó todo lo pedido? El stock de los productos subirá${cashText}.`;
+            `\n\nEl stock sube solo por lo que llegó${cashText}. Queda una tarea para aclarar la diferencia con el proveedor.`
+          : `Llegó todo lo pedido: el stock de los productos sube${cashText}.`;
+      const confirmText = message + repricedNote;
 
-      if (
-        !await alerts.confirm(message, {
-          title: "Recibir Compra",
-          okText: "Confirmar",
-          cancelText: "Cancelar",
-        })
-      )
-        return;
+      const ok = await alerts.confirm(confirmText, {
+        title: "¿Registrar la recepción?",
+        okText: "Registrar",
+        cancelText: "Volver",
+      });
+      if (!ok) return;
 
       try {
         const details = receiveRows.map((row) => ({
-          id: row.detail.id,
+          id: row.line.id,
           quantity_received: row.received as number,
+          // Solo si cambió: sin él se queda el precio del pedido.
+          ...(row.repriced ? { unit_price: row.price as number } : {}),
         }));
-        const response = await Services.purchasesV2.receive(Number(id), details);
-        if (response.success) {
+        const response = await Services.purchasesV2.receive(purchase.id, details);
+        if (response?.success === false) {
+          alerts.error(response.message || "No se pudo registrar la recepción.");
+        } else if (response?.cash_out_of_shift) {
+          // El egreso quedó sin turno: ningún corte lo descuenta (lo mismo que
+          // avisa el formulario al registrar una compra recibida).
+          alerts.alert(
+            "Compra recibida, pero no tienes turno abierto: el pago no se descuenta en ningún corte.",
+            { type: "warning", duration: 8000 },
+          );
+        } else {
           alerts.success(
             short.length > 0
-              ? "Compra recibida con faltantes. Stock actualizado con lo que llegó."
-              : "Compra recibida. Stock actualizado.",
+              ? "Compra recibida con faltantes. El stock subió con lo que llegó."
+              : "Compra recibida. El stock ya se actualizó.",
           );
-          await loadPurchase();
-        } else {
-          alerts.error(response.message || "Error al recibir la compra");
         }
-      } catch (e: any) {
-        alerts.error(apiMessage(e, "Error al recibir la compra"));
+      } catch (e) {
+        alerts.error(errorMessageOf(e, "No se pudo registrar la recepción."));
       }
+      await load();
     });
 
-  const handleCancelPurchase = () =>
+  const cancelPurchase = () =>
     run(async () => {
-      if (
-        !await alerts.confirm(
-          "¿Cancelar esta compra? Esta acción no se puede deshacer.",
-          {
-            title: "Cancelar Compra",
-            okText: "Cancelar Compra",
-            cancelText: "Volver",
-          },
-        )
-      )
-        return;
+      if (!purchase) return;
+      const ok = await alerts.confirm(
+        "No se puede deshacer. Como no se ha recibido, no mueve inventario.",
+        { title: `¿Cancelar la compra ${folio}?`, okText: "Sí, cancelar", cancelText: "Volver" },
+      );
+      if (!ok) return;
       try {
-        const response = await Services.purchasesV2.cancel(Number(id));
-        if (response.success) {
-          alerts.success("Compra cancelada");
-          await loadPurchase();
+        const response = await Services.purchasesV2.cancel(purchase.id);
+        if (response?.success === false) {
+          alerts.error(response.message || "No se pudo cancelar la compra.");
         } else {
-          alerts.error(response.message || "Error al cancelar");
+          alerts.success("Compra cancelada");
         }
-      } catch (e: any) {
-        alerts.error(apiMessage(e, "Error al cancelar"));
+      } catch (e) {
+        alerts.error(errorMessageOf(e, "No se pudo cancelar la compra."));
       }
+      await load();
     });
 
-  if (loading) {
+  // Acciones secundarias en el menú ⋮ del encabezado (antes, un botón de
+  // color por acción). Lo que no se puede hacer no aparece.
+  const menu: RowMenuAction[] = purchase
+    ? [
+        { label: "Imprimir PDF", icon: "file-pdf-box", onPress: printPurchase },
+        ...(canUpdate && status === "ordered"
+          ? [{ label: "Marcar en tránsito", icon: "truck-delivery-outline" as const, onPress: markInTransit }]
+          : []),
+        // Recibida o cancelada ya no se cancela (el backend tampoco deja).
+        ...(canUpdate && (status === "draft" || status === "ordered" || status === "in_transit")
+          ? [{ label: "Cancelar compra", icon: "cancel" as const, onPress: cancelPurchase, destructive: true }]
+          : []),
+      ]
+    : [];
+
+  // El layout le pone "Ver Compra"; el menú depende de la compra y de los
+  // permisos (sus acciones leen la compra de este render).
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: "Compra",
+      headerRight: () => (menu.length ? <RowMenu actions={menu} /> : null),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, purchase, canUpdate]);
+
+  if (problem) {
     return (
-      <View style={styles.center}>
-        <Text>Cargando...</Text>
-      </View>
+      <RecordLoadError
+        problem={problem}
+        notFoundTitle="No se encontró la compra"
+        errorTitle="No se pudo cargar la compra"
+        onRetry={load}
+      />
     );
   }
 
   if (!purchase) {
     return (
-      <View style={styles.center}>
-        <Text>No se encontró la compra</Text>
+      <View style={styles.screen} onLayout={layout.onLayout}>
+        <ScrollView contentContainerStyle={layout.contentStyle}>
+          <DetailSkeleton twoColumns={layout.twoColumns} />
+        </ScrollView>
       </View>
     );
   }
 
-  const status = purchaseStatus(purchase.status);
-  // Color del estado para lo que no es badge (el aviso de cancelada).
-  const statusColor = toneColors(colors, status.tone).fg;
-  const total = toNum(purchase.total);
-  const isCancelled = purchase.status === "cancelled";
-  const currentStepIndex = FLOW_STEPS.indexOf(purchase.status as any);
+  const lines = purchase.details ?? [];
+  const isReceived = status === "received";
+  const totals = isReceived ? receivedTotals(lines) : null;
+  const shortCount = totals?.short.length ?? 0;
+  const hint = statusHint(status, shortCount);
+  // Fotos solo si alguna tiene: así los renglones quedan alineados.
+  const showThumbs = lines.some((line) => !!lineImage(line));
+  const history = statusHistory(purchase.status_history);
+  const resolution = purchase.discrepancy_resolution;
+  const resolvedAt = resolution?.resolved_at ?? resolution?.resolution?.resolved_at ?? null;
+  const deliveredAt = backendDateTime(purchase.delivery_date);
 
-  return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* ── Encabezado: folio, estado y datos (sin tarjeta de color) ── */}
-      <View style={[styles.header, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <View style={styles.headerTitleRow}>
-          <Text style={[styles.headerTitle, { color: colors.text }]} selectable>
-            {purchase.purchase_number || `#${purchase.id}`}
-          </Text>
-          {/* El View centra el badge con el folio (suelto se alinearía arriba). */}
+  const header = (
+    <View style={[styles.header, !layout.phone && styles.headerWide]}>
+      <View style={styles.headerText}>
+        <Text style={styles.title} accessibilityRole="header">
+          {purchase.supplier_name || "Compra sin proveedor"}
+        </Text>
+        <Text style={styles.subtitle} selectable>
+          {[folio, purchase.purchase_date ? formatDate(purchase.purchase_date) : null]
+            .filter(Boolean)
+            .join(" · ")}
+        </Text>
+        <View style={styles.statusRow}>
+          {/* En un View cada uno se centra con el otro (sueltos se alinean arriba). */}
           <View>
-            <StatusBadge {...status} />
+            <StatusBadge {...purchaseStatus(status)} />
           </View>
+          {!!purchase.payment_method && (
+            <View>
+              <IconLabel {...purchasePaymentMethod(purchase.payment_method)} />
+            </View>
+          )}
         </View>
-        <View style={styles.row}>
-          <MaterialCommunityIcons name="store-outline" size={14} color={colors.textMuted} />
-          <Text style={[styles.headerMeta, { color: colors.textSecondary }]}>
-            {purchase.supplier_name || purchase.supplier?.name || "Sin proveedor"}
-          </Text>
-        </View>
-        <View style={styles.row}>
-          <MaterialCommunityIcons name="calendar-outline" size={14} color={colors.textMuted} />
-          <Text style={[styles.headerMeta, { color: colors.textSecondary }]}>
-            {formatDate(purchase.purchase_date, "long")}
-          </Text>
-        </View>
-
-        <View style={[styles.headerDivider, { backgroundColor: colors.border }]} />
-
-        <View style={styles.totalRow}>
-          <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
-            Total de compra
-          </Text>
-          <Text style={[styles.totalValue, { color: colors.text }]}>
-            {fmt(total)}
-          </Text>
-        </View>
-
-        {!!purchase.payment_method && (
-          <IconLabel {...purchasePaymentMethod(purchase.payment_method)} />
-        )}
+        {!!hint && <Text style={styles.hint}>{hint}</Text>}
       </View>
 
-      {/* ── Timeline de progreso ── */}
-      {!isCancelled && (
-        <Surface style={[styles.card, { backgroundColor: colors.surface }]} elevation={1}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Progreso
-          </Text>
-          <View style={{ marginTop: 16 }}>
-            {FLOW_STEPS.map((key, index) => {
-              const isActive = key === purchase.status;
-              const isCompleted = index < currentStepIndex;
-              const isLast = index === FLOW_STEPS.length - 1;
-              const reached = isActive || isCompleted;
-              // Un solo acento para el avance: el color del estado ya va en el badge.
-              const dotColor = reached ? colors.primary : colors.border;
-
-              return (
-                <View key={key} style={styles.timelineItem}>
-                  <View style={styles.timelineLeft}>
-                    <View
-                      style={[
-                        styles.timelineDot,
-                        { backgroundColor: dotColor, borderColor: dotColor },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name={isCompleted ? "check" : STEP_ICONS[key]}
-                        size={14}
-                        color={reached ? colors.primaryForeground : colors.textMuted}
-                      />
-                    </View>
-                    {!isLast && (
-                      <View
-                        style={[
-                          styles.timelineLine,
-                          {
-                            backgroundColor: isCompleted
-                              ? colors.primary
-                              : colors.border,
-                          },
-                        ]}
-                      />
-                    )}
-                  </View>
-                  <View style={styles.timelineContent}>
-                    <Text
-                      variant="bodyMedium"
-                      style={{
-                        fontWeight: isActive ? "700" : "400",
-                        color: reached ? colors.text : colors.textMuted,
-                      }}
-                    >
-                      {purchaseStatus(key).label}
-                    </Text>
-                    <Text
-                      variant="bodySmall"
-                      style={{ color: colors.textMuted, fontSize: 11 }}
-                    >
-                      {isActive
-                        ? "Estado actual"
-                        : isCompleted
-                          ? "Completado"
-                          : "Pendiente"}
-                    </Text>
-                  </View>
-                  {reached && (
-                    <MaterialCommunityIcons
-                      name="check-circle"
-                      size={18}
-                      color={colors.primary}
-                    />
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        </Surface>
+      {/* El borrador se termina en el formulario: ahí se registra recibida o
+          como pedido (ya no se confirma desde el detalle). */}
+      {status === "draft" && canContinue && (
+        <View style={layout.phone ? styles.headerActionPhone : undefined}>
+          <Button
+            mode="contained"
+            icon="pencil-outline"
+            onPress={continuePurchase}
+            disabled={busy}
+          >
+            Continuar compra
+          </Button>
+        </View>
       )}
+    </View>
+  );
 
-      {/* ── Cancelado ── */}
-      {isCancelled && (
-        <Surface
-          style={[
-            styles.card,
-            { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: colors.surface },
-          ]}
-          elevation={1}
-        >
-          <MaterialCommunityIcons name="close-circle" size={32} color={statusColor} />
-          <View>
-            <Text
-              variant="titleMedium"
-              style={{ fontWeight: "700", color: statusColor }}
-            >
-              Compra cancelada
-            </Text>
-            <Text variant="bodySmall" style={{ color: colors.textMuted }}>
-              Esta compra fue cancelada
-            </Text>
-          </View>
-        </Surface>
+  const products = (
+    <ListSection title="Productos" count={lines.length}>
+      {receiving && lines.length > 0 && (
+        <Text style={styles.hint}>
+          Escribe cuánto llegó de cada producto y lo que pagaste; por omisión, lo del pedido.
+        </Text>
       )}
-
-      {/* ── Productos ── */}
-      <Surface style={styles.card} elevation={1}>
-        <View style={styles.sectionHeader}>
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Productos
-          </Text>
-          <Chip
+      <ListGroup inset={LIST_TEXT_INSET}>
+        {lines.length === 0 ? (
+          <EmptyState
             compact
-            style={{ backgroundColor: palette.primary + "18" }}
-            textStyle={{ color: palette.primary, fontSize: 12, fontWeight: "700" }}
-          >
-            {purchase.details?.length || 0}
-          </Chip>
-        </View>
-
-        <View style={{ gap: 10, marginTop: 8 }}>
-          {purchase.details?.map((detail: any, index: number) => {
-            const imgUri =
-              typeof detail.product_image === "string"
-                ? detail.product_image
-                : detail.product_image?.uri;
-            const row = receiveRows[index];
-            const receivedQty =
-              detail.quantity_received != null ? toNum(detail.quantity_received) : null;
-            const receivedShort =
-              receivedQty !== null && receivedQty < toNum(detail.quantity);
-
-            return (
-              <View key={detail.id} style={styles.productItem}>
-                {imgUri ? (
-                  <Image
-                    source={{ uri: imgUri }}
-                    style={styles.productImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View
-                    style={[styles.productImage, styles.productImagePlaceholder]}
-                  >
-                    <MaterialCommunityIcons
-                      name="package-variant"
-                      size={24}
-                      color="#A39F92"
-                    />
-                  </View>
-                )}
-
-                <View style={{ flex: 1 }}>
-                  <Text
-                    variant="bodyLarge"
-                    style={{ fontWeight: "600" }}
-                    numberOfLines={1}
-                  >
-                    {detail.product_name}
-                  </Text>
-                  <Text variant="bodySmall" style={{ color: "#8F8B7D" }}>
-                    {detail.product_code}
-                  </Text>
-                  {detail.package_name && (
-                    <View style={[styles.row, { marginTop: 2 }]}>
-                      <MaterialCommunityIcons
-                        name="package-variant-closed"
-                        size={12}
-                        color="#A39F92"
-                      />
-                      <Text variant="bodySmall" style={{ color: "#8F8B7D" }}>
-                        {detail.package_name}
-                      </Text>
-                    </View>
-                  )}
-                  <Text variant="bodySmall" style={{ color: "#A39F92", marginTop: 2 }}>
-                    {detail.unit_name} ({detail.unit_abbreviation})
-                  </Text>
-
-                  <View
-                    style={[
-                      styles.row,
-                      { justifyContent: "space-between", marginTop: 8 },
-                    ]}
-                  >
-                    <View style={styles.qtyBadge}>
-                      <Text
-                        variant="bodySmall"
-                        style={{ color: palette.primary, fontWeight: "700" }}
-                      >
-                        {toNum(detail.quantity)} × {fmt(toNum(detail.unit_price))}
-                      </Text>
-                    </View>
-                    <Text
-                      variant="titleSmall"
-                      style={{ fontWeight: "bold", color: palette.primary }}
-                    >
-                      {fmt(toNum(detail.subtotal))}
-                    </Text>
-                  </View>
-
-                  {purchase.status === "received" && receivedQty !== null && (
-                    <View style={[styles.row, { marginTop: 4 }]}>
-                      <MaterialCommunityIcons
-                        name={receivedShort ? "alert-circle-outline" : "check-circle-outline"}
-                        size={13}
-                        color={receivedShort ? "#C47F12" : "#3F8A3A"}
-                      />
-                      <Text
-                        variant="bodySmall"
-                        style={{ color: receivedShort ? "#C47F12" : "#3F8A3A", fontWeight: "600" }}
-                      >
-                        Recibido: {formatQuantity(receivedQty)}
-                        {receivedShort ? ` de ${formatQuantity(detail.quantity)}` : ""}{" "}
-                        {detail.unit_abbreviation}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Recepción: cuánto llegó de este producto (por omisión, lo pedido). */}
-                  {receiving && row && (
-                    <View style={styles.receiveBox}>
-                      <View style={styles.row}>
-                        <Text variant="bodySmall" style={styles.receiveLabel}>
-                          Llegó
-                        </Text>
-                        <TextInput
-                          value={receivedText[detail.id] ?? ""}
-                          onChangeText={(text) =>
-                            setReceivedText((prev) => ({ ...prev, [detail.id]: text }))
-                          }
-                          keyboardType="decimal-pad"
-                          selectTextOnFocus
-                          editable={!busy}
-                          style={[styles.receiveInput, row.error ? styles.receiveInputError : null]}
-                        />
-                        <Text variant="bodySmall" style={{ color: "#57564B", flexShrink: 1 }}>
-                          de {formatQuantity(row.ordered)} {detail.unit_abbreviation}
-                        </Text>
-                      </View>
-                      {row.error ? (
-                        <Text variant="bodySmall" style={styles.receiveError}>
-                          {row.error}
-                        </Text>
-                      ) : row.received !== null && row.received < row.ordered ? (
-                        <Text variant="bodySmall" style={styles.receiveShort}>
-                          Faltan {formatQuantity(row.ordered - row.received)}{" "}
-                          {detail.unit_abbreviation}
-                        </Text>
-                      ) : null}
-                    </View>
-                  )}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
-        <Divider style={{ marginVertical: 16 }} />
-        <View style={[styles.row, { justifyContent: "space-between" }]}>
-          <Text variant="titleMedium" style={{ fontWeight: "700" }}>
-            Total
-          </Text>
-          <Text
-            variant="titleLarge"
-            style={{ fontWeight: "bold", color: palette.primary }}
-          >
-            {fmt(total)}
-          </Text>
-        </View>
-
-        {/* ── Resumen de la recepción ── */}
-        {receiving && (
-          <View style={styles.receiveSummary}>
-            <Text variant="titleSmall" style={{ fontWeight: "700" }}>
-              Recepción
-            </Text>
-            <Text variant="bodySmall" style={{ color: "#57564B" }}>
-              Si llegó menos de lo pedido, escribe en cada producto lo que llegó:
-              el stock sube solo por eso.
-            </Text>
-            <View style={[styles.row, { justifyContent: "space-between" }]}>
-              <Text variant="bodyMedium">Productos con faltante</Text>
-              <Text
-                variant="bodyMedium"
-                style={{
-                  fontWeight: "700",
-                  color: receiveSummary.short.length > 0 ? "#C47F12" : palette.text,
-                }}
-              >
-                {receiveSummary.short.length}
-              </Text>
-            </View>
-            <View style={[styles.row, { justifyContent: "space-between" }]}>
-              <Text variant="bodyMedium">Valor de lo que llegó</Text>
-              <Text variant="bodyMedium" style={{ fontWeight: "700" }}>
-                {fmt(receiveSummary.received)}
-              </Text>
-            </View>
-            {receiveSummary.difference > 0 && (
-              <View style={[styles.row, { justifyContent: "space-between" }]}>
-                <Text variant="bodyMedium">Diferencia contra lo pedido</Text>
-                <Text variant="bodyMedium" style={{ fontWeight: "700", color: "#C47F12" }}>
-                  {fmt(receiveSummary.difference)}
-                </Text>
-              </View>
-            )}
-            {paidFromCash && (
-              <Text variant="bodySmall" style={{ color: palette.primary }}>
-                Se pagó con la caja: al recibir se registra un egreso por{" "}
-                {fmt(receiveSummary.received)}.
-              </Text>
+            icon="package-variant"
+            title="Sin productos"
+            description={status === "draft" && canContinue ? "Continúa la compra para agregarlos." : undefined}
+          />
+        ) : (
+          lines.map((line, index) => (
+            <PurchaseLineRow
+              key={line.id}
+              line={line}
+              thumb={showThumbs}
+              showReceived={isReceived}
+              // Un renglón en $0 valuaría el inventario en $0 (los reportes
+              // usan el precio de la última compra): se avisa a quien puede
+              // corregirlo en el formulario. Abrirlo pide purchases_create,
+              // pero cambiar el precio pide purchases_update.
+              flagMissingPrice={status === "draft" && canContinue && canUpdate}
+              receive={
+                receiving
+                  ? {
+                      text: receivedText[line.id] ?? "",
+                      row: receiveRows[index],
+                      onChangeText: (text) =>
+                        setReceivedText((prev) => ({ ...prev, [line.id]: text })),
+                      priceText: priceText[line.id] ?? "",
+                      onChangePrice: (text) =>
+                        setPriceText((prev) => ({ ...prev, [line.id]: text })),
+                    }
+                  : undefined
+              }
+            />
+          ))
+        )}
+        {lines.length > 0 && (
+          <View style={styles.totals}>
+            {totals && shortCount > 0 ? (
+              // El total de la compra se queda como lo pedido; el egreso de
+              // caja y lo que se le paga al proveedor es por lo que llegó.
+              <>
+                <TotalLine label="Total pedido" value={formatMoney(purchase.total)} />
+                <TotalLine label="Total recibido" value={formatMoney(totals.received)} strong />
+                <TotalLine label="Diferencia" value={formatMoney(totals.difference)} />
+              </>
+            ) : (
+              <TotalLine label="Total" value={formatMoney(purchase.total)} strong />
             )}
           </View>
         )}
-      </Surface>
+      </ListGroup>
+    </ListSection>
+  );
 
-      {/* ── Notas ── */}
-      {purchase.notes && (
-        <Surface style={styles.card} elevation={1}>
-          <View style={[styles.row, { marginBottom: 8 }]}>
-            <MaterialCommunityIcons
-              name="note-text-outline"
-              size={18}
-              color={palette.primary}
+  // Recepción: lo que va a entrar con lo capturado arriba, y el botón.
+  const reception = receiving && lines.length > 0 && (
+    <ListSection title="Recepción">
+      <ListGroup inset={LIST_TEXT_INSET}>
+        <ListValueRow label="Productos con faltante" value={String(summary.short.length)} />
+        <ListValueRow label="Valor de lo que llegó" value={formatMoney(summary.received)} />
+        {summary.difference > 0 && (
+          <ListValueRow label="Diferencia contra lo pedido" value={formatMoney(summary.difference)} />
+        )}
+      </ListGroup>
+      {paidFromCash && (
+        <Text style={styles.hint}>
+          Se pagó con la caja: al registrar la recepción sale un egreso por {formatMoney(summary.received)}.
+        </Text>
+      )}
+      <Button
+        mode="contained"
+        icon="package-variant-closed-check"
+        onPress={receivePurchase}
+        loading={busy}
+        disabled={busy}
+        style={styles.receiveButton}
+      >
+        Registrar recepción
+      </Button>
+    </ListSection>
+  );
+
+  // Faltantes de una compra recibida: cuánto faltó y cómo se aclaró (la
+  // aclaración es una tarea que se creó al recibir).
+  const shortages = totals && shortCount > 0 && (
+    <ListSection title="Faltantes">
+      <ListGroup>
+        <ListRow
+          icon="alert-circle-outline"
+          iconColor={colors.warning}
+          title={`Llegó menos de lo pedido en ${shortCount} ${shortCount === 1 ? "producto" : "productos"}`}
+          titleLines={2}
+          subtitle={`Diferencia de ${formatMoney(totals.difference)}`}
+          chevron={false}
+        />
+        {resolution ? (
+          <ListRow
+            icon="check-circle-outline"
+            iconColor={colors.success}
+            title={resolutionLabel(resolution.resolution?.type)}
+            subtitle={resolution.resolution?.notes || undefined}
+            meta={resolvedAt ? `Aclarada el ${formatDateTime(resolvedAt)}` : undefined}
+            chevron={false}
+          />
+        ) : (
+          <ListRow
+            icon="clipboard-text-outline"
+            title="Aclaración con el proveedor"
+            subtitle="Al recibirla quedó una tarea para revisar la diferencia."
+            chevron={false}
+          />
+        )}
+      </ListGroup>
+    </ListSection>
+  );
+
+  // Datos que no están arriba; cada uno, solo si viene.
+  const dataRows = [
+    purchase.payment_method === "cash" && (
+      <ListValueRow
+        key="cash"
+        label="Pagado con la caja"
+        value={purchase.paid_from_cash === false ? "No" : "Sí"}
+      />
+    ),
+    !!purchase.expected_delivery_date && (
+      <ListValueRow
+        key="expected"
+        label="Entrega esperada"
+        value={formatDate(purchase.expected_delivery_date)}
+      />
+    ),
+    !!deliveredAt && <ListValueRow key="delivered" label="Recibida el" value={formatDateTime(deliveredAt)} />,
+    !!purchase.received_by_name && (
+      <ListValueRow key="received-by" label="Recibió" value={purchase.received_by_name} />
+    ),
+    !!purchase.created_by_name && (
+      <ListValueRow key="created-by" label="Registró" value={purchase.created_by_name} />
+    ),
+    !!purchase.document_number && (
+      <ListValueRow key="document" label="Documento del proveedor" value={purchase.document_number} />
+    ),
+  ].filter(Boolean);
+
+  const data = dataRows.length > 0 && (
+    <ListSection title="Datos de la compra">
+      <ListGroup inset={LIST_TEXT_INSET}>{dataRows}</ListGroup>
+    </ListSection>
+  );
+
+  const notes = !!purchase.notes && (
+    <ListSection title="Notas">
+      <Text style={styles.notes} selectable>
+        {purchase.notes}
+      </Text>
+    </ListSection>
+  );
+
+  // Lo que de verdad pasó y quién lo hizo. Antes era una línea fija de cuatro
+  // pasos, que ya no aplica: una compra puede registrarse recibida de una vez.
+  const historySection = history.length > 0 && (
+    <ListSection title="Historial">
+      <ListGroup>
+        {history.map((entry, index) => {
+          const event = historyEvent(entry);
+          const when = entry.at ? formatDateTime(entry.at) : null;
+          return (
+            <ListRow
+              key={index}
+              icon={event.icon}
+              title={event.title}
+              subtitle={[when, entry.by_user_name].filter(Boolean).join(" · ") || undefined}
+              meta={entry.reason || undefined}
+              chevron={false}
             />
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Notas
-            </Text>
-          </View>
-          <Text variant="bodyMedium" style={{ color: "#57564B", lineHeight: 20 }}>
-            {purchase.notes}
-          </Text>
-        </Surface>
-      )}
+          );
+        })}
+      </ListGroup>
+    </ListSection>
+  );
 
-      {/* ── Acciones ── */}
-      {canUpdate && (
-        <View style={{ gap: 10 }}>
-          {purchase.status === "draft" && (
-            <Button
-              mode="contained"
-              onPress={handleConfirmOrder}
-              loading={busy}
-              disabled={busy}
-              icon="cart-check"
-              buttonColor="#2F6F7E"
-              style={styles.actionBtn}
-            >
-              Confirmar Pedido
-            </Button>
-          )}
+  const side = (
+    <>
+      {reception}
+      {shortages}
+      {data}
+      {notes}
+      {historySection}
+    </>
+  );
 
-          {purchase.status === "ordered" && (
-            <Button
-              mode="contained"
-              onPress={handleMarkInTransit}
-              loading={busy}
-              disabled={busy}
-              icon="truck-delivery"
-              buttonColor="#7A6A8C"
-              style={styles.actionBtn}
-            >
-              Marcar en Tránsito
-            </Button>
-          )}
-
-          {purchase.status === "in_transit" && (
-            <Button
-              mode="contained"
-              onPress={handleReceivePurchase}
-              loading={busy}
-              disabled={busy}
-              icon="package-variant-closed-check"
-              buttonColor="#3F8A3A"
-              style={styles.actionBtn}
-            >
-              Confirmar Recepción
-            </Button>
-          )}
-
-          {purchase.status !== "received" && purchase.status !== "cancelled" && (
-            <Button
-              mode="outlined"
-              onPress={handleCancelPurchase}
-              loading={busy}
-              disabled={busy}
-              icon="close-circle-outline"
-              textColor="#B9412C"
-              style={[styles.actionBtn, { borderColor: "#B9412C" }]}
-            >
-              Cancelar Compra
-            </Button>
-          )}
-        </View>
-      )}
-    </ScrollView>
+  return (
+    <View style={styles.screen} onLayout={layout.onLayout}>
+      <ScrollView
+        contentContainerStyle={layout.contentStyle}
+        // Un toque en "Registrar recepción" con el teclado abierto cuenta.
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
+        {header}
+        {layout.twoColumns ? (
+          <SummaryColumns main={products} side={side} />
+        ) : (
+          <>
+            {products}
+            {side}
+          </>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  scroll:  { flex: 1, backgroundColor: "#F3F0E8" },
-  content: { padding: 16, gap: 14 },
-  center:  { flex: 1, justifyContent: "center", alignItems: "center" },
-  card:    { backgroundColor: "white", borderRadius: 18, padding: 20 },
+function TotalLine({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={styles.totalLine}>
+      <Text style={[styles.totalLabel, strong && styles.totalStrong]}>{label}</Text>
+      <Text style={[styles.totalValue, strong && styles.totalStrong]}>{value}</Text>
+    </View>
+  );
+}
 
-  // Encabezado: superficie lisa; el estado va en el badge (colores en línea, del tema).
-  header:         { borderRadius: 12, borderWidth: 1, padding: 16, gap: 6 },
-  headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 2 },
-  headerTitle:    { fontSize: 22, fontWeight: "700", letterSpacing: -0.3 },
-  headerMeta:     { fontSize: 13, flexShrink: 1 },
-  headerDivider:  { height: 1, marginVertical: 8 },
-  totalRow:       { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  totalLabel:     { fontSize: 14, fontWeight: "500" },
-  totalValue:     { fontSize: 22, fontWeight: "700", fontVariant: ["tabular-nums"] },
+/** Esqueleto con la forma del detalle mientras carga. */
+function DetailSkeleton({ twoColumns }: { twoColumns: boolean }) {
+  const styles = useThemedStyles(makeStyles);
+  const main = <SkeletonSection rows={4} />;
+  const side = (
+    <>
+      <SkeletonSection rows={3} />
+      <SkeletonSection rows={2} />
+    </>
+  );
+  return (
+    <>
+      <View style={styles.skeletonHeader}>
+        <SkeletonBlock width={220} height={26} radius={8} />
+        <SkeletonBlock width={160} height={13} />
+        <SkeletonBlock width={90} height={22} radius={11} />
+      </View>
+      {twoColumns ? (
+        <SummaryColumns main={main} side={side} />
+      ) : (
+        <>
+          {main}
+          {side}
+        </>
+      )}
+    </>
+  );
+}
 
-  // Common
-  row:           { flexDirection: "row", alignItems: "center", gap: 8 },
-  sectionTitle:  { fontWeight: "700" },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+const makeStyles = themedStyles((c) => ({
+  screen: { flex: 1, backgroundColor: c.background },
 
-  // Timeline
-  timelineItem:    { flexDirection: "row", alignItems: "flex-start", paddingBottom: 20 },
-  timelineLeft:    { alignItems: "center", marginRight: 14 },
-  timelineDot:     { width: 30, height: 30, borderRadius: 15, borderWidth: 2, justifyContent: "center", alignItems: "center" },
-  timelineLine:    { width: 2, flex: 1, marginTop: 4, minHeight: 24 },
-  timelineContent: { flex: 1, paddingTop: 4 },
+  // Encabezado sin tarjeta: el estado va en el badge y la acción, a la
+  // derecha en pantallas anchas y debajo en el teléfono.
+  header: { gap: 14 },
+  headerWide: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    columnGap: 24,
+    rowGap: 14,
+  },
+  headerText: { gap: 4, flexShrink: 1, minWidth: 0 },
+  headerActionPhone: { alignSelf: "stretch" },
+  title: { fontSize: 24, lineHeight: 30, fontWeight: "700", color: c.text, letterSpacing: -0.3 },
+  subtitle: { fontSize: 14, lineHeight: 20, color: c.textSecondary },
+  statusRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    columnGap: 12,
+    rowGap: 6,
+    marginTop: 6,
+  },
+  hint: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+  notes: { fontSize: 14, lineHeight: 20, color: c.text },
 
-  // Products
-  productItem:             { flexDirection: "row", gap: 12, alignItems: "flex-start", backgroundColor: "#F6F4EE", borderRadius: 12, padding: 12 },
-  productImage:            { width: 60, height: 60, borderRadius: 10 },
-  productImagePlaceholder: { backgroundColor: "#E6E1D5", justifyContent: "center", alignItems: "center" },
-  qtyBadge:                { backgroundColor: "#DFEDF0", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  // Totales al final de los productos, como en el detalle de venta.
+  totals: { paddingHorizontal: 14, paddingVertical: 10, gap: 4 },
+  totalLine: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline", gap: 16 },
+  totalLabel: { fontSize: 14, lineHeight: 20, color: c.textSecondary },
+  totalValue: { fontSize: 14, lineHeight: 20, color: c.text, fontVariant: ["tabular-nums"] },
+  totalStrong: { fontSize: 16, lineHeight: 22, fontWeight: "700", color: c.text },
 
-  // Recepción
-  receiveBox:        { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#E6E1D5", gap: 4 },
-  receiveLabel:      { color: "#57564B", fontWeight: "600" },
-  receiveInput:      { minWidth: 72, height: 36, paddingHorizontal: 8, borderWidth: 1, borderColor: "#D6D1C4", borderRadius: 8, backgroundColor: "white", textAlign: "center", fontWeight: "700", color: palette.text },
-  receiveInputError: { borderColor: "#B9412C" },
-  receiveError:      { color: "#B9412C" },
-  receiveShort:      { color: "#C47F12", fontWeight: "600" },
-  receiveSummary:    { marginTop: 16, padding: 12, borderRadius: 12, backgroundColor: "#F6F4EE", gap: 6 },
-
-  // Actions
-  actionBtn: { borderRadius: 10 },
-});
+  receiveButton: { marginTop: 4 },
+  skeletonHeader: { gap: 8 },
+}));

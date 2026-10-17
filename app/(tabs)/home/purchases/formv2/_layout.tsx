@@ -1,7 +1,7 @@
 import { goBack } from "@/utils/navigation";
 import AppBar from "@/components/App/AppBar";
 import { routeGuardLayout } from "@/components/App/RoutePermissionGuard";
-import { Stack, usePathname, useRouter } from "expo-router";
+import { Stack } from "expo-router";
 import React from "react";
 import { View } from "react-native";
 import { PurchaseProvider } from "./PurchaseContext";
@@ -10,18 +10,12 @@ import { PurchaseProvider } from "./PurchaseContext";
 // RoutePermissionGuard): sin permiso muestra "No tienes permiso…".
 const screenLayout = routeGuardLayout("(tabs)/home/purchases/formv2");
 
+// La compra es una sola pantalla (catálogo y carrito juntos): atrás sale de
+// ella, a la lista o a donde se abrió (como Reabastecimiento). Antes también
+// estaban productos y carrito, y atrás regresaba al formulario.
+const handleBack = () => goBack("/(tabs)/home/purchases");
+
 function StackContent() {
-  const router = useRouter();
-  const pathname = usePathname();
-
-  const handleBack = () => {
-    if (pathname.endsWith("/formv2")) {
-      router.replace("/(tabs)/home/purchases/index" as any);
-    } else {
-      goBack();
-    }
-  };
-
   return (
     <Stack
       screenLayout={screenLayout}
@@ -35,7 +29,6 @@ function StackContent() {
             <AppBar
               title={options.title || route.name}
               showSearchButton={false}
-              showBackButton={!pathname.endsWith("/formv2")}
               onBack={handleBack}
               rightActions={
                 screenRight ? (
@@ -49,9 +42,7 @@ function StackContent() {
         },
       }}
     >
-      <Stack.Screen name="index" options={{ title: "Nueva Compra" }} />
-      <Stack.Screen name="productos" options={{ title: "Agregar Productos" }} />
-      <Stack.Screen name="carrito" options={{ title: "Carrito de Compra" }} />
+      <Stack.Screen name="index" options={{ title: "Nueva compra" }} />
     </Stack>
   );
 }

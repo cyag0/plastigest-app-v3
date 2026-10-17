@@ -159,6 +159,9 @@ const Services = {
   companies: {
     ...createCrudService<App.Entities.Company>("/auth/admin/companies"),
   },
+  // Las acciones de compras van con silent: quien las llama (el carrito del
+  // formulario, el detalle, la lista, Reabastecimiento) muestra el motivo en
+  // su lugar y con el aviso global salían dos.
   purchasesV2: {
     async addDetail(data: {
       purchase_id?: number;
@@ -172,6 +175,7 @@ const Services = {
       const response = await axiosClient.post(
         "/auth/admin/purchases-v2/add-detail",
         data,
+        { silent: true },
       );
       return response.data;
     },
@@ -186,12 +190,14 @@ const Services = {
       const response = await axiosClient.post(
         `/auth/admin/purchases-v2/details/${detailId}/update`,
         data,
+        { silent: true },
       );
       return response.data;
     },
     async removeDetail(detailId: number) {
       const response = await axiosClient.delete(
         `/auth/admin/purchases-v2/details/${detailId}`,
+        { silent: true },
       );
       return response.data;
     },
@@ -212,11 +218,40 @@ const Services = {
       const response = await axiosClient.post(
         "/auth/admin/purchases-v2/upsert-draft",
         data,
+        { silent: true },
       );
       return response.data;
     },
     async getDraft() {
       const response = await axiosClient.get("/auth/admin/purchases-v2/draft");
+      return response.data;
+    },
+    /**
+     * Último precio pagado de cada producto y paquete (el último renglón
+     * recibido con precio > 0); con supplier_id, solo a ese proveedor. La
+     * compra lo propone al agregar un producto en lugar del precio del
+     * catálogo.
+     */
+    async lastPrices(
+      params?: { supplier_id?: number },
+      options?: RequestOptions,
+    ): Promise<{
+      success: boolean;
+      data: {
+        product_id: number;
+        package_id: number | null;
+        unit_id: number;
+        unit_price: number;
+        purchase_id: number;
+        purchase_number: string | null;
+        /** Y-m-d */
+        received_at: string | null;
+      }[];
+    }> {
+      const response = await axiosClient.get(
+        "/auth/admin/purchases-v2/last-prices",
+        { ...options, params },
+      );
       return response.data;
     },
     async confirm(
@@ -227,17 +262,41 @@ const Services = {
         payment_method?: string;
         /** ¿El dinero salió de la caja? Solo entonces se registra egreso. */
         paid_from_cash?: boolean;
+        notes?: string;
+        supplier_id?: number;
+        purchase_date?: string;
+        /**
+         * «Registrar compra recibida»: la compra pasa de borrador a recibida
+         * en el mismo paso (entra al inventario y no se manda el pedido por
+         * WhatsApp). Sin él queda pedida y se recibe desde el detalle.
+         */
+        receive_now?: boolean;
       },
-    ) {
+    ): Promise<{
+      success: boolean;
+      message?: string;
+      /** La compra quedó recibida (receive_now). */
+      received?: boolean;
+      whatsapp_sent?: boolean;
+      /**
+       * Recibida y pagada de la caja sin turno abierto de quien la registró:
+       * el egreso no entra en ningún corte.
+       */
+      cash_out_of_shift?: boolean;
+      data?: any;
+    }> {
       const response = await axiosClient.post(
         `/auth/admin/purchases-v2/${id}/confirm`,
         data,
+        { silent: true },
       );
       return response.data;
     },
     async markInTransit(id: number) {
       const response = await axiosClient.post(
         `/auth/admin/purchases-v2/${id}/mark-in-transit`,
+        undefined,
+        { silent: true },
       );
       return response.data;
     },
@@ -246,17 +305,31 @@ const Services = {
       details: {
         id: number;
         quantity_received: number;
+        /** Lo que de verdad se pagó, si no es el precio del pedido. */
+        unit_price?: number;
       }[],
-    ) {
+    ): Promise<{
+      success: boolean;
+      message?: string;
+      /**
+       * Pagada de la caja sin turno abierto de quien la recibió: el egreso no
+       * entra en ningún corte.
+       */
+      cash_out_of_shift?: boolean;
+      data?: any;
+    }> {
       const response = await axiosClient.post(
         `/auth/admin/purchases-v2/${id}/receive`,
         { details },
+        { silent: true },
       );
       return response.data;
     },
     async cancel(id: number) {
       const response = await axiosClient.post(
         `/auth/admin/purchases-v2/${id}/cancel`,
+        undefined,
+        { silent: true },
       );
       return response.data;
     },
@@ -271,18 +344,20 @@ const Services = {
       return response.data;
     },
     async show(id: number) {
-      const response = await axiosClient.get(`/auth/admin/purchases-v2/${id}`);
+      const response = await axiosClient.get(`/auth/admin/purchases-v2/${id}`, { silent: true });
       return response.data;
     },
     async pdfUrl(id: number) {
       const response = await axiosClient.get(
         `/auth/admin/purchases-v2/${id}/pdf-url`,
+        { silent: true },
       );
       return response.data as { url: string; expires_at: string };
     },
     async delete(id: number) {
       const response = await axiosClient.delete(
         `/auth/admin/purchases-v2/${id}`,
+        { silent: true },
       );
       return response.data;
     },
@@ -821,10 +896,14 @@ const Services = {
         );
         return response.data;
       },
-      async getGroupedByType(params?: { company_id?: number }) {
+      async getGroupedByType(
+        params?: { company_id?: number },
+        options?: RequestOptions,
+      ) {
         const response = await axiosClient.get(
           "/auth/admin/units/grouped-by-type",
           {
+            ...options,
             params,
           },
         );

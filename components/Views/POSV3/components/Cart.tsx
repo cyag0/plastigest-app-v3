@@ -1,10 +1,12 @@
 import EmptyState from "@/components/App/EmptyState";
-import palette from "@/constants/palette";
+import palette, { type Palette } from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
-import { formatUnitPrice, parseQuantity } from "@/utils/format";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
+import { formatUnitPrice, parseMoney, parseQuantity } from "@/utils/format";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import React, { useRef, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Image, Keyboard, Platform, ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Divider, Menu } from "react-native-paper";
 
 export interface CartItemData {
@@ -62,11 +64,36 @@ interface CartProps {
   canEditItems?: boolean;
   /** ¿Se pueden quitar renglones? Sin permiso no se muestra el bote. Por defecto sí. */
   canRemoveItems?: boolean;
+  /**
+   * ¿Se escribe el precio unitario de cada renglón? (compras: lo que de verdad
+   * se pagó). Necesita onPriceChange. Por defecto no: el precio solo se ve.
+   */
+  canEditPrice?: boolean;
+  /** Precio nuevo de un renglón, ya leído (sin negativos). */
+  onPriceChange?: (itemId: number | string, price: number) => void;
+  /** Título del encabezado. Por defecto "Carrito". */
+  title?: string;
+  /** Número junto al título. Por defecto, la suma de las cantidades. */
+  count?: number;
+  /**
+   * Colores del tema (modo oscuro) en lugar de la paleta clara fija. Por
+   * defecto no: Ventas y Transferencias le meten contenido (forma de pago,
+   * notas) con la paleta fija y sin fondo propio, que en un carrito oscuro
+   * no se leería.
+   */
+  themed?: boolean;
   children?: React.ReactNode;
+}
+
+/** Estilos y colores con que se pinta el carrito (tema o paleta fija). */
+interface CartLook {
+  styles: ReturnType<typeof makeStyles>;
+  colors: Palette;
 }
 
 interface CartItemComponentProps {
   item: CartItemData;
+  look: CartLook;
   canEdit: boolean;
   canRemove: boolean;
   onRemove: (itemId: number | string) => void;
@@ -75,6 +102,8 @@ interface CartItemComponentProps {
     action: "increment" | "decrement" | "unit" | "set",
     data?: any,
   ) => void;
+  /** Con él, el precio unitario se escribe en el renglón. */
+  onPriceChange?: (itemId: number | string, price: number) => void;
 }
 
 /**
@@ -92,13 +121,111 @@ const cartItemAllowsDecimal = (item: CartItemData): boolean => {
 
 const formatQuantity = (n: number) => String(Math.round(n * 1000) / 1000);
 
+/**
+ * Lo escrito en un campo con el foco se aplica aunque no llegue onBlur, como
+ * al salir de él:
+ * - al desmontarse: en Android el Modal deja de pintar su contenido en cuanto
+ *   se cierra y el campo se iba sin onBlur ni onEndEditing (cerrar la compra
+ *   con la X, o salir con la flecha atrás, con el teclado abierto);
+ * - al ocultarse el teclado: en Android «atrás» lo oculta y el campo se queda
+ *   con el foco; el total seguía con lo de antes y eso se confirmaba.
+ * Antes el precio o la cantidad a medio escribir se perdía.
+ */
+function useCommitOnLeave(focused: boolean, commit: () => void) {
+  const pendingRef = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => {
+    pendingRef.current = focused ? commit : null;
+  });
+  useEffect(() => {
+    if (!focused) return;
+    const subscription = Keyboard.addListener("keyboardDidHide", () => pendingRef.current?.());
+    return () => subscription.remove();
+  }, [focused]);
+  useEffect(() => () => pendingRef.current?.(), []);
+}
+
+/**
+ * Precio unitario editable. Acepta coma o punto ("12,50", "1,500.50"), sin
+ * negativos; se guarda al salir del campo o con Enter. Fuera del campo se ve
+ * el precio que tiene el carrito: si el valor no sirve, se descarta y vuelve
+ * a verse ese. Al entrar el texto no cambia ("$12.50", que parseMoney también
+ * lee): así queda seleccionado y lo que se escribe lo reemplaza.
+ */
+function CartPriceField({
+  item,
+  look,
+  onPriceChange,
+}: {
+  item: CartItemData;
+  look: CartLook;
+  onPriceChange: (itemId: number | string, price: number) => void;
+}) {
+  // Los colores del renglón donde va: antes eran siempre los del tema y, en
+  // un carrito con la paleta fija, en modo oscuro el «/kg» quedaba crema
+  // sobre blanco.
+  const { styles } = look;
+  const [focused, setFocused] = useState(false);
+  const [text, setText] = useState("");
+  // Lo que tenía el campo al entrar: si no se cambió, no se manda nada (un
+  // precio de $0.025/g no se vuelve $0.03 solo por tocar el campo).
+  const initialRef = useRef("");
+  // onEndEditing, onSubmitEditing y onBlur pueden llegar juntos: aplicar una vez.
+  const committedRef = useRef<string | null>(null);
+
+  const commit = () => {
+    if (committedRef.current === text) return;
+    committedRef.current = text;
+    if (text.trim() === initialRef.current) return;
+
+    const parsed = parseMoney(text);
+    if (parsed === null || parsed < 0) return;
+    // Se puede seguir escribiendo sin salir del campo (se aplicó al ocultar
+    // el teclado): lo que se compara después es lo último que se aplicó.
+    initialRef.current = text.trim();
+    onPriceChange(item.id, parsed);
+  };
+  useCommitOnLeave(focused, commit);
+
+  return (
+    <View style={styles.priceField}>
+      <TextInput
+        style={styles.priceInput}
+        value={focused ? text : formatUnitPrice(item.price)}
+        onChangeText={(value) => setText(value.replace(/-/g, ""))}
+        onFocus={() => {
+          const initial = formatUnitPrice(item.price);
+          initialRef.current = initial;
+          committedRef.current = null;
+          setText(initial);
+          setFocused(true);
+        }}
+        onSubmitEditing={commit}
+        onEndEditing={commit}
+        onBlur={() => {
+          commit();
+          setFocused(false);
+        }}
+        keyboardType="decimal-pad"
+        selectTextOnFocus
+        maxLength={14}
+        returnKeyType="done"
+        accessibilityLabel={`Precio por ${item.unit_name || item.unit_abbreviation || "unidad"} de ${item.name}`}
+      />
+      {!!item.unit_abbreviation && <Text style={styles.priceUnit}>/{item.unit_abbreviation}</Text>}
+    </View>
+  );
+}
+
 function CartItemComponent({
   item,
+  look,
   canEdit,
   canRemove,
   onRemove,
   onItemChange,
+  onPriceChange,
 }: CartItemComponentProps) {
+  const { styles, colors } = look;
   const [unitMenuVisible, setUnitMenuVisible] = useState(false);
   const allowDecimal = cartItemAllowsDecimal(item);
   // Mientras el campo tiene el foco se muestra lo que se escribe; fuera de él,
@@ -133,6 +260,7 @@ function CartItemComponent({
       onItemChange(item.id, "set", next);
     }
   };
+  useCommitOnLeave(focused, commitQuantity);
 
   const handleUnitChange = (unitId: number) => {
     onItemChange(item.id, "unit", unitId);
@@ -154,7 +282,7 @@ function CartItemComponent({
               <MaterialCommunityIcons
                 name="package-variant"
                 size={20}
-                color={palette.textMuted}
+                color={colors.textMuted}
               />
             </View>
           )}
@@ -182,6 +310,8 @@ function CartItemComponent({
                     style={styles.unitChip}
                     onPress={() => setUnitMenuVisible(true)}
                     activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Unidad de ${item.name}: ${item.unit_name || item.unit_abbreviation || item.unit || "sin unidad"}`}
                   >
                     <Text style={styles.unitChipText} numberOfLines={1}>
                       {item.unit_abbreviation ||
@@ -192,7 +322,7 @@ function CartItemComponent({
                     <MaterialCommunityIcons
                       name={unitMenuVisible ? "chevron-up" : "chevron-down"}
                       size={12}
-                      color={palette.textSecondary}
+                      color={colors.textSecondary}
                     />
                   </TouchableOpacity>
                 }
@@ -218,16 +348,20 @@ function CartItemComponent({
           </View>
 
           <View style={styles.priceRow}>
-            <Text style={styles.itemPrice}>
-              {/* Con 4 decimales debajo de $1: $0.025/g se veía "$0.03 /g". */}
-              {formatUnitPrice(item.price)}
-              {item.unit_abbreviation && (
-                <Text style={styles.unitLabel}>
-                  {" "}
-                  /{item.unit_abbreviation}
-                </Text>
-              )}
-            </Text>
+            {onPriceChange ? (
+              <CartPriceField item={item} look={look} onPriceChange={onPriceChange} />
+            ) : (
+              <Text style={styles.itemPrice}>
+                {/* Con 4 decimales debajo de $1: $0.025/g se veía "$0.03 /g". */}
+                {formatUnitPrice(item.price)}
+                {item.unit_abbreviation && (
+                  <Text style={styles.unitLabel}>
+                    {" "}
+                    /{item.unit_abbreviation}
+                  </Text>
+                )}
+              </Text>
+            )}
           </View>
         </View>
       </View>
@@ -242,16 +376,21 @@ function CartItemComponent({
                 style={styles.qtyButton}
                 onPress={() => handleQuantityChange(-1)}
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  item.quantity <= 1 ? `Quitar ${item.name}` : `Restar uno a ${item.name}`
+                }
               >
                 <MaterialCommunityIcons
                   name="minus"
                   size={14}
-                  color={palette.textSecondary}
+                  color={colors.textSecondary}
                 />
               </TouchableOpacity>
             )}
             <TextInput
               style={styles.quantityInput}
+              accessibilityLabel={`Cantidad de ${item.name}`}
               value={focused ? qtyText : formatQuantity(item.quantity)}
               onChangeText={setQtyText}
               onFocus={() => {
@@ -273,8 +412,10 @@ function CartItemComponent({
               style={[styles.qtyButton, styles.qtyButtonPrimary]}
               onPress={() => handleQuantityChange(1)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Sumar uno a ${item.name}`}
             >
-              <MaterialCommunityIcons name="plus" size={14} color="#fff" />
+              <MaterialCommunityIcons name="plus" size={14} color={colors.primaryForeground} />
             </TouchableOpacity>
           </View>
         ) : (
@@ -291,11 +432,13 @@ function CartItemComponent({
               style={styles.removeButton}
               onPress={() => onRemove(item.id)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Quitar ${item.name}`}
             >
               <MaterialCommunityIcons
                 name="trash-can-outline"
                 size={16}
-                color={palette.error}
+                color={colors.error}
               />
             </TouchableOpacity>
           )}
@@ -316,10 +459,26 @@ export default function Cart({
   scrollAll = false,
   canEditItems = true,
   canRemoveItems = true,
+  canEditPrice = false,
+  onPriceChange,
+  title = "Carrito",
+  count,
+  themed = false,
   children,
 }: CartProps) {
+  // Con `themed` el carrito sigue el modo oscuro, como lo que la compra le
+  // mete adentro (datos y botones del tema). Antes era siempre la paleta
+  // clara fija y eso quedaba crema sobre blanco.
+  const { colors: themeColors } = useTheme();
+  const themedSheet = useThemedStyles(makeStyles);
+  const look = useMemo<CartLook>(
+    () => (themed ? { styles: themedSheet, colors: themeColors } : fixedLook),
+    [themed, themedSheet, themeColors],
+  );
+  const { styles, colors } = look;
   const cartTotal = items.reduce((sum, item) => sum + item.total, 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  const priceChange = canEditPrice ? onPriceChange : undefined;
 
   const itemsContent =
     items.length === 0 ? (
@@ -336,10 +495,12 @@ export default function Cart({
         <View key={item.id}>
           <CartItemComponent
             item={item}
+            look={look}
             canEdit={canEditItems}
             canRemove={canRemoveItems}
             onRemove={onRemoveItem}
             onItemChange={onItemChange}
+            onPriceChange={priceChange}
           />
           {index < items.length - 1 && <View style={styles.itemDivider} />}
         </View>
@@ -369,7 +530,7 @@ export default function Cart({
             activeOpacity={0.7}
           >
             <Text style={styles.finishButtonText}>Finalizar</Text>
-            <MaterialCommunityIcons name="arrow-right" size={18} color="#fff" />
+            <MaterialCommunityIcons name="arrow-right" size={18} color={colors.primaryForeground} />
           </TouchableOpacity>
         )}
       </View>
@@ -384,13 +545,13 @@ export default function Cart({
             <MaterialCommunityIcons
               name="cart-outline"
               size={18}
-              color={palette.primary}
+              color={colors.primary}
             />
           </View>
-          <Text style={styles.title}>Carrito</Text>
+          <Text style={styles.title}>{title}</Text>
           {items.length > 0 && (
             <View style={styles.countBadge}>
-              <Text style={styles.countText}>{itemCount}</Text>
+              <Text style={styles.countText}>{count ?? itemCount}</Text>
             </View>
           )}
         </View>
@@ -403,7 +564,7 @@ export default function Cart({
             <MaterialCommunityIcons
               name="broom"
               size={14}
-              color={palette.error}
+              color={colors.error}
             />
             <Text style={styles.clearButtonText}>Limpiar</Text>
           </TouchableOpacity>
@@ -431,10 +592,10 @@ export default function Cart({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
   },
   screenContainer: {
     // Estilos específicos cuando se muestra como pantalla
@@ -458,26 +619,26 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: tokens.radius.md,
-    backgroundColor: palette.primarySoft,
+    backgroundColor: c.primarySoft,
     alignItems: "center",
     justifyContent: "center",
   },
   title: {
     ...tokens.typography.h3,
-    color: palette.text,
+    color: c.text,
   },
   countBadge: {
     minWidth: 22,
     height: 22,
     borderRadius: tokens.radius.full,
     paddingHorizontal: 6,
-    backgroundColor: palette.primarySoft,
+    backgroundColor: c.primarySoft,
     alignItems: "center",
     justifyContent: "center",
   },
   countText: {
     ...tokens.typography.micro,
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
@@ -491,11 +652,11 @@ const styles = StyleSheet.create({
   },
   clearButtonText: {
     ...tokens.typography.micro,
-    color: palette.error,
+    color: c.error,
     fontWeight: "600",
   },
   headerDivider: {
-    backgroundColor: palette.border,
+    backgroundColor: c.border,
   },
 
   // --- Items list ---
@@ -519,7 +680,7 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: tokens.radius.md,
     overflow: "hidden",
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
   },
   productImage: {
     width: "100%",
@@ -528,7 +689,7 @@ const styles = StyleSheet.create({
   imagePlaceholder: {
     width: "100%",
     height: "100%",
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -549,12 +710,12 @@ const styles = StyleSheet.create({
   },
   itemName: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
   },
   itemCode: {
     ...tokens.typography.micro,
-    color: palette.textMuted,
+    color: c.textMuted,
   },
   priceRow: {
     flexDirection: "row",
@@ -562,14 +723,31 @@ const styles = StyleSheet.create({
   },
   itemPrice: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
   },
   unitLabel: {
     ...tokens.typography.micro,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontWeight: "400",
   },
+  priceField: { flexDirection: "row", alignItems: "center", gap: 4 },
+  priceInput: {
+    minWidth: 92,
+    height: 30,
+    paddingVertical: 0,
+    paddingHorizontal: 8,
+    borderRadius: tokens.radius.sm,
+    borderWidth: 1,
+    borderColor: c.borderStrong,
+    backgroundColor: c.surface,
+    color: c.text,
+    fontSize: 14,
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : null),
+  },
+  priceUnit: { fontSize: 12, color: c.textSecondary },
 
   // --- Unit chip in cart ---
   unitChip: {
@@ -579,20 +757,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: tokens.radius.full,
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
   },
   unitChipText: {
     ...tokens.typography.micro,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
   },
   unitMenu: {
     marginTop: 4,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.md,
     ...tokens.shadow.md,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     // Z-index alto para superponerse a las cards del carrito
     // sin verse transparente. Paper renderiza el Menu en un
     // portal, por lo que el zIndex va en el contentStyle.
@@ -600,7 +778,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   unitMenuItemTextSelected: {
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "600",
   },
 
@@ -614,7 +792,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: tokens.spacing[2],
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     borderRadius: tokens.radius.md,
     paddingHorizontal: 4,
     paddingVertical: 4,
@@ -625,28 +803,32 @@ const styles = StyleSheet.create({
     borderRadius: tokens.radius.sm,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
   },
   qtyButtonPrimary: {
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
   },
   quantityInput: {
     ...tokens.typography.bodyMd,
     minWidth: 48,
+    // En web un TextInput mide unos 20 caracteres: en el carrito al lado del
+    // catálogo (Compras, Transferencias) empujaba el importe y el botón de
+    // quitar fuera del panel.
+    ...(Platform.OS === "web" ? { width: 64 } : null),
     height: 28,
     paddingVertical: 0,
     paddingHorizontal: 4,
     textAlign: "center",
     fontWeight: "700",
-    color: palette.text,
+    color: c.text,
     fontVariant: ["tabular-nums"],
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.sm,
   },
   quantityReadOnly: {
     ...tokens.typography.bodyMd,
     fontWeight: "700",
-    color: palette.text,
+    color: c.text,
     fontVariant: ["tabular-nums"],
   },
   itemRight: {
@@ -657,7 +839,7 @@ const styles = StyleSheet.create({
   itemTotal: {
     ...tokens.typography.bodyMd,
     fontWeight: "700",
-    color: palette.text,
+    color: c.text,
     fontVariant: ["tabular-nums"],
   },
   removeButton: {
@@ -669,15 +851,15 @@ const styles = StyleSheet.create({
   },
   itemDivider: {
     height: 1,
-    backgroundColor: palette.border,
+    backgroundColor: c.border,
     marginHorizontal: tokens.spacing[4],
   },
 
   // --- Footer ---
   footer: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderTopWidth: 1,
-    borderTopColor: palette.border,
+    borderTopColor: c.border,
   },
   totalContainer: {
     padding: tokens.spacing[4],
@@ -690,22 +872,22 @@ const styles = StyleSheet.create({
   },
   totalLabel: {
     ...tokens.typography.body,
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
   totalLabelStrong: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
   },
   totalValue: {
     ...tokens.typography.body,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
     fontVariant: ["tabular-nums"],
   },
   totalAmount: {
     ...tokens.typography.h2,
-    color: palette.text,
+    color: c.text,
     fontVariant: ["tabular-nums"],
   },
   finishButton: {
@@ -713,7 +895,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
     marginHorizontal: tokens.spacing[4],
     marginBottom: tokens.spacing[4],
     paddingVertical: 12,
@@ -721,7 +903,15 @@ const styles = StyleSheet.create({
   },
   finishButtonText: {
     ...tokens.typography.bodyMd,
-    color: "#fff",
+    color: c.primaryForeground,
     fontWeight: "700",
   },
-});
+}));
+
+// Ventas y Transferencias: la paleta clara fija, como siempre. Sin
+// StyleSheet.create, que devuelve el mismo objeto y no acepta el tipo de
+// themedStyles.
+const fixedLook: CartLook = {
+  styles: makeStyles(palette),
+  colors: palette,
+};
