@@ -1,55 +1,53 @@
 /**
- * ReportsScreen v2 — SaaS 2025.
+ * Dashboard: cómo va el negocio en el periodo (hoy, la semana o el mes), de
+ * la sucursal o de todas.
  *
- * Rediseño completo del dashboard de reportes usando el nuevo
- * sistema de diseño (tokens, palette v2, KpiCard, AppChip,
- * SectionHeader, EmptyState). Mantiene la estructura de datos
- * del backend (DashboardV2) y agrega dos secciones nuevas:
+ * Mismo lenguaje que Inicio: la cifra de ventas al frente con su gráfica, y
+ * lo demás en listas agrupadas (resumen, más vendidos, métodos de pago,
+ * actividad) en vez de tarjetas con sombra. En el teléfono va en una columna;
+ * en tableta vertical, en una columna centrada; en tableta acostada y
+ * escritorio, en dos (ver SummaryLayout).
  *
- * - Producción hoy: módulo nuevo agregado al backend, con
- *   cocos procesados, agua extraída, pulpa producida y % de
- *   merma. Usa /production-orders/today-stats.
- * - Alertas críticas: agrupa stock bajo, tareas vencidas y
- *   notificaciones no leídas en un solo panel de un vistazo.
- *
- * Layout: 3 filas de KPIs + grid 2x2 (gráficos) + grid 2x1
- * (top productos + actividad) + alertas + producción.
+ * Datos: GET /reports-v2/dashboard (period, scope) y, con permiso de
+ * producción, /production-orders/today-stats.
  */
 
-import { parseLocalDate } from "@/utils/dates";
-import EmptyState from "@/components/App/EmptyState";
-import SectionHeader from "@/components/App/SectionHeader";
-import KpiCard from "@/components/Dashboard/KpiCard";
-import { tokens } from "@/constants/tokens";
+import { useAllLocationsAccess } from "@/components/Administration/Users/useUserScope";
+import {
+  LIST_TEXT_INSET,
+  ListGroup as List,
+  ListRow as Row,
+  ListSection as Section,
+  ListValueRow as ValueRow,
+} from "@/components/App/ListGroup";
+import SegmentedControl from "@/components/App/SegmentedControl";
+import {
+  HeroFigure,
+  SkeletonBlock,
+  SkeletonHero,
+  SkeletonSection,
+  SummaryColumns,
+  SummaryHeader,
+  useSummaryLayout,
+} from "@/components/App/SummaryLayout";
+import BreakdownList, { type BreakdownItem } from "@/components/Dashboard/BreakdownList";
+import TrendBars, { type TrendBar } from "@/components/Dashboard/TrendBars";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useCan } from "@/hooks/useCan";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { parseLocalDate, toLocalDateString } from "@/utils/dates";
+import { formatMoney, formatQuantity } from "@/utils/format";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import React from "react";
-import {
-  Dimensions,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { LineChart, PieChart } from "react-native-chart-kit";
-import {
-  Button,
-  Modal,
-  Portal,
-  RadioButton,
-  Text,
-  TouchableRipple,
-} from "react-native-paper";
+import { Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
 
 type Period = "today" | "week" | "month";
 type Scope = "location" | "general";
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 interface TrendPoint {
   period: string;
@@ -90,7 +88,7 @@ interface DashboardV2 {
   cash: { income: number; expense: number; balance: number };
   expenses: { total: number; count: number };
   sales_trend: TrendPoint[];
-  sales_by_location: Array<{ name: string; value: number }>;
+  sales_by_location: { name: string; value: number }[];
   top_products: TopProduct[];
   payment_methods: PiePoint[];
   recent_activity: ActivityItem[];
@@ -117,56 +115,122 @@ interface ProductionToday {
   top_produced: ProductionLine[];
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-MX", {
-    style: "currency",
-    currency: "MXN",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value || 0);
+const PERIODS = [
+  { value: "today", label: "Hoy" },
+  { value: "week", label: "Semana" },
+  { value: "month", label: "Mes" },
+] as const;
+
+const SCOPES = [
+  { value: "location", label: "Esta sucursal" },
+  { value: "general", label: "Todas" },
+] as const;
+
+const LOW_STOCK_ROUTE = "/(tabs)/inventory/products/type/all?filter=low_stock";
+const NOTIFICATIONS_ROUTE = "/(tabs)/notifications";
+const PRODUCTION_ROUTE = "/(tabs)/home/production";
+const BUSINESS_REPORTS_ROUTE = "/(tabs)/home/business-reports";
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+const formatCount = (value: number) => new Intl.NumberFormat("es-MX").format(value || 0);
+const percentOf = (value: number, total: number) => (total > 0 ? `${Math.round((value / total) * 100)}%` : undefined);
+
+/** Lunes de la semana de `date`: la semana del backend empieza en lunes. */
+function mondayOf(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - ((date.getDay() + 6) % 7));
 }
 
-function formatNumber(value: number, suffix = "") {
-  if (!value) return `0${suffix}`;
-  return `${new Intl.NumberFormat("es-MX").format(value)}${suffix}`;
+const longDay = (date: Date) =>
+  date.toLocaleDateString("es-MX", { weekday: "long", day: "numeric", month: "long" });
+
+/** "Hoy · viernes, 16 de octubre" · "Esta semana · 12 al 18 de octubre" · "Este mes · octubre de 2026". */
+function periodCaption(period: Period, now = new Date()): string {
+  if (period === "today") return `Hoy · ${longDay(now)}`;
+  if (period === "week") {
+    const start = mondayOf(now);
+    const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6);
+    const from = start.toLocaleDateString(
+      "es-MX",
+      start.getMonth() === end.getMonth() ? { day: "numeric" } : { day: "numeric", month: "short" },
+    );
+    return `Esta semana · ${from} al ${end.toLocaleDateString("es-MX", { day: "numeric", month: "long" })}`;
+  }
+  return `Este mes · ${now.toLocaleDateString("es-MX", { month: "long", year: "numeric" })}`;
 }
 
-function formatQuantity(value: number, unit?: string | null) {
-  const num = new Intl.NumberFormat("es-MX", {
-    maximumFractionDigits: 2,
-  }).format(value || 0);
-  return unit ? `${num} ${unit}` : num;
-}
+const hourRange = (hour: number) => `${hour}:00 – ${hour + 1}:00`;
 
-function formatDate(dateString?: string | null) {
-  if (!dateString) return "-";
-  const dt = parseLocalDate(dateString);
-  if (Number.isNaN(dt.getTime())) return "-";
-  return dt.toLocaleDateString("es-MX", {
-    day: "2-digit",
-    month: "short",
+/**
+ * Una barra por cada hora (hoy) o día (semana, mes), con o sin ventas: el
+ * backend solo manda los periodos con ventas y la línea de antes unía esos
+ * puntos como si no hubiera días en cero entre ellos.
+ */
+function buildTrend(period: Period, points: TrendPoint[], now = new Date()): TrendBar[] {
+  const totals = new Map(points.map((point) => [point.period, Number(point.total) || 0]));
+  const bars: TrendBar[] = [];
+
+  if (period === "today") {
+    const hours = points
+      .filter((point) => /^\d{2}:\d{2}$/.test(point.period))
+      .map((point) => parseInt(point.period, 10));
+    const nowHour = now.getHours();
+    for (let hour = Math.min(8, ...hours); hour <= Math.max(20, nowHour, ...hours); hour++) {
+      const key = `${String(hour).padStart(2, "0")}:00`;
+      bars.push({
+        key,
+        axisLabel: hour % 4 === 0 ? `${hour}h` : undefined,
+        label: hourRange(hour),
+        value: totals.get(key) ?? 0,
+        current: hour === nowHour,
+      });
+    }
+  } else {
+    const start = period === "week" ? mondayOf(now) : new Date(now.getFullYear(), now.getMonth(), 1);
+    const days = period === "week" ? 7 : new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const today = toLocalDateString(now);
+    for (let i = 0; i < days; i++) {
+      const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      const key = toLocalDateString(date);
+      const day = date.getDate();
+      bars.push({
+        key,
+        axisLabel:
+          period === "week"
+            ? date.toLocaleDateString("es-MX", { weekday: "short" }).replace(".", "")
+            : day === 1 || day % 5 === 0
+              ? String(day)
+              : undefined,
+        label: longDay(date),
+        value: totals.get(key) ?? 0,
+        current: key === today,
+      });
+    }
+  }
+
+  // Si algo quedó fuera de los días esperados (p. ej. el dispositivo en otra
+  // zona horaria), se muestran los puntos tal cual para no esconder ventas.
+  const matched = bars.reduce((sum, bar) => sum + bar.value, 0);
+  const total = points.reduce((sum, point) => sum + (Number(point.total) || 0), 0);
+  if (Math.abs(matched - total) < 0.01) return bars;
+  return points.map((point) => {
+    const hour = /^\d{2}:\d{2}$/.test(point.period) ? parseInt(point.period, 10) : null;
+    const date = parseLocalDate(point.period);
+    return {
+      key: point.period,
+      label: hour !== null ? hourRange(hour) : longDay(date),
+      axisLabel: hour !== null ? `${hour}h` : String(date.getDate()),
+      value: Number(point.total) || 0,
+    };
   });
 }
 
-function normalizeDayLabel(raw: string) {
-  if (!raw) return "";
-  if (/^\d{2}:\d{2}$/.test(raw)) return raw;
-  // "2026-10-14" con new Date() es medianoche UTC: en México, el día anterior.
-  const dt = parseLocalDate(raw);
-  if (Number.isNaN(dt.getTime())) return raw;
-  return dt.toLocaleDateString("es-MX", { weekday: "short" });
+function shortDate(value?: string | null): string {
+  if (!value) return "";
+  const date = parseLocalDate(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
 }
 
-function moneyColor(
-  type: ActivityItem["money_type"],
-  colors: ReturnType<typeof useTheme>["colors"],
-) {
-  if (type === "income") return colors.success;
-  if (type === "expense") return colors.error;
-  return colors.textSecondary;
-}
-
-function activityIcon(type: string) {
+function activityIcon(type: string): IconName {
   if (type.startsWith("sale")) return "cash-register";
   if (type.startsWith("purchase")) return "cart-outline";
   if (type.startsWith("expense")) return "cash-minus";
@@ -178,499 +242,77 @@ function activityIcon(type: string) {
   return "information-outline";
 }
 
-/**
- * Factory de estilos a nivel de módulo. Se comparte entre el screen
- * principal y los sub-componentes (ProductionStat, FilterModal,
- * ScopeOption) para que cada uno pueda tener su propio `styles`
- * reactivo al tema. La función NO captura estado externo: solo
- * recibe la paleta y devuelve un objeto plano.
- */
-function makeReportsStyles(c: ReturnType<typeof useTheme>["colors"]) {
-  return {
-    container: {
-      flex: 1,
-      backgroundColor: c.background,
-    },
-    content: {
-      paddingHorizontal: tokens.spacing[5],
-      paddingTop: tokens.spacing[3],
-      paddingBottom: tokens.spacing[10],
-      width: "100%",
-    },
-    header: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: tokens.spacing[4],
-      gap: tokens.spacing[3],
-    },
-    title: {
-      ...tokens.typography.h1,
-      color: c.text,
-    },
-    subtitle: {
-      ...tokens.typography.caption,
-      color: c.textSecondary,
-      marginTop: 2,
-    },
-    filterButton: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      paddingHorizontal: tokens.spacing[3],
-      paddingVertical: 8,
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.surfaceMuted,
-      borderWidth: 1,
-      borderColor: "transparent",
-    },
-    periodRow: {
-      flexDirection: "row",
-      gap: 6,
-      marginBottom: tokens.spacing[2],
-    },
-    periodChip: {
-      paddingHorizontal: tokens.spacing[3],
-      paddingVertical: 6,
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.surfaceMuted,
-      borderWidth: 1,
-      borderColor: "transparent",
-    },
-    periodChipActive: {
-      backgroundColor: c.primary,
-      borderColor: c.primary,
-    },
-    periodChipText: {
-      ...tokens.typography.caption,
-      color: c.textSecondary,
-      fontWeight: "500",
-    },
-    periodChipTextActive: {
-      color: c.textInverse,
-      fontWeight: "600",
-    },
-    docsBanner: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[3],
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[3],
-      marginTop: tokens.spacing[2],
-      marginBottom: tokens.spacing[4],
-      ...tokens.shadow.sm,
-    },
-    docsIcon: {
-      width: 36,
-      height: 36,
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.primarySoft,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    docsTitle: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-      fontWeight: "600",
-    },
-    docsSubtitle: {
-      ...tokens.typography.caption,
-      color: c.textSecondary,
-    },
-    section: {
-      marginBottom: tokens.spacing[5],
-    },
-    kpiRow: {
-      flexDirection: "row",
-      gap: tokens.spacing[3],
-      marginBottom: tokens.spacing[3],
-    },
-    // Las 6 KPIs en una sola cuadrícula: 3 por fila en pantallas anchas y 2
-    // en celular (en 3 columnas el valor se cortaba a "$7…").
-    kpiGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: tokens.spacing[3],
-      marginBottom: tokens.spacing[3],
-    },
-    chartCard: {
-      flex: 1,
-      minWidth: 320,
-      width: "100%",
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[4],
-      ...tokens.shadow.sm,
-    },
-    chartTitle: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-      fontWeight: "600",
-      marginBottom: tokens.spacing[3],
-    },
-    chart: {
-      borderRadius: tokens.radius.md,
-    },
-    chartEmpty: {
-      padding: tokens.spacing[5],
-      alignItems: "center",
-    },
-    emptyText: {
-      ...tokens.typography.body,
-      color: c.textMuted,
-      textAlign: "center",
-    },
-    chartsGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: tokens.spacing[3],
-      marginBottom: tokens.spacing[5],
-    },
-    bottomGrid: {
-      flexDirection: "row",
-      gap: tokens.spacing[3],
-    },
-    // Top productos / métodos de pago
-    productRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[3],
-      paddingVertical: tokens.spacing[2] + 2,
-    },
-    productRank: {
-      width: 28,
-      height: 28,
-      borderRadius: tokens.radius.full,
-      backgroundColor: c.primarySoft,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    productRankText: {
-      color: c.primary,
-      fontWeight: "700",
-      fontSize: 12,
-    },
-    productHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: tokens.spacing[2],
-    },
-    productLabel: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-      flex: 1,
-      minWidth: 0,
-    },
-    productValue: {
-      ...tokens.typography.bodyMd,
-      color: c.textSecondary,
-      fontVariant: ["tabular-nums"],
-    },
-    productMeta: {
-      ...tokens.typography.caption,
-      color: c.textMuted,
-    },
-    productBarTrack: {
-      height: 6,
-      backgroundColor: c.surfaceMuted,
-      borderRadius: tokens.radius.full,
-      overflow: "hidden",
-      marginTop: 6,
-    },
-    productBarFill: {
-      height: "100%",
-      backgroundColor: c.primary,
-      borderRadius: tokens.radius.full,
-    },
-    paymentRow: {
-      flexDirection: "column",
-      gap: 0,
-      paddingVertical: tokens.spacing[2] + 2,
-    },
-    paymentHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: tokens.spacing[2],
-    },
-    paymentTrack: {
-      height: 6,
-      backgroundColor: c.surfaceMuted,
-      borderRadius: tokens.radius.full,
-      overflow: "hidden",
-      marginTop: 6,
-    },
-    paymentFill: {
-      height: "100%",
-      borderRadius: tokens.radius.full,
-    },
-    paymentDot: {
-      width: 10,
-      height: 10,
-      borderRadius: tokens.radius.full,
-    },
-    paymentName: {
-      ...tokens.typography.body,
-      color: c.text,
-      flex: 1,
-    },
-    paymentPercent: {
-      ...tokens.typography.bodyMd,
-      color: c.textSecondary,
-      fontVariant: ["tabular-nums"],
-    },
-    subTitle: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-      fontWeight: "600",
-      marginTop: tokens.spacing[3],
-      marginBottom: tokens.spacing[2],
-    },
-    // Actividad
-    activityRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      paddingVertical: tokens.spacing[3],
-      gap: tokens.spacing[3],
-    },
-    activityIcon: {
-      width: 32,
-      height: 32,
-      borderRadius: tokens.radius.md,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    activityBody: {
-      flex: 1,
-      minWidth: 0,
-    },
-    activityLabel: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-    },
-    activityTitle: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-    },
-    activityMeta: {
-      ...tokens.typography.caption,
-      color: c.textMuted,
-      marginTop: 2,
-    },
-    activityAmount: {
-      ...tokens.typography.bodyMd,
-      fontWeight: "600",
-      fontVariant: ["tabular-nums"],
-    },
-    divider: {
-      height: 1,
-      backgroundColor: c.border,
-      marginVertical: tokens.spacing[3],
-    },
-    // Alertas
-    alertsPanel: {
-      gap: tokens.spacing[2],
-    },
-    alertRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: tokens.spacing[3],
-      padding: tokens.spacing[3] + 2,
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.surfaceMuted,
-    },
-    alertRowError: {
-      backgroundColor: c.errorSoft,
-    },
-    alertRowWarning: {
-      backgroundColor: c.warningSoft,
-    },
-    alertRowInfo: {
-      backgroundColor: c.infoSoft,
-    },
-    alertIcon: {
-      width: 32,
-      height: 32,
-      borderRadius: tokens.radius.md,
-      backgroundColor: c.surface,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    alertIconError: {
-      backgroundColor: c.error,
-    },
-    alertIconWarning: {
-      backgroundColor: c.warning,
-    },
-    alertIconInfo: {
-      backgroundColor: c.info,
-    },
-    alertLabel: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-    },
-    alertMeta: {
-      ...tokens.typography.caption,
-      color: c.textMuted,
-      marginTop: 2,
-    },
-    alertCard: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: c.warningSoft,
-      borderLeftWidth: 4,
-      borderLeftColor: c.warning,
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[4],
-      gap: tokens.spacing[3],
-    },
-    alertBody: {
-      flex: 1,
-      minWidth: 0,
-    },
-    alertTitle: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-      fontWeight: "600",
-    },
-    alertSubtitle: {
-      ...tokens.typography.caption,
-      color: c.textSecondary,
-    },
-    // Producción
-    productionGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: tokens.spacing[3],
-    },
-    prodStat: {
-      flex: 1,
-      minWidth: 160,
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[4],
-      gap: tokens.spacing[2],
-      ...tokens.shadow.sm,
-    },
-    prodStatIcon: {
-      width: 32,
-      height: 32,
-      borderRadius: tokens.radius.sm,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    prodStatValue: {
-      ...tokens.typography.numeric,
-      color: c.text,
-      fontVariant: ["tabular-nums"],
-    },
-    prodStatLabel: {
-      ...tokens.typography.caption,
-      color: c.textMuted,
-    },
-    // Modal
-    modalContainer: {
-      maxWidth: 400,
-      width: "100%",
-      alignSelf: "center",
-      backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
-      padding: tokens.spacing[5],
-      margin: tokens.spacing[5],
-      ...tokens.shadow.lg,
-    },
-    modalTitle: {
-      ...tokens.typography.h2,
-      color: c.text,
-      marginBottom: tokens.spacing[4],
-    },
-    scopeItem: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      padding: tokens.spacing[3] + 2,
-      borderRadius: tokens.radius.lg,
-      borderWidth: 1,
-      borderColor: c.border,
-      gap: tokens.spacing[3],
-      marginBottom: tokens.spacing[2],
-    },
-    scopeItemSelected: {
-      borderColor: c.primary,
-      backgroundColor: c.primarySoft,
-    },
-    scopeContent: {
-      flex: 1,
-    },
-    scopeTitle: {
-      ...tokens.typography.bodyMd,
-      color: c.text,
-      fontWeight: "600",
-    },
-    scopeDescription: {
-      ...tokens.typography.caption,
-      color: c.textSecondary,
-      marginTop: 2,
-    },
-  };
-}
-
 export default function ReportsScreen() {
+  const router = useRouter();
   const { selectedLocation } = useSelectedLocation();
   const auth = useAuth();
   const { colors } = useTheme();
-  const { can } = useCan();
+  const { can, canAccessRoute } = useCan();
+  const styles = useStyles();
+  const layout = useSummaryLayout();
+  // "Todas" solo cambia algo para quien entra a todas las sucursales: a los
+  // demás el backend les responde con la suya aunque lo pidan.
+  const allLocations = useAllLocationsAccess();
   // "Producción de hoy" pide production_orders_list: sin él no se consulta
   // (antes se pedía igual y el backend respondía 403).
   const canSeeProduction = can("production_orders_list");
 
   const [loading, setLoading] = React.useState(true);
+  // Al cambiar de periodo o de alcance se queda lo anterior, atenuado, hasta
+  // que llega lo nuevo (antes se volvía al esqueleto y la pantalla brincaba).
+  const [reloading, setReloading] = React.useState(false);
   const [refreshing, setRefreshing] = React.useState(false);
-  const [selectedPeriod, setSelectedPeriod] = React.useState<Period>("month");
+  const [period, setPeriod] = React.useState<Period>("month");
   const [scope, setScope] = React.useState<Scope>("location");
-  const [filterVisible, setFilterVisible] = React.useState(false);
   const [dashboard, setDashboard] = React.useState<DashboardV2 | null>(null);
-  const [production, setProduction] = React.useState<ProductionToday | null>(
-    null
-  );
-
-  const isWeb = Platform.OS === "web";
-  const width = Dimensions.get("window").width;
-  const isWide = width >= 1024;
-  const kpiItemStyle = { flexBasis: width < 768 ? "46%" : "30%" } as const;
-  const chartWidth = isWide ? Math.min((width - 100) / 2, 530) : width - 56;
+  // Periodo y alcance de los datos en pantalla: mientras llega lo nuevo, la
+  // gráfica sigue leyendo lo anterior con sus propias reglas (fechas como días,
+  // no como horas).
+  const [shown, setShown] = React.useState<{ period: Period; scope: Scope }>({ period, scope });
+  const [production, setProduction] = React.useState<ProductionToday | null>(null);
+  const requestId = React.useRef(0);
+  const locationId = selectedLocation?.id;
 
   const loadAll = React.useCallback(async () => {
+    const id = ++requestId.current;
     try {
       const [dashboardRes, productionRes] = await Promise.all([
-        Services.reportsV2
-          .dashboard({ period: selectedPeriod, scope })
-          .catch(() => null),
+        Services.reportsV2.dashboard({ period, scope }).catch(() => null),
         canSeeProduction
           ? Services.productionOrders
               ?.getTodayStats?.({
-                location_id: selectedLocation?.id,
+                location_id: locationId,
               })
               .catch(() => null)
           : null,
       ]);
+      // Una respuesta que llega después de cambiar otra vez el filtro ya no vale.
+      if (id !== requestId.current) return;
 
       const dData: any = dashboardRes?.data;
       setDashboard(dData?.data ?? dData ?? null);
+      setShown({ period, scope });
 
       const pData: any = productionRes?.data;
       setProduction(pData?.data ?? pData ?? null);
     } catch (error) {
       console.error("reports v2 load error", error);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (id === requestId.current) {
+        setLoading(false);
+        setReloading(false);
+        setRefreshing(false);
+      }
     }
-  }, [scope, selectedPeriod, selectedLocation?.id, canSeeProduction]);
+  }, [scope, period, locationId, canSeeProduction]);
 
+  // Al entrar y al cambiar un filtro. La carga es asíncrona: el estado cambia
+  // cuando llega la respuesta, no durante el efecto.
   React.useEffect(() => {
-    loadAll();
+    const run = async () => {
+      await loadAll();
+    };
+    run();
   }, [loadAll]);
 
   const onRefresh = () => {
@@ -678,817 +320,437 @@ export default function ReportsScreen() {
     loadAll();
   };
 
-  const periodLabel = React.useMemo(() => {
-    if (selectedPeriod === "today") return "Hoy";
-    if (selectedPeriod === "week") return "Esta semana";
-    return "Este mes";
-  }, [selectedPeriod]);
+  const changePeriod = (next: Period) => {
+    if (dashboard) setReloading(true);
+    else setLoading(true);
+    setPeriod(next);
+  };
 
-  const locationPie = React.useMemo(() => {
-    const rows = dashboard?.sales_by_location || [];
-    if (!rows.length) return [] as any[];
-    const total = rows.reduce((acc, row) => acc + row.value, 0) || 1;
-    const chartColors = [
-      colors.chart1,
-      colors.chart2,
-      colors.chart3,
-      colors.chart4,
-      colors.chart5,
-      colors.chart6,
-    ];
-    return rows.map((row, index) => ({
-      name: `${row.name}: ${Math.round((row.value / total) * 100)}%`,
-      population: row.value,
-      color: chartColors[index % chartColors.length],
-      legendFontColor: colors.textSecondary,
-      legendFontSize: 11,
-    }));
-  }, [dashboard]);
+  const changeScope = (next: Scope) => {
+    if (dashboard) setReloading(true);
+    else setLoading(true);
+    setScope(next);
+  };
 
-  const paymentProgress = React.useMemo(() => {
-    const rows = dashboard?.payment_methods || [];
-    const total = rows.reduce((acc, row) => acc + row.value, 0) || 1;
-    return rows.map((row) => ({
-      ...row,
-      percent: Math.round((row.value / total) * 100),
-    }));
-  }, [dashboard]);
+  const go = (link: string) => router.push(link as any);
+  const linkIfAllowed = (link: string) => (canAccessRoute(link) ? () => go(link) : undefined);
 
-  const topProductMax = React.useMemo(() => {
-    const values = (dashboard?.top_products || []).map((p) => p.sales || 0);
-    return values.length ? Math.max(...values) : 1;
-  }, [dashboard]);
+  const trend = React.useMemo(
+    () => buildTrend(shown.period, dashboard?.sales_trend ?? []),
+    [shown.period, dashboard],
+  );
 
-  // Alertas críticas: stock bajo + tareas + notificaciones
-  const alerts = React.useMemo(() => {
-    const list: Array<{
-      id: string;
-      icon: keyof typeof MaterialCommunityIcons.glyphMap;
-      label: string;
-      meta: string;
-      variant: "error" | "warning" | "info";
-      action?: () => void;
-    }> = [];
-
-    if ((dashboard?.mini_kpis.low_stock_products ?? 0) > 0) {
-      list.push({
-        id: "low-stock",
-        icon: "alert-circle",
-        label: `${dashboard?.mini_kpis.low_stock_products} producto${
-          (dashboard?.mini_kpis.low_stock_products ?? 0) === 1 ? "" : "s"
-        } con stock bajo`,
-        meta: "Requieren reabastecimiento",
-        variant: "error",
-      });
+  // Dos claves del backend pueden dar el mismo nombre ("Sin especificar"):
+  // se juntan para no repetir la fila.
+  const payments = React.useMemo(() => {
+    const byName = new Map<string, number>();
+    for (const row of dashboard?.payment_methods ?? []) {
+      byName.set(row.name, (byName.get(row.name) ?? 0) + (Number(row.value) || 0));
     }
-    if ((auth.unreadNotificationsCount ?? 0) > 0) {
-      list.push({
-        id: "notifications",
-        icon: "bell-ring",
-        label: `${auth.unreadNotificationsCount} notificación${
-          (auth.unreadNotificationsCount ?? 0) === 1 ? "" : "es"
-        } sin leer`,
-        meta: "Revisa las novedades",
-        variant: "warning",
-      });
-    }
-    return list;
-  }, [dashboard, auth.unreadNotificationsCount, production]);
+    const total = [...byName.values()].reduce((sum, value) => sum + value, 0);
+    const items: BreakdownItem[] = [...byName.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, value]) => ({
+        key: name,
+        label: name,
+        value,
+        valueText: formatMoney(value),
+        detail: percentOf(value, total),
+      }));
+    return { total, items };
+  }, [dashboard]);
 
-  const styles = useThemedStyles(makeReportsStyles);
+  const branches = React.useMemo(() => {
+    const rows = dashboard?.sales_by_location ?? [];
+    const total = rows.reduce((sum, row) => sum + (Number(row.value) || 0), 0);
+    const items: BreakdownItem[] = rows.map((row) => ({
+      key: row.name,
+      label: row.name,
+      value: Number(row.value) || 0,
+      valueText: formatMoney(row.value),
+      detail: percentOf(Number(row.value) || 0, total),
+    }));
+    return { total, items };
+  }, [dashboard]);
 
-  return (
-    <View style={styles.container}>
-      <ScrollView
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header con periodo y filtros */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>Reportes</Text>
-            <Text style={styles.subtitle}>
-              {scope === "location" ? "Por sucursal" : "Consolidado"} ·{" "}
-              {periodLabel}
-            </Text>
-          </View>
-          <Button
-            mode="outlined"
-            icon="tune-variant"
-            textColor={colors.primary}
-            onPress={() => setFilterVisible(true)}
-            style={styles.filterButton}
-          >
-            Filtros
-          </Button>
-        </View>
+  const locationName = selectedLocation?.name ?? auth.location?.name ?? "Sucursal actual";
+  const header = (
+    <SummaryHeader
+      caption={periodCaption(period)}
+      title={scope === "general" ? "Todas las sucursales" : locationName}
+      phone={layout.phone}
+    >
+      <SegmentedControl
+        options={PERIODS}
+        value={period}
+        onChange={changePeriod}
+        stretch={layout.phone}
+        accessibilityLabel="Periodo"
+      />
+      {allLocations && (
+        <SegmentedControl
+          options={SCOPES}
+          value={scope}
+          onChange={changeScope}
+          stretch={layout.phone}
+          accessibilityLabel="Sucursales"
+        />
+      )}
+    </SummaryHeader>
+  );
 
-        {/* Period selector como chips inline */}
-        <View style={styles.periodRow}>
-          {(
-            [
-              { key: "today", label: "Hoy" },
-              { key: "week", label: "Semana" },
-              { key: "month", label: "Mes" },
-            ] as const
-          ).map((p) => (
-            <TouchableOpacity
-              key={p.key}
-              onPress={() => {
-                setLoading(true);
-                setSelectedPeriod(p.key);
-              }}
-              activeOpacity={0.7}
-              style={[
-                styles.periodChip,
-                selectedPeriod === p.key && styles.periodChipActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.periodChipText,
-                  selectedPeriod === p.key && styles.periodChipTextActive,
-                ]}
-              >
-                {p.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* Los mismos números, como documento: PDF para imprimir, Excel para el contador. */}
-        <TouchableOpacity
-          onPress={() => router.push("/(tabs)/home/business-reports" as any)}
-          activeOpacity={0.7}
-          style={styles.docsBanner}
+  let body: React.ReactNode;
+  if (loading) {
+    body = <DashboardSkeleton twoColumns={layout.twoColumns} />;
+  } else if (!dashboard) {
+    body = (
+      <View style={styles.loadError}>
+        <Text style={styles.calm}>No se pudo cargar el resumen.</Text>
+        <Pressable
+          onPress={() => {
+            setLoading(true);
+            loadAll();
+          }}
+          accessibilityRole="button"
+          hitSlop={8}
         >
-          <View style={styles.docsIcon}>
-            <MaterialCommunityIcons name="file-chart-outline" size={20} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.docsTitle}>Reportes en PDF y Excel</Text>
-            <Text style={styles.docsSubtitle}>
-              Ventas del periodo, inventario valorizado, mermas y diferencias de caja
-            </Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={22} color={colors.textMuted} />
-        </TouchableOpacity>
+          <Text style={styles.link}>Reintentar</Text>
+        </Pressable>
+      </View>
+    );
+  } else {
+    const kpis = dashboard.kpis;
+    const mini = dashboard.mini_kpis;
+    const lowStock = mini?.low_stock_products ?? 0;
+    const unread = auth.unreadNotificationsCount ?? 0;
+    const topProducts = dashboard.top_products ?? [];
+    const activity = (dashboard.recent_activity ?? []).slice(0, 5);
 
-        {loading ? (
-          <View style={{ gap: 12 }}>
-            <View style={styles.kpiRow}>
-              <SkeletonBox />
-              <SkeletonBox />
-              <SkeletonBox />
-            </View>
-            <View style={styles.kpiRow}>
-              <SkeletonBox />
-              <SkeletonBox />
-              <SkeletonBox />
-            </View>
-            <SkeletonBox height={260} />
-            <SkeletonBox height={320} />
-          </View>
+    const sales = (
+      <Section title="Ventas">
+        <HeroFigure value={formatMoney(kpis?.sales ?? 0)} />
+        <View style={styles.trend}>
+          <TrendBars
+            bars={trend}
+            formatValue={formatMoney}
+            peakLabel={shown.period === "today" ? "Hora más alta" : "Día más alto"}
+            emptyText={shown.period === "today" ? "Todavía sin ventas hoy." : "Sin ventas en este periodo."}
+          />
+        </View>
+      </Section>
+    );
+
+    const summary = (
+      <Section title="Resumen">
+        <List inset={LIST_TEXT_INSET}>
+          <ValueRow label="Compras" value={formatMoney(kpis?.purchases ?? 0)} />
+          <ValueRow label="Ganancia (ventas − compras)" value={formatMoney(kpis?.profit ?? 0)} />
+          <ValueRow label="Valor del inventario" value={formatMoney(mini?.inventory_value ?? 0)} />
+          <ValueRow label="Movimientos" value={formatCount(mini?.movements_count ?? 0)} />
+          <ValueRow label="Productos con stock bajo" value={formatCount(lowStock)} />
+        </List>
+      </Section>
+    );
+
+    const attention =
+      lowStock > 0 || unread > 0 ? (
+        <Section title="Por atender">
+          <List>
+            {lowStock > 0 && (
+              <Row
+                icon="trending-down"
+                iconColor={colors.warning}
+                title={`${formatCount(lowStock)} ${plural(lowStock, "producto", "productos")} con stock bajo`}
+                onPress={linkIfAllowed(LOW_STOCK_ROUTE)}
+              />
+            )}
+            {unread > 0 && (
+              <Row
+                icon="bell-outline"
+                iconColor={colors.info}
+                title={`${formatCount(unread)} ${plural(unread, "notificación sin leer", "notificaciones sin leer")}`}
+                onPress={linkIfAllowed(NOTIFICATIONS_ROUTE)}
+              />
+            )}
+          </List>
+        </Section>
+      ) : null;
+
+    const bestSellers = (
+      <Section title="Más vendidos">
+        {topProducts.length > 0 ? (
+          <BreakdownList
+            items={topProducts.map((product, index) => ({
+              key: `${product.name}-${index}`,
+              label: product.name,
+              value: Number(product.sales) || 0,
+              valueText: formatMoney(product.sales),
+            }))}
+          />
+        ) : (
+          <Text style={styles.calm}>Sin productos vendidos en este periodo.</Text>
+        )}
+      </Section>
+    );
+
+    const paymentMethods = (
+      <Section title="Métodos de pago">
+        {payments.items.length > 0 ? (
+          <BreakdownList items={payments.items} max={payments.total} />
+        ) : (
+          <Text style={styles.calm}>Sin cobros en este periodo.</Text>
+        )}
+      </Section>
+    );
+
+    // Con una sola sucursal el desglose solo repetiría el total.
+    const byBranch =
+      branches.items.length > 1 ? (
+        <Section title="Ventas por sucursal">
+          <BreakdownList items={branches.items} max={branches.total} />
+        </Section>
+      ) : null;
+
+    const productionBlock =
+      canSeeProduction && production ? (
+        <Section
+          title="Producción de hoy"
+          action={canAccessRoute(PRODUCTION_ROUTE) ? { label: "Ver órdenes", onPress: () => go(PRODUCTION_ROUTE) } : undefined}
+        >
+          <ProductionTodayBlock production={production} sideBySide={layout.mainWidth >= 600} />
+        </Section>
+      ) : null;
+
+    const recent = (
+      <Section title="Actividad reciente">
+        {activity.length > 0 ? (
+          <List>
+            {activity.map((item) => (
+              <ActivityRow key={item.id} item={item} showLocation={shown.scope === "general"} />
+            ))}
+          </List>
+        ) : (
+          <Text style={styles.calm}>Sin movimientos en este periodo.</Text>
+        )}
+      </Section>
+    );
+
+    // Los mismos números, como documento: PDF para imprimir, Excel para el contador.
+    const documents = canAccessRoute(BUSINESS_REPORTS_ROUTE) ? (
+      <Section title="Documentos">
+        <List>
+          <Row
+            icon="file-chart-outline"
+            title="Reportes en PDF y Excel"
+            subtitle="Ventas del periodo, inventario valorizado, mermas y diferencias de caja"
+            onPress={() => go(BUSINESS_REPORTS_ROUTE)}
+          />
+        </List>
+      </Section>
+    ) : null;
+
+    body = (
+      <View style={[styles.body, reloading && styles.dimmed]}>
+        {layout.twoColumns ? (
+          <SummaryColumns
+            main={
+              <>
+                {sales}
+                {bestSellers}
+                {paymentMethods}
+                {byBranch}
+                {productionBlock}
+              </>
+            }
+            side={
+              <>
+                {summary}
+                {attention}
+                {recent}
+                {documents}
+              </>
+            }
+          />
         ) : (
           <>
-            {/* KPIs principales y secundarios */}
-            <View style={styles.kpiGrid}>
-              <KpiCard
-                style={kpiItemStyle}
-                icon="trending-up"
-                label="Ventas"
-                value={formatCurrency(dashboard?.kpis?.sales ?? 0)}
-              />
-              <KpiCard
-                style={kpiItemStyle}
-                icon="cart-outline"
-                label="Compras"
-                value={formatCurrency(dashboard?.kpis?.purchases ?? 0)}
-                neutralDelta
-              />
-              <KpiCard
-                style={kpiItemStyle}
-                icon="cash-multiple"
-                label="Ganancia"
-                value={formatCurrency(dashboard?.kpis?.profit ?? 0)}
-              />
-              <KpiCard
-                style={kpiItemStyle}
-                icon="package-variant"
-                label="Inventario"
-                value={formatCurrency(
-                  dashboard?.mini_kpis.inventory_value ?? 0
-                )}
-              />
-              <KpiCard
-                style={kpiItemStyle}
-                icon="swap-vertical"
-                label="Movimientos"
-                value={formatNumber(dashboard?.mini_kpis.movements_count ?? 0)}
-              />
-              <KpiCard
-                style={kpiItemStyle}
-                icon="alert-circle-outline"
-                label="Stock bajo"
-                value={formatNumber(
-                  dashboard?.mini_kpis.low_stock_products ?? 0
-                )}
-              />
-            </View>
-
-            {/* Producción hoy — KPIs dinámicos basados en datos reales */}
-            {production && (
-              <View style={styles.section}>
-                <SectionHeader
-                  title="Producción de hoy"
-                  actionLabel="Ver órdenes"
-                  onAction={() =>
-                    auth.user &&
-                    (require("expo-router") as any).router.push(
-                      "/(tabs)/home/production"
-                    )
-                  }
-                />
-                {production.productions_count_today > 0 ? (
-                  <>
-                    <View style={styles.productionGrid}>
-                      <ProductionStat
-                        icon="factory"
-                        label="Órdenes"
-                        value={String(production.productions_count_today)}
-                        tone="primary"
-                      />
-                      <ProductionStat
-                        icon="import"
-                        label="Insumos"
-                        value={String(production.consumption_lines)}
-                        tone="info"
-                      />
-                      <ProductionStat
-                        icon="export-variant"
-                        label="Productos"
-                        value={String(production.output_lines)}
-                        tone="success"
-                      />
-                      {production.waste_percentage_available && (
-                        <ProductionStat
-                          icon="delete-variant"
-                          label="Merma"
-                          value={`${formatNumber(
-                            production.waste_percentage_today ?? 0
-                          )}%`}
-                          tone="warning"
-                        />
-                      )}
-                    </View>
-
-                    <View
-                      style={[
-                        styles.bottomGrid,
-                        !isWide && { flexDirection: "column" },
-                        { marginTop: tokens.spacing[3] },
-                      ]}
-                    >
-                      <View style={styles.chartCard}>
-                        <Text style={styles.chartTitle}>Más producido</Text>
-                        <ProductionBreakdown
-                          rows={production.top_produced}
-                          tone="success"
-                          emptyText="Sin productos registrados hoy."
-                        />
-                      </View>
-                      <View style={styles.chartCard}>
-                        <Text style={styles.chartTitle}>Más consumido</Text>
-                        <ProductionBreakdown
-                          rows={production.top_consumed}
-                          tone="info"
-                          emptyText="Sin insumos registrados hoy."
-                        />
-                      </View>
-                    </View>
-                  </>
-                ) : (
-                  <View style={styles.chartCard}>
-                    <EmptyState
-                      icon="factory"
-                      title="Sin producción hoy"
-                      description="No se han completado órdenes de producción hoy"
-                      compact
-                    />
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Alertas críticas */}
-            {alerts.length > 0 && (
-              <View style={styles.section}>
-                <SectionHeader
-                  title="Atención requerida"
-                  badge={alerts.length}
-                />
-                <View style={styles.alertsPanel}>
-                  {alerts.map((alert) => (
-                    <View
-                      key={alert.id}
-                      style={[
-                        styles.alertRow,
-                        alert.variant === "error" && styles.alertRowError,
-                        alert.variant === "warning" && styles.alertRowWarning,
-                        alert.variant === "info" && styles.alertRowInfo,
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.alertIcon,
-                          alert.variant === "error" && styles.alertIconError,
-                          alert.variant === "warning" && styles.alertIconWarning,
-                          alert.variant === "info" && styles.alertIconInfo,
-                        ]}
-                      >
-                        {/* La caja ya va del color de la alerta: el ícono en
-                            blanco (antes iba del mismo color y no se veía). */}
-                        <MaterialCommunityIcons
-                          name={alert.icon}
-                          size={16}
-                          color="#FFFFFF"
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.alertLabel}>{alert.label}</Text>
-                        <Text style={styles.alertMeta}>{alert.meta}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Gráficos principales: tendencia + por sucursal */}
-            <View
-              style={[
-                styles.chartsGrid,
-                !isWide && { flexDirection: "column" },
-              ]}
-            >
-              <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>Tendencia de Ventas</Text>
-                {(() => {
-                  const trendValues = (dashboard?.sales_trend || []).map(
-                    (p) => Number(p.total || 0),
-                  );
-                  const trendLabels = (dashboard?.sales_trend || []).map((p) =>
-                    normalizeDayLabel(p.period),
-                  );
-                  if (!trendValues.length) {
-                    return (
-                      <View style={styles.chartEmpty}>
-                        <Text style={styles.emptyText}>
-                          No hay datos de tendencia.
-                        </Text>
-                      </View>
-                    );
-                  }
-                  return (
-                    <LineChart
-                      data={{
-                        labels: trendLabels,
-                        datasets: [{ data: trendValues }],
-                      }}
-                      width={chartWidth}
-                      height={220}
-                      yAxisLabel="$"
-                      yAxisSuffix=""
-                      fromZero
-                      chartConfig={{
-                        backgroundColor: colors.surface,
-                        backgroundGradientFrom: colors.surface,
-                        backgroundGradientTo: colors.surface,
-                        decimalPlaces: 0,
-                        color: () => colors.primary,
-                        labelColor: () => colors.textMuted,
-                        propsForDots: {
-                          r: "4",
-                          strokeWidth: "2",
-                          stroke: colors.primary,
-                        },
-                      }}
-                      bezier
-                      style={styles.chart}
-                    />
-                  );
-                })()}
-              </View>
-
-              <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>Ventas por Sucursal</Text>
-                {locationPie.length ? (
-                  <PieChart
-                    data={locationPie}
-                    width={chartWidth}
-                    height={220}
-                    chartConfig={{
-                      color: () => colors.text,
-                      labelColor: () => colors.textSecondary,
-                    }}
-                    accessor="population"
-                    backgroundColor="transparent"
-                    paddingLeft="8"
-                    absolute
-                  />
-                ) : (
-                  <View style={styles.chartEmpty}>
-                    <Text style={styles.emptyText}>
-                      No hay datos para mostrar.
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {/* Top productos + Métodos de pago + Actividad */}
-            <View
-              style={[
-                styles.bottomGrid,
-                !isWide && { flexDirection: "column" },
-              ]}
-            >
-              <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>Top 5 Productos</Text>
-                {(dashboard?.top_products || []).map((product, idx) => {
-                  const widthPct = Math.max(
-                    8,
-                    Math.round(((product.sales || 0) / topProductMax) * 100)
-                  );
-                  return (
-                    <View
-                      key={`${product.name}-${idx}`}
-                      style={styles.productRow}
-                    >
-                      <View style={styles.productRank}>
-                        <Text style={styles.productRankText}>{idx + 1}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={styles.productHeader}>
-                          <Text
-                            style={styles.productLabel}
-                            numberOfLines={1}
-                          >
-                            {product.name}
-                          </Text>
-                          <Text style={styles.productValue}>
-                            {formatCurrency(product.sales)}
-                          </Text>
-                        </View>
-                        <View style={styles.productBarTrack}>
-                          <View
-                            style={[
-                              styles.productBarFill,
-                              {
-                                width: `${widthPct}%`,
-                                backgroundColor: colors.primary,
-                              },
-                            ]}
-                          />
-                        </View>
-                      </View>
-                    </View>
-                  );
-                })}
-                {(!dashboard?.top_products ||
-                  dashboard.top_products.length === 0) && (
-                  <View style={styles.chartEmpty}>
-                    <EmptyState
-                      icon="package-variant-closed"
-                      title="Sin ventas registradas"
-                      description="No hay productos vendidos en el periodo"
-                      compact
-                    />
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.chartCard}>
-                <Text style={styles.chartTitle}>Métodos de Pago</Text>
-                {(paymentProgress || []).map((method, idx) => (
-                  <View
-                    key={`${method.name}-${idx}`}
-                    style={styles.paymentRow}
-                  >
-                    <View style={styles.paymentHeader}>
-                      <Text style={styles.productLabel}>{method.name}</Text>
-                      <Text style={styles.productMeta}>
-                        {method.percent}%
-                      </Text>
-                    </View>
-                    <View style={styles.paymentTrack}>
-                      <View
-                        style={[
-                          styles.paymentFill,
-                          {
-                            width: `${method.percent}%`,
-                            backgroundColor: method.color || colors.primary,
-                          },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                ))}
-                {paymentProgress.length === 0 && (
-                  <View style={styles.chartEmpty}>
-                    <Text style={styles.emptyText}>
-                      Sin métodos de pago registrados.
-                    </Text>
-                  </View>
-                )}
-
-                <View style={styles.divider} />
-
-                <Text style={styles.subTitle}>Actividad reciente</Text>
-                {(dashboard?.recent_activity || []).slice(0, 5).map((item) => (
-                  <View key={item.id} style={styles.activityRow}>
-                    <View
-                      style={[
-                        styles.activityIcon,
-                        {
-                          backgroundColor:
-                            moneyColor(item.money_type, colors) + "15",
-                        },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name={activityIcon(item.type) as any}
-                        size={14}
-                        color={moneyColor(item.money_type, colors)}
-                      />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text
-                        style={styles.activityLabel}
-                        numberOfLines={1}
-                      >
-                        {item.label}
-                      </Text>
-                      <Text style={styles.activityMeta} numberOfLines={1}>
-                        {formatDate(item.date)}
-                        {item.location ? ` · ${item.location}` : ""}
-                      </Text>
-                    </View>
-                    <Text
-                      style={[
-                        styles.activityAmount,
-                        { color: moneyColor(item.money_type, colors) },
-                      ]}
-                    >
-                      {item.money_type === "none"
-                        ? "-"
-                        : formatCurrency(item.amount)}
-                    </Text>
-                  </View>
-                ))}
-                {(!dashboard?.recent_activity ||
-                  dashboard.recent_activity.length === 0) && (
-                  <View style={styles.chartEmpty}>
-                    <EmptyState
-                      icon="clock-outline"
-                      title="Sin actividad"
-                      description="No hay movimientos en el periodo"
-                      compact
-                    />
-                  </View>
-                )}
-              </View>
-            </View>
+            {sales}
+            {summary}
+            {attention}
+            {bestSellers}
+            {paymentMethods}
+            {byBranch}
+            {productionBlock}
+            {recent}
+            {documents}
           </>
         )}
-      </ScrollView>
-
-      {/* Modal de filtros (sucursal vs consolidado) */}
-      <FilterModal
-        visible={filterVisible}
-        onDismiss={() => setFilterVisible(false)}
-        selectedScope={scope}
-        currentLocationName={selectedLocation?.name}
-        onScopeChange={(nextScope) => {
-          setScope(nextScope);
-          setLoading(true);
-        }}
-      />
-    </View>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────
-// Sub-componentes locales (mantenidos inline para cohesion)
-// ────────────────────────────────────────────────────────────────────
-
-interface ProductionStatProps {
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  label: string;
-  value: string;
-  tone: "primary" | "info" | "success" | "warning" | "error";
-}
-
-function ProductionStat({ icon, label, value, tone }: ProductionStatProps) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(makeReportsStyles);
-  const tonePalette = {
-    primary: { bg: colors.primarySoft, fg: colors.primary },
-    info: { bg: colors.infoSoft, fg: colors.info },
-    success: { bg: colors.successSoft, fg: colors.success },
-    warning: { bg: colors.warningSoft, fg: colors.warning },
-    error: { bg: colors.errorSoft, fg: colors.error },
-  }[tone];
-  return (
-    <View style={styles.prodStat}>
-      <View
-        style={[styles.prodStatIcon, { backgroundColor: tonePalette.bg }]}
-      >
-        <MaterialCommunityIcons name={icon} size={18} color={tonePalette.fg} />
-      </View>
-      <Text style={styles.prodStatValue}>{value}</Text>
-      <Text style={styles.prodStatLabel}>{label}</Text>
-    </View>
-  );
-}
-
-interface ProductionBreakdownProps {
-  rows: ProductionLine[];
-  tone: "primary" | "info" | "success" | "warning" | "error";
-  emptyText: string;
-}
-
-function ProductionBreakdown({ rows, tone, emptyText }: ProductionBreakdownProps) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(makeReportsStyles);
-  const toneColor = {
-    primary: colors.primary,
-    info: colors.info,
-    success: colors.success,
-    warning: colors.warning,
-    error: colors.error,
-  }[tone];
-
-  if (!rows || rows.length === 0) {
-    return (
-      <View style={styles.chartEmpty}>
-        <Text style={styles.emptyText}>{emptyText}</Text>
       </View>
     );
   }
 
-  const max = Math.max(...rows.map((r) => r.quantity || 0), 1);
-
   return (
+    <View style={styles.screen} onLayout={layout.onLayout}>
+      <ScrollView
+        contentContainerStyle={layout.contentStyle}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        showsVerticalScrollIndicator={false}
+      >
+        {header}
+        {body}
+      </ScrollView>
+    </View>
+  );
+}
+
+// ─── Bloques ────────────────────────────────────────────────────────────────
+
+function DashboardSkeleton({ twoColumns }: { twoColumns: boolean }) {
+  const main = (
     <>
-      {rows.map((row, idx) => {
-        const widthPct = Math.max(
-          8,
-          Math.round(((row.quantity || 0) / max) * 100)
-        );
-        return (
-          <View key={`${row.product_id}-${idx}`} style={styles.productRow}>
-            <View
-              style={[styles.productRank, { backgroundColor: toneColor + "1A" }]}
-            >
-              <Text style={[styles.productRankText, { color: toneColor }]}>
-                {idx + 1}
-              </Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={styles.productHeader}>
-                <Text style={styles.productLabel} numberOfLines={1}>
-                  {row.product_name}
-                </Text>
-                <Text style={styles.productValue}>
-                  {formatQuantity(row.quantity, row.unit_name)}
-                </Text>
-              </View>
-              <View style={styles.productBarTrack}>
-                <View
-                  style={[
-                    styles.productBarFill,
-                    { width: `${widthPct}%`, backgroundColor: toneColor },
-                  ]}
-                />
-              </View>
-            </View>
-          </View>
-        );
-      })}
+      <View style={{ gap: 16 }}>
+        <SkeletonHero />
+        <SkeletonBlock height={120} radius={8} />
+      </View>
+      <SkeletonSection rows={4} />
     </>
   );
-}
-
-interface SkeletonBoxProps {
-  height?: number;
-}
-function SkeletonBox({ height = 112 }: SkeletonBoxProps) {
-  const { colors } = useTheme();
-  return (
-    <View
-      style={{
-        flex: 1,
-        height,
-        backgroundColor: colors.surfaceMuted,
-        borderRadius: tokens.radius.lg,
-      }}
-    />
+  const side = (
+    <>
+      <SkeletonSection rows={5} />
+      <SkeletonSection rows={3} />
+    </>
+  );
+  return twoColumns ? (
+    <SummaryColumns main={main} side={side} />
+  ) : (
+    <View style={{ gap: 22 }}>
+      {main}
+      {side}
+    </View>
   );
 }
 
-interface FilterModalProps {
-  visible: boolean;
-  onDismiss: () => void;
-  selectedScope: Scope;
-  onScopeChange: (scope: Scope) => void;
-  currentLocationName?: string | null;
-}
+function ProductionTodayBlock({ production, sideBySide }: { production: ProductionToday; sideBySide: boolean }) {
+  const styles = useStyles();
+  const count = production.productions_count_today;
+  if (count <= 0) {
+    return <Text style={styles.calm}>Todavía no se completa ninguna orden de producción hoy.</Text>;
+  }
 
-function FilterModal({
-  visible,
-  onDismiss,
-  selectedScope,
-  onScopeChange,
-  currentLocationName,
-}: FilterModalProps) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(makeReportsStyles);
+  const parts = [
+    `${count} ${plural(count, "orden", "órdenes")}`,
+    `${production.consumption_lines} ${plural(production.consumption_lines, "insumo", "insumos")}`,
+    `${production.output_lines} ${plural(production.output_lines, "producto", "productos")}`,
+    production.waste_percentage_available
+      ? `merma ${new Intl.NumberFormat("es-MX", { maximumFractionDigits: 1 }).format(production.waste_percentage_today ?? 0)}%`
+      : null,
+  ].filter(Boolean);
+
+  const lines = (rows: ProductionLine[], emptyText: string) =>
+    rows.length > 0 ? (
+      <BreakdownList
+        items={rows.map((row, index) => ({
+          key: `${row.product_id}-${index}`,
+          label: row.product_name,
+          value: Number(row.quantity) || 0,
+          valueText: formatQuantity(row.quantity, row.unit_name),
+        }))}
+      />
+    ) : (
+      <Text style={styles.calm}>{emptyText}</Text>
+    );
+
   return (
-    <Portal>
-      <Modal
-        visible={visible}
-        onDismiss={onDismiss}
-        contentContainerStyle={styles.modalContainer}
-      >
-        <Text style={styles.modalTitle}>Filtros de Reporte</Text>
-
-        <View style={{ marginTop: 16, gap: 12 }}>
-          <ScopeOption
-            value="location"
-            selected={selectedScope === "location"}
-            onPress={() => onScopeChange("location")}
-            title="Sucursal actual"
-            description={currentLocationName || "Sin sucursal seleccionada"}
-          />
-          <ScopeOption
-            value="general"
-            selected={selectedScope === "general"}
-            onPress={() => onScopeChange("general")}
-            title="Consolidado"
-            description="Todas las sucursales"
-          />
+    <View style={{ gap: 12 }}>
+      <Text style={styles.subtle}>{parts.join(" · ")}</Text>
+      <View style={[styles.pair, sideBySide && styles.pairRow]}>
+        <View style={[styles.pairItem, sideBySide && styles.pairItemRow]}>
+          <Text style={styles.subhead}>Lo que más se produjo</Text>
+          {lines(production.top_produced ?? [], "Sin productos registrados hoy.")}
         </View>
-
-        <Button
-          mode="contained"
-          style={{ marginTop: 20 }}
-          buttonColor={colors.primary}
-          onPress={onDismiss}
-        >
-          Aplicar
-        </Button>
-      </Modal>
-    </Portal>
-  );
-}
-
-interface ScopeOptionProps {
-  value: Scope;
-  selected: boolean;
-  onPress: () => void;
-  title: string;
-  description: string;
-}
-
-function ScopeOption({
-  selected,
-  onPress,
-  title,
-  description,
-}: ScopeOptionProps) {
-  const { colors } = useTheme();
-  const styles = useThemedStyles(makeReportsStyles);
-  return (
-    <TouchableRipple
-      onPress={onPress}
-      style={[styles.scopeItem, selected && styles.scopeItemSelected]}
-    >
-      <View style={styles.scopeContent}>
-        <RadioButton
-          value="scope"
-          status={selected ? "checked" : "unchecked"}
-          onPress={onPress}
-          color={colors.primary}
-        />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.scopeTitle}>{title}</Text>
-          <Text style={styles.scopeDescription}>{description}</Text>
+        <View style={[styles.pairItem, sideBySide && styles.pairItemRow]}>
+          <Text style={styles.subhead}>Lo que más se usó</Text>
+          {lines(production.top_consumed ?? [], "Sin insumos registrados hoy.")}
         </View>
       </View>
-    </TouchableRipple>
+    </View>
   );
 }
+
+/**
+ * Movimiento del periodo: ícono del tipo, folio, fecha y monto con signo. La
+ * sucursal solo cuando se ven todas (o en transferencias, que dicen de dónde
+ * a dónde); con una sola, repetirla en cada fila no dice nada.
+ */
+function ActivityRow({ item, showLocation }: { item: ActivityItem; showLocation: boolean }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  const isTransfer = item.type.startsWith("transfer");
+  const place = showLocation || isTransfer ? item.location?.replace(" -> ", " → ") : null;
+  const meta = [shortDate(item.date), place].filter(Boolean).join(" · ");
+  const amount =
+    item.money_type === "income"
+      ? `+${formatMoney(item.amount)}`
+      : item.money_type === "expense"
+        ? `−${formatMoney(item.amount)}`
+        : null;
+
+  return (
+    <View style={styles.activityRow} accessible accessibilityLabel={[item.label, meta, amount].filter(Boolean).join(", ")}>
+      <MaterialCommunityIcons name={activityIcon(item.type)} size={20} color={colors.textSecondary} />
+      <View style={styles.activityBody}>
+        <Text style={styles.activityTitle} numberOfLines={1}>
+          {item.label}
+        </Text>
+        {!!meta && (
+          <Text style={styles.activityMeta} numberOfLines={1}>
+            {meta}
+          </Text>
+        )}
+      </View>
+      {amount && (
+        <Text style={[styles.activityAmount, item.money_type === "income" && { color: colors.success }]}>
+          {amount}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+// ─── Estilos ────────────────────────────────────────────────────────────────
+
+const useStyles = () =>
+  useThemedStyles((c) => ({
+    screen: { flex: 1, backgroundColor: c.background },
+    body: { gap: 22 },
+    dimmed: { opacity: 0.55 },
+
+    trend: { marginTop: 10 },
+    calm: { fontSize: 14, lineHeight: 20, color: c.textSecondary },
+    subtle: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+    subhead: { fontSize: 13, fontWeight: "600" as const, color: c.textSecondary, marginBottom: 8 },
+    link: { fontSize: 14, fontWeight: "600" as const, color: c.primary },
+    loadError: { gap: 8, paddingVertical: 8 },
+
+    pair: { gap: 16 },
+    pairRow: { flexDirection: "row" as const, alignItems: "flex-start" as const },
+    pairItem: { minWidth: 0 },
+    pairItemRow: { flex: 1 },
+
+    activityRow: {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+    },
+    activityBody: { flex: 1, minWidth: 0 },
+    activityTitle: { fontSize: 15, lineHeight: 20, fontWeight: "500" as const, color: c.text },
+    activityMeta: { fontSize: 13, lineHeight: 18, color: c.textSecondary, marginTop: 2 },
+    activityAmount: {
+      fontSize: 14,
+      fontWeight: "600" as const,
+      color: c.text,
+      fontVariant: ["tabular-nums"] as any,
+    },
+  }));
