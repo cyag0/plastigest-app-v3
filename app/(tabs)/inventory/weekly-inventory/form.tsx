@@ -107,6 +107,9 @@ async function runChunked<T>(
 const plural = (n: number, one: string, many: string) =>
   `${n} ${n === 1 ? one : many}`;
 
+/** "Contado 16 pz" en un solo renglón: solo se corta entre datos (en " · "). */
+const keepTogether = (text: string) => text.replace(/ /g, "\u00A0");
+
 // Nombre (≤ 150, como el backend) y fecha: lo que se manda al completar.
 const validationSchema = Yup.object().shape({
   name: Yup.string()
@@ -834,9 +837,9 @@ const ProductCard = React.memo(function ProductCard({
               {product?.name || "Producto"}
             </Text>
             <Text style={styles.rowMeta}>
-              Sistema {formatQuantity(system, unit)}
+              {keepTogether(`Sistema ${formatQuantity(system, unit)}`)}
               {savedId != null
-                ? ` · Contado ${formatQuantity(countedVal, unit)}`
+                ? ` · ${keepTogether(`Contado ${formatQuantity(countedVal, unit)}`)}`
                 : ""}
             </Text>
             {!!detail?.notes && (
