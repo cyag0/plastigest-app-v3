@@ -1,6 +1,7 @@
 import AppUpload, { UploadedFile } from "@/components/Form/AppUpload";
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { resolveImageUri } from "@/utils/imageUtils";
 import type {
   InventoryTransfer,
@@ -9,7 +10,7 @@ import type {
 import transferService from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, View } from "react-native";
 import { Button, Card, Divider, Text } from "react-native-paper";
 
 interface ShipRow {
@@ -34,6 +35,8 @@ export default function TransferStepTwoShip({
   onCompleted,
 }: TransferStepTwoShipProps) {
   const alerts = useAlerts();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [rows, setRows] = useState<ShipRow[]>([]);
   const [evidence, setEvidence] = useState<UploadedFile[]>([]);
   const [existingEvidenceFiles, setExistingEvidenceFiles] = useState<
@@ -158,7 +161,7 @@ export default function TransferStepTwoShip({
           <MaterialCommunityIcons
             name="truck-delivery-outline"
             size={22}
-            color={palette.error}
+            color={colors.error}
           />
           <Text variant="titleMedium" style={styles.sectionTitle}>
             Paso 2: Envio
@@ -185,7 +188,7 @@ export default function TransferStepTwoShip({
                   <MaterialCommunityIcons
                     name="image-off-outline"
                     size={18}
-                    color="#7A7369"
+                    color={colors.textMuted}
                   />
                 )}
               </View>
@@ -215,7 +218,7 @@ export default function TransferStepTwoShip({
                   <MaterialCommunityIcons
                     name="file-check-outline"
                     size={18}
-                    color={palette.success}
+                    color={colors.success}
                   />
                   <Text
                     variant="labelMedium"
@@ -265,7 +268,7 @@ export default function TransferStepTwoShip({
               disabled={!canSubmit || saving}
               loading={saving}
               style={[styles.actionButton, styles.shipButton]}
-              textColor="#ffffff"
+              textColor={colors.textInverse}
             >
               Transferir productos
             </Button>
@@ -276,17 +279,17 @@ export default function TransferStepTwoShip({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   card: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E8E0D4",
+    borderColor: c.border,
     elevation: 0,
     shadowColor: "transparent",
     shadowOpacity: 0,
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 0,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -294,26 +297,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: {
-    color: "#4E473D",
+    color: c.text,
     fontWeight: "700",
   },
   divider: {
     marginVertical: 12,
-    backgroundColor: "#ECE4D8",
+    backgroundColor: c.border,
   },
   stepHelpText: {
-    color: "#4E473D",
+    color: c.textSecondary,
     marginBottom: 14,
     lineHeight: 20,
   },
   stepMutedText: {
-    color: "#7A7369",
+    color: c.textMuted,
     lineHeight: 20,
     marginBottom: 8,
   },
   productRow: {
     borderWidth: 1,
-    borderColor: "#EFE8DE",
+    borderColor: c.border,
     borderRadius: 12,
     padding: 10,
     marginBottom: 10,
@@ -328,8 +331,8 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E3D9CA",
-    backgroundColor: "#F7F4EE",
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -339,22 +342,22 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   productName: {
-    color: "#3D372F",
+    color: c.text,
     fontWeight: "700",
     fontSize: 14,
   },
   productMeta: {
-    color: "#6A6258",
+    color: c.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
   existingEvidenceSection: {
     borderWidth: 1,
-    borderColor: "#D4E8D4",
+    borderColor: c.successSoft,
     borderRadius: 12,
     padding: 12,
     marginBottom: 12,
-    backgroundColor: "#F5FBF5",
+    backgroundColor: c.successSoft,
   },
   existingEvidenceHeader: {
     flexDirection: "row",
@@ -363,7 +366,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   existingEvidenceTitle: {
-    color: "#2B7A2B",
+    color: c.successStrong,
     fontWeight: "600",
   },
   evidenceGrid: {
@@ -378,17 +381,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#E8F0E8",
-    backgroundColor: "#FFFFFF",
+    borderColor: c.border,
+    backgroundColor: c.surface,
   },
   evidenceImage: {
     width: "100%",
     height: "100%",
-    backgroundColor: "#E8E0D4",
+    backgroundColor: c.border,
   },
   input: {
     marginTop: 10,
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
   },
   actionButton: {
     marginTop: 12,
@@ -396,6 +399,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   shipButton: {
-    backgroundColor: palette.error,
+    backgroundColor: c.error,
   },
-});
+}));

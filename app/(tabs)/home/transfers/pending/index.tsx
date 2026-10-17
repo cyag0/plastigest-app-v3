@@ -4,11 +4,12 @@ import AppList from "@/components/App/AppList/AppList";
 import type { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import IconLabel from "@/components/App/IconLabel";
 import StatusBadge from "@/components/App/StatusBadge";
-import palette from "@/constants/palette";
 import { transferStatus } from "@/constants/statuses";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import transferService from "@/utils/services/transferService";
 import { useRouter } from "expo-router";
@@ -38,6 +39,8 @@ export default function PendingTransfersScreen() {
   const alerts = useAlerts();
   const { can } = useCan();
   const allLocations = useAllLocationsAccess();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const company = auth.selectedCompany;
@@ -233,7 +236,7 @@ export default function PendingTransfersScreen() {
             {
               title: "Cancelar solicitud",
               icon: "close-circle-outline",
-              color: palette.error,
+              color: colors.error,
               // Como el backend (destroy): transfers_delete, desde la sucursal
               // de origen o la de destino (o con acceso a todas), y mientras
               // esté pendiente, aprobada o en tránsito.
@@ -252,14 +255,14 @@ export default function PendingTransfersScreen() {
   );
 }
 
-const styles = {
+const makeStyles = themedStyles((c) => ({
   rightContent: {
-    alignItems: "flex-end" as const,
+    alignItems: "flex-end",
     gap: 4,
   },
   dateText: {
     fontSize: 12,
-    color: palette.textSecondary,
-    fontWeight: "500" as const,
+    color: c.textSecondary,
+    fontWeight: "500",
   },
-};
+}));

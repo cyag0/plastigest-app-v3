@@ -41,6 +41,8 @@ export function getCurrentStepFromTransfer(transfer: InventoryTransfer) {
   return 3;
 }
 
+// Encabezado de color sólido con texto y círculos blancos: se ve igual en
+// modo claro y oscuro, por eso no usa la paleta.
 function getStepTheme(step: number) {
   if (step === 1) {
     return {

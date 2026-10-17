@@ -1,7 +1,9 @@
 import { formatQuantity } from "@/utils/format";
 import AppUpload, { UploadedFile } from "@/components/Form/AppUpload";
-import palette from "@/constants/palette";
+import type { Palette } from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { resolveImageUri } from "@/utils/imageUtils";
 import type {
   TransferGeneratedAdjustment,
@@ -11,7 +13,7 @@ import type {
 import transferService from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useEffect, useMemo, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, View } from "react-native";
 import { Button, Card, Divider, Text, TextInput } from "react-native-paper";
 
 interface ReceiveRow {
@@ -46,24 +48,24 @@ function getReasonLabel(reason?: string) {
   return "-";
 }
 
-function getReasonBadgeStyle(reason?: string) {
+function getReasonBadgeStyle(colors: Palette, reason?: string) {
   if (reason === "loss") {
     return {
-      backgroundColor: "#B9412C",
-      text: "#FFFFFF",
+      backgroundColor: colors.error,
+      text: colors.textInverse,
     };
   }
 
   if (reason === "damage") {
     return {
-      backgroundColor: "#9A6210",
-      text: "#FFFFFF",
+      backgroundColor: colors.warningStrong,
+      text: colors.textInverse,
     };
   }
 
   return {
-    backgroundColor: "#6E6B5E",
-    text: "#FFFFFF",
+    backgroundColor: colors.textSecondary,
+    text: colors.textInverse,
   };
 }
 
@@ -78,6 +80,8 @@ export default function TransferStepThreeReceive({
   onCompleted,
 }: TransferStepThreeReceiveProps) {
   const alerts = useAlerts();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const [rows, setRows] = useState<ReceiveRow[]>([]);
   const [receivingNotes, setReceivingNotes] = useState("");
   const [evidence, setEvidence] = useState<UploadedFile[]>([]);
@@ -311,7 +315,7 @@ export default function TransferStepThreeReceive({
           <MaterialCommunityIcons
             name="archive-check-outline"
             size={22}
-            color={palette.success}
+            color={colors.success}
           />
           <Text variant="titleMedium" style={styles.sectionTitle}>
             Paso 3: Recepción
@@ -342,8 +346,8 @@ export default function TransferStepThreeReceive({
           const generatedAdjustment = row.adjustment_id
             ? generatedAdjustmentById.get(Number(row.adjustment_id))
             : undefined;
-          const rowReasonBadge = getReasonBadgeStyle(row.adjustment_reason);
-          const generatedReasonBadge = getReasonBadgeStyle(generatedAdjustment?.reason);
+          const rowReasonBadge = getReasonBadgeStyle(colors, row.adjustment_reason);
+          const generatedReasonBadge = getReasonBadgeStyle(colors, generatedAdjustment?.reason);
           const generatedAdjustmentEvidence = Array.isArray(
             generatedAdjustment?.content?.evidence_files,
           )
@@ -363,7 +367,7 @@ export default function TransferStepThreeReceive({
                     <MaterialCommunityIcons
                       name="image-off-outline"
                       size={18}
-                      color="#7A7369"
+                      color={colors.textMuted}
                     />
                   )}
                 </View>
@@ -516,7 +520,7 @@ export default function TransferStepThreeReceive({
                           <MaterialCommunityIcons
                             name="alert-circle-outline"
                             size={16}
-                            color="#8C3020"
+                            color={colors.errorStrong}
                           />
                           <Text style={styles.adjustmentCardTitle}>Ajuste a generar</Text>
                         </View>
@@ -596,7 +600,7 @@ export default function TransferStepThreeReceive({
                         <MaterialCommunityIcons
                           name="alert-circle-outline"
                           size={16}
-                          color="#8C3020"
+                          color={colors.errorStrong}
                         />
                         <Text style={styles.adjustmentCardTitle}>
                           Ajuste generado #{generatedAdjustment.id}
@@ -660,7 +664,7 @@ export default function TransferStepThreeReceive({
                   <MaterialCommunityIcons
                     name="file-check-outline"
                     size={18}
-                    color={palette.success}
+                    color={colors.success}
                   />
                   <Text
                     variant="labelMedium"
@@ -726,7 +730,7 @@ export default function TransferStepThreeReceive({
               disabled={!canSubmit || saving}
               loading={saving}
               style={[styles.actionButton, styles.receiveButton]}
-              textColor="#ffffff"
+              textColor={colors.textInverse}
             >
               Confirmar recepción
             </Button>
@@ -737,17 +741,17 @@ export default function TransferStepThreeReceive({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   card: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E8E0D4",
+    borderColor: c.border,
     elevation: 0,
     shadowColor: "transparent",
     shadowOpacity: 0,
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 0,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -755,26 +759,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: {
-    color: "#4E473D",
+    color: c.text,
     fontWeight: "700",
   },
   divider: {
     marginVertical: 12,
-    backgroundColor: "#ECE4D8",
+    backgroundColor: c.border,
   },
   stepHelpText: {
-    color: "#4E473D",
+    color: c.textSecondary,
     marginBottom: 14,
     lineHeight: 20,
   },
   stepMutedText: {
-    color: "#7A7369",
+    color: c.textMuted,
     lineHeight: 20,
     marginBottom: 8,
   },
   productRow: {
     borderWidth: 1,
-    borderColor: "#EFE8DE",
+    borderColor: c.border,
     borderRadius: 12,
     padding: 10,
     marginBottom: 10,
@@ -789,8 +793,8 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E3D9CA",
-    backgroundColor: "#F7F4EE",
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -800,23 +804,23 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   productName: {
-    color: "#3D372F",
+    color: c.text,
     fontWeight: "700",
     fontSize: 14,
   },
   productMeta: {
-    color: "#6A6258",
+    color: c.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
   checklistBlock: {
     marginTop: 10,
-    backgroundColor: "#F9F8F6",
+    backgroundColor: c.surfaceMuted,
     borderRadius: 10,
     padding: 8,
   },
   checklistLabel: {
-    color: "#4E473D",
+    color: c.text,
     fontWeight: "700",
     fontSize: 12,
   },
@@ -830,17 +834,17 @@ const styles = StyleSheet.create({
   },
   okHintText: {
     marginTop: 10,
-    color: "#4D6141",
+    color: c.primary,
     fontSize: 12,
     fontWeight: "600",
   },
   input: {
     marginTop: 10,
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
   },
   adjustmentTitle: {
     marginTop: 10,
-    color: "#4E473D",
+    color: c.text,
     fontWeight: "700",
   },
   reasonRow: {
@@ -857,25 +861,25 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   receiveButton: {
-    backgroundColor: palette.success,
+    backgroundColor: c.success,
   },
   readOnlyInfoBlock: {
     marginTop: 10,
     borderRadius: 10,
-    backgroundColor: "#F9F8F6",
+    backgroundColor: c.surfaceMuted,
     padding: 8,
     gap: 4,
   },
   readOnlyInfoText: {
-    color: "#5E5A52",
+    color: c.textSecondary,
     fontSize: 12,
   },
   adjustmentCard: {
     marginTop: 10,
     borderWidth: 1,
-    borderColor: "#F1B5AF",
+    borderColor: c.errorSoft,
     borderRadius: 10,
-    backgroundColor: "#F8E2DC",
+    backgroundColor: c.errorSoft,
     padding: 10,
     gap: 4,
   },
@@ -886,12 +890,12 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   adjustmentCardTitle: {
-    color: "#8C3020",
+    color: c.errorStrong,
     fontWeight: "700",
     fontSize: 12,
   },
   adjustmentCardText: {
-    color: "#7D2119",
+    color: c.errorStrong,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -912,11 +916,11 @@ const styles = StyleSheet.create({
   },
   existingEvidenceSection: {
     borderWidth: 1,
-    borderColor: "#D4E8D4",
+    borderColor: c.successSoft,
     borderRadius: 12,
     padding: 12,
     marginTop: 6,
-    backgroundColor: "#F5FBF5",
+    backgroundColor: c.successSoft,
   },
   existingEvidenceHeader: {
     flexDirection: "row",
@@ -925,7 +929,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   existingEvidenceTitle: {
-    color: "#2B7A2B",
+    color: c.successStrong,
     fontWeight: "600",
   },
   evidenceGrid: {
@@ -940,12 +944,12 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#E8F0E8",
-    backgroundColor: "#FFFFFF",
+    borderColor: c.border,
+    backgroundColor: c.surface,
   },
   evidenceImage: {
     width: "100%",
     height: "100%",
-    backgroundColor: "#E8E0D4",
+    backgroundColor: c.border,
   },
-});
+}));

@@ -4,11 +4,11 @@ import AppList from "@/components/App/AppList/AppList";
 import type { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import IconLabel from "@/components/App/IconLabel";
 import StatusBadge from "@/components/App/StatusBadge";
-import palette from "@/constants/palette";
 import { transferStatus } from "@/constants/statuses";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useCan } from "@/hooks/useCan";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import transferService from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -30,6 +30,7 @@ export default function HistoryTransfersScreen() {
   const router = useRouter();
   const auth = useAuth();
   const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   // Abrir una transferencia pide transfers_read.
   const canRead = useCan().can("transfers_read");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -219,14 +220,14 @@ export default function HistoryTransfersScreen() {
   );
 }
 
-const styles = {
+const makeStyles = themedStyles((c) => ({
   rightContent: {
-    alignItems: "flex-end" as const,
+    alignItems: "flex-end",
     gap: 4,
   },
   dateText: {
     fontSize: 12,
-    color: palette.textSecondary,
-    fontWeight: "500" as const,
+    color: c.textSecondary,
+    fontWeight: "500",
   },
-};
+}));

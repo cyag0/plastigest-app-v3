@@ -1,16 +1,16 @@
 import AppChip from "@/components/App/Chip";
 import PermissionGate from "@/components/App/PermissionGate";
 import TransferStats from "@/components/Dashboard/TransferStats";
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
@@ -24,7 +24,8 @@ interface TransferModule {
   description: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   route: string;
-  color: string;
+  /** Color de la paleta para el ícono. */
+  tone: "success" | "warning" | "info";
   badge?: string;
   badgeVariant?: "primary" | "success" | "warning" | "error" | "info" | "default";
 }
@@ -37,7 +38,7 @@ const modules: TransferModule[] = [
       "Sugerencias según lo que vende cada sucursal: qué mandar, comprar o producir",
     icon: "chart-timeline-variant",
     route: "/(tabs)/home/transfers/suggestions",
-    color: palette.success,
+    tone: "success",
     badge: "Nuevo",
     badgeVariant: "success",
   },
@@ -48,7 +49,7 @@ const modules: TransferModule[] = [
       "Gestiona peticiones enviadas y recibidas que requieren acción",
     icon: "clipboard-text-clock",
     route: "/(tabs)/home/transfers/pending",
-    color: palette.warning,
+    tone: "warning",
     badge: "Nuevo",
     badgeVariant: "primary",
   },
@@ -58,7 +59,7 @@ const modules: TransferModule[] = [
     description: "Consulta envíos realizados y recibidos completados",
     icon: "history",
     route: "/(tabs)/home/transfers/history",
-    color: palette.info,
+    tone: "info",
   },
 ];
 
@@ -78,6 +79,8 @@ function hexWithAlpha(hex: string, alpha: number): string {
 export default function TransfersMenuScreen() {
   const router = useRouter();
   const layout = useWindowDimensions();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const { hasPermission } = useAuth();
   // Las estadísticas salen de reports/transfer-stats, que pide reports_view:
   // sin él la pestaña solo mostraba un error. Crear pide transfers_create.
@@ -115,7 +118,7 @@ export default function TransfersMenuScreen() {
             <MaterialCommunityIcons
               name="swap-horizontal"
               size={20}
-              color={palette.primary}
+              color={colors.primary}
             />
           </View>
           <View style={styles.contextBody}>
@@ -138,7 +141,7 @@ export default function TransfersMenuScreen() {
               <MaterialCommunityIcons
                 name="plus-circle"
                 size={22}
-                color={palette.primary}
+                color={colors.primary}
               />
             </View>
             <View style={styles.primaryActionBody}>
@@ -150,7 +153,7 @@ export default function TransfersMenuScreen() {
             <MaterialCommunityIcons
               name="arrow-right"
               size={18}
-              color={palette.textMuted}
+              color={colors.textMuted}
             />
           </TouchableOpacity>
         )}
@@ -160,7 +163,7 @@ export default function TransfersMenuScreen() {
           <MaterialCommunityIcons
             name="format-list-bulleted"
             size={16}
-            color={palette.textMuted}
+            color={colors.textMuted}
           />
           <Text style={styles.sectionTitle}>CONSULTAS</Text>
           <View style={styles.countBadge}>
@@ -180,13 +183,13 @@ export default function TransfersMenuScreen() {
                 <View
                   style={[
                     styles.optionIconBox,
-                    { backgroundColor: hexWithAlpha(module.color, 0.12) },
+                    { backgroundColor: hexWithAlpha(colors[module.tone], 0.12) },
                   ]}
                 >
                   <MaterialCommunityIcons
                     name={module.icon}
                     size={20}
-                    color={module.color}
+                    color={colors[module.tone]}
                   />
                 </View>
 
@@ -212,7 +215,7 @@ export default function TransfersMenuScreen() {
                 <MaterialCommunityIcons
                   name="chevron-right"
                   size={18}
-                  color={palette.textMuted}
+                  color={colors.textMuted}
                   style={styles.chevron}
                 />
               </TouchableOpacity>
@@ -228,7 +231,7 @@ export default function TransfersMenuScreen() {
             <MaterialCommunityIcons
               name="information-outline"
               size={18}
-              color={palette.info}
+              color={colors.info}
             />
           </View>
           <Text style={styles.infoText}>
@@ -239,7 +242,7 @@ export default function TransfersMenuScreen() {
         </View>
       </ScrollView>
     ),
-    [handleCreateTransfer, canCreate],
+    [handleCreateTransfer, canCreate, styles, colors],
   );
 
   const renderStatsRoute = useMemo(() => () => <TransferStats />, []);
@@ -295,7 +298,7 @@ export default function TransfersMenuScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     backgroundColor: "transparent" as any,
@@ -304,9 +307,9 @@ const styles = StyleSheet.create({
   // --- Tabs ---
   tabsContainer: {
     flexDirection: "row",
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+    borderBottomColor: c.border,
   },
   tab: {
     flex: 1,
@@ -318,14 +321,14 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
   },
   tabActive: {
-    borderBottomColor: palette.primary,
+    borderBottomColor: c.primary,
   },
   tabText: {
     ...tokens.typography.bodyMd,
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
   tabTextActive: {
-    color: palette.primary,
+    color: c.primary,
   },
 
   // --- Scroll container ---
@@ -341,11 +344,11 @@ const styles = StyleSheet.create({
   contextCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     padding: tokens.spacing[4],
     borderRadius: tokens.radius.lg,
     borderLeftWidth: 4,
-    borderLeftColor: palette.primary,
+    borderLeftColor: c.primary,
     gap: tokens.spacing[3],
     marginBottom: tokens.spacing[5],
     ...tokens.shadow.sm,
@@ -354,7 +357,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: tokens.radius.md,
-    backgroundColor: palette.primarySoft,
+    backgroundColor: c.primarySoft,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -366,12 +369,12 @@ const styles = StyleSheet.create({
   },
   contextTitle: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
   },
   contextSubtitle: {
     ...tokens.typography.caption,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     lineHeight: 16,
   },
 
@@ -380,9 +383,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: tokens.spacing[3],
-    backgroundColor: palette.primarySoft,
+    backgroundColor: c.primarySoft,
     borderWidth: 1,
-    borderColor: palette.primary,
+    borderColor: c.primary,
     borderRadius: tokens.radius.lg,
     paddingVertical: tokens.spacing[3] + 2,
     paddingHorizontal: tokens.spacing[4],
@@ -392,7 +395,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: tokens.radius.md,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -404,12 +407,12 @@ const styles = StyleSheet.create({
   },
   primaryActionTitle: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
   },
   primaryActionSubtitle: {
     ...tokens.typography.caption,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     lineHeight: 16,
   },
 
@@ -423,7 +426,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...tokens.typography.micro,
-    color: palette.textMuted,
+    color: c.textMuted,
     flex: 1,
   },
   countBadge: {
@@ -431,19 +434,19 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: tokens.radius.full,
     paddingHorizontal: 6,
-    backgroundColor: palette.surfaceMuted,
+    backgroundColor: c.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
   },
   countText: {
     ...tokens.typography.micro,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontVariant: ["tabular-nums"],
   },
 
   // --- Options card / list ---
   optionsCard: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.lg,
     ...tokens.shadow.sm,
     overflow: "hidden",
@@ -475,13 +478,13 @@ const styles = StyleSheet.create({
   },
   optionTitle: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     flex: 1,
     minWidth: 0,
   },
   optionDescription: {
     ...tokens.typography.caption,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     lineHeight: 16,
   },
   chevron: {
@@ -489,7 +492,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: palette.border,
+    backgroundColor: c.border,
     marginLeft: tokens.spacing[4] + 40 + tokens.spacing[3],
   },
 
@@ -497,11 +500,11 @@ const styles = StyleSheet.create({
   infoCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     padding: tokens.spacing[4],
     borderRadius: tokens.radius.lg,
     borderLeftWidth: 4,
-    borderLeftColor: palette.info,
+    borderLeftColor: c.info,
     gap: tokens.spacing[3],
     marginTop: tokens.spacing[5],
     ...tokens.shadow.sm,
@@ -510,15 +513,15 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: tokens.radius.md,
-    backgroundColor: palette.infoSoft,
+    backgroundColor: c.infoSoft,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   infoText: {
     ...tokens.typography.caption,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     flex: 1,
     lineHeight: 18,
   },
-});
+}));

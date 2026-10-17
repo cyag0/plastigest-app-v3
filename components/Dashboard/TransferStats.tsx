@@ -2,14 +2,15 @@ import { parseLocalDate } from "@/utils/dates";
 import AppChip from "@/components/App/Chip";
 import EmptyState from "@/components/App/EmptyState";
 import KpiCard from "@/components/Dashboard/KpiCard";
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import axios from "@/utils/axios";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ScrollView, View, useWindowDimensions } from "react-native";
 import { BarChart, LineChart } from "react-native-chart-kit";
 import { ActivityIndicator, SegmentedButtons, Text } from "react-native-paper";
 
@@ -37,6 +38,12 @@ interface TransferStatsData {
   avg_processing_time_hours: number;
 }
 
+/** "#4F7A3A" → "79, 122, 58": las gráficas piden el color con opacidad. */
+const rgbOf = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+};
+
 const STATUS_META: Record<
   string,
   { label: string; variant: "primary" | "success" | "warning" | "error" | "info" | "default" }
@@ -49,6 +56,9 @@ const STATUS_META: Record<
 
 export default function TransferStats() {
   const { isMobile } = useResponsive();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  const primaryRgb = rgbOf(colors.primary);
   // reports/transfer-stats pide reports_view: sin él no se pide (respondía 403).
   const { hasPermission } = useAuth();
   const canView = hasPermission("reports_view");
@@ -90,7 +100,7 @@ export default function TransferStats() {
   if (loading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color={palette.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Cargando estadísticas...</Text>
       </View>
     );
@@ -158,8 +168,8 @@ export default function TransferStats() {
           ]}
           theme={{
             colors: {
-              secondaryContainer: palette.primarySoft,
-              onSecondaryContainer: palette.primary,
+              secondaryContainer: colors.primarySoft,
+              onSecondaryContainer: colors.primary,
             },
           }}
         />
@@ -216,20 +226,20 @@ export default function TransferStats() {
               width={chartWidth}
               height={220}
               chartConfig={{
-                backgroundColor: palette.surface,
-                backgroundGradientFrom: palette.surface,
-                backgroundGradientTo: palette.surface,
+                backgroundColor: colors.surface,
+                backgroundGradientFrom: colors.surface,
+                backgroundGradientTo: colors.surface,
                 decimalPlaces: 0,
                 color: (opacity = 1) =>
-                  `rgba(79, 122, 58, ${opacity})`,
-                labelColor: () => palette.textSecondary,
+                  `rgba(${primaryRgb}, ${opacity})`,
+                labelColor: () => colors.textSecondary,
                 propsForDots: {
                   r: "5",
                   strokeWidth: "2",
-                  stroke: palette.primary,
+                  stroke: colors.primary,
                 },
                 propsForBackgroundLines: {
-                  stroke: palette.border,
+                  stroke: colors.border,
                 },
               }}
               bezier
@@ -291,14 +301,14 @@ export default function TransferStats() {
               width={chartWidth}
               height={220}
               chartConfig={{
-                backgroundColor: palette.surface,
-                backgroundGradientFrom: palette.surface,
-                backgroundGradientTo: palette.surface,
+                backgroundColor: colors.surface,
+                backgroundGradientFrom: colors.surface,
+                backgroundGradientTo: colors.surface,
                 decimalPlaces: 0,
-                color: (opacity = 1) => `rgba(79, 122, 58, ${opacity})`,
-                labelColor: () => palette.textSecondary,
+                color: (opacity = 1) => `rgba(${primaryRgb}, ${opacity})`,
+                labelColor: () => colors.textSecondary,
                 propsForBackgroundLines: {
-                  stroke: palette.border,
+                  stroke: colors.border,
                 },
               }}
               style={styles.chart}
@@ -323,10 +333,10 @@ export default function TransferStats() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
   },
   content: {
     padding: tokens.spacing[5],
@@ -336,12 +346,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
     gap: tokens.spacing[3],
   },
   loadingText: {
     ...tokens.typography.body,
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
 
   // --- KPI Grid ---
@@ -353,11 +363,11 @@ const styles = StyleSheet.create({
 
   // --- Period selector ---
   periodWrap: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.md,
     padding: tokens.spacing[2],
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
   },
 
   // --- Section ---
@@ -366,13 +376,13 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...tokens.typography.h3,
-    color: palette.text,
+    color: c.text,
   },
   card: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderRadius: tokens.radius.lg,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     padding: tokens.spacing[4],
     ...tokens.shadow.sm,
   },
@@ -393,7 +403,7 @@ const styles = StyleSheet.create({
   },
   statusCount: {
     ...tokens.typography.h3,
-    color: palette.text,
+    color: c.text,
     fontVariant: ["tabular-nums"],
   },
 
@@ -406,19 +416,19 @@ const styles = StyleSheet.create({
   },
   topItemDivider: {
     borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+    borderBottomColor: c.border,
   },
   topItemRank: {
     width: 28,
     height: 28,
     borderRadius: tokens.radius.full,
-    backgroundColor: palette.primarySoft,
+    backgroundColor: c.primarySoft,
     justifyContent: "center",
     alignItems: "center",
   },
   topItemRankText: {
     ...tokens.typography.micro,
-    color: palette.primary,
+    color: c.primary,
     fontWeight: "700",
   },
   topItemInfo: {
@@ -428,11 +438,11 @@ const styles = StyleSheet.create({
   },
   topItemName: {
     ...tokens.typography.bodyMd,
-    color: palette.text,
+    color: c.text,
     fontWeight: "600",
   },
   topItemDetails: {
     ...tokens.typography.micro,
-    color: palette.textSecondary,
+    color: c.textSecondary,
   },
-});
+}));

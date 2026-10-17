@@ -1,9 +1,11 @@
 import { formatQuantity } from "@/utils/format";
-import palette from "@/constants/palette";
+import type { Palette } from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { resolveImageUri } from "@/utils/imageUtils";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, View } from "react-native";
 import { Card, Chip, Divider, Text } from "react-native-paper";
 
 interface TransferStepFourSummaryProps {
@@ -15,68 +17,68 @@ function formatQty(value: number | string | undefined) {
   return formatQuantity(value);
 }
 
-function getReasonBadgeStyle(reason?: string) {
+function getReasonBadgeStyle(colors: Palette, reason?: string) {
   if (reason === "loss") {
     return {
-      backgroundColor: "#B9412C",
-      text: "#FFFFFF",
+      backgroundColor: colors.error,
+      text: colors.textInverse,
     };
   }
 
   if (reason === "damage") {
     return {
-      backgroundColor: "#9A6210",
-      text: "#FFFFFF",
+      backgroundColor: colors.warningStrong,
+      text: colors.textInverse,
     };
   }
 
   return {
-    backgroundColor: "#6E6B5E",
-    text: "#FFFFFF",
+    backgroundColor: colors.textSecondary,
+    text: colors.textInverse,
   };
 }
 
-function getStepPresentation(result: string) {
+function getStepPresentation(colors: Palette, result: string) {
   if (result === "failed") {
     return {
       icon: "close-circle-outline" as const,
-      iconColor: "#B9412C",
+      iconColor: colors.error,
       label: "Fallo",
-      chipBg: "#F8E2DC",
-      chipText: "#8C3020",
-      cardBorder: "#F4B4AE",
+      chipBg: colors.errorSoft,
+      chipText: colors.errorStrong,
+      cardBorder: colors.errorSoft,
     };
   }
 
   if (result === "completed") {
     return {
       icon: "check-circle-outline" as const,
-      iconColor: "#3F8A3A",
+      iconColor: colors.success,
       label: "Completado",
-      chipBg: "#EAF5E4",
-      chipText: "#31502F",
-      cardBorder: "#D7EACC",
+      chipBg: colors.successSoft,
+      chipText: colors.successStrong,
+      cardBorder: colors.successSoft,
     };
   }
 
   if (result === "skipped") {
     return {
       icon: "skip-next-circle-outline" as const,
-      iconColor: "#8A6F42",
+      iconColor: colors.accent,
       label: "No alcanzado",
-      chipBg: "#F8EFE1",
-      chipText: "#7A5D2F",
-      cardBorder: "#E8D8BC",
+      chipBg: colors.accentSoft,
+      chipText: colors.accent,
+      cardBorder: colors.accentSoft,
     };
   }
 
   return {
     icon: "clock-outline" as const,
-    iconColor: "#6E6B5E",
+    iconColor: colors.textMuted,
     label: "Pendiente",
-    chipBg: "#EFF1F4",
-    chipText: "#465066",
-    cardBorder: "#DDE3EA",
+    chipBg: colors.surfaceMuted,
+    chipText: colors.textSecondary,
+    cardBorder: colors.border,
   };
 }
 
@@ -84,6 +86,8 @@ export default function TransferStepFourSummary({
   transfer,
   formatDate,
 }: TransferStepFourSummaryProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   const details = transfer.details || [];
   const content = transfer.content;
   const progress = content?.progress || {};
@@ -163,7 +167,7 @@ export default function TransferStepFourSummary({
     evidence?: Array<{ uri?: string; url?: string; path?: string; name?: string }>;
     noReachedText: string;
   }) => {
-    const visual = getStepPresentation(result);
+    const visual = getStepPresentation(colors, result);
     const wasReached = result !== "skipped" && result !== "pending";
 
     return (
@@ -228,7 +232,7 @@ export default function TransferStepFourSummary({
                         <MaterialCommunityIcons
                           name="image-off-outline"
                           size={16}
-                          color="#7A7369"
+                          color={colors.textMuted}
                         />
                       )}
                     </View>
@@ -262,7 +266,7 @@ export default function TransferStepFourSummary({
                           <MaterialCommunityIcons
                             name="file-image-outline"
                             size={20}
-                            color="#6A6258"
+                            color={colors.textSecondary}
                           />
                         </View>
                       )}
@@ -291,7 +295,7 @@ export default function TransferStepFourSummary({
           <MaterialCommunityIcons
             name="file-document-check-outline"
             size={22}
-            color={palette.success}
+            color={colors.success}
           />
           <Text variant="titleMedium" style={styles.sectionTitle}>
             Paso 4: Resumen
@@ -353,7 +357,7 @@ export default function TransferStepFourSummary({
             <MaterialCommunityIcons
               name="numeric-1-circle"
               size={18}
-              color={palette.blue}
+              color={colors.info}
             />
             <Text style={styles.timelineText}>
               Aprobación: {formatDate(transfer.approved_at)}
@@ -364,7 +368,7 @@ export default function TransferStepFourSummary({
             <MaterialCommunityIcons
               name="numeric-2-circle"
               size={18}
-              color={palette.warning}
+              color={colors.warning}
             />
             <Text style={styles.timelineText}>Envio: {formatDate(transfer.shipped_at)}</Text>
           </View>
@@ -373,7 +377,7 @@ export default function TransferStepFourSummary({
             <MaterialCommunityIcons
               name="numeric-3-circle"
               size={18}
-              color={palette.success}
+              color={colors.success}
             />
             <Text style={styles.timelineText}>
               Recepción: {formatDate(transfer.received_at)}
@@ -443,7 +447,7 @@ export default function TransferStepFourSummary({
               const evidenceFiles = Array.isArray(adjustment.content?.evidence_files)
                 ? adjustment.content?.evidence_files || []
                 : [];
-              const reasonBadge = getReasonBadgeStyle(adjustment.reason);
+              const reasonBadge = getReasonBadgeStyle(colors, adjustment.reason);
 
               return (
                 <View key={adjustment.id} style={styles.adjustmentCard}>
@@ -451,7 +455,7 @@ export default function TransferStepFourSummary({
                     <MaterialCommunityIcons
                       name="alert-circle-outline"
                       size={16}
-                      color="#8C3020"
+                      color={colors.errorStrong}
                     />
                     <Text style={styles.adjustmentCardTitle}>
                       Ajuste #{adjustment.id}
@@ -566,17 +570,17 @@ export default function TransferStepFourSummary({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   card: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E8E0D4",
+    borderColor: c.border,
     elevation: 0,
     shadowColor: "transparent",
     shadowOpacity: 0,
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 0,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -584,15 +588,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: {
-    color: "#4E473D",
+    color: c.text,
     fontWeight: "700",
   },
   divider: {
     marginVertical: 12,
-    backgroundColor: "#ECE4D8",
+    backgroundColor: c.border,
   },
   stepHelpText: {
-    color: "#4E473D",
+    color: c.textSecondary,
     marginBottom: 14,
     lineHeight: 20,
   },
@@ -603,42 +607,42 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   label: {
-    color: "#6A6258",
+    color: c.textSecondary,
     fontWeight: "700",
     minWidth: 95,
   },
   value: {
-    color: "#3D372F",
+    color: c.text,
     flex: 1,
   },
   statusChip: {
-    backgroundColor: "#EAF5E4",
+    backgroundColor: c.successSoft,
     height: 30,
   },
   statusChipFailed: {
-    backgroundColor: "#F8E2DC",
+    backgroundColor: c.errorSoft,
   },
   statusChipText: {
-    color: "#31502F",
+    color: c.successStrong,
     fontWeight: "700",
   },
   statusChipTextFailed: {
-    color: "#8C3020",
+    color: c.errorStrong,
   },
   valueFailed: {
-    color: "#8C3020",
+    color: c.errorStrong,
     fontWeight: "700",
   },
   timelineBlock: {
     marginTop: 6,
     borderWidth: 1,
-    borderColor: "#EFE8DE",
+    borderColor: c.border,
     borderRadius: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     padding: 10,
   },
   timelineTitle: {
-    color: "#4E473D",
+    color: c.text,
     fontWeight: "700",
     marginBottom: 8,
   },
@@ -649,18 +653,18 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   timelineText: {
-    color: "#4E473D",
+    color: c.textSecondary,
   },
   resumeBlock: {
     marginTop: 12,
     borderWidth: 1,
-    borderColor: "#EFE8DE",
+    borderColor: c.border,
     borderRadius: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
     padding: 10,
   },
   resumeTitle: {
-    color: "#4E473D",
+    color: c.text,
     fontWeight: "700",
     marginBottom: 8,
   },
@@ -672,43 +676,43 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     paddingHorizontal: 6,
-    backgroundColor: "#F8F6F2",
+    backgroundColor: c.surfaceMuted,
     borderRadius: 8,
     alignItems: "center",
   },
   totalLabel: {
-    color: "#6A6258",
+    color: c.textSecondary,
     fontSize: 12,
   },
   totalValue: {
-    color: "#3D372F",
+    color: c.text,
     fontWeight: "700",
     marginTop: 4,
   },
   noDifferencesText: {
-    color: "#5E5A52",
+    color: c.textSecondary,
   },
   differenceItem: {
     borderWidth: 1,
-    borderColor: "#EFE8DE",
+    borderColor: c.border,
     borderRadius: 10,
     padding: 8,
     marginBottom: 8,
   },
   productName: {
-    color: "#3D372F",
+    color: c.text,
     fontWeight: "700",
   },
   differenceText: {
-    color: "#5E5A52",
+    color: c.textSecondary,
     marginTop: 2,
     fontSize: 12,
   },
   adjustmentCard: {
     borderWidth: 1,
-    borderColor: "#F1B5AF",
+    borderColor: c.errorSoft,
     borderRadius: 10,
-    backgroundColor: "#F8E2DC",
+    backgroundColor: c.errorSoft,
     padding: 10,
     marginBottom: 8,
     gap: 4,
@@ -720,12 +724,12 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   adjustmentCardTitle: {
-    color: "#8C3020",
+    color: c.errorStrong,
     fontWeight: "700",
     fontSize: 12,
   },
   adjustmentCardText: {
-    color: "#7D2119",
+    color: c.errorStrong,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -749,10 +753,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     marginTop: 10,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
   },
   failedStepCard: {
-    backgroundColor: "#FFF8F8",
+    backgroundColor: c.errorSoft,
   },
   stepCardHeader: {
     flexDirection: "row",
@@ -767,7 +771,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stepCardTitle: {
-    color: "#3D372F",
+    color: c.text,
     fontWeight: "700",
     flexShrink: 1,
   },
@@ -779,23 +783,23 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   failedText: {
-    color: "#8C3020",
+    color: c.errorStrong,
     fontWeight: "700",
     marginTop: 8,
   },
   notReachedText: {
     marginTop: 8,
-    color: "#7A5D2F",
+    color: c.accent,
     lineHeight: 18,
   },
   stepDateText: {
     marginTop: 8,
-    color: "#5E5A52",
+    color: c.textSecondary,
     fontSize: 12,
   },
   itemRow: {
     borderWidth: 1,
-    borderColor: "#EFE8DE",
+    borderColor: c.border,
     borderRadius: 10,
     padding: 8,
     marginTop: 8,
@@ -810,8 +814,8 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "#E3D9CA",
-    backgroundColor: "#F7F4EE",
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -821,24 +825,24 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   itemTitle: {
-    color: "#3D372F",
+    color: c.text,
     fontWeight: "700",
     flexShrink: 1,
   },
   itemText: {
-    color: "#5E5A52",
+    color: c.textSecondary,
     marginTop: 2,
     fontSize: 12,
   },
   emptyListText: {
     marginTop: 8,
-    color: "#5E5A52",
+    color: c.textSecondary,
   },
   evidenceBlock: {
     marginTop: 10,
   },
   evidenceTitle: {
-    color: "#4E473D",
+    color: c.text,
     fontWeight: "700",
     marginBottom: 8,
   },
@@ -853,8 +857,8 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#E3D9CA",
-    backgroundColor: "#FAF7F2",
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
   },
   evidenceImage: {
     width: "100%",
@@ -867,7 +871,7 @@ const styles = StyleSheet.create({
   },
   noEvidenceText: {
     marginTop: 8,
-    color: "#6A6258",
+    color: c.textSecondary,
     fontSize: 12,
   },
-});
+}));

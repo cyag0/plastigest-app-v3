@@ -13,7 +13,6 @@ import RecordLoadError, {
   recordLoadProblem,
   type RecordLoadProblem,
 } from "@/components/App/RecordLoadError";
-import palette from "@/constants/palette";
 import { useAuth } from "@/contexts/AuthContext";
 import { useHelpSection } from "@/help";
 import { useAlerts } from "@/hooks/useAlerts";

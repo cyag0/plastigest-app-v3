@@ -3,12 +3,13 @@ import { formatMoney } from "@/utils/format";
 import EmptyState from "@/components/App/EmptyState";
 import PermissionGate from "@/components/App/PermissionGate";
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
-import palette from "@/constants/palette";
 import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import transferService, {
   type TransferOrigin,
 } from "@/utils/services/transferService";
@@ -16,7 +17,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { Modal, ScrollView, StyleSheet, Text as RNText, TextInput, TouchableOpacity, View } from "react-native";
+import { Modal, ScrollView, Text as RNText, TextInput, TouchableOpacity, View } from "react-native";
 import { Button, Card, Menu, Text } from "react-native-paper";
 import { TransferProvider, useTransferContext } from "./TransferContext";
 
@@ -28,6 +29,8 @@ type ListSelectedProduct = {
 };
 
 function CartHeaderButton({ count, onPress }: { count: number; onPress: () => void }) {
+  const { colors } = useTheme();
+  const cartBtnStyles = useThemedStyles(makeCartBtnStyles);
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -35,7 +38,7 @@ function CartHeaderButton({ count, onPress }: { count: number; onPress: () => vo
       activeOpacity={0.7}
       accessibilityLabel="Ver carrito"
     >
-      <MaterialCommunityIcons name="cart-outline" size={24} color={palette.text} />
+      <MaterialCommunityIcons name="cart-outline" size={24} color={colors.text} />
       {count > 0 && (
         <View style={cartBtnStyles.badge}>
           <RNText style={cartBtnStyles.badgeText}>{count > 99 ? "99+" : count}</RNText>
@@ -45,7 +48,7 @@ function CartHeaderButton({ count, onPress }: { count: number; onPress: () => vo
   );
 }
 
-const cartBtnStyles = StyleSheet.create({
+const makeCartBtnStyles = themedStyles((c) => ({
   btn: { padding: 8, marginRight: 4 },
   badge: {
     position: "absolute",
@@ -54,13 +57,13 @@ const cartBtnStyles = StyleSheet.create({
     minWidth: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: palette.primary,
+    backgroundColor: c.primary,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 3,
   },
-  badgeText: { color: "#fff", fontSize: 10, fontWeight: "700" as const },
-});
+  badgeText: { color: c.primaryForeground, fontSize: 10, fontWeight: "700" },
+}));
 
 function TransferFormContent() {
   const router = useRouter();
@@ -69,6 +72,8 @@ function TransferFormContent() {
   const auth = useAuth();
   const navigation = useNavigation();
   const { isMobile } = useResponsive();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
 
   const [locations, setLocations] = useState<TransferOrigin[]>([]);
   const [notes, setNotes] = useState("");
@@ -265,6 +270,7 @@ function TransferFormContent() {
             <TextInput
               style={styles.notesInput}
               placeholder="Escribe notas sobre esta transferencia..."
+              placeholderTextColor={colors.textMuted}
               value={notes}
               onChangeText={setNotes}
               multiline
@@ -300,7 +306,7 @@ function TransferFormContent() {
               cartItems.length === 0
             }
             style={styles.confirmButton}
-            buttonColor={palette.success}
+            buttonColor={colors.success}
             icon="check-circle"
           >
             Crear Solicitud de Transferencia
@@ -317,7 +323,7 @@ function TransferFormContent() {
   // veía: el catálogo decía "Agrega productos para empezar a vender").
   const originBar = (
     <View style={styles.originBar}>
-      <MaterialCommunityIcons name="store-marker-outline" size={20} color={palette.primary} />
+      <MaterialCommunityIcons name="store-marker-outline" size={20} color={colors.primary} />
       <Text style={styles.originLabel}>Pedir a</Text>
       {loadingLocations ? (
         <Text style={styles.loadingText}>Cargando sucursales...</Text>
@@ -411,7 +417,7 @@ function TransferFormContent() {
                 style={styles.cartModalClose}
                 activeOpacity={0.7}
               >
-                <MaterialCommunityIcons name="close" size={24} color={palette.text} />
+                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
             {cartContent}
@@ -434,7 +440,7 @@ export default function TransferFormScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     flexDirection: "row",
@@ -447,14 +453,14 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
     borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+    borderBottomColor: c.border,
   },
   originLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: palette.text,
+    color: c.text,
   },
   productsSection: {
     flex: 1,
@@ -462,7 +468,7 @@ const styles = StyleSheet.create({
   // Modal del carrito en mobile
   cartModal: {
     flex: 1,
-    backgroundColor: palette.background,
+    backgroundColor: c.background,
   },
   cartModalHeader: {
     flexDirection: "row",
@@ -471,12 +477,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: tokens.spacing[4],
     paddingVertical: tokens.spacing[3],
     borderBottomWidth: 1,
-    borderBottomColor: palette.border,
-    backgroundColor: palette.surface,
+    borderBottomColor: c.border,
+    backgroundColor: c.surface,
   },
   cartModalTitle: {
     ...tokens.typography.h3,
-    color: palette.text,
+    color: c.text,
   },
   cartModalClose: {
     padding: tokens.spacing[2],
@@ -484,7 +490,7 @@ const styles = StyleSheet.create({
   cartSection: {
     width: 420,
     borderLeftWidth: 1,
-    borderLeftColor: palette.border,
+    borderLeftColor: c.border,
   },
   transferSection: {
     padding: 16,
@@ -492,28 +498,28 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: palette.text,
+    color: c.text,
     marginBottom: 16,
   },
   card: {
     marginBottom: 12,
-    backgroundColor: palette.card,
+    backgroundColor: c.surface,
     borderRadius: 8,
   },
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: palette.text,
+    color: c.text,
     marginBottom: 4,
   },
   sublabel: {
     fontSize: 12,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     marginBottom: 8,
   },
   loadingText: {
     fontSize: 14,
-    color: palette.textSecondary,
+    color: c.textSecondary,
     fontStyle: "italic",
     paddingVertical: 8,
   },
@@ -525,22 +531,23 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   menuContent: {
-    backgroundColor: palette.surface,
+    backgroundColor: c.surface,
   },
   notesInput: {
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: c.border,
     borderRadius: 6,
     padding: 12,
     fontSize: 14,
+    color: c.text,
     backgroundColor: "transparent" as any,
     minHeight: 80,
     marginTop: 4,
   },
   summaryCard: {
-    backgroundColor: palette.primary + "10",
+    backgroundColor: c.primary + "10",
     borderWidth: 1,
-    borderColor: palette.primary + "30",
+    borderColor: c.primary + "30",
   },
   summaryRow: {
     flexDirection: "row",
@@ -551,15 +558,15 @@ const styles = StyleSheet.create({
   summaryLabel: {
     fontSize: 14,
     fontWeight: "500",
-    color: palette.text,
+    color: c.text,
   },
   summaryValue: {
     fontSize: 14,
     fontWeight: "700",
-    color: palette.primary,
+    color: c.primary,
   },
   confirmButton: {
     marginTop: 16,
     paddingVertical: 8,
   },
-});
+}));

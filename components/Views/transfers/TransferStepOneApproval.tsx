@@ -1,8 +1,9 @@
-import palette from "@/constants/palette";
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { resolveImageUri } from "@/utils/imageUtils";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Image, StyleSheet, View } from "react-native";
+import { Image, View } from "react-native";
 import {
   Button,
   Card,
@@ -37,6 +38,8 @@ export default function TransferStepOneApproval({
   onReject,
   formatDate,
 }: TransferStepOneApprovalProps) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
   return (
     <>
       <Card style={styles.card}>
@@ -45,7 +48,7 @@ export default function TransferStepOneApproval({
             <MaterialCommunityIcons
               name="check-decagram-outline"
               size={22}
-              color={palette.blue}
+              color={colors.info}
             />
             <Text variant="titleMedium" style={styles.sectionTitle}>
               Paso 1: Aprobación
@@ -131,7 +134,7 @@ export default function TransferStepOneApproval({
             <MaterialCommunityIcons
               name="package-variant-closed"
               size={22}
-              color={palette.warning}
+              color={colors.warning}
             />
             <Text variant="titleMedium" style={styles.sectionTitle}>
               Productos Solicitados
@@ -160,7 +163,7 @@ export default function TransferStepOneApproval({
                       <MaterialCommunityIcons
                         name="image-off-outline"
                         size={18}
-                        color="#7A7369"
+                        color={colors.textMuted}
                       />
                     )}
                   </View>
@@ -224,7 +227,7 @@ export default function TransferStepOneApproval({
                 loading={submitting}
                 disabled={submitting}
                 style={[styles.actionButton, styles.approveButton]}
-                textColor="#ffffff"
+                textColor={colors.textInverse}
               >
                 Aceptar
               </Button>
@@ -236,7 +239,7 @@ export default function TransferStepOneApproval({
                 loading={submitting}
                 disabled={submitting}
                 style={[styles.actionButton, styles.rejectButton]}
-                textColor="#ffffff"
+                textColor={colors.textInverse}
               >
                 Rechazar
               </Button>
@@ -248,17 +251,17 @@ export default function TransferStepOneApproval({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = themedStyles((c) => ({
   card: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E8E0D4",
+    borderColor: c.border,
     elevation: 0,
     shadowColor: "transparent",
     shadowOpacity: 0,
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 0,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: c.surface,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -266,12 +269,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   sectionTitle: {
-    color: "#4E473D",
+    color: c.text,
     fontWeight: "700",
   },
   divider: {
     marginVertical: 12,
-    backgroundColor: "#ECE4D8",
+    backgroundColor: c.border,
   },
   infoRowCompact: {
     flexDirection: "row",
@@ -284,32 +287,32 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: "#F9F8F6",
+    backgroundColor: c.surfaceMuted,
     borderRadius: 8,
     borderLeftWidth: 3,
-    borderLeftColor: palette.primary,
+    borderLeftColor: c.primary,
   },
   badge: {
     marginTop: 8,
   },
   badgeSender: {
-    backgroundColor: "#DFEDF0",
+    backgroundColor: c.infoSoft,
   },
   badgeReceiver: {
-    backgroundColor: "#F3E5F5",
+    backgroundColor: c.accentSoft,
   },
   badgeText: {
-    color: "#3E3C33",
+    color: c.text,
     fontWeight: "600", 
     fontSize: 12,
   },
   label: {
-    color: "#6A6258",
+    color: c.textSecondary,
     fontSize: 13,
     fontWeight: "600",
   },
   value: {
-    color: "#3D372F",
+    color: c.text,
     fontSize: 13,
     fontWeight: "700",
     flexShrink: 1,
@@ -319,36 +322,36 @@ const styles = StyleSheet.create({
     marginTop: 10,
     padding: 10,
     borderRadius: 12,
-    backgroundColor: "#F7F4EE",
+    backgroundColor: c.surfaceMuted,
   },
   notesLabel: {
-    color: "#6A6258",
+    color: c.textSecondary,
     fontSize: 12,
     fontWeight: "700",
     marginBottom: 2,
   },
   notesValue: {
-    color: "#4E473D",
+    color: c.textSecondary,
   },
   rejectionBlock: {
     marginTop: 10,
     padding: 10,
     borderRadius: 12,
-    backgroundColor: "#F7E7E4",
+    backgroundColor: c.errorSoft,
     borderWidth: 1,
-    borderColor: "#E4B4AC",
+    borderColor: c.errorSoft,
   },
   rejectionLabel: {
-    color: palette.error,
+    color: c.error,
     fontSize: 12,
     fontWeight: "700",
     marginBottom: 2,
   },
   rejectionValue: {
-    color: "#7A3E35",
+    color: c.errorStrong,
   },
   emptyText: {
-    color: "#6A6258",
+    color: c.textSecondary,
     textAlign: "center",
     paddingVertical: 8,
   },
@@ -358,7 +361,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#EFE8DE",
+    borderBottomColor: c.border,
     gap: 10,
   },
   productMainRow: {
@@ -372,8 +375,8 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#E3D9CA",
-    backgroundColor: "#F7F4EE",
+    borderColor: c.border,
+    backgroundColor: c.surfaceMuted,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -383,42 +386,42 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   productName: {
-    color: "#3D372F",
+    color: c.text,
     fontWeight: "700",
     fontSize: 14,
   },
   productCode: {
-    color: "#6A6258",
+    color: c.textSecondary,
     fontSize: 12,
     marginTop: 2,
   },
   qtyInput: {
     marginTop: 8,
-    backgroundColor: "#fff",
+    backgroundColor: c.surface,
   },
   readOnlyHint: {
     marginTop: 8,
-    color: "#7A7369",
+    color: c.textMuted,
     fontSize: 12,
   },
   qtyPill: {
-    backgroundColor: "#E9F0E5",
+    backgroundColor: c.primarySoft,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 10,
   },
   qtyText: {
-    color: "#4D6141",
+    color: c.primary,
     fontWeight: "700",
     fontSize: 12,
   },
   stepHelpText: {
-    color: "#4E473D",
+    color: c.textSecondary,
     marginBottom: 14,
     lineHeight: 20,
   },
   stepMutedText: {
-    color: "#7A7369",
+    color: c.textMuted,
     lineHeight: 20,
   },
   actionsRow: {
@@ -431,9 +434,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   approveButton: {
-    backgroundColor: palette.success,
+    backgroundColor: c.success,
   },
   rejectButton: {
-    backgroundColor: palette.error,
+    backgroundColor: c.error,
   },
-});
+}));
