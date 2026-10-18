@@ -5,9 +5,10 @@
  * enviado, recibido), lo que pasó con un faltante, las fotos de cada paso y
  * el historial.
  *
- * Lo que el recurso no trae: el nombre de quien aprobó, rechazó o canceló
- * (approved_by_user y compañía siempre llegan en null); solo el de quien
- * pidió, envió (workflow.step_2.actor_name) y recibió (workflow.step_3).
+ * Quién hizo cada paso: requested/approved/shipped/received/rejected/
+ * cancelled_by_user (el backend los resuelve desde 777605c); antes solo
+ * llegaban los de pedir, enviar y recibir (workflow.step_N.actor_name), que se
+ * siguen usando si falta el otro.
  */
 
 import type { UploadedFile } from "@/components/Form/AppUpload";
@@ -372,7 +373,14 @@ export function transferHistory(transfer: InventoryTransfer): HistoryEntry[] {
   ];
 
   if (wasApproved(transfer)) {
-    entries.push({ key: "approved", icon: "check", title: "Se aprobó", at: approvedAt(transfer), by: null, note: null });
+    entries.push({
+      key: "approved",
+      icon: "check",
+      title: "Se aprobó",
+      at: approvedAt(transfer),
+      by: transfer.approved_by_user?.name ?? null,
+      note: null,
+    });
   }
   if (wasShipped(transfer) || content.step_2?.status === "shipped") {
     entries.push({
@@ -380,7 +388,7 @@ export function transferHistory(transfer: InventoryTransfer): HistoryEntry[] {
       icon: "truck-delivery-outline",
       title: "Se envió",
       at: shippedAt(transfer),
-      by: text(content.workflow?.step_2?.actor_name) || null,
+      by: transfer.shipped_by_user?.name ?? (text(content.workflow?.step_2?.actor_name) || null),
       note: null,
     });
   }
@@ -391,7 +399,7 @@ export function transferHistory(transfer: InventoryTransfer): HistoryEntry[] {
       icon: "package-variant-closed-check",
       title: short ? "Se recibió con diferencias" : "Se recibió completa",
       at: receivedAt(transfer),
-      by: text(content.workflow?.step_3?.actor_name) || null,
+      by: transfer.received_by_user?.name ?? (text(content.workflow?.step_3?.actor_name) || null),
       note: null,
     });
   }
@@ -401,7 +409,7 @@ export function transferHistory(transfer: InventoryTransfer): HistoryEntry[] {
       icon: "close-circle-outline",
       title: "Se rechazó",
       at: rejectedAt(transfer),
-      by: null,
+      by: transfer.rejected_by_user?.name ?? null,
       note: realReason(content.step_1?.reason ?? transfer.rejection_reason),
       tone: "danger",
     });
@@ -412,7 +420,7 @@ export function transferHistory(transfer: InventoryTransfer): HistoryEntry[] {
       icon: "cancel",
       title: "Se canceló",
       at: cancelledAt(transfer),
-      by: null,
+      by: transfer.cancelled_by_user?.name ?? null,
       note: realReason(content.cancellation?.reason),
       tone: "danger",
     });

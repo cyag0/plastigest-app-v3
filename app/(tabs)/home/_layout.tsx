@@ -269,9 +269,9 @@ export default function _layout() {
         }}
       />
       <Stack.Screen
-        name="transfers/[id]"
+        name="transfers/[id]/index"
         options={{
-          title: "Envío recibido",
+          title: "Transferencia",
         }}
       />
 

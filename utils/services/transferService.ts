@@ -198,6 +198,8 @@ export interface InventoryTransfer {
   received_by_user_id?: number;
   received_by_user?: User;
   received_at?: string;
+  rejected_by_user?: User | null;
+  cancelled_by_user?: User | null;
   cancelled_at?: string;
   rejected_at?: string;
   rejection_reason?: string;
