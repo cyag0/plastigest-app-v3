@@ -1,9 +1,12 @@
 /**
  * Lo que muestra el detalle de una transferencia (la forma de
  * InventoryTransferResource, GET inventory-transfers/{id}): en qué paso va y a
- * quién le toca, las cantidades de cada renglón por etapa (pedido o aprobado,
+ * quién le toca, las cantidades de cada renglón por etapa (pedido, aprobado,
  * enviado, recibido), lo que pasó con un faltante, las fotos de cada paso y
  * el historial.
+ *
+ * Lo pedido (quantity_requested) ya no se reescribe al aprobar: lo aprobado
+ * va en quantity_approved (null mientras no se aprueba; backend dd94df8).
  *
  * Quién hizo cada paso: requested/approved/shipped/received/rejected/
  * cancelled_by_user (el backend los resuelve desde 777605c); antes solo
@@ -53,10 +56,11 @@ export function getCurrentStepFromTransfer(transfer: InventoryTransfer): number 
   return 3;
 }
 
-/** ¿Llegó a aprobarse? (las cantidades del detalle ya son las aprobadas). */
+/** ¿Llegó a aprobarse? */
 export function wasApproved(transfer: InventoryTransfer): boolean {
   const status = String(transfer.status);
   if (status === "approved" || status === "in_transit" || status === "completed") return true;
+  if ((transfer.details ?? []).some((detail) => detail.quantity_approved != null)) return true;
   const content = contentOf(transfer);
   if (status === "cancelled") {
     const from = content.cancellation?.from_status;
@@ -75,14 +79,47 @@ export function cancelledFrom(transfer: InventoryTransfer): string | null {
   return contentOf(transfer).cancellation?.from_status ?? null;
 }
 
-// Los motivos que pone la app sola (rechazar desde el detalle, cancelar
-// desde la lista) no dicen nada: no se muestran como motivo.
+// Los motivos que ponía la app sola (rechazar desde el detalle antes de que
+// se pidiera el motivo, cancelar desde la lista) no dicen nada: no se
+// muestran como motivo.
 const AUTOMATIC_REASONS = ["rechazada desde wizard de transferencias", "cancelada por el usuario"];
 
 /** El motivo que escribió alguien, o null si es uno automático. */
 export function realReason(reason?: string | null): string | null {
   const value = text(reason);
   return value && !AUTOMATIC_REASONS.includes(value.toLowerCase()) ? value : null;
+}
+
+/** Por qué se rechazó (lo que eligió y escribió quien la rechazó), si lo dijo. */
+export function rejectionReason(transfer: InventoryTransfer): string | null {
+  if (String(transfer.status) !== "rejected") return null;
+  return realReason(contentOf(transfer).step_1?.reason ?? transfer.rejection_reason);
+}
+
+/** Motivos de un toque al rechazar; "Otro" pide escribirlo. */
+export const REJECTION_REASONS = [
+  "No tenemos suficiente",
+  "Lo necesitamos aquí",
+  "Pídelo a otra sucursal",
+  "Otro",
+] as const;
+
+export type RejectionChoice = (typeof REJECTION_REASONS)[number];
+
+/** Máximo de rejection_reason en el backend (string, max 500). */
+export const REJECTION_REASON_MAX = 500;
+
+/**
+ * El rejection_reason que se manda: el motivo elegido y la nota
+ * ("No tenemos suficiente. Nos llega mercancía el lunes"); con "Otro", solo
+ * la nota. Sin punto final: el aviso a quien la pidió ya dice
+ * "Motivo: {motivo}." y quedaría "..".
+ */
+export function composeRejection(choice: RejectionChoice, note: string): string {
+  let detail = note.trim().replace(/\s+/g, " ").replace(/[.\s]+$/, "");
+  if (detail) detail = detail.charAt(0).toUpperCase() + detail.slice(1);
+  if (choice === "Otro") return detail;
+  return detail ? `${choice}. ${detail}` : choice;
 }
 
 // ── Renglones ───────────────────────────────────────────────────────────────
@@ -114,6 +151,24 @@ export const lineQty = (line: TransferLine, value: number): string =>
   formatQuantity(value, captureUnit(line));
 
 export const lineImage = (line: TransferLine): string | null => resolveImageUri(line.product?.main_image);
+
+/** Lo que se pidió del renglón. */
+export const lineRequested = (line: TransferLine): number => num(line.quantity_requested);
+
+/**
+ * Lo aprobado del renglón: quantity_approved, o lo pedido si no pasó por la
+ * aprobación (o es de antes de que se guardara aparte). Es lo que se envía.
+ */
+export const lineApproved = (line: TransferLine): number =>
+  line.quantity_approved != null ? num(line.quantity_approved) : lineRequested(line);
+
+/** ¿Se aprobó menos de lo que se pidió? */
+export const approvedLess = (line: TransferLine): boolean =>
+  line.quantity_approved != null && lineApproved(line) < lineRequested(line) - EPS;
+
+/** Renglones a los que se les aprobó menos de lo pedido. */
+export const linesApprovedLess = (transfer: InventoryTransfer): number =>
+  (transfer.details ?? []).filter((line) => approvedLess(line as TransferLine)).length;
 
 /** Existencia disponible en el origen (en la unidad base del producto). */
 export const lineStock = (line: TransferLine): number => num(line.available_stock);
@@ -151,9 +206,8 @@ export interface LineStage {
 }
 
 /**
- * Cantidades del renglón por etapa, de la más reciente a la primera. Lo
- * pedido se vuelve "Aprobado" al aprobarse (aprobar reescribe la cantidad
- * pedida con la que se va a enviar).
+ * Cantidades del renglón por etapa, de la más reciente a la primera: la
+ * primera es la que se ve a la derecha; las demás, solo si cambiaron.
  */
 export function lineStages(transfer: InventoryTransfer, line: TransferLine): LineStage[] {
   const stages: LineStage[] = [];
@@ -163,7 +217,8 @@ export function lineStages(transfer: InventoryTransfer, line: TransferLine): Lin
   const received = status === "completed" && num(line.quantity_shipped) > EPS;
   if (received) stages.push({ label: "Recibido", value: num(line.quantity_received) });
   if (shipped) stages.push({ label: "Enviado", value: num(line.quantity_shipped) });
-  stages.push({ label: wasApproved(transfer) ? "Aprobado" : "Pedido", value: num(line.quantity_requested) });
+  if (wasApproved(transfer)) stages.push({ label: "Aprobado", value: lineApproved(line) });
+  stages.push({ label: "Pedido", value: lineRequested(line) });
   return stages;
 }
 
@@ -373,13 +428,14 @@ export function transferHistory(transfer: InventoryTransfer): HistoryEntry[] {
   ];
 
   if (wasApproved(transfer)) {
+    const less = linesApprovedLess(transfer);
     entries.push({
       key: "approved",
       icon: "check",
       title: "Se aprobó",
       at: approvedAt(transfer),
       by: transfer.approved_by_user?.name ?? null,
-      note: null,
+      note: less > 0 ? `Con menos de lo pedido en ${less === 1 ? "un producto" : `${less} productos`}` : null,
     });
   }
   if (wasShipped(transfer) || content.step_2?.status === "shipped") {
@@ -410,7 +466,8 @@ export function transferHistory(transfer: InventoryTransfer): HistoryEntry[] {
       title: "Se rechazó",
       at: rejectedAt(transfer),
       by: transfer.rejected_by_user?.name ?? null,
-      note: realReason(content.step_1?.reason ?? transfer.rejection_reason),
+      // El motivo va completo en el encabezado (aquí se cortaba a un renglón).
+      note: null,
       tone: "danger",
     });
   }
@@ -465,13 +522,17 @@ export function statusHint(
           : noPermission("aprobarla");
       }
       return `Espera que ${from} la apruebe. Todavía no se mueve inventario.`;
-    case "approved":
+    case "approved": {
       if (viewer.isSource) {
         return viewer.canWorkflow
           ? "Te toca enviarla: el inventario sale de tu sucursal al registrar el envío."
           : noPermission("enviarla");
       }
-      return `${capitalize(from)} ya la aprobó; falta que envíe los productos. Todavía no se mueve inventario.`;
+      const less = linesApprovedLess(transfer);
+      return less > 0
+        ? `${capitalize(from)} ya la aprobó, con menos de lo pedido en ${less === 1 ? "un producto" : `${less} productos`}; falta que envíe los productos.`
+        : `${capitalize(from)} ya la aprobó; falta que envíe los productos. Todavía no se mueve inventario.`;
+    }
     case "in_transit":
       if (viewer.isTarget) {
         return viewer.canWorkflow

@@ -40,12 +40,15 @@ export const transferFolio = (transfer: InventoryTransfer): string =>
 export function TransferHeader({
   transfer,
   hint,
+  reason,
   currentLocationId,
   companyName,
 }: {
   transfer: InventoryTransfer;
   /** Qué significa el estado y a quién le toca (statusHint). */
   hint: string;
+  /** Por qué se rechazó (rejectionReason), completo. */
+  reason?: string | null;
   currentLocationId?: number | null;
   companyName?: string | null;
 }) {
@@ -85,6 +88,12 @@ export function TransferHeader({
           )}
         </View>
         {!!hint && <Text style={styles.hint}>{hint}</Text>}
+        {!!reason && (
+          <Text style={styles.reason} selectable>
+            <Text style={styles.reasonLabel}>Motivo: </Text>
+            {reason}
+          </Text>
+        )}
       </View>
       <TransferSteps transfer={transfer} />
     </View>
@@ -253,6 +262,8 @@ const makeStyles = themedStyles((c) => ({
     marginTop: 6,
   },
   hint: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+  reason: { fontSize: 14, lineHeight: 20, color: c.text, marginTop: 2 },
+  reasonLabel: { fontWeight: "600" },
   note: { fontSize: 14, lineHeight: 20, color: c.text },
   skeletonHeader: { gap: 8 },
 }));

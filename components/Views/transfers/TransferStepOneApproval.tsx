@@ -4,14 +4,17 @@
  * rechaza. Para los demás (quien la pidió, quien no tiene permiso) es solo
  * lectura y el encabezado dice a quién le toca.
  *
- * Aprobar: POST approve con items[{detail_id, quantity_requested}]; rechazar:
- * POST reject con un motivo fijo. Ninguno mueve inventario. Antes las
- * cantidades no aceptaban decimales («1.5» se volvía 1) y un campo vacío se
- * aprobaba en 0 sin avisar.
+ * Aprobar: POST approve con items[{detail_id, quantity_requested}] (lo que se
+ * va a enviar; el backend lo guarda como quantity_approved y lo pedido se
+ * queda como se pidió). Rechazar: POST reject con el motivo que se elige en
+ * RejectTransferSheet (antes era siempre el mismo texto). Ninguno mueve
+ * inventario. Antes las cantidades no aceptaban decimales («1.5» se volvía 1)
+ * y un campo vacío se aprobaba en 0 sin avisar.
  */
 
 import EmptyState from "@/components/App/EmptyState";
 import { FormFooter } from "@/components/Form/FormLayout";
+import RejectTransferSheet from "@/components/Transfers/RejectTransferSheet";
 import { TransferLayout, TransferProducts } from "@/components/Transfers/TransferDetailParts";
 import TransferLineRow, { TransferQuantityInput } from "@/components/Transfers/TransferLineRow";
 import {
@@ -38,9 +41,6 @@ import transferService from "@/utils/services/transferService";
 import React, { useMemo, useState } from "react";
 import { Text, useWindowDimensions } from "react-native";
 import { Button } from "react-native-paper";
-
-/** El motivo que manda "Rechazar" (el backend lo pide). */
-const REJECTION_REASON = "Rechazada desde wizard de transferencias";
 
 const lowerFirst = (value: string) => value.charAt(0).toLowerCase() + value.slice(1);
 
@@ -72,7 +72,9 @@ export default function TransferStepOneApproval({
   const narrow = useWindowDimensions().width < 520;
   // Candado de aprobar/rechazar: un doble toque no manda la acción dos veces.
   const { submitting, run } = useSubmitGuard();
-  const [pending, setPending] = useState<"approve" | "reject" | null>(null);
+  const [approving, setApproving] = useState(false);
+  // El diálogo del motivo de rechazo.
+  const [rejecting, setRejecting] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -141,7 +143,7 @@ export default function TransferStepOneApproval({
         cancelText: "Volver",
       });
       if (!ok) return;
-      setPending("approve");
+      setApproving(true);
       try {
         await transferService.approve(
           transfer.id,
@@ -158,29 +160,31 @@ export default function TransferStepOneApproval({
       } catch (error) {
         setServerError(errorMessageOf(error, "No se pudo aprobar la transferencia."));
       } finally {
-        setPending(null);
+        setApproving(false);
       }
     });
 
-  const reject = () =>
-    run(async () => {
-      setServerError(null);
-      const ok = await alerts.confirm(
-        "La solicitud termina como rechazada y a quien la pidió le llega un aviso. No se mueve inventario y no se puede deshacer.",
-        { title: "¿Rechazar la solicitud?", okText: "Rechazar", cancelText: "Volver" },
-      );
-      if (!ok) return;
-      setPending("reject");
+  /**
+   * Manda el rechazo con el motivo del diálogo. El error se queda en el
+   * diálogo (en su barra); si sale bien, se cierra y se recarga.
+   */
+  const reject = async (reason: string): Promise<string | null> => {
+    const outcome = await run(async () => {
       try {
-        await transferService.reject(transfer.id, REJECTION_REASON, { silent: true });
-        alerts.success("Transferencia rechazada");
-        await onCompleted();
+        await transferService.reject(transfer.id, reason, { silent: true });
+        return null;
       } catch (error) {
-        setServerError(errorMessageOf(error, "No se pudo rechazar la transferencia."));
-      } finally {
-        setPending(null);
+        return errorMessageOf(error, "No se pudo rechazar la transferencia.");
       }
     });
+    // Ya iba otra acción en curso: el diálogo se queda abierto con el aviso.
+    if (outcome === undefined) return "Espera un momento: se está guardando.";
+    if (outcome) return outcome;
+    setRejecting(false);
+    alerts.success("Transferencia rechazada");
+    await onCompleted();
+    return null;
+  };
 
   const showThumbs = lines.some((line) => !!line.product?.main_image);
 
@@ -248,9 +252,11 @@ export default function TransferStepOneApproval({
       {/* En el teléfono "Rechazar" ocupa solo lo suyo. */}
       <Button
         mode="outlined"
-        onPress={reject}
+        onPress={() => {
+          setServerError(null);
+          setRejecting(true);
+        }}
         disabled={submitting}
-        loading={pending === "reject"}
         textColor={colors.error}
         compact={narrow}
         style={narrow ? undefined : { flex: 1 }}
@@ -261,7 +267,7 @@ export default function TransferStepOneApproval({
         mode="contained"
         onPress={approve}
         disabled={submitting}
-        loading={pending === "approve"}
+        loading={approving}
         compact={narrow}
         style={{ flex: narrow ? 1 : 1.4 }}
       >
@@ -271,17 +277,27 @@ export default function TransferStepOneApproval({
   ) : null;
 
   return (
-    <TransferLayout
-      header={header}
-      main={
-        <>
-          {intro}
-          {products}
-        </>
-      }
-      side={side}
-      footer={footer}
-    />
+    <>
+      <TransferLayout
+        header={header}
+        main={
+          <>
+            {intro}
+            {products}
+          </>
+        }
+        side={side}
+        footer={footer}
+      />
+      {canApprove && (
+        <RejectTransferSheet
+          visible={rejecting}
+          requesterName={transfer.requested_by_user?.name}
+          onClose={() => setRejecting(false)}
+          onSubmit={reject}
+        />
+      )}
+    </>
   );
 }
 
