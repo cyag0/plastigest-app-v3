@@ -2,7 +2,7 @@ import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import React from "react";
-import { Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 import { TouchableRipple } from "react-native-paper";
 import SelectDropdown from "react-native-select-dropdown";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -19,12 +19,19 @@ interface AppSelectProps {
   readonly?: boolean;
   placeholder?: string;
   disabled?: boolean;
+  /** Lo inyecta el formulario: error de validación ya tocado (borde rojo). */
+  hasError?: boolean;
+  /** Fuera de un formulario: true (o un texto) pinta el borde rojo. */
+  error?: boolean | string;
 }
 
 export default function AppSelect(props: AppSelectProps) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const dropdownRef = React.useRef<SelectDropdown>(null);
+  // Como los campos de texto: rojo con un error de validación ya tocado
+  // (antes solo salía el mensaje abajo).
+  const hasError = props.hasError ?? Boolean(props.error);
 
   // Normalizar el valor para el procesamiento interno
   const normalizedValue = props.multiple
@@ -115,7 +122,13 @@ export default function AppSelect(props: AppSelectProps) {
           onSelect={handleOnChange}
           renderButton={(selectedItem, isOpened) => (
             <View
-              style={[styles.dropdownButton, props.disabled && styles.disabled]}
+              style={[
+                styles.dropdownButton,
+                // Como en los campos de texto, el rojo gana al color de abierto.
+                isOpened && styles.openBorder,
+                hasError && styles.errorBorder,
+                props.disabled && styles.disabled,
+              ]}
             >
               <Text
                 style={[styles.buttonText, { color: buttonTextColor }]}
@@ -163,7 +176,13 @@ export default function AppSelect(props: AppSelectProps) {
         renderButton={(selectedItem, isOpened) => (
           <TouchableRipple onPress={() => {}}>
             <View
-              style={[styles.dropdownButton, props.disabled && styles.disabled]}
+              style={[
+                styles.dropdownButton,
+                // Como en los campos de texto, el rojo gana al color de abierto.
+                isOpened && styles.openBorder,
+                hasError && styles.errorBorder,
+                props.disabled && styles.disabled,
+              ]}
             >
               <Text
                 style={[styles.buttonText, { color: buttonTextColor }]}
@@ -194,7 +213,9 @@ export default function AppSelect(props: AppSelectProps) {
         }}
         showsVerticalScrollIndicator={false}
         dropdownStyle={styles.dropdown}
-        disabled={props.readonly || false}
+        // Deshabilitado (cargando, sin permiso o a propósito) ya no se abre:
+        // antes solo se veía gris.
+        disabled={props.disabled || props.readonly || false}
         search={!props.hideSearchBox}
         searchInputStyle={styles.searchInput}
         searchPlaceHolder="Buscar..."
@@ -223,6 +244,13 @@ const makeStyles = themedStyles((c) => ({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  // Mismos colores que el borde de los campos de texto (useFieldInputProps).
+  errorBorder: {
+    borderColor: c.error,
+  },
+  openBorder: {
+    borderColor: c.primary,
   },
   disabled: {
     backgroundColor: c.surfaceMuted,
@@ -256,6 +284,8 @@ const makeStyles = themedStyles((c) => ({
     borderRadius: 0,
     paddingHorizontal: tokens.spacing[3],
     color: c.text,
+    // En web, sin el anillo negro del navegador (el cursor ya indica foco).
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : null),
   },
 
   // --- Items ---
