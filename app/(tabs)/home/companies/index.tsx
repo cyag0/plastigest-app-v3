@@ -3,8 +3,6 @@ import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { activeFilter } from "@/constants/listFilters";
 import PermissionGate from "@/components/App/PermissionGate";
-import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
-import FilterModal from "@/components/Feedback/Modal/FilterModal";
 import { generateCrudMenu } from "@/utils/routes";
 import Services from "@/utils/services";
 import { formatPhone } from "@/utils/phone";
@@ -20,7 +18,6 @@ interface CompanyIndexScreenProps {
 export default function CompaniesIndexScreen(props: CompanyIndexScreenProps) {
   const styles = useThemedStyles(makeStyles);
   const navigation = useRouter();
-  const modalRef = React.useRef<AppModalRef>(null);
 
   const route: Href = props.route || "/(tabs)/home/companies";
 
@@ -65,8 +62,6 @@ export default function CompaniesIndexScreen(props: CompanyIndexScreenProps) {
         searchPlaceholder="Buscar compañías..."
         menu={generateCrudMenu(route)}
       />
-
-      <FilterModal ref={modalRef} />
     </PermissionGate>
   );
 }

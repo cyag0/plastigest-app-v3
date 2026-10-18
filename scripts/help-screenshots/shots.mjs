@@ -110,34 +110,35 @@ const transferencias = {
       await h.debug(pide, "pendientes");
       await h.shot("pendientes", pide, { marks: [pide.getByText(created.transfer_number).first()] });
 
-      // Paso 1: la sucursal de origen aprueba.
+      // Paso 1: la sucursal de origen aprueba (la acción va en la barra de abajo).
       await h.goto(surte, `/home/transfers/${transferId}`);
-      const aceptar = surte.getByRole("button", { name: "Aceptar" });
-      await aceptar.waitFor();
+      const aprobar = surte.getByRole("button", { name: "Aprobar", exact: true });
+      await aprobar.waitFor();
       await h.debug(surte, "aprobar");
       await h.shot("aprobar", surte, {
         marks: [
-          { locator: innermost(surte, surte.getByText("Cantidad a enviar").first(), surte.locator("input")), label: "2" },
-          { locator: aceptar, label: "3" },
-          { locator: surte.getByRole("button", { name: "Rechazar" }), label: "3" },
+          { locator: surte.getByLabel(/^Cuánto vas a enviar de/).first(), label: "2" },
+          { locator: aprobar, label: "3" },
+          { locator: surte.getByRole("button", { name: "Rechazar", exact: true }), label: "3" },
         ],
       });
-      await aceptar.click();
-      await surte.getByText("Aprobar", { exact: true }).click();
+      await aprobar.click();
+      // El botón del diálogo de confirmación también dice "Aprobar": es el último.
+      await surte.getByText("Aprobar", { exact: true }).last().click();
 
-      // Paso 2: envío con fotos del transporte.
-      const transferir = surte.getByRole("button", { name: "Transferir productos" });
-      await transferir.waitFor();
+      // Paso 2: envío con fotos.
+      const enviar = surte.getByRole("button", { name: "Enviar productos" });
+      await enviar.waitFor();
       // El aviso "Transferencia aprobada" tapa el botón de enviar.
       await surte.getByText("Cerrar", { exact: true }).click().catch(() => {});
       await h.debug(surte, "enviar");
       await h.shot("enviar", surte, {
         marks: [
           {
-            locator: innermost(surte, surte.getByText("Subir fotos del transporte (obligatorio)"), surte.getByText("Galería")),
+            locator: innermost(surte, surte.getByText("Fotos del envío", { exact: true }), surte.getByLabel("Agregar foto")),
             label: "2",
           },
-          { locator: transferir, label: "3" },
+          { locator: enviar, label: "3" },
         ],
       });
 
@@ -153,24 +154,21 @@ const transferencias = {
       form.append("evidence[0]", new Blob([photo], { type: "image/png" }), "transporte.png");
       await apiSurte.post(`${TRANSFERS}/${transferId}/ship`, form);
 
-      // Paso 3: la sucursal destino recibe.
+      // Paso 3: la sucursal destino recibe ("Llegó" trae lo enviado).
       await h.goto(pide, `/home/transfers/${transferId}`);
-      const si = pide.getByText("Si", { exact: true });
-      await si.first().waitFor();
+      const llego = pide.getByLabel(/^Cuánto llegó de/).first();
+      await llego.waitFor();
       await h.debug(pide, "recibir");
       await h.shot("recibir", pide, {
-        marks: [{ locator: pide.getByText("Llego correctamente?").first().locator(".."), label: "1" }],
+        marks: [{ locator: innermost(pide, pide.getByText("Llegó", { exact: true }).first(), llego), label: "1" }],
       });
 
-      // Recepción con faltante en el primer producto.
-      await pide.getByText("No", { exact: true }).first().click();
-      const motivo = pide.getByText("Motivo del ajuste").first();
+      // Recepción con faltante en el primer producto: llegó uno menos, dañado.
+      await llego.fill(String(Math.max(Number(approved.details[0].quantity_requested) - 1, 0)));
+      const motivo = pide.getByText("Motivo", { exact: true }).first();
       await motivo.waitFor();
-      await pide.getByText("Daño", { exact: true }).first().click();
-      await innermost(pide, pide.getByText("Que paso?").first(), pide.locator("input, textarea"))
-        .locator("input, textarea")
-        .first()
-        .fill("La botella llegó rota");
+      await pide.getByRole("radio", { name: "Llegó dañado" }).first().click();
+      await pide.getByLabel(/^Qué pasó con/).first().fill("La botella llegó rota");
       await h.debug(pide, "diferencias");
       await h.shot("diferencias", pide, { marks: [motivo.locator("..")] });
 
@@ -184,7 +182,7 @@ const transferencias = {
           t.details?.some((d) => Number(d.quantity_received) < Number(d.quantity_shipped)),
         ) ?? completed[0];
       await h.goto(pide, `/home/transfers/${summary.id}`);
-      await pide.getByText("Línea de tiempo").first().waitFor();
+      await pide.getByText("Historial", { exact: true }).first().waitFor();
       await h.debug(pide, "resumen");
       await h.shot("resumen", pide);
     } finally {

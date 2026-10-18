@@ -1,48 +1,65 @@
-import AppUpload, { UploadedFile } from "@/components/Form/AppUpload";
-import { useTheme } from "@/contexts/ThemeContext";
+/**
+ * Paso 2, envío: la sucursal de origen manda lo aprobado de cada producto
+ * con al menos una foto (hasta 8). Al registrarlo el inventario sale de su
+ * sucursal y la transferencia queda en tránsito. Para los demás es solo
+ * lectura.
+ *
+ * POST ship (multipart): items[{detail_id, quantity_shipped}] con lo
+ * aprobado de cada renglón y evidence[] con las fotos.
+ */
+
+import { ListSection } from "@/components/App/ListGroup";
+import EmptyState from "@/components/App/EmptyState";
+import AppUpload, { type UploadedFile } from "@/components/Form/AppUpload";
+import { FormFooter } from "@/components/Form/FormLayout";
+import { TransferLayout, TransferProducts, transferPlaces } from "@/components/Transfers/TransferDetailParts";
+import TransferLineRow from "@/components/Transfers/TransferLineRow";
+import {
+  exceedsStock,
+  lineName,
+  lineQty,
+  lineStages,
+  stockText,
+  stockWarning,
+  type TransferLine,
+} from "@/components/Transfers/transferFormat";
+import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
-import { resolveImageUri } from "@/utils/imageUtils";
-import type {
-  InventoryTransfer,
-  TransferShipStepItem,
-} from "@/utils/services/transferService";
+import { errorMessageOf } from "@/utils/errorNotice";
+import type { InventoryTransfer, TransferShipStepItem } from "@/utils/services/transferService";
 import transferService from "@/utils/services/transferService";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
-import { Image, View } from "react-native";
-import { Button, Card, Divider, Text } from "react-native-paper";
+import React, { useMemo, useState } from "react";
+import { Text } from "react-native";
 
-interface ShipRow {
-  detail_id: number;
-  product_name: string;
-  product_image?: any;
-  unit: string;
-  quantity_shipped: number;
-}
+const MAX_PHOTOS = 8;
 
-interface TransferStepTwoShipProps {
+interface Props {
   transfer: InventoryTransfer;
-  canContinueShipInStep2: boolean;
-  isRequester: boolean;
+  header: React.ReactNode;
+  intro?: React.ReactNode;
+  side: React.ReactNode;
+  /** Origen con transfers_update en el paso 2: sube las fotos y envía. */
+  canShip: boolean;
+  /** Existencia del origen en cada renglón (la ve quien surte). */
+  showStock: boolean;
   onCompleted: () => Promise<void>;
 }
 
-export default function TransferStepTwoShip({
-  transfer,
-  canContinueShipInStep2,
-  isRequester,
-  onCompleted,
-}: TransferStepTwoShipProps) {
+export default function TransferStepTwoShip({ transfer, header, intro, side, canShip, showStock, onCompleted }: Props) {
   const alerts = useAlerts();
-  const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const [rows, setRows] = useState<ShipRow[]>([]);
+  const { selectedCompany } = useAuth();
+  const { submitting, run } = useSubmitGuard();
+  // La pantalla monta esta vista con key por transferencia y updated_at: al
+  // recargarla, las fotos elegidas vuelven a empezar.
   const [evidence, setEvidence] = useState<UploadedFile[]>([]);
-  const [existingEvidenceFiles, setExistingEvidenceFiles] = useState<
-    Array<{ name: string; uri: string }>
-  >([]);
-  const [saving, setSaving] = useState(false);
+  const [attempted, setAttempted] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  // Enviando (ya confirmado): el botón muestra que se está guardando.
+  const [sending, setSending] = useState(false);
+  const places = transferPlaces(transfer, selectedCompany?.name);
 
   const step2Status = String((transfer.content as any)?.step_2?.status || "").toLowerCase();
   const transferStatus = String(transfer.status || "").toLowerCase();
@@ -54,351 +71,138 @@ export default function TransferStepTwoShip({
     transferStatus === "cancelled" ||
     transferStatus === "closed";
 
-  useEffect(() => {
-    const mapped: ShipRow[] = (transfer.details || []).map((detail: any) => {
-      const approvedQuantity = Number(
-        detail.quantity_requested || detail.quantity || 0,
-      );
-      const shippedQuantity = Number(detail.quantity_shipped ?? 0);
+  const lines = useMemo(() => (transfer.details ?? []) as TransferLine[], [transfer.details]);
+  // Se envía lo aprobado de cada renglón (o lo ya enviado, si ya salió).
+  const rows = lines.map((line) => {
+    const approvedQuantity = Number(line.quantity_requested || (line as any).quantity || 0);
+    const shippedQuantity = Number(line.quantity_shipped ?? 0);
+    return {
+      line,
+      quantity_shipped: isHistoricalStep2 && shippedQuantity > 0 ? shippedQuantity : approvedQuantity,
+    };
+  });
 
-      return {
-        detail_id: detail.id,
-        product_name: detail.product?.name || "Producto",
-        product_image: detail.product?.main_image,
-        unit:
-          detail.unit?.abbreviation ||
-          detail.product?.unit?.abbreviation ||
-          "ud",
-        quantity_shipped:
-          isHistoricalStep2 && shippedQuantity > 0
-            ? shippedQuantity
-            : approvedQuantity,
-      };
-    });
+  const missingPhotos = evidence.length === 0;
+  let note: string | null = serverError;
+  if (!note && attempted) {
+    if (rows.length === 0) note = "No hay productos para enviar.";
+    else if (missingPhotos) note = "Sube al menos una foto del envío.";
+  }
 
-    setRows(mapped);
-    setEvidence([]);
-
-    // Extract existing evidence files from transfer content with full URIs
-    const existingFiles: Array<{ name: string; uri: string }> = [];
-    const step2Content = transfer.content as any;
-    const filesFromStep = Array.isArray(step2Content?.step_2?.evidence_files)
-      ? step2Content.step_2.evidence_files
-      : [];
-    const filesFromWorkflow = Array.isArray(step2Content?.workflow?.step_2?.evidence)
-      ? step2Content.workflow.step_2.evidence
-      : [];
-    const sourceFiles = filesFromStep.length > 0 ? filesFromStep : filesFromWorkflow;
-
-    if (
-      sourceFiles &&
-      Array.isArray(sourceFiles)
-    ) {
-      existingFiles.push(
-        ...sourceFiles.map((file: any) => ({
-          name: file.name || "archivo",
-          uri: file.uri || file.url || file.path || "",
-        })),
-      );
-    }
-    setExistingEvidenceFiles(existingFiles);
-  }, [transfer.id, transfer.updated_at, isHistoricalStep2]);
-
-  const canSubmit = useMemo(() => {
-    return rows.length > 0 && evidence.length > 0;
-  }, [rows, evidence]);
-
-  const handleSubmit = async () => {
-    if (evidence.length === 0) {
-      alerts.error(
-        "Debes subir al menos una imagen para confirmar el transporte",
-      );
-      return;
-    }
-
-    const confirmed = await alerts.confirm(
-      "¿Deseas confirmar el envío y transferir estos productos?",
-      {
-        title: "Confirmar envío",
-        okText: "Transferir",
-        cancelText: "Cancelar",
-      },
+  const shipMessage = () => {
+    const toSend = rows.filter((row) => row.quantity_shipped > 0);
+    const skipped = rows.filter((row) => row.quantity_shipped <= 0);
+    const shown = toSend.slice(0, 6).map((row) => `• ${lineName(row.line)}: ${lineQty(row.line, row.quantity_shipped)}`);
+    if (toSend.length > shown.length) shown.push(`• y ${toSend.length - shown.length} más`);
+    const notSent = skipped.length
+      ? `\nNo se envía: ${skipped.map((row) => lineName(row.line)).join(", ")}.`
+      : "";
+    const stock = stockWarning(rows.map((row) => ({ line: row.line, quantity: row.quantity_shipped })));
+    // Solo envía el origen: "tu sucursal".
+    return (
+      `Sale del inventario de tu sucursal:\n${shown.join("\n")}${notSent}\n\n` +
+      `La transferencia queda en tránsito y ${places.to} recibe la tarea de recibirla.` +
+      (stock ? `\n\n${stock}` : "")
     );
-
-    if (!confirmed) {
-      return;
-    }
-
-    const payloadItems: TransferShipStepItem[] = rows.map((row) => ({
-      detail_id: row.detail_id,
-      quantity_shipped: Number(row.quantity_shipped),
-    }));
-
-    try {
-      setSaving(true);
-      await transferService.ship(transfer.id, {
-        items: payloadItems,
-        evidence,
-      });
-
-      alerts.success("Transporte confirmado correctamente");
-      await onCompleted();
-    } catch (error: any) {
-      alerts.error(
-        error?.response?.data?.message ||
-          error?.message ||
-          "No se pudo confirmar el transporte",
-      );
-    } finally {
-      setSaving(false);
-    }
   };
 
-  return (
-    <Card style={styles.card}>
-      <Card.Content>
-        <View style={styles.sectionHeader}>
-          <MaterialCommunityIcons
-            name="truck-delivery-outline"
-            size={22}
-            color={colors.error}
+  const ship = () =>
+    run(async () => {
+      setAttempted(true);
+      setServerError(null);
+      if (rows.length === 0 || missingPhotos) return;
+
+      const ok = await alerts.confirm(shipMessage(), {
+        title: "¿Registrar el envío?",
+        okText: "Enviar",
+        cancelText: "Volver",
+      });
+      if (!ok) return;
+
+      const payloadItems: TransferShipStepItem[] = rows.map((row) => ({
+        detail_id: row.line.id,
+        quantity_shipped: Number(row.quantity_shipped),
+      }));
+
+      setSending(true);
+      try {
+        await transferService.ship(transfer.id, { items: payloadItems, evidence }, { silent: true });
+        alerts.success("Envío registrado: la mercancía ya salió de tu inventario.");
+        await onCompleted();
+      } catch (error) {
+        setServerError(errorMessageOf(error, "No se pudo registrar el envío."));
+      } finally {
+        setSending(false);
+      }
+    });
+
+  const showThumbs = lines.some((line) => !!line.product?.main_image);
+
+  const products = (
+    <TransferProducts
+      count={lines.length}
+      hint={canShip && lines.length > 0 ? "Se envía lo aprobado de cada producto." : null}
+    >
+      {lines.length === 0 ? (
+        <EmptyState compact icon="package-variant" title="Sin productos" />
+      ) : (
+        rows.map(({ line, quantity_shipped }) => (
+          <TransferLineRow
+            key={line.id}
+            line={line}
+            thumb={showThumbs}
+            stages={lineStages(transfer, line)}
+            showStock={showStock}
+            // El backend no deja enviar más de lo que hay: se avisa antes.
+            warning={
+              showStock && quantity_shipped > 0 && exceedsStock(line, quantity_shipped)
+                ? `Solo hay ${stockText(line)} en tu sucursal`
+                : null
+            }
           />
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Paso 2: Envio
-          </Text>
-        </View>
-        <Divider style={styles.divider} />
-        <Text style={styles.stepHelpText}>
-          {canContinueShipInStep2
-            ? "Verifica los productos aprobados y sube imágenes obligatorias como evidencia del transporte."
-            : isRequester
-              ? "Tu solicitud fue aprobada. Ahora estas esperando que la otra sucursal confirme el transporte de los productos."
-              : "Esta etapa la completa la sucursal que envia los productos."}
-        </Text>
-        {rows.map((row) => (
-          <View key={row.detail_id} style={styles.productRow}>
-            <View style={styles.productMainRow}>
-              <View style={styles.productImageBox}>
-                {resolveImageUri(row.product_image) ? (
-                  <Image
-                    source={{ uri: resolveImageUri(row.product_image) || "" }}
-                    style={styles.productImage}
-                  />
-                ) : (
-                  <MaterialCommunityIcons
-                    name="image-off-outline"
-                    size={18}
-                    color={colors.textMuted}
-                  />
-                )}
-              </View>
+        ))
+      )}
+    </TransferProducts>
+  );
 
-              <View style={{ flex: 1 }}>
-              <Text style={styles.productName}>{row.product_name}</Text>
-              <Text style={styles.productMeta}>
-                Cantidad aprobada a enviar: {row.quantity_shipped.toFixed(3)}{" "}
-                {row.unit}
-              </Text>
-            </View>
-            </View>
-          </View>
-        ))}
+  const photos = canShip && (
+    <ListSection title="Fotos del envío">
+      <Text style={styles.hint}>De la mercancía lista para salir o del transporte; al menos una.</Text>
+      <AppUpload
+        value={evidence}
+        onChange={(files: UploadedFile[]) => {
+          setServerError(null);
+          setEvidence(files);
+        }}
+        multiple
+        maxFiles={MAX_PHOTOS}
+        accept="images"
+        error={attempted && missingPhotos}
+        helperText={attempted && missingPhotos ? "Sube al menos una foto del envío" : undefined}
+      />
+    </ListSection>
+  );
 
-        {!canContinueShipInStep2 ? (
-          <>
-            <Text style={styles.stepMutedText}>
-              {isRequester
-                ? "Modo historial: puedes ver lo que ya se envió, pero no modificarlo."
-                : "Modo historial: este paso ya fue procesado y solo esta disponible en lectura."}
-            </Text>
+  const footer = canShip ? (
+    <FormFooter submitLabel="Enviar productos" onSubmit={ship} loading={sending} disabled={submitting} note={note} />
+  ) : null;
 
-            {existingEvidenceFiles.length > 0 ? (
-              <View style={styles.existingEvidenceSection}>
-                <View style={styles.existingEvidenceHeader}>
-                  <MaterialCommunityIcons
-                    name="file-check-outline"
-                    size={18}
-                    color={colors.success}
-                  />
-                  <Text
-                    variant="labelMedium"
-                    style={styles.existingEvidenceTitle}
-                  >
-                    Evidencias de envio ({existingEvidenceFiles.length})
-                  </Text>
-                </View>
-
-                <View style={styles.evidenceGrid}>
-                  {existingEvidenceFiles.map((item, index) => (
-                    <View key={`${item.uri}-${index}`} style={styles.evidenceItem}>
-                      <Image
-                        source={{ uri: item.uri }}
-                        style={styles.evidenceImage}
-                        resizeMode="cover"
-                      />
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ) : (
-              <Text style={styles.stepMutedText}>
-                {isHistoricalStep2
-                  ? "No se registraron evidencias para este envío."
-                  : "Este paso todavia no se procesa y no hay evidencias."}
-              </Text>
-            )}
-          </>
-        ) : (
-          <>
-            <AppUpload
-              label="Imágenes de transporte"
-              placeholder="Subir fotos del transporte (obligatorio)"
-              value={evidence}
-              onChange={(files: UploadedFile[]) => setEvidence(files)}
-              multiple
-              maxFiles={8}
-              accept="images"
-              helperText="Debes subir al menos una imagen para transferir productos"
-            />
-
-            <Button
-              mode="contained"
-              icon="truck-check-outline"
-              onPress={handleSubmit}
-              disabled={!canSubmit || saving}
-              loading={saving}
-              style={[styles.actionButton, styles.shipButton]}
-              textColor={colors.textInverse}
-            >
-              Transferir productos
-            </Button>
-          </>
-        )}
-      </Card.Content>
-    </Card>
+  return (
+    <TransferLayout
+      header={header}
+      main={
+        <>
+          {intro}
+          {products}
+          {photos}
+        </>
+      }
+      side={side}
+      footer={footer}
+    />
   );
 }
 
 const makeStyles = themedStyles((c) => ({
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.border,
-    elevation: 0,
-    shadowColor: "transparent",
-    shadowOpacity: 0,
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 0,
-    backgroundColor: c.surface,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  sectionTitle: {
-    color: c.text,
-    fontWeight: "700",
-  },
-  divider: {
-    marginVertical: 12,
-    backgroundColor: c.border,
-  },
-  stepHelpText: {
-    color: c.textSecondary,
-    marginBottom: 14,
-    lineHeight: 20,
-  },
-  stepMutedText: {
-    color: c.textMuted,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  productRow: {
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 10,
-  },
-  productMainRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  productImageBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.surfaceMuted,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  productImage: {
-    width: "100%",
-    height: "100%",
-  },
-  productName: {
-    color: c.text,
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  productMeta: {
-    color: c.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  existingEvidenceSection: {
-    borderWidth: 1,
-    borderColor: c.successSoft,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    backgroundColor: c.successSoft,
-  },
-  existingEvidenceHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 10,
-  },
-  existingEvidenceTitle: {
-    color: c.successStrong,
-    fontWeight: "600",
-  },
-  evidenceGrid: {
-    marginTop: 10,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  evidenceItem: {
-    width: 96,
-    height: 96,
-    borderRadius: 10,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.surface,
-  },
-  evidenceImage: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: c.border,
-  },
-  input: {
-    marginTop: 10,
-    backgroundColor: c.surface,
-  },
-  actionButton: {
-    marginTop: 12,
-    borderRadius: 12,
-    paddingVertical: 6,
-  },
-  shipButton: {
-    backgroundColor: c.error,
-  },
+  hint: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
 }));

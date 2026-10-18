@@ -198,6 +198,8 @@ export interface InventoryTransfer {
   received_by_user_id?: number;
   received_by_user?: User;
   received_at?: string;
+  rejected_by_user?: User | null;
+  cancelled_by_user?: User | null;
   cancelled_at?: string;
   rejected_at?: string;
   rejection_reason?: string;
@@ -376,21 +378,25 @@ const transferService = {
   },
 
   // === ACCIONES DE WORKFLOW ===
+  // `options.silent`: el detalle muestra el error en su barra (sin el aviso
+  // global encima). El cuerpo de cada petición no cambia.
 
   // Aprobar transferencia
-  async approve(id: number, data?: any): Promise<InventoryTransfer> {
+  async approve(id: number, data?: any, options?: RequestOptions): Promise<InventoryTransfer> {
     const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
       `/auth/admin/inventory-transfers/${id}/approve`,
       data || {},
+      options,
     );
     return response.data.data;
   },
 
   // Rechazar transferencia
-  async reject(id: number, reason: string): Promise<InventoryTransfer> {
+  async reject(id: number, reason: string, options?: RequestOptions): Promise<InventoryTransfer> {
     const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
       `/auth/admin/inventory-transfers/${id}/reject`,
       { rejection_reason: reason },
+      options,
     );
     return response.data.data;
   },
@@ -399,10 +405,13 @@ const transferService = {
   async ship(
     id: number,
     data?: TransferShipStepPayload,
+    options?: RequestOptions,
   ): Promise<InventoryTransfer> {
     if (!data) {
       const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
         `/auth/admin/inventory-transfers/${id}/ship`,
+        undefined,
+        options,
       );
       return response.data.data;
     }
@@ -411,6 +420,7 @@ const transferService = {
     const response = await apiClient.post<LaravelResponse<InventoryTransfer>>(
       `/auth/admin/inventory-transfers/${id}/ship`,
       formData,
+      options,
     );
     return response.data.data;
   },
@@ -419,11 +429,12 @@ const transferService = {
   async receive(
     id: number,
     data?: TransferReceiveStepPayload,
+    options?: RequestOptions,
   ): Promise<InventoryTransfer> {
     if (!data) {
       const response = await axiosClient.post<
         LaravelResponse<InventoryTransfer>
-      >(`/auth/admin/inventory-transfers/${id}/receive`);
+      >(`/auth/admin/inventory-transfers/${id}/receive`, undefined, options);
       return response.data.data;
     }
 
@@ -431,6 +442,7 @@ const transferService = {
     const response = await axiosClient.post<LaravelResponse<InventoryTransfer>>(
       `/auth/admin/inventory-transfers/${id}/receive`,
       formData,
+      options,
     );
     return response.data.data;
   },

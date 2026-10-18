@@ -9,6 +9,11 @@
  * sombra por módulo, chips de colores, un contador con barra de progreso y
  * plantillas que no decían qué marcaban.
  *
+ * Al editar, «Activo»: un rol apagado no da sus permisos a nadie (el
+ * backend lo trata como si no existiera). La barra de abajo es propia para
+ * decir ahí lo que pasa al guardar (a cuántas personas les quita o devuelve
+ * los permisos) y lo que respondió el servidor.
+ *
  * Lo que se manda no cambia: `permissions` es el mapa {id_del_permiso: true|false}.
  */
 
@@ -20,17 +25,25 @@ import RecordLoadError, {
 import FormNote from "@/components/Auth/FormNote";
 import AppForm, { AppFormRef, useAppForm } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
-import { FormSection } from "@/components/Form/FormLayout";
+import { FormSwitch } from "@/components/Form/AppSwitch";
+import { FormFooter, FormSection } from "@/components/Form/FormLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAlerts } from "@/hooks/useAlerts";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { errorMessageOf } from "@/utils/errorNotice";
+import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
 import Services from "@/utils/services";
+import { logCaughtError } from "@/utils/silenceLogs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
-import { useFormikContext } from "formik";
+import { setNestedObjectValues, useFormikContext } from "formik";
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  type HostInstance,
+  KeyboardAvoidingView,
   type LayoutChangeEvent,
   Platform,
   Pressable,
@@ -67,6 +80,12 @@ interface RoleValues {
   permissions: Record<string, boolean>;
   /** Solo al editar o ver: el rol del sistema (Super Admin) no se cambia. */
   is_system?: boolean;
+  /** Solo al editar o ver. Apagado, no da sus permisos a nadie. */
+  is_active?: boolean;
+  /** Cuántas personas tienen el rol (directo o en alguna sucursal). */
+  users_count?: number;
+  /** Quien edita tiene este rol: no lo puede apagar (el backend responde 422). */
+  held_by_current_user?: boolean;
 }
 
 interface RoleProps {
@@ -78,6 +97,71 @@ type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 
 /** AppForm también expone setReadonly (el «Editar» del detalle). */
 type RoleFormRef = AppFormRef<RoleValues> & { setReadonly?: (value: boolean) => void };
+
+type NoteTone = "error" | "warning" | "info";
+
+/** Aviso de la barra de abajo. */
+interface FooterNotice {
+  text: string;
+  tone: NoteTone;
+}
+
+/** Lo que la barra de abajo necesita saber del editor (que vive dentro de Formik). */
+interface EditorState {
+  /** Detalle, o sin permiso para guardar: la barra es la de AppForm. */
+  readonly: boolean;
+  /** No se puede guardar (permisos que quien edita no tiene, rol del sistema). */
+  locked: boolean;
+  /** Primer error de los campos, para decir en la barra qué falta. */
+  firstError: string | null;
+  /** Lo que pasa al guardar (apagar o volver a activar el rol). */
+  notice: FooterNotice | null;
+}
+
+const sameNotice = (a: FooterNotice | null, b: FooterNotice | null) =>
+  a === b || (!!a && !!b && a.text === b.text && a.tone === b.tone);
+
+const sameEditorState = (a: EditorState, b: EditorState) =>
+  a.readonly === b.readonly &&
+  a.locked === b.locked &&
+  a.firstError === b.firstError &&
+  sameNotice(a.notice, b.notice);
+
+/** Un aviso termina en punto (los mensajes de Yup no lo llevan). */
+const sentence = (text: string) => (/[.!?…]$/.test(text) ? text : `${text}.`);
+
+/**
+ * Qué decir en la barra cuando el servidor no guardó: el primer error de
+ * campo de un 422 («Ya existe un rol con ese nombre.») o su mensaje («No
+ * puedes desactivar un rol que tú tienes…»).
+ */
+function saveErrorMessage(error: unknown): string {
+  const errors = (error as any)?.response?.data?.errors;
+  const first = errors && typeof errors === "object" ? Object.values(errors).flat()[0] : undefined;
+  if (typeof first === "string" && first.trim()) return sentence(first.trim());
+  return sentence(errorMessageOf(error, "No se pudo guardar el rol."));
+}
+
+// --- Rol apagado: qué les pasa a quienes lo tienen ---------------------------
+
+function deactivationWarning(count: number): string {
+  return count === 1
+    ? "1 persona tiene este rol y se quedará sin estos permisos hasta que lo vuelvas a activar o le asignes otro."
+    : `${count} personas tienen este rol y se quedarán sin estos permisos hasta que lo vuelvas a activar o les asignes otro.`;
+}
+
+function reactivationNotice(count: number): string {
+  return count === 1
+    ? "La persona que tiene este rol recupera estos permisos al guardar."
+    : `Las ${count} personas que tienen este rol recuperan estos permisos al guardar.`;
+}
+
+function inactiveSummary(count: number): string {
+  if (count === 0) return "Este rol está inactivo: no da sus permisos y no se ofrece al asignar roles.";
+  return count === 1
+    ? "Este rol está inactivo: la persona que lo tiene no tiene estos permisos."
+    : `Este rol está inactivo: las ${count} personas que lo tienen no tienen estos permisos.`;
+}
 
 const LIST_ROUTE = "/(tabs)/home/roles";
 
@@ -406,12 +490,36 @@ export default function CreateRoleScreen(props: RoleProps) {
   } | null>(null);
   const [problem, setProblem] = useState<RecordLoadProblem | null>(null);
   const [attempt, setAttempt] = useState(0);
-  // El rol no se puede guardar: tiene permisos que quien edita no tiene, o es
-  // el rol del sistema. La barra de abajo solo deja "Volver".
-  const [locked, setLocked] = useState(false);
+  // Lo que el editor le cuenta a la barra de abajo. Con locked (permisos que
+  // quien edita no tiene, o el rol del sistema) la barra solo deja "Volver".
+  const [editor, setEditor] = useState<EditorState>({
+    readonly: !!props.readonly,
+    locked: false,
+    firstError: null,
+    notice: null,
+  });
+  const onEditorState = useCallback(
+    (next: EditorState) => setEditor((prev) => (sameEditorState(prev, next) ? prev : next)),
+    [],
+  );
+  // Lo que respondió el servidor al guardar, y si se intentó guardar con
+  // campos por corregir: van en la barra, encima de los botones.
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [invalidAttempt, setInvalidAttempt] = useState(false);
+  const clearSaveNotes = useCallback(() => {
+    setServerError(null);
+    setInvalidAttempt(false);
+  }, []);
+  // Lo que dijo el servidor deja de aplicar en cuanto se cambia algo.
+  const onValuesChange = useCallback(() => setServerError(null), []);
+  const { submitting, run } = useSubmitGuard();
+  const alerts = useAlerts();
   const formRef = useRef<RoleFormRef>(null);
+  // Lleva al primer campo con error (lo registra el editor).
+  const revealFirstErrorRef = useRef<(() => void) | null>(null);
 
   const styles = useThemedStyles((c) => ({
+    screen: { flex: 1, backgroundColor: c.background },
     center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: c.background },
     back: { flex: 1 },
   }));
@@ -465,6 +573,7 @@ export default function CreateRoleScreen(props: RoleProps) {
 
   // Editado en el mismo detalle («Editar»): vuelve a verse en solo lectura.
   const handleSuccess = () => {
+    clearSaveNotes();
     if (props.readonly) {
       formRef.current?.setReadonly?.(true);
       formRef.current?.reload();
@@ -473,14 +582,54 @@ export default function CreateRoleScreen(props: RoleProps) {
     }
   };
   const handleCancel = () => {
+    clearSaveNotes();
     if (props.readonly) {
       formRef.current?.resetForm();
       formRef.current?.setReadonly?.(true);
-      setLocked(false);
     } else {
       leave();
     }
   };
+
+  // Guardar desde la barra propia: lo mismo que haría AppForm (validar,
+  // marcar los campos, el mismo FormData), pero lo que falte o lo que
+  // responda el servidor se dice en la barra y no en un aviso que se va.
+  const save = () =>
+    run(async () => {
+      const form = formRef.current;
+      if (!form) return;
+      setServerError(null);
+
+      const errors = await form.validateForm();
+      if (errors && Object.keys(errors).length > 0) {
+        form.setTouched({ ...form.getTouched(), ...setNestedObjectValues(errors, true) });
+        setInvalidAttempt(true);
+        setTimeout(() => revealFirstErrorRef.current?.(), 80);
+        return;
+      }
+      setInvalidAttempt(false);
+
+      try {
+        const data = (await objectToFormDataWithNestedInputsAsync(form.getValues())) as any;
+        if (props.id) {
+          await Services.admin.roles.update(props.id, data, { silent: true });
+        } else {
+          await Services.admin.roles.store(data, { silent: true });
+        }
+        alerts.success(props.id ? "Cambios guardados" : "Rol guardado");
+        handleSuccess();
+      } catch (error) {
+        logCaughtError("Error saving role:", error);
+        setServerError(saveErrorMessage(error));
+        // «Ya existe un rol con ese nombre.»: también en el campo.
+        const nameError = (error as any)?.response?.data?.errors?.name?.[0];
+        if (typeof nameError === "string") {
+          const formik = form.getFormikInstance();
+          formik.setFieldTouched("name", true, false);
+          formik.setFieldError("name", nameError);
+        }
+      }
+    });
 
   if (problem) {
     return (
@@ -500,37 +649,68 @@ export default function CreateRoleScreen(props: RoleProps) {
     );
   }
 
-  return (
-    <AppForm
-      permissionPrefix="roles"
-      readonly={props.readonly}
-      id={props.id}
-      api={Services.admin.roles}
-      ref={formRef}
-      validationSchema={validationSchema}
-      initialValues={INITIAL_VALUES}
-      submitButtonText={props.id ? "Guardar cambios" : "Guardar rol"}
-      successMessage={props.id ? "Cambios guardados" : "Rol guardado"}
-      onSuccess={handleSuccess}
+  // En el detalle (o sin permiso para guardar) la barra es la de AppForm:
+  // Eliminar / Editar o «Solo lectura». Al editar es esta, con el aviso de
+  // lo que falta, de lo que respondió el servidor o de lo que pasa al guardar.
+  const editMode = !editor.readonly;
+  const note: FooterNotice | null = serverError
+    ? { text: serverError, tone: "error" }
+    : invalidAttempt && editor.firstError
+      ? { text: sentence(editor.firstError), tone: "error" }
+      : editor.notice;
+  const footer = !editMode ? null : editor.locked ? (
+    // Sin poder guardar, la barra solo deja regresar.
+    <FormFooter>
+      <Button mode="outlined" onPress={handleCancel} style={styles.back}>
+        Volver
+      </Button>
+    </FormFooter>
+  ) : (
+    <FormFooter
+      note={note?.text}
+      noteTone={note?.tone}
       onCancel={handleCancel}
-      // Sin guardar, la barra solo deja regresar.
-      showSubmitButton={!locked}
-      showCancelButton={!locked}
-      additionalSubmitButtons={
-        locked ? (
-          <Button mode="outlined" onPress={handleCancel} style={styles.back}>
-            Volver
-          </Button>
-        ) : undefined
-      }
-    >
-      <RoleEditor
-        resources={catalog.resources}
-        permissionsByResource={catalog.permissionsByResource}
-        editing={!!props.id}
-        onLockedChange={setLocked}
-      />
-    </AppForm>
+      submitLabel={props.id ? "Guardar cambios" : "Guardar rol"}
+      onSubmit={save}
+      loading={submitting}
+    />
+  );
+
+  return (
+    <View style={styles.screen}>
+      <AppForm
+        permissionPrefix="roles"
+        readonly={props.readonly}
+        id={props.id}
+        api={Services.admin.roles}
+        ref={formRef}
+        validationSchema={validationSchema}
+        initialValues={INITIAL_VALUES}
+        // Al editar, la barra es la de abajo (save): AppForm ya no guarda.
+        showButtons={!editMode}
+      >
+        <RoleEditor
+          resources={catalog.resources}
+          permissionsByResource={catalog.permissionsByResource}
+          editing={!!props.id}
+          onStateChange={onEditorState}
+          onValuesChange={onValuesChange}
+          revealFirstErrorRef={revealFirstErrorRef}
+        />
+      </AppForm>
+      {/* En el teléfono la barra sube con el teclado, como la de AppForm. */}
+      {footer &&
+        (Platform.OS === "web" ? (
+          footer
+        ) : (
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            keyboardVerticalOffset={100}
+          >
+            {footer}
+          </KeyboardAvoidingView>
+        ))}
+    </View>
   );
 }
 
@@ -541,19 +721,24 @@ function RoleEditor({
   resources,
   permissionsByResource,
   editing,
-  onLockedChange,
+  onStateChange,
+  onValuesChange,
+  revealFirstErrorRef,
 }: {
   resources: ResourceItem[];
   permissionsByResource: Record<string, PermissionItem[]>;
   editing: boolean;
-  onLockedChange: (locked: boolean) => void;
+  onStateChange: (state: EditorState) => void;
+  onValuesChange: () => void;
+  /** Aquí se deja con qué llevar al primer campo con error. */
+  revealFirstErrorRef: React.RefObject<(() => void) | null>;
 }) {
   const { colors } = useTheme();
   const styles = useStyles();
   const { readonly } = useAppForm();
   const { permissions: myPermissions } = useAuth();
 
-  const { values, setFieldValue } = useFormikContext<RoleValues>();
+  const { values, setFieldValue, initialValues, errors } = useFormikContext<RoleValues>();
   // Ref con los valores más recientes para que los callbacks sean estables
   // (no se recrean en cada tecleo) sin perder acceso al estado actual.
   const valuesRef = useRef(values);
@@ -617,9 +802,62 @@ function RoleEditor({
   const systemRole = !!values.is_system;
   const locked = !readonly && (frozen || systemRole);
 
+  // «Activo»: solo al editar o ver un rol que no es el del sistema (uno nuevo
+  // nace activo). Apagado, quienes lo tienen pierden sus permisos.
+  const showActive = editing && !systemRole;
+  const isActive = values.is_active !== false;
+  const wasActive = initialValues.is_active !== false;
+  const usersCount = Number(values.users_count ?? 0);
+  // Apagar el propio rol lo deja a uno sin esos permisos (el backend no lo deja).
+  const heldByMe = !!values.held_by_current_user;
+  const activeDescription =
+    heldByMe && isActive
+      ? "Tú tienes este rol, así que no lo puedes apagar."
+      : isActive
+        ? "Si lo apagas, quienes tienen este rol pierden sus permisos."
+        : "Apagado: quienes tienen este rol no tienen sus permisos.";
+
+  // Lo que pasa al guardar, dicho en la barra junto a «Guardar cambios».
+  const notice = useMemo<FooterNotice | null>(() => {
+    if (!showActive || readonly || usersCount === 0 || isActive === wasActive) return null;
+    return isActive
+      ? { text: reactivationNotice(usersCount), tone: "info" }
+      : { text: deactivationWarning(usersCount), tone: "warning" };
+  }, [showActive, readonly, usersCount, isActive, wasActive]);
+
+  const firstError = useMemo(() => {
+    const first = Object.values(errors ?? {}).find((message) => typeof message === "string");
+    return typeof first === "string" ? first : null;
+  }, [errors]);
+
+  useLayoutEffect(() => {
+    onStateChange({ readonly, locked, firstError, notice });
+  }, [readonly, locked, firstError, notice, onStateChange]);
+
+  const valuesChanged = useRef(onValuesChange);
+  useLayoutEffect(() => {
+    valuesChanged.current = onValuesChange;
+  });
   useEffect(() => {
-    onLockedChange(locked);
-  }, [locked, onLockedChange]);
+    valuesChanged.current();
+  }, [values]);
+
+  // Los campos que se validan (nombre y descripción) van arriba: al guardar
+  // con errores se lleva ahí. En web se desplaza la página; en el teléfono la
+  // barra dice qué falta.
+  const fieldsRef = useRef<HostInstance>(null);
+  useLayoutEffect(() => {
+    revealFirstErrorRef.current = () => {
+      const node = fieldsRef.current as unknown as HTMLElement | null;
+      if (Platform.OS === "web" && typeof node?.scrollIntoView === "function") {
+        // "center": como van arriba, la página sube hasta el inicio.
+        node.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    };
+    return () => {
+      revealFirstErrorRef.current = null;
+    };
+  }, [revealFirstErrorRef]);
 
   // Casillas de cada módulo, en orden y sin las de alcance (van en «Alcance»).
   const modulePermissions = useMemo(() => {
@@ -786,25 +1024,44 @@ function RoleEditor({
           </FormNote>
         </View>
       )}
+      {readonly && showActive && !isActive && (
+        <View style={styles.note}>
+          <FormNote tone="warning" icon="shield-off-outline">
+            {inactiveSummary(usersCount)}
+          </FormNote>
+        </View>
+      )}
 
-      <FormInput
-        name="name"
-        label="Nombre"
-        placeholder="Por ejemplo, Cajero de mostrador"
-        maxLength={LIMITS.name}
-        autoCapitalize="sentences"
-        readonly={locked || undefined}
-      />
-      <FormInput
-        name="description"
-        label="Descripción"
-        optional
-        multiline
-        numberOfLines={2}
-        placeholder="Qué hace quien tiene este rol"
-        maxLength={LIMITS.description}
-        readonly={locked || undefined}
-      />
+      <View ref={fieldsRef}>
+        <FormInput
+          name="name"
+          label="Nombre"
+          placeholder="Por ejemplo, Cajero de mostrador"
+          maxLength={LIMITS.name}
+          autoCapitalize="sentences"
+          readonly={locked || undefined}
+        />
+        <FormInput
+          name="description"
+          label="Descripción"
+          optional
+          multiline
+          numberOfLines={2}
+          placeholder="Qué hace quien tiene este rol"
+          maxLength={LIMITS.description}
+          readonly={locked || undefined}
+        />
+      </View>
+      {/* Aquí y no al final: después vienen los 30 módulos de permisos. */}
+      {showActive && (
+        <FormSwitch
+          name="is_active"
+          label="Activo"
+          description={activeDescription}
+          disabled={heldByMe && isActive}
+          readonly={locked || undefined}
+        />
+      )}
 
       <FormSection
         title="Permisos"

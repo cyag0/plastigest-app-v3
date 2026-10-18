@@ -1,288 +1,135 @@
-import StatusBadge from "@/components/App/StatusBadge";
-import { transferStatus } from "@/constants/statuses";
+/**
+ * Los pasos de una transferencia (Solicitud, Aprobación, Envío, Recepción)
+ * como un indicador discreto debajo del encabezado del detalle: cada paso
+ * hecho con su fecha, el de ahora marcado y, si se rechazó o canceló, el
+ * paso en el que se quedó.
+ *
+ * Antes era una tarjeta de color sólido (un color por paso, fuera de la
+ * paleta) con texto y círculos blancos que no cambiaba con el modo oscuro, y
+ * los pasos se tocaban para ver cada uno por separado: ahora el detalle
+ * muestra todo junto.
+ */
+
+import { useTheme } from "@/contexts/ThemeContext";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import type { InventoryTransfer } from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { notifyError } from "@/utils/errorNotice";
-import { printTransferRemission } from "@/utils/printDocument";
-import React, { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import { Button, Card, Text } from "react-native-paper";
+import React from "react";
+import { Text, View } from "react-native";
+import { transferSteps, type StepInfo, type StepState } from "./transferFormat";
 
-interface TransferWizardStatusCardProps {
-  transfer: InventoryTransfer;
-  selectedStep: number;
-  maxStep: number;
-  onSelectStep?: (step: number) => void;
-}
+export { getCurrentStepFromTransfer } from "./transferFormat";
 
-const STEP_LABELS = ["Aprobación", "Envío", "Recepción", "Resumen"];
+const MARK = 20;
 
-export function getCurrentStepFromTransfer(transfer: InventoryTransfer) {
-  const status = String(transfer.status || "").toLowerCase();
+/** Hasta este paso llegó la transferencia (se pinta la línea que lo une). */
+const reached = (state: StepState) => state === "done" || state === "current" || state === "failed";
 
-  if (
-    status === "completed" ||
-    status === "closed" ||
-    status === "rejected" ||
-    status === "cancelled"
-  ) {
-    return 4;
-  }
-
-  const fromPayload = Number(transfer.current_step || 0);
-
-  if (fromPayload >= 1 && fromPayload <= 4) {
-    return fromPayload;
-  }
-
-  if (status === "pending" || status === "ordered") return 1;
-  if (status === "approved") return 2;
-  if (status === "in_transit") return 3;
-  return 3;
-}
-
-// Encabezado de color sólido con texto y círculos blancos: se ve igual en
-// modo claro y oscuro, por eso no usa la paleta.
-function getStepTheme(step: number) {
-  if (step === 1) {
-    return {
-      title: "Paso 1: Aprobación",
-      subtitle: "Autoriza la solicitud y ajusta cantidades a enviar",
-      color: "#D2AB80",
-    };
-  }
-
-  if (step === 2) {
-    return {
-      title: "Paso 2: Envío",
-      subtitle: "Registra salida de productos y evidencia",
-      color: "#A65A4D",
-    };
-  }
-
-  if (step === 3) {
-    return {
-      title: "Paso 3: Recepción",
-      subtitle: "Confirma recepción y diferencias",
-      color: "#809671",
-    };
-  }
-
-  return {
-    title: "Paso 4: Resumen",
-    subtitle: "Consulta el resultado final de la transferencia",
-    color: "#4B6C8F",
-  };
-}
-
-export function TransferWizardStatusCard({
-  transfer,
-  selectedStep,
-  maxStep,
-  onSelectStep,
-}: TransferWizardStatusCardProps) {
-  const theme = getStepTheme(selectedStep);
-  const [printing, setPrinting] = useState(false);
-
-  // La remisión es la hoja que viaja con la mercancía y se firma al recibir.
-  const printRemission = async () => {
-    try {
-      setPrinting(true);
-      await printTransferRemission(transfer.id, transfer.transfer_number);
-    } catch (error) {
-      // Un solo aviso (el de la app), con el motivo del servidor.
-      notifyError(error, "No se pudo generar la remisión.");
-    } finally {
-      setPrinting(false);
-    }
-  };
+export function TransferSteps({ transfer }: { transfer: InventoryTransfer }) {
+  const styles = useThemedStyles(makeStyles);
+  const steps = transferSteps(transfer);
+  const active = steps.find((step) => step.state === "current" || step.state === "failed");
+  const summary = active
+    ? `${active.label}: ${active.state === "failed" ? active.caption : "pendiente"} (paso ${steps.indexOf(active) + 1} de ${steps.length})`
+    : "Todos los pasos terminados";
 
   return (
-    <Card style={[styles.statusCard, { backgroundColor: theme.color }]}>
-      <Card.Content>
-        <View style={styles.statusHeader}>
-          <View style={{ flex: 1 }}>
-            <Text variant="titleLarge" style={styles.statusTitle}>
-              {theme.title}
+    <View style={styles.row} accessible accessibilityLabel={`Pasos de la transferencia. ${summary}`}>
+      {steps.map((step, index) => {
+        const next = steps[index + 1];
+        return (
+          <View key={step.key} style={styles.step}>
+            <View style={styles.track}>
+              <View style={[styles.line, index === 0 ? styles.lineHidden : reached(step.state) && styles.lineOn]} />
+              <Marker state={step.state} />
+              <View
+                style={[styles.line, !next ? styles.lineHidden : reached(next.state) && styles.lineOn]}
+              />
+            </View>
+            <Text
+              style={[
+                styles.label,
+                step.state === "current" && styles.labelCurrent,
+                step.state === "failed" && styles.labelFailed,
+                (step.state === "upcoming" || step.state === "skipped") && styles.labelMuted,
+              ]}
+              numberOfLines={1}
+            >
+              {step.label}
             </Text>
-            <Text style={styles.statusSubtitle}>{theme.subtitle}</Text>
+            <Caption step={step} />
           </View>
-          <StatusBadge {...transferStatus(transfer.status)} />
-        </View>
-
-        <View style={styles.printRow}>
-          <Button
-            mode="outlined"
-            compact
-            icon="printer"
-            textColor="#FFFFFF"
-            style={styles.printButton}
-            onPress={printRemission}
-            loading={printing}
-            disabled={printing}
-          >
-            Imprimir remisión
-          </Button>
-        </View>
-
-        <View style={styles.progressRow}>
-          {[1, 2, 3, 4].map((step, index) => {
-            const isDone = maxStep > step;
-            const isCurrent = selectedStep === step;
-            const isEnabled = step <= maxStep;
-
-            return (
-              <React.Fragment key={`step-${step}`}>
-                <Pressable
-                  onPress={() => isEnabled && onSelectStep?.(step)}
-                  disabled={!isEnabled || !onSelectStep}
-                  style={[
-                    styles.progressCircle,
-                    {
-                      backgroundColor: isDone
-                        ? "#FFFFFF"
-                        : isCurrent
-                          ? "#FFFFFF"
-                          : "rgba(255,255,255,0.38)",
-                    },
-                    !isEnabled && styles.progressCircleDisabled,
-                  ]}
-                >
-                  {isDone ? (
-                    <MaterialCommunityIcons
-                      name="check"
-                      size={14}
-                      color={theme.color}
-                    />
-                  ) : (
-                    <Text
-                      style={[styles.progressNumber, { color: theme.color }]}
-                    >
-                      {step}
-                    </Text>
-                  )}
-                </Pressable>
-
-                {index < 3 && (
-                  <View
-                    style={[
-                      styles.progressConnector,
-                      {
-                        backgroundColor:
-                          maxStep > step
-                            ? "rgba(255, 255, 255, 0.95)"
-                            : "rgba(255, 255, 255, 0.35)",
-                      },
-                    ]}
-                  />
-                )}
-              </React.Fragment>
-            );
-          })}
-        </View>
-
-        <View style={styles.progressLegendRow}>
-          {STEP_LABELS.map((label, index) => {
-            const step = index + 1;
-            const enabled = step <= maxStep;
-
-            return (
-              <Pressable
-                key={label}
-                onPress={() => enabled && onSelectStep?.(step)}
-                disabled={!onSelectStep || !enabled}
-                style={styles.progressLegendPressable}
-              >
-                <Text
-                  style={[
-                    styles.progressLegendText,
-                    !enabled && styles.disabledLegend,
-                  ]}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </Card.Content>
-    </Card>
+        );
+      })}
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  statusCard: {
-    borderRadius: 16,
-    borderWidth: 0,
-    borderColor: "transparent",
-    elevation: 0,
-    shadowColor: "transparent",
-    shadowOpacity: 0,
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 0,
-  },
-  statusHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  statusTitle: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-  },
-  statusSubtitle: {
-    marginTop: 4,
-    color: "rgba(255, 255, 255, 0.92)",
-  },
-  printRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 12,
-  },
-  printButton: {
-    borderColor: "rgba(255, 255, 255, 0.7)",
-  },
-  progressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 18,
-  },
-  progressCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+function Caption({ step }: { step: StepInfo }) {
+  const styles = useThemedStyles(makeStyles);
+  // Siempre ocupa su renglón: así las etiquetas quedan alineadas.
+  return (
+    <Text style={[styles.caption, step.state === "failed" && styles.captionFailed]} numberOfLines={1}>
+      {step.caption ?? " "}
+    </Text>
+  );
+}
+
+function Marker({ state }: { state: StepState }) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles(makeStyles);
+  switch (state) {
+    case "done":
+      return (
+        <View style={[styles.mark, styles.markDone]}>
+          <MaterialCommunityIcons name="check" size={13} color={colors.primaryForeground} />
+        </View>
+      );
+    case "current":
+      return (
+        <View style={[styles.mark, styles.markCurrent]}>
+          <View style={styles.dot} />
+        </View>
+      );
+    case "failed":
+      return (
+        <View style={[styles.mark, styles.markFailed]}>
+          <MaterialCommunityIcons name="close" size={12} color={colors.errorStrong} />
+        </View>
+      );
+    case "skipped":
+      return <View style={[styles.mark, styles.markSkipped]} />;
+    default:
+      return <View style={styles.mark} />;
+  }
+}
+
+const makeStyles = themedStyles((c) => ({
+  row: { flexDirection: "row", alignItems: "flex-start", width: "100%", maxWidth: 560 },
+  step: { flex: 1, alignItems: "center", minWidth: 0 },
+  track: { flexDirection: "row", alignItems: "center", alignSelf: "stretch" },
+  line: { flex: 1, height: 2, backgroundColor: c.border },
+  lineOn: { backgroundColor: c.primary },
+  lineHidden: { backgroundColor: "transparent" },
+  mark: {
+    width: MARK,
+    height: MARK,
+    borderRadius: MARK / 2,
+    borderWidth: 2,
+    borderColor: c.borderStrong,
+    backgroundColor: c.surface,
     alignItems: "center",
     justifyContent: "center",
   },
-  progressCircleDisabled: {
-    opacity: 0.45,
-  },
-  progressNumber: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  progressConnector: {
-    flex: 1,
-    height: 4,
-    borderRadius: 999,
-    marginHorizontal: 6,
-  },
-  progressLegendRow: {
-    marginTop: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  progressLegendPressable: {
-    alignItems: "center",
-  },
-  progressLegendText: {
-    color: "rgba(255, 255, 255, 0.92)",
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  disabledLegend: {
-    opacity: 0.5,
-  },
-});
+  markDone: { borderColor: c.primary, backgroundColor: c.primary },
+  markCurrent: { borderColor: c.primary },
+  markFailed: { borderColor: c.errorStrong, backgroundColor: c.errorSoft },
+  markSkipped: { borderColor: c.border, backgroundColor: c.surfaceMuted },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.primary },
+  label: { marginTop: 6, fontSize: 12, lineHeight: 16, fontWeight: "500", color: c.textSecondary, textAlign: "center" },
+  labelCurrent: { color: c.text, fontWeight: "700" },
+  labelFailed: { color: c.errorStrong, fontWeight: "700" },
+  labelMuted: { color: c.textMuted },
+  caption: { fontSize: 11, lineHeight: 15, color: c.textMuted, textAlign: "center" },
+  captionFailed: { color: c.errorStrong },
+}));

@@ -37,23 +37,15 @@ interface PackageFormData {
   package_name: string;
   barcode: string;
   quantity_per_package: number;
-  unit_id?: number | null;
   purchase_price?: number | string | null;
   sale_price?: number | string | null;
   is_active: boolean;
-  is_default: boolean;
   sort_order: number;
 }
 
 export interface PackageFormProps {
   id?: number;
   readonly?: boolean;
-  /**
-   * La unidad del paquete solo ofrece las del mismo tipo que la del producto
-   * (pieza, decena, docena para uno por pieza) y se borra al cambiar de
-   * producto. Así lo hacía la copia de Inventario; la de Administración no.
-   */
-  unitsOfProductType?: boolean;
 }
 
 /** Vacío = sin precio; con algo escrito, un número ≥ 0. */
@@ -80,7 +72,6 @@ const validationSchema = Yup.object().shape({
     .typeError("Escribe cuánto trae el paquete")
     .required("Escribe cuánto trae el paquete")
     .min(0.01, "Debe ser mayor que 0"),
-  unit_id: Yup.number().nullable(),
   purchase_price: optionalPrice,
   sale_price: optionalPrice,
   sort_order: Yup.number().nullable().integer("Usa un número entero, por ejemplo 1"),
@@ -112,7 +103,7 @@ function SelectedProductWatcher({
   return null;
 }
 
-export default function PackageForm({ id, readonly, unitsOfProductType = true }: PackageFormProps) {
+export default function PackageForm({ id, readonly }: PackageFormProps) {
   const params = useLocalSearchParams();
   const packageId = id || (params.id ? parseInt(params.id as string) : undefined);
   const formRef = useRef<AppFormRef<PackageFormData>>(null);
@@ -120,7 +111,6 @@ export default function PackageForm({ id, readonly, unitsOfProductType = true }:
 
   const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [product, setProduct] = useState<Product | null>(null);
-  const unitType = unitsOfProductType ? product?.unit?.unit_type ?? null : null;
   const unitAbbreviation = product?.unit?.abbreviation;
 
   // Referencia estable: AppForm recarga los valores si cambia.
@@ -128,7 +118,6 @@ export default function PackageForm({ id, readonly, unitsOfProductType = true }:
     () => ({
       company_id: company?.id,
       is_active: true,
-      is_default: false,
       sort_order: 0,
     }),
     [company?.id],
@@ -174,10 +163,6 @@ export default function PackageForm({ id, readonly, unitsOfProductType = true }:
           // Al editar, el backend no cambia el producto: se ve, pero no se elige.
           disabled={!!packageId}
           hint={packageId ? "No se cambia. Para otro producto, crea un paquete nuevo." : undefined}
-          onChange={() => {
-            // Una unidad de otro tipo no le queda al producto nuevo.
-            if (unitsOfProductType) formRef.current?.setFieldValue("unit_id", null);
-          }}
         />
 
         <FormInput
@@ -194,34 +179,18 @@ export default function PackageForm({ id, readonly, unitsOfProductType = true }:
           hint="El del paquete: escríbelo, escanéalo o genera uno."
         />
 
-        <FormRow>
-          <FormNumeric
-            // El campo es un FastField: sin volver a montarlo no toma la
-            // unidad, que llega después (al cargar los productos).
-            key={`qty-${unitAbbreviation ?? "none"}`}
-            name="quantity_per_package"
-            label="Cantidad por paquete"
-            right={unitAbbreviation ? <TextInput.Affix text={unitAbbreviation} /> : undefined}
-            hint={
-              packageId
-                ? "No cambia si el producto ya tiene existencia o movimientos."
-                : "En la unidad del producto."
-            }
-          />
-          <FormProSelect
-            // Al cambiar el tipo permitido el select se vuelve a montar para
-            // tomar el filtro nuevo (FastField no lo propagaría).
-            key={`unit-${unitType ?? "all"}`}
-            name="unit_id"
-            label="Unidad"
-            optional
-            model="home.unidades"
-            placeholder="Sin unidad"
-            selectedLabelField="unit.name"
-            filterItem={unitType ? (item: any) => item.unit_type === unitType : undefined}
-            hint="Solo de referencia."
-          />
-        </FormRow>
+        {/* La cantidad va en la unidad del producto. La unidad propia del
+            paquete y "Paquete principal" ya no se capturan: nada los usaba. */}
+        <FormNumeric
+          name="quantity_per_package"
+          label="Cantidad por paquete"
+          right={unitAbbreviation ? <TextInput.Affix text={unitAbbreviation} /> : undefined}
+          hint={
+            packageId
+              ? "No cambia si el producto ya tiene existencia o movimientos."
+              : "En la unidad del producto."
+          }
+        />
       </FormSection>
 
       <FormSection title="Precios">
@@ -248,11 +217,6 @@ export default function PackageForm({ id, readonly, unitsOfProductType = true }:
       </FormSection>
 
       <FormSection title="Opciones">
-        <FormSwitch
-          name="is_default"
-          text="Paquete principal"
-          description="Solo uno por producto: al marcarlo, los demás dejan de serlo."
-        />
         <FormNumeric
           name="sort_order"
           label="Orden"
