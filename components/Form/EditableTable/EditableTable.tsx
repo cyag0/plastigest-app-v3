@@ -1,7 +1,11 @@
-import { useAppForm } from "@/components/Form/AppForm/AppForm";
+import { ListRow } from "@/components/App/ListGroup";
+import { useAppForm, useFormFieldAnchor } from "@/components/Form/AppForm/AppForm";
+import { InputLabel } from "@/components/Form/AppForm/hoc";
+import ReadonlyText from "@/components/Form/AppForm/ReadonlyText";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
 import { useSelectData } from "@/components/Form/AppProSelect/context";
+import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useCan } from "@/hooks/useCan";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
@@ -10,17 +14,19 @@ import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import Services from "@/utils/services";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFormikContext, getIn } from "formik";
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  type HostInstance,
+  type LayoutChangeEvent,
   LayoutAnimation,
   Platform,
-  ScrollView,
-  TouchableOpacity,
+  Pressable,
+  Text,
   UIManager,
+  useWindowDimensions,
   View,
 } from "react-native";
-import { Button, Card, Text } from "react-native-paper";
 import { FormSelectSimple } from "../AppSelect/AppSelect";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -39,7 +45,9 @@ export interface EditableTableColumn {
   key: string;
   label: string;
   type: ColumnType;
+  /** Ancho de la columna; con más espacio, las columnas crecen en proporción. */
   width?: number;
+  /** Ya no pinta asterisco: lo obligatorio es lo normal en los formularios. */
   required?: boolean;
   // for "product"
   productFetchParams?: Record<string, any>;
@@ -62,26 +70,44 @@ export interface EditableTableProps {
   label?: string;
   defaultRow: Record<string, any>;
   columns: EditableTableColumn[];
+  /** Texto del renglón para agregar ("Agregar material"). */
   addLabel?: string;
+  /** Qué agregar, mientras la tabla está vacía. */
   emptyMessage?: string;
+  /** Color de la orilla izquierda con `borderLeft` (no se usa en la app). */
   highlightColor?: string;
   borderLeft?: boolean;
   // si se quiere un id-key custom para key de React
   rowKeyField?: string;
   /**
-   * Solo lectura: sin "Agregar" ni el bote de cada renglón. Por defecto, el
+   * Solo lectura: sin "Agregar" ni la × de cada renglón. Por defecto, el
    * del formulario (AppForm en solo lectura o sin permiso para guardar).
    */
   readonly?: boolean;
 }
 
+/** Ancho de la × de cada renglón. */
+const REMOVE_WIDTH = 40;
+/** Por omisión, ancho de una columna sin `width`. */
+const COLUMN_WIDTH = 140;
+// Los campos de la tabla no llevan el margen de abajo de un campo suelto.
+const CELL_FIELD = { marginBottom: 0 };
+const STACKED_FIELD = { marginBottom: 12 };
+
+/**
+ * Renglones editables de un formulario (p. ej. el material de empaque de un
+ * producto): una sola superficie con borde, como ListGroup, con encabezado,
+ * separadores, una × por renglón y "Agregar …" al final. Si las columnas no
+ * caben (el teléfono), cada renglón muestra sus campos uno debajo de otro,
+ * con su etiqueta.
+ */
 export default function EditableTable({
   name,
   label,
   defaultRow,
   columns,
   addLabel = "Agregar",
-  emptyMessage = "Sin filas. Toca “Agregar” para comenzar.",
+  emptyMessage = "Todavía no hay renglones.",
   highlightColor,
   borderLeft = false,
   rowKeyField = "_key",
@@ -96,6 +122,26 @@ export default function EditableTable({
   const readonly = readonlyProp ?? formContext.readonly;
   const rows: any[] = getIn(values, name) || [];
 
+  // Un error de la lista entera ("agrega al menos uno") también lleva aquí
+  // al guardar.
+  const wrapRef = useRef<HostInstance>(null);
+  useFormFieldAnchor(name, wrapRef);
+
+  // Ancho disponible: hasta medirlo, se estima con el de la ventana (la
+  // columna de un formulario mide a lo más 680).
+  const { width: windowWidth } = useWindowDimensions();
+  const [measured, setMeasured] = useState<number | null>(null);
+  const available = measured ?? Math.min(windowWidth - 32, 680);
+  const onLayout = (e: LayoutChangeEvent) => {
+    const next = Math.round(e.nativeEvent.layout.width);
+    if (next !== measured) setMeasured(next);
+  };
+  const removeWidth = readonly ? 0 : REMOVE_WIDTH;
+  const tableWidth =
+    columns.reduce((acc, c) => acc + (c.width ?? COLUMN_WIDTH), 0) + removeWidth;
+  // Las columnas se encogen hasta un 10 %; si ni así caben, apiladas.
+  const stacked = available < tableWidth * 0.9;
+
   const addRow = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     const newRow = { ...defaultRow, [rowKeyField]: `row-${Date.now()}-${Math.random()}` };
@@ -108,117 +154,126 @@ export default function EditableTable({
     setFieldValue(name, next);
   };
 
-  const totalWidth =
-    columns.reduce((acc, c) => acc + (c.width ?? 140), 0) + (readonly ? 0 : 60); // +60 for remove button
+  const removeButton = (index: number, style?: object) => (
+    <Pressable
+      onPress={() => removeRow(index)}
+      hitSlop={8}
+      style={({ pressed }) => [styles.remove, style, pressed && { opacity: 0.5 }]}
+      accessibilityRole="button"
+      accessibilityLabel={`Quitar renglón ${index + 1}`}
+    >
+      <MaterialCommunityIcons name="close" size={18} color={colors.textMuted} />
+    </Pressable>
+  );
+
+  // Teléfono: el primer campo a todo lo ancho y los cortos (unidad,
+  // cantidad) de dos en dos.
+  const stackedGroups = useMemo(() => {
+    const groups: EditableTableColumn[][] = [];
+    let pending: EditableTableColumn | null = null;
+    columns.forEach((c, i) => {
+      const wide = i === 0 || c.type === "product" || c.type === "text";
+      if (wide) {
+        if (pending) groups.push([pending]);
+        pending = null;
+        groups.push([c]);
+      } else if (pending) {
+        groups.push([pending, c]);
+        pending = null;
+      } else {
+        pending = c;
+      }
+    });
+    if (pending) groups.push([pending]);
+    return groups;
+  }, [columns]);
+
+  if (readonly && rows.length === 0) {
+    return (
+      <View ref={wrapRef} style={styles.wrap}>
+        {label ? <InputLabel label={label} /> : null}
+        <ReadonlyText text="" />
+      </View>
+    );
+  }
+
+  const divider = <View style={styles.divider} />;
 
   return (
-    <View style={{ marginBottom: 16 }}>
-      {label ? (
-        <View style={styles.headerRow}>
-          <Text
-            variant="titleSmall"
-            style={{ color: colors.text, fontWeight: "600" }}
-          >
-            {label}
-          </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-            {rows.length} {rows.length === 1 ? "fila" : "filas"}
-          </Text>
-        </View>
-      ) : null}
+    <View ref={wrapRef} style={styles.wrap}>
+      {label ? <InputLabel label={label} /> : null}
 
-      <Card
+      <View
+        onLayout={onLayout}
         style={[
-          {shadowOffset: { width: 0, height: 0 },},
-          styles.card,
+          styles.surface,
           borderLeft && {
             borderLeftWidth: 4,
             borderLeftColor: highlightColor ?? colors.error,
           },
         ]}
       >
-        <Card.Content style={{ padding: 0 }}>
-          {rows.length === 0 ? (
-            <View style={styles.empty}>
-              <Text style={{ color: colors.textSecondary }}>
-                {readonly ? "Sin renglones." : emptyMessage}
-              </Text>
-            </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator>
-              <View style={{ minWidth: totalWidth }}>
-                {/* Header */}
-                <View style={[styles.row, styles.headerRowTable]}>
-                  {columns.map((c) => (
-                    <View
-                      key={c.key}
-                      style={[styles.cell, { width: c.width ?? 140 }]}
-                    >
-                      <Text style={styles.headerCellText}>
-                        {c.label}
-                        {c.required ? " *" : ""}
-                      </Text>
-                    </View>
-                  ))}
-                  {!readonly && (
-                    <View style={[styles.cell, { width: 50 }]}>
-                      <Text style={styles.headerCellText}>—</Text>
-                    </View>
-                  )}
-                </View>
-
-                {rows.map((row, index) => (
-                  <View
-                    key={row[rowKeyField] ?? index}
-                    style={[
-                      styles.row,
-                      { backgroundColor: index % 2 === 0 ? colors.background : colors.surface },
-                    ]}
-                  >
-                    {columns.map((c) => (
-                      <View
-                        key={c.key}
-                        style={[styles.cell, { width: c.width ?? 140 }]}
-                      >
-                        {renderCell(name, index, c, row)}
+        {rows.length === 0 ? (
+          <Text style={styles.empty}>{emptyMessage}</Text>
+        ) : stacked ? (
+          rows.map((row, index) => (
+            <React.Fragment key={row[rowKeyField] ?? index}>
+              {index > 0 && divider}
+              <View style={styles.stackedRow}>
+                {stackedGroups.map((group) => (
+                  <View key={group.map((c) => c.key).join("|")} style={styles.stackedGroup}>
+                    {group.map((c) => (
+                      <View key={c.key} style={styles.stackedCell}>
+                        {renderCell(name, index, c, row, true)}
                       </View>
                     ))}
-                    {!readonly && (
-                      <View style={[styles.cell, { width: 50, alignItems: "center" }]}>
-                        <TouchableOpacity
-                          onPress={() => removeRow(index)}
-                          style={styles.removeBtn}
-                          accessibilityLabel="Eliminar fila"
-                        >
-                          <MaterialCommunityIcons
-                            name="trash-can-outline"
-                            size={18}
-                            color={colors.error}
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    )}
                   </View>
                 ))}
+                {!readonly && removeButton(index, styles.removeStacked)}
               </View>
-            </ScrollView>
-          )}
-        </Card.Content>
-      </Card>
+            </React.Fragment>
+          ))
+        ) : (
+          <>
+            <View style={[styles.tableRow, styles.headerRow]}>
+              {columns.map((c) => (
+                <View key={c.key} style={[styles.cell, { flex: c.width ?? COLUMN_WIDTH }]}>
+                  <Text style={styles.headerText} numberOfLines={1}>
+                    {c.label}
+                  </Text>
+                </View>
+              ))}
+              {!readonly && <View style={{ width: REMOVE_WIDTH }} />}
+            </View>
+            {rows.map((row, index) => (
+              <React.Fragment key={row[rowKeyField] ?? index}>
+                {divider}
+                <View style={[styles.tableRow, readonly && styles.tableRowReadonly]}>
+                  {columns.map((c) => (
+                    <View key={c.key} style={[styles.cell, { flex: c.width ?? COLUMN_WIDTH }]}>
+                      {renderCell(name, index, c, row, false)}
+                    </View>
+                  ))}
+                  {!readonly && removeButton(index)}
+                </View>
+              </React.Fragment>
+            ))}
+          </>
+        )}
 
-      {!readonly && (
-        <View style={{ marginTop: 8 }}>
-          <Button
-            icon="plus"
-            mode="contained-tonal"
-            onPress={addRow}
-            buttonColor={colors.surface}
-            textColor={colors.primary}
-          >
-            {addLabel}
-          </Button>
-        </View>
-      )}
+        {!readonly && (
+          <>
+            {divider}
+            <ListRow
+              icon="plus"
+              iconColor={colors.primary}
+              title={addLabel}
+              onPress={addRow}
+              chevron={false}
+            />
+          </>
+        )}
+      </View>
     </View>
   );
 
@@ -227,8 +282,12 @@ export default function EditableTable({
     index: number,
     col: EditableTableColumn,
     row: any,
+    withLabel: boolean,
   ) {
     const fieldName = `${fieldArrayName}.${index}.${col.key}`;
+    // En el teléfono cada campo lleva su etiqueta (no hay encabezado).
+    const fieldLabel = withLabel ? col.label : undefined;
+    const containerStyle = withLabel ? STACKED_FIELD : CELL_FIELD;
     // Nombre que trae el renglón, por si el catálogo no se puede cargar.
     const labelField = col.labelKey
       ? `${fieldArrayName}.${index}.${col.labelKey}`
@@ -237,9 +296,11 @@ export default function EditableTable({
       return (
         <FormProSelect
           name={fieldName}
+          label={fieldLabel}
+          containerStyle={containerStyle}
           model="products"
           fetchParams={col.productFetchParams}
-          placeholder="Seleccionar producto"
+          placeholder="Elige un producto"
           selectedLabelField={labelField}
           required={col.required}
         />
@@ -250,6 +311,8 @@ export default function EditableTable({
       return (
         <UnitCell
           fieldName={fieldName}
+          label={fieldLabel}
+          containerStyle={containerStyle}
           productId={productCol ? row[productCol.key] : 0}
           productParams={productCol?.productFetchParams}
           labelField={labelField}
@@ -262,20 +325,25 @@ export default function EditableTable({
       const unitCol = columns.find((c) => c.type === "unit");
       const quantityCol = columns.find((c) => c.type === "number");
       return (
-        <StockCell
-          productId={productCol ? row[productCol.key] : 0}
-          unitId={unitCol ? row[unitCol.key] : 0}
-          quantity={quantityCol ? row[quantityCol.key] : 0}
-          productParams={productCol?.productFetchParams}
-        />
+        <View style={withLabel ? STACKED_FIELD : undefined}>
+          {withLabel ? <InputLabel label={col.label} /> : null}
+          <StockCell
+            productId={productCol ? row[productCol.key] : 0}
+            unitId={unitCol ? row[unitCol.key] : 0}
+            quantity={quantityCol ? row[quantityCol.key] : 0}
+            productParams={productCol?.productFetchParams}
+          />
+        </View>
       );
     }
     if (col.type === "select") {
       return (
         <FormSelectSimple
           name={fieldName}
+          label={fieldLabel}
+          containerStyle={containerStyle}
           data={col.options ?? []}
-          placeholder="Seleccionar"
+          placeholder="Elige una opción"
           required={col.required}
         />
       );
@@ -283,32 +351,28 @@ export default function EditableTable({
     if (col.type === "number") {
       const helper = col.helperText?.(row) ?? null;
       return (
-        <View>
+        <View style={withLabel ? STACKED_FIELD : undefined}>
           <FormInput
             name={fieldName}
-            placeholder="0.00"
-            keyboardType="numeric"
+            label={fieldLabel}
+            containerStyle={CELL_FIELD}
+            placeholder="0"
+            keyboardType="decimal-pad"
+            inputMode="decimal"
             required={col.required}
+            accessibilityLabel={withLabel ? undefined : `${col.label}, renglón ${index + 1}`}
           />
-          {helper ? (
-            <Text
-              style={{
-                fontSize: 10,
-                color: colors.textSecondary,
-                marginTop: 2,
-              }}
-            >
-              {helper}
-            </Text>
-          ) : null}
+          {helper ? <Text style={styles.cellHelper}>{helper}</Text> : null}
         </View>
       );
     }
     return (
       <FormInput
         name={fieldName}
-        placeholder={col.label}
+        label={fieldLabel}
+        containerStyle={containerStyle}
         required={col.required}
+        accessibilityLabel={withLabel ? undefined : `${col.label}, renglón ${index + 1}`}
       />
     );
   }
@@ -322,12 +386,16 @@ export default function EditableTable({
  */
 function UnitCell({
   fieldName,
+  label,
+  containerStyle,
   productId,
   productParams,
   labelField,
   required,
 }: {
   fieldName: string;
+  label?: string;
+  containerStyle?: object;
   productId: any;
   productParams?: Record<string, any>;
   labelField?: string;
@@ -388,10 +456,12 @@ function UnitCell({
 
   return (
     <FormProSelect
-      // El `key` fuerza el remount cuando cambia el tipo de medida permitido,
-      // único caso en que FastField no propagaría el nuevo `filterItem`.
+      // El `key` fuerza el remount cuando cambia el tipo de medida permitido:
+      // el campo no vuelve a pintarse solo porque cambie una función.
       key={`unit-${allowedType ?? "all"}`}
       name={fieldName}
+      label={label}
+      containerStyle={containerStyle}
       model="home.unidades"
       placeholder="Unidad"
       required={required}
@@ -474,7 +544,7 @@ function StockCell({
   }, [productId, locationId, companyId]);
 
   if (!productId) {
-    return <Text style={{ color: colors.textSecondary, fontSize: 12 }}>—</Text>;
+    return <Text style={{ color: colors.textMuted, fontSize: 14 }}>—</Text>;
   }
 
   if (loading && stock === null) {
@@ -488,24 +558,23 @@ function StockCell({
   const qty = Number(quantity) || 0;
   const insufficient = stock !== null && sameUnit && qty > stock;
 
-  const color =
-    stock === null
-      ? colors.textSecondary
-      : insufficient
-        ? colors.error
-        : colors.success;
-
   return (
     <View>
-      <Text style={{ color, fontWeight: "700", fontSize: 13 }}>
+      <Text
+        style={{
+          color: stock === null ? colors.textMuted : insufficient ? colors.error : colors.text,
+          fontWeight: "500",
+          fontSize: 14,
+        }}
+      >
         {stock === null
           ? "—"
           : stock.toLocaleString("es-MX", { maximumFractionDigits: 2 })}
         {baseUnitName ? ` ${baseUnitName}` : ""}
       </Text>
       {insufficient ? (
-        <Text style={{ fontSize: 10, color: colors.error, marginTop: 2 }}>
-          Stock insuficiente
+        <Text style={{ fontSize: 12, lineHeight: 16, color: colors.error, marginTop: 2 }}>
+          No alcanza
         </Text>
       ) : null}
     </View>
@@ -513,51 +582,85 @@ function StockCell({
 }
 
 const makeStyles = themedStyles((c) => ({
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
+  wrap: {
+    marginBottom: 18,
   },
-  card: {
-    backgroundColor: c.card,
-    borderRadius: 12,
-    elevation: 0,
-    shadowColor: "transparent",
+  surface: {
+    backgroundColor: c.surface,
+    borderRadius: tokens.radius.md,
     borderWidth: 1,
     borderColor: c.border,
+    overflow: "hidden",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: c.border,
+    marginLeft: 14,
   },
   empty: {
-    padding: 24,
-    alignItems: "center",
+    fontSize: 14,
+    lineHeight: 20,
+    color: c.textSecondary,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
-  row: {
+  headerRow: {
+    paddingTop: 10,
+    paddingBottom: 8,
+  },
+  headerText: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+    color: c.textSecondary,
+  },
+  tableRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: c.border,
+    paddingLeft: 10,
+    paddingRight: 4,
     paddingVertical: 8,
   },
-  headerRowTable: {
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+  tableRowReadonly: {
+    paddingVertical: 12,
   },
   cell: {
-    paddingHorizontal: 8,
+    minWidth: 0,
+    paddingHorizontal: 4,
     justifyContent: "center",
   },
-  headerCellText: {
-    fontWeight: "700",
-    color: c.text,
+  cellHelper: {
     fontSize: 12,
+    lineHeight: 16,
+    color: c.textSecondary,
+    marginTop: 4,
   },
-  removeBtn: {
-    width: 30,
-    height: 30,
+  remove: {
+    width: REMOVE_WIDTH,
+    height: 40,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 15,
-    backgroundColor: c.errorSoft,
+  },
+  // En el teléfono la × va arriba a la derecha, a la altura de la etiqueta
+  // (sin tapar la esquina del primer campo).
+  removeStacked: {
+    position: "absolute",
+    top: 6,
+    right: 4,
+    width: 36,
+    height: 28,
+  },
+  stackedRow: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 2,
+  },
+  stackedGroup: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  stackedCell: {
+    flex: 1,
+    minWidth: 0,
   },
 }));
