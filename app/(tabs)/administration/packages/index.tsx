@@ -100,7 +100,7 @@ export default function PackagesIndex() {
       width: 150,
       align: "center",
       render: (_, item) =>
-        `${item.quantity_per_package} ${item.unit?.abbreviation || "uds"}`,
+        `${item.quantity_per_package} ${item.product?.unit?.abbreviation || item.unit?.abbreviation || "uds"}`,
     },
     {
       title: "Precio venta",
@@ -154,7 +154,7 @@ export default function PackagesIndex() {
             >
               {item.product?.name || "Producto no encontrado"}
               {" • "}
-              {item.quantity_per_package} {item.unit?.abbreviation || "uds"}
+              {item.quantity_per_package} {item.product?.unit?.abbreviation || item.unit?.abbreviation || "uds"}
             </Text>
           ),
           right: (
