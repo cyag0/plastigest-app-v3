@@ -24,6 +24,16 @@ function toNumber(text: string): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+/**
+ * Cómo se muestra un valor que llega de fuera: "8.00" del API → "8",
+ * "2.50" → "2.5". Lo que no es un número se queda como viene.
+ */
+function toText(value: unknown): string {
+  if (value == null || value === "") return "";
+  const n = Number(value);
+  return Number.isFinite(n) ? String(n) : String(value);
+}
+
 export default function AppNumeric(props: AppInputProps) {
   // Igual que en AppInput: el texto `error` no debe pisar a hasError.
   const { value, onChange, onBlur, hasError, error: _error, ...restProps } = props;
@@ -33,8 +43,10 @@ export default function AppNumeric(props: AppInputProps) {
 
   // Lo escrito se guarda como texto: antes el campo mostraba el número ya
   // convertido, y "1." se volvía 1 al instante, así que no se podían teclear
-  // decimales (1.5 terminaba en 15).
-  const [text, setText] = useState(value == null ? "" : String(value));
+  // decimales (1.5 terminaba en 15). El valor con el que se monta se muestra
+  // como número (antes "8.00" del API se quedaba así; si llegaba después,
+  // salía "8").
+  const [text, setText] = useState(() => toText(value));
 
   // Un cambio que viene de fuera (cargar el registro, los botones + y −)
   // reemplaza el texto; uno que ya coincide con lo escrito ("1." y 1) no.
@@ -73,7 +85,7 @@ export default function AppNumeric(props: AppInputProps) {
           style={[fieldProps.style, restProps.style]}
         />
       ) : (
-        <ReadonlyText text={value == null ? "" : String(value)} />
+        <ReadonlyText text={toText(value)} />
       )}
     </View>
   );
