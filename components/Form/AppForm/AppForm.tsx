@@ -15,10 +15,11 @@ import type { PermissionRule } from "@/utils/permissions/permissions";
 import { CrudService } from "@/utils/services/crudService";
 import { logCaughtError } from "@/utils/silenceLogs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { FormikProps, FormikProvider, setNestedObjectValues, useFormik } from "formik";
+import { FormikProps, FormikProvider, getIn, setNestedObjectValues, useFormik } from "formik";
 import React, {
   createContext,
   forwardRef,
+  useCallback,
   useContext,
   useEffect,
   useImperativeHandle,
@@ -26,9 +27,11 @@ import React, {
   useState,
 } from "react";
 import {
+  type HostInstance,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  type ScrollViewInstance,
   StyleProp,
   View,
   ViewStyle,
@@ -66,16 +69,104 @@ export interface AppFormRef<T> {
 
   // Formik instance access
   getFormikInstance: () => FormikProps<T>;
+
+  // Solo lectura (las pantallas de detalle que pasan a editar ahí mismo)
+  setReadonly: (value: boolean) => void;
+  readonly: boolean;
 }
+
+/** La vista de un campo, para llevar al primero con error al guardar. */
+type FieldAnchor = { name: string; ref: React.RefObject<HostInstance | null> };
 
 // Context interface
 interface AppFormContextType<T> {
   readonly: boolean;
   formRef: React.RefObject<AppFormRef<T>> | null;
+  /** Registra la vista de un campo; devuelve con qué quitarla. */
+  registerAnchor?: (anchor: FieldAnchor) => () => void;
 }
 
 // Context
 const AppFormContext = createContext<AppFormContextType<any> | null>(null);
+
+/** Margen arriba del campo al que se lleva (su etiqueta queda a la vista). */
+const SCROLL_MARGIN = 24;
+
+/**
+ * Lleva al primer campo con error (el de más arriba en la pantalla): en web
+ * desplaza el contenedor del formulario; en el teléfono mide el campo dentro
+ * del ScrollView. Sin campos registrados con error, sube al inicio.
+ */
+function scrollToFirstError(
+  anchors: FieldAnchor[],
+  errors: object,
+  scroll: ScrollViewInstance | null,
+  scrollEnabled: boolean,
+) {
+  const targets = anchors
+    .filter((anchor) => !!getIn(errors, anchor.name))
+    .map((anchor) => anchor.ref.current)
+    .filter((node): node is HostInstance => !!node);
+
+  if (Platform.OS === "web") {
+    // En react-native-web la vista es el elemento del DOM.
+    let first: HTMLElement | null = null;
+    let firstTop = Infinity;
+    for (const node of targets as unknown as HTMLElement[]) {
+      if (typeof node?.getBoundingClientRect !== "function") continue;
+      const rect = node.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) continue; // oculto
+      if (rect.top < firstTop) {
+        firstTop = rect.top;
+        first = node;
+      }
+    }
+    // Ojo: react-native-web cambia el scrollTo() de ese elemento por el de
+    // React Native ({ x, y, animated }); scrollTo({ top }) llevaba arriba.
+    const scroller = (scroll as any)?.getScrollableNode?.() as HTMLElement | undefined;
+    if (!first) {
+      if (scrollEnabled) scroll?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    if (scrollEnabled && scroll && scroller?.contains?.(first)) {
+      const y =
+        scroller.scrollTop + firstTop - scroller.getBoundingClientRect().top - SCROLL_MARGIN;
+      scroll.scrollTo({ y: Math.max(0, y), animated: true });
+    } else {
+      // Formulario dentro del scroll de la pantalla (disableScroll).
+      first.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    }
+    return;
+  }
+
+  if (!scroll || !scrollEnabled) return;
+  const inner = scroll.getInnerViewRef?.();
+  if (!inner || targets.length === 0) {
+    scroll.scrollTo({ y: 0, animated: true });
+    return;
+  }
+  let pending = targets.length;
+  let firstY = Infinity;
+  const done = () => {
+    pending -= 1;
+    if (pending > 0) return;
+    scroll.scrollTo({ y: firstY === Infinity ? 0 : Math.max(0, firstY - SCROLL_MARGIN), animated: true });
+  };
+  for (const node of targets) {
+    try {
+      node.measureLayout(
+        inner as unknown as HostInstance,
+        (_x, y, width, height) => {
+          if ((width > 0 || height > 0) && y < firstY) firstY = y;
+          done();
+        },
+        done,
+      );
+    } catch {
+      done();
+    }
+  }
+}
 
 interface FormProps<T> {
   formInstance?: FormikProps<T>;
@@ -155,6 +246,18 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   const { can } = useCan();
   // Candado contra envíos dobles (guardar y eliminar), ver handleSubmit.
   const { submitting, run } = useSubmitGuard();
+
+  // Vistas de los campos (las registra cada campo): al guardar con errores
+  // se lleva al primero. Antes, en un formulario largo (Producto) solo
+  // cambiaba la barra de abajo y no se veía qué faltaba.
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const anchors = useRef(new Set<FieldAnchor>());
+  const registerAnchor = useCallback((anchor: FieldAnchor) => {
+    anchors.current.add(anchor);
+    return () => {
+      anchors.current.delete(anchor);
+    };
+  }, []);
   // En web la barra de abajo no necesita subir con el teclado.
   const isWeb = Platform.OS === "web";
   const styles = useThemedStyles((c) => ({
@@ -452,6 +555,17 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         false,
       );
       setInvalidAttempt(true);
+      // Después de que se pinten los mensajes de error.
+      setTimeout(
+        () =>
+          scrollToFirstError(
+            [...anchors.current],
+            errors,
+            scrollRef.current,
+            !props.disableScroll,
+          ),
+        80,
+      );
       return;
     }
     setInvalidAttempt(false);
@@ -464,6 +578,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   const contextValue: AppFormContextType<T> = {
     readonly: readonly || !canSubmit,
     formRef: { current: ref as any },
+    registerAnchor,
   };
 
   const showButtons =
@@ -639,6 +754,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
             
          }, props.containerStyle]}>
           <ScrollView
+            ref={scrollRef}
             scrollEnabled={!props.disableScroll}
             // Con el teclado abierto, el primer toque en un botón o select
             // ejecuta la acción en vez de solo cerrar el teclado.
@@ -668,6 +784,22 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     </AppFormContext.Provider>
   );
 });
+
+/**
+ * Registra la vista de un campo (o de una tabla de renglones) con su nombre
+ * en el formulario: al guardar con errores, AppForm lleva al primero que
+ * tenga error. Fuera de un AppForm no hace nada.
+ */
+export function useFormFieldAnchor(
+  name: string | undefined,
+  ref: React.RefObject<HostInstance | null>,
+) {
+  const register = useContext(AppFormContext)?.registerAnchor;
+  useEffect(() => {
+    if (!register || !name) return;
+    return register({ name, ref });
+  }, [register, name, ref]);
+}
 
 // Hook personalizado para usar el formulario
 export function useAppForm<T = any>() {
