@@ -15,10 +15,11 @@ import type { PermissionRule } from "@/utils/permissions/permissions";
 import { CrudService } from "@/utils/services/crudService";
 import { logCaughtError } from "@/utils/silenceLogs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { FormikProps, FormikProvider, useFormik } from "formik";
+import { FormikProps, FormikProvider, getIn, setNestedObjectValues, useFormik } from "formik";
 import React, {
   createContext,
   forwardRef,
+  useCallback,
   useContext,
   useEffect,
   useImperativeHandle,
@@ -26,14 +27,17 @@ import React, {
   useState,
 } from "react";
 import {
+  type HostInstance,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  type ScrollViewInstance,
   StyleProp,
   View,
   ViewStyle,
 } from "react-native";
 import { Button, Text } from "react-native-paper";
+import { FORM_MAX_WIDTH, FormFooter } from "../FormLayout";
 
 // Ref interface que expone todos los métodos
 export interface AppFormRef<T> {
@@ -65,16 +69,104 @@ export interface AppFormRef<T> {
 
   // Formik instance access
   getFormikInstance: () => FormikProps<T>;
+
+  // Solo lectura (las pantallas de detalle que pasan a editar ahí mismo)
+  setReadonly: (value: boolean) => void;
+  readonly: boolean;
 }
+
+/** La vista de un campo, para llevar al primero con error al guardar. */
+type FieldAnchor = { name: string; ref: React.RefObject<HostInstance | null> };
 
 // Context interface
 interface AppFormContextType<T> {
   readonly: boolean;
   formRef: React.RefObject<AppFormRef<T>> | null;
+  /** Registra la vista de un campo; devuelve con qué quitarla. */
+  registerAnchor?: (anchor: FieldAnchor) => () => void;
 }
 
 // Context
 const AppFormContext = createContext<AppFormContextType<any> | null>(null);
+
+/** Margen arriba del campo al que se lleva (su etiqueta queda a la vista). */
+const SCROLL_MARGIN = 24;
+
+/**
+ * Lleva al primer campo con error (el de más arriba en la pantalla): en web
+ * desplaza el contenedor del formulario; en el teléfono mide el campo dentro
+ * del ScrollView. Sin campos registrados con error, sube al inicio.
+ */
+function scrollToFirstError(
+  anchors: FieldAnchor[],
+  errors: object,
+  scroll: ScrollViewInstance | null,
+  scrollEnabled: boolean,
+) {
+  const targets = anchors
+    .filter((anchor) => !!getIn(errors, anchor.name))
+    .map((anchor) => anchor.ref.current)
+    .filter((node): node is HostInstance => !!node);
+
+  if (Platform.OS === "web") {
+    // En react-native-web la vista es el elemento del DOM.
+    let first: HTMLElement | null = null;
+    let firstTop = Infinity;
+    for (const node of targets as unknown as HTMLElement[]) {
+      if (typeof node?.getBoundingClientRect !== "function") continue;
+      const rect = node.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) continue; // oculto
+      if (rect.top < firstTop) {
+        firstTop = rect.top;
+        first = node;
+      }
+    }
+    // Ojo: react-native-web cambia el scrollTo() de ese elemento por el de
+    // React Native ({ x, y, animated }); scrollTo({ top }) llevaba arriba.
+    const scroller = (scroll as any)?.getScrollableNode?.() as HTMLElement | undefined;
+    if (!first) {
+      if (scrollEnabled) scroll?.scrollTo({ y: 0, animated: true });
+      return;
+    }
+    if (scrollEnabled && scroll && scroller?.contains?.(first)) {
+      const y =
+        scroller.scrollTop + firstTop - scroller.getBoundingClientRect().top - SCROLL_MARGIN;
+      scroll.scrollTo({ y: Math.max(0, y), animated: true });
+    } else {
+      // Formulario dentro del scroll de la pantalla (disableScroll).
+      first.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    }
+    return;
+  }
+
+  if (!scroll || !scrollEnabled) return;
+  const inner = scroll.getInnerViewRef?.();
+  if (!inner || targets.length === 0) {
+    scroll.scrollTo({ y: 0, animated: true });
+    return;
+  }
+  let pending = targets.length;
+  let firstY = Infinity;
+  const done = () => {
+    pending -= 1;
+    if (pending > 0) return;
+    scroll.scrollTo({ y: firstY === Infinity ? 0 : Math.max(0, firstY - SCROLL_MARGIN), animated: true });
+  };
+  for (const node of targets) {
+    try {
+      node.measureLayout(
+        inner as unknown as HostInstance,
+        (_x, y, width, height) => {
+          if ((width > 0 || height > 0) && y < firstY) firstY = y;
+          done();
+        },
+        done,
+      );
+    } catch {
+      done();
+    }
+  }
+}
 
 interface FormProps<T> {
   formInstance?: FormikProps<T>;
@@ -86,11 +178,24 @@ interface FormProps<T> {
   onSubmit?: (values: T, formInstance: FormikProps<T>) => void | Promise<void>;
   onSuccess?: (response: any, values: T) => void;
   onError?: (error: any, values: T) => void;
+  /** Texto de la acción principal; por omisión "Guardar" / "Guardar cambios". */
   submitButtonText?: string;
   additionalSubmitButtons?: React.ReactNode;
   resetButtonText?: string;
   showSubmitButton?: boolean;
+  /** "Resetear" ya no se muestra salvo que se pida explícitamente. */
   showResetButton?: boolean;
+  /** "Cancelar" (regresa); se puede ocultar o cambiar qué hace. */
+  showCancelButton?: boolean;
+  cancelLabel?: string;
+  onCancel?: () => void;
+  /** Aviso al guardar con `api` ("Cliente guardado"). */
+  successMessage?: string;
+  /**
+   * Confirmación antes de guardar con `api`. Por omisión no se pregunta: el
+   * "¿Estás seguro de guardar los cambios?" de siempre solo agregaba un paso.
+   */
+  confirmMessage?: string;
   readonly?: boolean;
   showButtons?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -141,51 +246,45 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   const { can } = useCan();
   // Candado contra envíos dobles (guardar y eliminar), ver handleSubmit.
   const { submitting, run } = useSubmitGuard();
-  // Web usa botones compactos alineados a la derecha; mobile mantiene
-  // los botones grandes apilados y a todo lo ancho.
+
+  // Vistas de los campos (las registra cada campo): al guardar con errores
+  // se lleva al primero. Antes, en un formulario largo (Producto) solo
+  // cambiaba la barra de abajo y no se veía qué faltaba.
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const anchors = useRef(new Set<FieldAnchor>());
+  const registerAnchor = useCallback((anchor: FieldAnchor) => {
+    anchors.current.add(anchor);
+    return () => {
+      anchors.current.delete(anchor);
+    };
+  }, []);
+  // En web la barra de abajo no necesita subir con el teclado.
   const isWeb = Platform.OS === "web";
   const styles = useThemedStyles((c) => ({
     formCard: {
-      maxWidth: 900,
       width: "100%",
-      alignSelf: "center",
       backgroundColor: c.surface,
-      borderRadius: tokens.radius.lg,
+      borderRadius: tokens.radius.md,
       borderWidth: 1,
       borderColor: c.border,
-      padding: tokens.spacing[5],
-      ...tokens.shadow.sm,
+      padding: tokens.spacing[4],
     },
     cardWrap: {
       width: "100%",
-      maxWidth: 900,
+      maxWidth: FORM_MAX_WIDTH,
       alignSelf: "center",
       backgroundColor: c.background
     },
     backgroundStyle: {
       backgroundColor: c.background,
     },
-    // Wrapper de los botones. En web los botones van en fila alineados
-    // a la derecha y con padding reducido; en mobile se apilan a todo
-    // lo ancho como antes.
-    buttonContainer: {
-      padding: isWeb ? 8 : 16,
-      paddingHorizontal: isWeb ? 16 : 16,
-      gap: 8,
-      flexDirection: isWeb ? "row" : "column",
-      justifyContent: isWeb ? "flex-end" : "flex-start",
-      alignItems: isWeb ? "center" : "stretch",
-    },
-    buttonWrap: {
-      width: isWeb ? undefined : "100%",
-      maxWidth: isWeb ? 240 : undefined,
-    },
     readOnlyHint: {
+      flex: 1,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: 6,
-      paddingVertical: 4,
+      paddingVertical: 10,
     },
     readOnlyText: {
       color: c.textMuted,
@@ -366,17 +465,15 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       }
       // Si no hay handleSubmit pero hay API, usar store automático
       else if (props.api) {
-        const res = await alerts.confirm(
-          "¿Estás seguro de guardar los cambios?",
-          {
+        if (props.confirmMessage) {
+          const res = await alerts.confirm(props.confirmMessage, {
             okText: "Sí, guardar",
             cancelText: "Cancelar",
-            title: "Confirmar guardado",
-          },
-        );
-
-        if (!res) {
-          return;
+            title: "Confirmar",
+          });
+          if (!res) {
+            return;
+          }
         }
 
         let response;
@@ -384,13 +481,12 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
         // Si hay ID, es actualización
         if (props.id) {
           response = await props.api.update(props.id, values as T);
-          alerts.success("Actualizado correctamente");
         }
         // Si no hay ID, es creación
         else {
           response = await props.api.store(values as T);
-          alerts.success("Creado correctamente");
         }
+        alerts.success(props.successMessage ?? (props.id ? "Cambios guardados" : "Guardado"));
 
         props.onSuccess?.(response.data, _values);
       }
@@ -445,12 +541,44 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     return false;
   }
 
+  // Guardar con datos faltantes ya no deja el botón gris sin explicación:
+  // se marcan en rojo los campos (también los que no estaban en los valores
+  // iniciales, que Formik no toca solo) y la barra de abajo dice qué pasa.
+  const [invalidAttempt, setInvalidAttempt] = useState(false);
+  const showInvalid = invalidAttempt && !formInstance.isValid;
+
+  async function attemptSubmit() {
+    const errors = await formInstance.validateForm();
+    if (errors && Object.keys(errors).length > 0) {
+      formInstance.setTouched(
+        { ...formInstance.touched, ...setNestedObjectValues(errors, true) } as any,
+        false,
+      );
+      setInvalidAttempt(true);
+      // Después de que se pinten los mensajes de error.
+      setTimeout(
+        () =>
+          scrollToFirstError(
+            [...anchors.current],
+            errors,
+            scrollRef.current,
+            !props.disableScroll,
+          ),
+        80,
+      );
+      return;
+    }
+    setInvalidAttempt(false);
+    formInstance.handleSubmit();
+  }
+
   // Context value. Sin permiso para guardar (submitPermission /
   // permissionPrefix) los campos también quedan en solo lectura: antes se
   // podía escribir en un formulario marcado «Solo lectura».
   const contextValue: AppFormContextType<T> = {
     readonly: readonly || !canSubmit,
     formRef: { current: ref as any },
+    registerAnchor,
   };
 
   const showButtons =
@@ -510,117 +638,107 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     }
   }
 
-  // Bloque de botones (Submit/Reset o Editar/Eliminar en readonly).
-  // Se renderiza dentro del ScrollView en web (debajo de children) y
-  // fuera en mobile (siempre visible sobre el teclado).
+  // Barra fija de abajo (ver FormFooter): Cancelar y la acción principal, o
+  // Eliminar y Editar en modo solo lectura. Antes en web eran botones chicos
+  // al final del formulario y en el teléfono se apilaban a todo lo ancho.
   const renderButtons = () => {
     if (!showButtons) return null;
 
-    const inner = (
-      <View style={styles.cardWrap}>
-        <View style={styles.buttonContainer}>
-          {readonly ? (
-            <>
-              {canSubmit ? (
-                <View style={styles.buttonWrap}>
-                  <Button
-                    mode="contained"
-                    compact={isWeb}
-                    onPress={() => {
-                      setReadonly(false);
-                    }}
-                  >
-                    Editar Registro
-                  </Button>
-                </View>
-              ) : (
-                readOnlyHint
-              )}
-
-              {canDelete && (
-                <View style={styles.buttonWrap}>
-                  <Button
-                    mode="outlined"
-                    compact={isWeb}
-                    onPress={handleDelete}
-                    disabled={formInstance.isSubmitting || loading || submitting}
-                    textColor={colors.error}
-                    loading={loading}
-                  >
-                    Eliminar
-                  </Button>
-                </View>
-              )}
-            </>
-          ) : !canSubmit ? (
-            readOnlyHint
-          ) : (
-            (props.showSubmitButton !== false ||
-              props.showResetButton !== false) && (
-              <>
-                {props.showSubmitButton !== false && (
-                  <View style={styles.buttonWrap}>
-                    <Button
-                      mode="contained"
-                      compact={isWeb}
-                      onPress={() => {
-                        const isValid = formInstance.validateForm();
-
-                        if (!isValid) {
-                          alerts.error(
-                            "Por favor, completa todos los campos requeridos.",
-                          );
-                          return;
-                        }
-
-                        formInstance.handleSubmit();
-                      }}
-                      disabled={
-                        !formInstance.isValid ||
-                        formInstance.isSubmitting ||
-                        loading ||
-                        submitting
-                      }
-                      loading={loading}
-                    >
-                      {props.submitButtonText ||
-                        (props.id ? "Actualizar" : "Crear")}
-                    </Button>
-                  </View>
-                )}
-
-                {props.showResetButton !== false && (
-                  <View style={styles.buttonWrap}>
-                    <Button
-                      mode="outlined"
-                      compact={isWeb}
-                      onPress={() => formInstance.resetForm()}
-                      disabled={loading}
-                    >
-                      {props.resetButtonText || "Resetear"}
-                    </Button>
-                  </View>
-                )}
-
-                {props.additionalSubmitButtons &&
-                  props.additionalSubmitButtons}
-              </>
-            )
+    let footer: React.ReactNode = null;
+    if (readonly) {
+      if (!canSubmit && !canDelete) {
+        footer = <FormFooter>{readOnlyHint}</FormFooter>;
+      } else {
+        footer = (
+          <FormFooter>
+            {canDelete && (
+              <Button
+                mode="outlined"
+                onPress={handleDelete}
+                disabled={formInstance.isSubmitting || loading || submitting}
+                textColor={colors.error}
+                loading={loading}
+                style={{ flex: 1 }}
+              >
+                Eliminar
+              </Button>
+            )}
+            {canSubmit ? (
+              <Button
+                mode="contained"
+                icon="pencil-outline"
+                onPress={() => setReadonly(false)}
+                style={{ flex: 1.4 }}
+              >
+                Editar
+              </Button>
+            ) : (
+              readOnlyHint
+            )}
+          </FormFooter>
+        );
+      }
+    } else if (!canSubmit) {
+      footer = <FormFooter>{readOnlyHint}</FormFooter>;
+    } else if (
+      props.showSubmitButton !== false ||
+      props.showResetButton === true ||
+      props.additionalSubmitButtons
+    ) {
+      footer = (
+        <FormFooter
+          note={showInvalid ? "Falta completar o corregir los campos marcados." : undefined}
+        >
+          {props.showCancelButton !== false && (
+            <Button
+              mode="outlined"
+              onPress={props.onCancel ?? (() => goBack())}
+              disabled={loading || submitting}
+              style={{ flex: 1 }}
+            >
+              {props.cancelLabel ?? "Cancelar"}
+            </Button>
           )}
-        </View>
-      </View>
-    );
 
-    // En mobile envolvemos con KeyboardAvoidingView para que el teclado
-    // no tape los botones. En web no es necesario.
-    if (isWeb) return inner;
+          {props.showResetButton === true && (
+            <Button
+              mode="outlined"
+              onPress={() => formInstance.resetForm()}
+              disabled={loading}
+              style={{ flex: 1 }}
+            >
+              {props.resetButtonText || "Deshacer cambios"}
+            </Button>
+          )}
+
+          {props.additionalSubmitButtons && props.additionalSubmitButtons}
+
+          {props.showSubmitButton !== false && (
+            <Button
+              mode="contained"
+              onPress={attemptSubmit}
+              disabled={formInstance.isSubmitting || loading || submitting}
+              loading={loading}
+              style={{ flex: 1.4 }}
+            >
+              {props.submitButtonText || (props.id ? "Guardar cambios" : "Guardar")}
+            </Button>
+          )}
+        </FormFooter>
+      );
+    }
+
+    if (!footer) return null;
+
+    // En el teléfono la barra sube con el teclado. En web no es necesario.
+    if (isWeb) return footer;
 
     return (
       <KeyboardAvoidingView
-        behavior="padding"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={100}
       >
-        {inner}
+        {footer}
       </KeyboardAvoidingView>
     );
   };
@@ -636,6 +754,7 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
             
          }, props.containerStyle]}>
           <ScrollView
+            ref={scrollRef}
             scrollEnabled={!props.disableScroll}
             // Con el teclado abierto, el primer toque en un botón o select
             // ejecuta la acción en vez de solo cerrar el teclado.
@@ -656,17 +775,31 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
             ) : (
               props.children
             )}
-            <View style={{ height: props.disableScroll ? 0 : 16 }} />
-
-            {isWeb && renderButtons()}
+            <View style={{ height: props.disableScroll ? 0 : 24 }} />
           </ScrollView>
 
-          {!isWeb && renderButtons()}
+          {renderButtons()}
         </View>
       </FormikProvider>
     </AppFormContext.Provider>
   );
 });
+
+/**
+ * Registra la vista de un campo (o de una tabla de renglones) con su nombre
+ * en el formulario: al guardar con errores, AppForm lleva al primero que
+ * tenga error. Fuera de un AppForm no hace nada.
+ */
+export function useFormFieldAnchor(
+  name: string | undefined,
+  ref: React.RefObject<HostInstance | null>,
+) {
+  const register = useContext(AppFormContext)?.registerAnchor;
+  useEffect(() => {
+    if (!register || !name) return;
+    return register({ name, ref });
+  }, [register, name, ref]);
+}
 
 // Hook personalizado para usar el formulario
 export function useAppForm<T = any>() {

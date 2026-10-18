@@ -134,6 +134,19 @@ const Services = {
   },
   inventoryAdjustments: {
     ...createCrudService<any>("/auth/admin/inventory-adjustments"),
+    /**
+     * Deshace un ajuste manual del mismo día: devuelve la existencia y el
+     * ajuste queda registrado como deshecho (no se borra). 422 con el motivo
+     * si no se puede (de otro día, de otro documento, ya deshecho…).
+     */
+    async undo(id: number, options?: RequestOptions) {
+      const response = await axiosClient.post(
+        `/auth/admin/inventory-adjustments/${id}/undo`,
+        undefined,
+        options,
+      );
+      return response.data;
+    },
   },
   productPackages: {
     ...createCrudService<any>("/auth/admin/product-packages"),

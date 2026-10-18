@@ -59,19 +59,19 @@ export default function _layout() {
       <Stack.Screen
         name="roles/form"
         options={{
-          title: "Nuevo Rol",
+          title: "Nuevo rol",
         }}
       />
       <Stack.Screen
         name="roles/[id]/index"
         options={{
-          title: "Ver Rol",
+          title: "Rol",
         }}
       />
       <Stack.Screen
         name="roles/[id]/edit"
         options={{
-          title: "Editar Rol",
+          title: "Editar rol",
         }}
       />
       <Stack.Screen
@@ -83,7 +83,7 @@ export default function _layout() {
       <Stack.Screen
         name="notifications/[id]"
         options={{
-          title: "Detalle de la Notificación",
+          title: "Notificación",
         }}
       />
       <Stack.Screen name="locations" />
@@ -97,9 +97,13 @@ export default function _layout() {
         name="cash/form"
         // Con ?id= es un movimiento que ya existe (antes decía "Nuevo").
         options={({ route }: any) => ({
-          title: route.params?.id ? "Detalle del Movimiento" : "Nuevo Movimiento",
+          title: route.params?.id ? "Movimiento de caja" : "Nuevo movimiento",
         })}
       />
+      {/* Gastos y recordatorios ponen su título desde la pantalla; esto es
+          lo que se ve mientras carga (antes, en el teléfono, "expenses/form"). */}
+      <Stack.Screen name="expenses/form" options={{ title: "Gasto" }} />
+      <Stack.Screen name="reminders/form" options={{ title: "Recordatorio" }} />
       <Stack.Screen
         name="cash/sessions/index"
         options={{ title: "Turnos de caja" }}
@@ -114,7 +118,7 @@ export default function _layout() {
       />
       <Stack.Screen
         name="cash/closing/[id]/index"
-        options={{ title: "Detalle de Cierre" }}
+        options={{ title: "Cierre de caja" }}
       />
       <Stack.Screen name="categories" />
       <Stack.Screen name="products" />
@@ -129,14 +133,14 @@ export default function _layout() {
       <Stack.Screen
         name="purchases/form"
         options={{
-          title: "Nueva Compra",
+          title: "Nueva compra",
         }}
       />
 
       <Stack.Screen
         name="purchases/[id]"
         options={{
-          title: "Ver Compra",
+          title: "Compra",
         }}
       />
       <Stack.Screen
@@ -205,38 +209,32 @@ export default function _layout() {
       <Stack.Screen
         name="sales-orders/[id]"
         options={{
-          title: "Detalle de Pedido",
+          title: "Pedido",
         }}
       />
       <Stack.Screen
         name="sales/[id]/index"
         options={{
-          title: "Ver Venta",
+          title: "Venta",
         }}
       />
 
       <Stack.Screen
         name="adjustment/index"
         options={{
-          title: "Ajustes de Inventario",
+          title: "Ajustes de inventario",
         }}
       />
       <Stack.Screen
         name="adjustment/form"
         options={{
-          title: "Nuevo Ajuste",
-        }}
-      />
-      <Stack.Screen
-        name="adjustment/[id]/edit"
-        options={{
-          title: "Editar Ajuste",
+          title: "Nuevo ajuste",
         }}
       />
       <Stack.Screen
         name="adjustment/[id]/index"
         options={{
-          title: "Ver Ajuste",
+          title: "Ajuste",
         }}
       />
       <Stack.Screen
@@ -248,7 +246,8 @@ export default function _layout() {
       <Stack.Screen
         name="transfers/formv2/index"
         options={{
-          title: "Nueva Solicitud de Transferencia",
+          // "Nueva solicitud de transferencia" se cortaba en el teléfono.
+          title: "Nueva solicitud",
         }}
       />
       <Stack.Screen
@@ -260,19 +259,19 @@ export default function _layout() {
       <Stack.Screen
         name="transfers/pending/index"
         options={{
-          title: "Solicitudes Pendientes",
+          title: "Solicitudes pendientes",
         }}
       />
       <Stack.Screen
         name="transfers/history/index"
         options={{
-          title: "Historial de Transferencias",
+          title: "Historial de transferencias",
         }}
       />
       <Stack.Screen
         name="transfers/[id]"
         options={{
-          title: "Detalle de Envío Recibido",
+          title: "Envío recibido",
         }}
       />
 

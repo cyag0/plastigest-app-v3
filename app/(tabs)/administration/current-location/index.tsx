@@ -1,266 +1,29 @@
-import { goBack } from "@/utils/navigation";
-import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
-import { FormInput } from "@/components/Form/AppInput";
-import { FormPhoneInput } from "@/components/Form/AppPhoneInput";
+import EmptyState from "@/components/App/EmptyState";
+import LocationForm from "@/components/Administration/Locations/LocationForm";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/contexts/ThemeContext";
-import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
-import Services from "@/utils/services";
-import { phoneSchema } from "@/utils/phone";
-import { useRouter } from "expo-router";
-import React, { useRef } from "react";
-import { ScrollView, View } from "react-native";
-import { Card, IconButton, Text } from "react-native-paper";
-import * as Yup from "yup";
+import { router } from "expo-router";
+import React from "react";
 
-interface LocationFormData {
-  name: string;
-  address?: string;
-  phone?: string;
-  email?: string;
-  city?: string;
-  state?: string;
-  country?: string;
-  postal_code?: string;
-  is_active: boolean;
-}
-
-const validationSchema = Yup.object().shape({
-  name: Yup.string().required("El nombre es obligatorio"),
-  address: Yup.string(),
-  phone: phoneSchema(),
-  email: Yup.string().email("Email inválido"),
-  city: Yup.string(),
-  state: Yup.string(),
-  country: Yup.string(),
-  postal_code: Yup.string(),
-});
-
+/**
+ * Datos de la sucursal en la que se está trabajando: el mismo formulario de
+ * Sucursales. Antes era una copia aparte, en tarjetas, con ciudad, estado,
+ * país y código postal que el servidor no guarda (se perdían al guardar), y
+ * con la dirección como opcional aunque el servidor la pide.
+ */
 export default function CurrentLocationScreen() {
   const { location } = useAuth();
-  const router = useRouter();
-  const formRef = useRef<AppFormRef<LocationFormData>>(null);
-  const { colors } = useTheme();
-  const styles = useThemedStyles(makeStyles);
 
   if (!location) {
     return (
-      <View style={styles.container}>
-        <View style={styles.emptyContainer}>
-          <IconButton
-            icon="alert-circle"
-            size={64}
-            iconColor={colors.warning}
-          />
-          <Text variant="titleLarge" style={styles.emptyTitle}>
-            Sin Sucursal Seleccionada
-          </Text>
-          <Text variant="bodyMedium" style={styles.emptyText}>
-            Debes seleccionar una sucursal primero
-          </Text>
-        </View>
-      </View>
+      <EmptyState
+        icon="store-outline"
+        title="Elige una sucursal"
+        description="Para cambiar sus datos, primero entra a la sucursal."
+        actionLabel="Elegir sucursal"
+        onAction={() => router.push("/(stacks)/selectLocation")}
+      />
     );
   }
 
-  return (
-    <AppForm
-      ref={formRef}
-      api={Services.admin.locations}
-      id={location.id}
-      permissionPrefix="locations"
-      onSuccess={() => goBack()}
-      initialValues={{
-        name: "",
-        address: "",
-        phone: "",
-        email: "",
-        city: "",
-        state: "",
-        country: "",
-        postal_code: "",
-        is_active: true,
-      }}
-      validationSchema={validationSchema}
-      title="Mi Sucursal"
-      submitButtonText="Guardar Cambios"
-    >
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Información Básica */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <View style={styles.sectionHeader}>
-              <IconButton
-                icon="store"
-                size={24}
-                iconColor={colors.primary}
-                style={{ margin: 0 }}
-              />
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Información de la Sucursal
-              </Text>
-            </View>
-
-            <FormInput
-              name="name"
-              label="Nombre de la Sucursal"
-              placeholder="Ej: Sucursal Centro"
-              required
-            />
-
-            <FormInput
-              name="address"
-              label="Dirección"
-              placeholder="Calle, número, colonia"
-              multiline
-              numberOfLines={2}
-            />
-
-            <View style={styles.row}>
-              <FormPhoneInput
-                name="phone"
-                label="Teléfono"
-                containerStyle={{ flex: 1 }}
-              />
-              <FormInput
-                name="email"
-                label="Email"
-                placeholder="sucursal@empresa.com"
-                keyboardType="email-address"
-                containerStyle={{ flex: 1 }}
-              />
-            </View>
-          </Card.Content>
-        </Card>
-
-        {/* Ubicación */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <View style={styles.sectionHeader}>
-              <IconButton
-                icon="map-marker"
-                size={24}
-                iconColor={colors.info}
-                style={{ margin: 0 }}
-              />
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Ubicación Geográfica
-              </Text>
-            </View>
-
-            <FormInput name="city" label="Ciudad" placeholder="Ej: Lima" />
-
-            <View style={styles.row}>
-              <FormInput
-                name="state"
-                label="Departamento/Estado"
-                placeholder="Ej: Lima"
-                containerStyle={{ flex: 1 }}
-              />
-              <FormInput
-                name="postal_code"
-                label="Código Postal"
-                placeholder="15001"
-                keyboardType="numeric"
-                containerStyle={{ flex: 1 }}
-              />
-            </View>
-
-            <FormInput name="country" label="País" placeholder="Ej: Perú" />
-          </Card.Content>
-        </Card>
-
-        {/* Nota informativa */}
-        <Card style={[styles.card, styles.infoCard]}>
-          <Card.Content>
-            <View style={styles.infoContent}>
-              <IconButton
-                icon="information"
-                size={24}
-                iconColor={colors.info}
-                style={{ margin: 0 }}
-              />
-              <View style={{ flex: 1 }}>
-                <Text variant="bodySmall" style={styles.infoText}>
-                  Solo puedes editar la información de tu sucursal actual (
-                  {location.name}).
-                </Text>
-                <Text
-                  variant="bodySmall"
-                  style={[styles.infoText, { marginTop: 4 }]}
-                >
-                  Para gestionar todas las sucursales, contacta al administrador
-                  de la empresa.
-                </Text>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
-      </ScrollView>
-    </AppForm>
-  );
+  return <LocationForm id={location.id} title="Datos de la sucursal" />;
 }
-
-const makeStyles = themedStyles((c) => ({
-  container: {
-    flex: 1,
-    backgroundColor: "transparent" as any,
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 100,
-  },
-  card: {
-    marginBottom: 16,
-    backgroundColor: c.surface,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    gap: 8,
-  },
-  sectionTitle: {
-    fontWeight: "600",
-    color: c.text,
-  },
-  row: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  infoCard: {
-    backgroundColor: c.info + "10",
-    borderLeftWidth: 4,
-    borderLeftColor: c.info,
-  },
-  infoContent: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  infoText: {
-    color: c.textSecondary,
-    lineHeight: 18,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 32,
-  },
-  emptyTitle: {
-    fontWeight: "700",
-    color: c.text,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    color: c.textSecondary,
-    textAlign: "center",
-  },
-}));

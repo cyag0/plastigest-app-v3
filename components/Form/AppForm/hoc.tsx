@@ -1,9 +1,95 @@
 import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { FastField, FieldConfig, getIn } from "formik";
-import React from "react";
-import { Text, View } from "react-native";
-import { useAppForm } from "./AppForm";
+import React, { isValidElement, useRef } from "react";
+import { type HostInstance, Text, View } from "react-native";
+import { useAppForm, useFormFieldAnchor } from "./AppForm";
 import { InjectedFormProps, WithFormProps } from "./types";
+
+/** Lo que recibe el FastField de cada campo (además de lo de Formik). */
+interface FieldUpdateProps {
+  name: string;
+  readonly: boolean;
+  /** Los props del campo, para notar cuándo cambian. */
+  fieldProps: Record<string, unknown>;
+  formik?: {
+    values?: unknown;
+    errors?: unknown;
+    touched?: unknown;
+    isSubmitting?: boolean;
+  };
+}
+
+// Hasta dónde se comparan los props (estilos, opciones de un select, el
+// sufijo de unidad…). Más allá, o con demasiados valores, se toma como
+// cambio: se vuelve a pintar de más, nunca se queda viejo.
+const MAX_DEPTH = 6;
+const MAX_NODES = 2000;
+
+function sameValue(a: unknown, b: unknown, depth: number, budget: { left: number }): boolean {
+  if (Object.is(a, b)) return true;
+  // Las funciones no cuentan: casi siempre son nuevas en cada render y
+  // volverían a pintar cada campo del formulario con cada tecla.
+  if (typeof a === "function" && typeof b === "function") return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (depth >= MAX_DEPTH || --budget.left < 0) return false;
+
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!sameValue(a[i], b[i], depth + 1, budget)) return false;
+    }
+    return true;
+  }
+
+  // Un elemento, p. ej. right={<TextInput.Affix text="kg" />}.
+  if (isValidElement(a) || isValidElement(b)) {
+    return (
+      isValidElement(a) &&
+      isValidElement(b) &&
+      a.type === b.type &&
+      a.key === b.key &&
+      sameValue(a.props, b.props, depth + 1, budget)
+    );
+  }
+
+  const proto = Object.getPrototypeOf(a);
+  if (proto !== Object.getPrototypeOf(b)) return false;
+  if (a instanceof Date) return a.getTime() === (b as Date).getTime();
+  // Instancias de clases (Map, refs de librerías…): solo la identidad.
+  if (proto !== Object.prototype && proto !== null) return false;
+
+  const objA = a as Record<string, unknown>;
+  const objB = b as Record<string, unknown>;
+  const keys = Object.keys(objA);
+  if (keys.length !== Object.keys(objB).length) return false;
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(objB, key)) return false;
+    if (!sameValue(objA[key], objB[key], depth + 1, budget)) return false;
+  }
+  return true;
+}
+
+/**
+ * Cuándo vuelve a pintarse un campo: cambió su valor, su error, si se tocó,
+ * el envío, su nombre (un renglón que se quitó de una tabla) o alguno de sus
+ * props que no sea función (etiqueta, ayuda, opciones, el sufijo de unidad).
+ * Antes un prop nuevo no se veía sin un `key`. Formik la llama con
+ * (siguientes, anteriores).
+ */
+function shouldFieldUpdate(next: FieldUpdateProps, prev: FieldUpdateProps): boolean {
+  if (next.name !== prev.name || next.readonly !== prev.readonly) return true;
+  const a = prev.formik;
+  const b = next.formik;
+  if (
+    getIn(a?.values, prev.name) !== getIn(b?.values, next.name) ||
+    getIn(a?.errors, prev.name) !== getIn(b?.errors, next.name) ||
+    getIn(a?.touched, prev.name) !== getIn(b?.touched, next.name) ||
+    a?.isSubmitting !== b?.isSubmitting
+  ) {
+    return true;
+  }
+  return !sameValue(prev.fieldProps, next.fieldProps, 0, { left: MAX_NODES });
+}
 
 function MakeForm<TProps extends Record<string, any>>(
   WrappedComponent: React.ComponentType<TProps>,
@@ -16,7 +102,10 @@ function MakeForm<TProps extends Record<string, any>>(
       showError = true,
       errorStyle,
       containerStyle,
-      required = false,
+      // Ya no se pinta (ver types.ts); se saca para no pasarlo al campo.
+      required: _required = false,
+      optional = false,
+      hint,
       ...restProps
     } = props;
 
@@ -24,32 +113,21 @@ function MakeForm<TProps extends Record<string, any>>(
     const readonly = props.readonly || formContext?.readonly || false;
     const styles = useThemedStyles(makeStyles);
 
+    // El onChange más reciente de la pantalla: el campo puede no volver a
+    // pintarse (FastField) y seguiría llamando al de un render anterior.
+    const latestOnChange = useRef(props.onChange);
+    latestOnChange.current = props.onChange;
+
+    // Al guardar con errores, AppForm lleva al primer campo marcado.
+    const anchorRef = useRef<HostInstance>(null);
+    useFormFieldAnchor(name, anchorRef);
+
     return (
       <FastField
         name={name}
         readonly={readonly}
-        shouldUpdate={(prevProps, nextProps) => {
-          const prevFormik = prevProps.formik;
-          const nextFormik = nextProps.formik;
-
-          const valueChanged =
-            getIn(prevFormik?.values, name) !== getIn(nextFormik?.values, name);
-          const errorChanged =
-            getIn(prevFormik?.errors, name) !== getIn(nextFormik?.errors, name);
-          const touchedChanged =
-            getIn(prevFormik?.touched, name) !==
-            getIn(nextFormik?.touched, name);
-          const isSubmittingChanged =
-            prevFormik?.isSubmitting !== nextFormik?.isSubmitting;
-
-          return (
-            prevProps.readonly !== nextProps.readonly ||
-            valueChanged ||
-            errorChanged ||
-            touchedChanged ||
-            isSubmittingChanged
-          );
-        }}
+        fieldProps={props}
+        shouldUpdate={shouldFieldUpdate}
       >
         {({
           field,
@@ -64,9 +142,7 @@ function MakeForm<TProps extends Record<string, any>>(
             // Primero actualizar Formik
             form.setFieldValue(name, value);
             // Luego ejecutar el onChange del prop (si existe)
-            if (props.onChange) {
-              props.onChange(value);
-            }
+            latestOnChange.current?.(value);
           };
 
           const onBlur = () => {
@@ -88,19 +164,25 @@ function MakeForm<TProps extends Record<string, any>>(
           };
 
           return (
-            <View style={[styles.container, containerStyle]}>
+            <View ref={anchorRef} style={[styles.container, containerStyle]}>
               {label && options?.label !== false && (
-                <InputLabel required={required} label={label} />
+                <InputLabel label={label} optional={optional && !readonly} />
               )}
 
               <WrappedComponent
                 {...(restProps as unknown as TProps)}
+                // Los campos que pintan su propia etiqueta (FormSwitch,
+                // FormCheckBox) la reciben; antes se perdía y salía
+                // "Selecciona una opción".
+                {...(options?.label === false && label ? { label } : {})}
                 {...injectedProps}
               />
 
-              {showError && hasError && (
+              {showError && hasError ? (
                 <FieldError message={meta.error} style={errorStyle} />
-              )}
+              ) : hint && !readonly ? (
+                <FieldHint text={hint} />
+              ) : null}
             </View>
           );
         }}
@@ -116,33 +198,51 @@ function FieldError(props: { message?: string; style?: object }) {
   return <Text style={[styles.errorText, props.style]}>{props.message}</Text>;
 }
 
-export function InputLabel(props: { label: string; required: boolean }) {
+function FieldHint(props: { text: string }) {
+  const styles = useThemedStyles(makeStyles);
+  return <Text style={styles.hint}>{props.text}</Text>;
+}
+
+/**
+ * Etiqueta de un campo. Lo obligatorio es lo normal: no lleva asterisco, y
+ * los campos que se pueden dejar vacíos dicen «(opcional)».
+ */
+export function InputLabel(props: { label: string; required?: boolean; optional?: boolean }) {
   const styles = useThemedStyles(makeStyles);
   return (
     <Text style={styles.label}>
-      {props.required && <Text style={styles.required}>* </Text>}
       {props.label}
+      {props.optional && <Text style={styles.optional}> (opcional)</Text>}
     </Text>
   );
 }
 
 const makeStyles = themedStyles((c) => ({
   container: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   label: {
-    marginBottom: 8,
-    fontSize: 16,
-    fontWeight: "bold",
+    marginBottom: 6,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "600",
     color: c.textSecondary,
   },
-  required: {
-    color: c.error,
+  optional: {
+    fontWeight: "400",
+    color: c.textMuted,
   },
   errorText: {
     color: c.error,
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6,
+  },
+  hint: {
+    color: c.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6,
   },
 }));
 

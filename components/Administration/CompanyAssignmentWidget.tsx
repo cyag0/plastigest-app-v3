@@ -1,3 +1,5 @@
+import FormNote from "@/components/Auth/FormNote";
+import { ListGroup, ListGroupSkeleton, ListRow } from "@/components/App/ListGroup";
 import { shortLocationName } from "@/utils/locations";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -6,7 +8,7 @@ import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import axiosClient from "@/utils/axios";
 import React, { useEffect, useState } from "react";
 import { View, useWindowDimensions } from "react-native";
-import { Button, Card, IconButton, Text } from "react-native-paper";
+import { IconButton } from "react-native-paper";
 import AppSelect from "../Form/AppSelect/AppSelect";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -14,6 +16,13 @@ import AppSelect from "../Form/AppSelect/AppSelect";
 export interface LocationRoleItem {
   location_id: number | undefined;
   role_id: number | undefined;
+  /**
+   * Nombres con los que llegó del servidor: si la sucursal o el rol no están
+   * en las listas (el rol del sistema, una sucursal de otra empresa), se
+   * muestran igual en lugar de «Sin rol» o «Elige la sucursal».
+   */
+  location_name?: string | null;
+  role_name?: string | null;
 }
 
 interface SelectOption {
@@ -31,6 +40,15 @@ interface Props {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
+/**
+ * Sucursales de un usuario y su rol en cada una (formulario de usuario en la
+ * empresa). Un renglón por sucursal dentro de una sola superficie, como las
+ * listas de Inicio: la sucursal, el rol y quitar; al final «Agregar
+ * sucursal». Antes cada una era una tarjeta con barra de color al costado.
+ *
+ * Una sucursal elegida en un renglón ya no se ofrece en los demás (el
+ * servidor se quedaba con una sola y el rol de la otra se perdía).
+ */
 export default function LocationRoleList({ value, onChange, readonly, companyId }: Props) {
   const { selectedCompany } = useAuth();
   const { colors } = useTheme();
@@ -43,13 +61,13 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
   const stacked = width < 600;
   const [locations, setLocations] = useState<SelectOption[]>([]);
   const [roles, setRoles] = useState<SelectOption[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Empieza cargando: el efecto pide las sucursales y los roles al montar.
+  const [loading, setLoading] = useState(true);
   // Antes un error (p. ej. 403 sin «Roles › Listar») dejaba los selects
   // vacíos sin decir por qué.
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLoading(true);
     const params: any = { all: true };
     if (companyId) params.company_id = companyId;
 
@@ -100,104 +118,101 @@ export default function LocationRoleList({ value, onChange, readonly, companyId 
   const setRole = (i: number, roleId: number | undefined) =>
     onChange(value.map((item, idx) => (idx === i ? { ...item, role_id: roleId } : item)));
 
-  if (loading) {
-    return (
-      <Text variant="bodySmall" style={styles.loadingText}>
-        Cargando sucursales y roles...
-      </Text>
+  /** Las sucursales que se pueden elegir en un renglón: sin las de los demás. */
+  const locationOptions = (i: number) => {
+    const item = value[i];
+    const taken = new Set(
+      value
+        .filter((other, idx) => idx !== i && other.location_id != null)
+        .map((other) => String(other.location_id)),
     );
+    const options = locations.filter((option) => !taken.has(option.value));
+    return withCurrent(
+      options,
+      item.location_id,
+      item.location_name ? shortLocationName(item.location_name, selectedCompany?.name) : null,
+    );
+  };
+
+  /** Los roles de la empresa, más el que ya tiene si no es uno de ellos. */
+  const roleOptions = (item: LocationRoleItem) => withCurrent(roles, item.role_id, item.role_name);
+
+  if (loading) {
+    return <ListGroupSkeleton rows={Math.max(1, Math.min(value.length, 3))} />;
   }
+
+  // Con todas las sucursales ya asignadas no hay más que agregar.
+  const canAdd = !readonly && locations.length > 0 && value.length < locations.length;
 
   return (
     <View style={styles.container}>
-      {!!loadError && (
-        <Text variant="bodySmall" style={styles.errorText}>
-          {loadError}
-        </Text>
-      )}
+      {!!loadError && <FormNote tone="warning">{loadError}</FormNote>}
 
-      {value.length === 0 && (
-        <Card style={styles.emptyCard}>
-          <Card.Content style={styles.emptyContent}>
-            <Text variant="bodySmall" style={styles.emptyText}>
-              Sin sucursales asignadas
-            </Text>
-          </Card.Content>
-        </Card>
-      )}
+      <ListGroup inset={14}>
+        {value.length === 0 && (
+          <ListRow
+            icon="store-off-outline"
+            iconColor={colors.warning}
+            title="Sin sucursales"
+            subtitle="No puede entrar a ninguna hasta que le agregues una."
+            chevron={false}
+          />
+        )}
 
-      {value.map((item, i) => {
-        const locLabel = locations.find((l) => l.value === String(item.location_id))?.label;
-        const roleLabel = roles.find((r) => r.value === String(item.role_id))?.label;
-
-        return (
-          <View key={i} style={styles.row}>
-            {/* Row number + remove */}
-            <View style={styles.rowHeader}>
-              <Text variant="labelSmall" style={styles.rowLabel}>
-                {locLabel && roleLabel
-                  ? `${locLabel} · ${roleLabel}`
-                  : locLabel
-                  ? locLabel
-                  : `Sucursal ${i + 1}`}
-              </Text>
+        {value.map((item, i) => {
+          const locLabel = locations.find((l) => l.value === String(item.location_id))?.label;
+          return (
+            <View key={i} style={[styles.row, !stacked && styles.rowCentered]}>
+              <View style={[styles.selects, stacked && styles.selectsStacked]}>
+                <View style={[styles.selectLocation, stacked && styles.selectStacked]}>
+                  <AppSelect
+                    value={item.location_id}
+                    onChange={(v) => setLocation(i, v as number | undefined)}
+                    data={locationOptions(i)}
+                    placeholder="Elige la sucursal"
+                    disabled={readonly}
+                  />
+                </View>
+                <View style={[styles.selectRole, stacked && styles.selectStacked]}>
+                  <AppSelect
+                    value={item.role_id}
+                    onChange={(v) => setRole(i, v as number | undefined)}
+                    data={roleOptions(item)}
+                    placeholder="Sin rol"
+                    disabled={readonly}
+                  />
+                </View>
+              </View>
               {!readonly && (
                 <IconButton
                   icon="close"
-                  size={16}
-                  iconColor={colors.error}
-                  style={{ margin: 0 }}
+                  size={18}
+                  iconColor={colors.textMuted}
+                  style={[styles.remove, !stacked && styles.removeCentered]}
                   onPress={() => remove(i)}
+                  accessibilityLabel={`Quitar ${locLabel ?? "esta sucursal"}`}
                 />
               )}
             </View>
+          );
+        })}
 
-            <View style={[styles.selects, stacked && styles.selectsStacked]}>
-              {/* Location */}
-              <View style={[styles.selectLocation, stacked && styles.selectStacked]}>
-                <Text variant="labelSmall" style={styles.fieldLabel}>
-                  Sucursal
-                </Text>
-                <AppSelect
-                  value={item.location_id}
-                  onChange={(v) => setLocation(i, v as number | undefined)}
-                  data={locations}
-                  placeholder="Seleccionar"
-                  disabled={readonly}
-                />
-              </View>
-
-              {/* Role */}
-              <View style={[styles.selectRole, stacked && styles.selectStacked]}>
-                <Text variant="labelSmall" style={styles.fieldLabel}>
-                  Rol
-                </Text>
-                <AppSelect
-                  value={item.role_id}
-                  onChange={(v) => setRole(i, v as number | undefined)}
-                  data={roles}
-                  placeholder="Sin rol"
-                  disabled={readonly}
-                />
-              </View>
-            </View>
-          </View>
-        );
-      })}
-
-      {!readonly && (
-        <Button
-          mode="outlined"
-          icon="plus"
-          onPress={add}
-          style={styles.addButton}
-          textColor={colors.primary}
-        >
-          Agregar sucursal
-        </Button>
-      )}
+        {canAdd && (
+          <ListRow icon="plus" iconColor={colors.primary} title="Agregar sucursal" onPress={add} chevron={false} />
+        )}
+      </ListGroup>
     </View>
   );
+}
+
+/** Agrega a las opciones el valor actual cuando no viene en ellas. */
+function withCurrent(
+  options: SelectOption[],
+  id: number | string | undefined,
+  label: string | null | undefined,
+): SelectOption[] {
+  if (id == null || !label || options.some((option) => option.value === String(id))) return options;
+  return [...options, { value: String(id), label }];
 }
 
 // Re-export old type alias for backwards compat (UserFormShared uses CompanyAssignment)
@@ -205,46 +220,30 @@ export type CompanyAssignment = LocationRoleItem;
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const makeStyles = themedStyles((c) => ({
+const makeStyles = themedStyles(() => ({
   container: {
     gap: 10,
   },
-  emptyCard: {
-    backgroundColor: c.surface,
-    borderRadius: 10,
-  },
-  emptyContent: {
-    alignItems: "center",
-    paddingVertical: 18,
-  },
-  emptyText: {
-    color: c.textSecondary,
-    fontStyle: "italic",
-  },
   row: {
-    backgroundColor: c.surface,
-    borderRadius: 10,
-    padding: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: c.primary + "66",
-  },
-  rowHeader: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
+    alignItems: "flex-start",
+    gap: 4,
+    paddingLeft: 12,
+    paddingRight: 4,
+    paddingVertical: 10,
   },
-  rowLabel: {
-    color: c.primary,
-    fontWeight: "600",
-    flex: 1,
+  rowCentered: {
+    alignItems: "center",
   },
   selects: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     gap: 10,
   },
   selectsStacked: {
     flexDirection: "column",
+    gap: 8,
   },
   // Apilados, cada select toma el alto de su contenido (flex: 3/2 es para
   // repartir el ancho cuando van lado a lado).
@@ -255,27 +254,17 @@ const makeStyles = themedStyles((c) => ({
   },
   selectLocation: {
     flex: 3,
+    minWidth: 0,
   },
   selectRole: {
     flex: 2,
+    minWidth: 0,
   },
-  fieldLabel: {
-    color: c.textSecondary,
-    marginBottom: 4,
-    letterSpacing: 0.3,
+  remove: {
+    margin: 0,
+    marginTop: 4,
   },
-  loadingText: {
-    color: c.textSecondary,
-    fontStyle: "italic",
-    paddingVertical: 12,
-  },
-  errorText: {
-    color: c.error,
-  },
-  addButton: {
-    borderRadius: 10,
-    borderColor: c.primary,
-    marginTop: 2,
+  removeCentered: {
+    marginTop: 0,
   },
 }));
-

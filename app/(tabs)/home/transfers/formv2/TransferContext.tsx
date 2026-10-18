@@ -315,7 +315,7 @@ export function TransferProvider({ children }: TransferProviderProps) {
       [productId]: newProduct,
     }));
 
-    alerts.success("Producto agregado a la solicitud");
+    alerts.success("Producto agregado");
   };
 
   const handleRemoveProduct = (productId: number | string) => {

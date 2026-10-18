@@ -1,11 +1,10 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import PartyDetail from "@/components/Administration/Catalogs/PartyDetail";
+import { useLocalSearchParams } from "expo-router";
 import React from "react";
-import SuppliersForm from "../form";
 
+/** Detalle de un proveedor (antes, el formulario en solo lectura). */
 export default function SupplierDetail() {
-  const router = useRouter();
-  const params = useLocalSearchParams();
-  const supplierId = params.id as string;
+  const { id } = useLocalSearchParams<{ id: string }>();
 
-  return <SuppliersForm id={parseInt(supplierId)} readonly />;
+  return <PartyDetail kind="supplier" id={Number(id)} />;
 }

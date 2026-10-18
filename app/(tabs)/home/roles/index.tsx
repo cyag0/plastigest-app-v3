@@ -4,12 +4,10 @@ import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { activeFilter } from "@/constants/listFilters";
 import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import FilterModal from "@/components/Feedback/Modal/FilterModal";
-import AppChip from "@/components/App/Chip";
 import PermissionGate from "@/components/App/PermissionGate";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
 import * as React from "react";
-import { View } from "react-native";
 
 /** Total de permisos del rol (el índice manda solo los primeros 10 nombres). */
 function permissionsCount(item: any): number {
@@ -46,33 +44,17 @@ export default function RolesListScreen() {
         service={Services.admin.roles}
         columns={columns}
         filters={[activeFilter()]}
+        // Nombre, descripción y cuántos permisos tiene. Antes iban hasta 8
+        // chips con el nombre interno del permiso ("Leer Usuarios"), que ya no
+        // es como los llama el editor de roles.
         renderCard={({ item }) => ({
           title: item.name,
           description: (
             <React.Fragment>
-              <AppList.Description>{item.description}</AppList.Description>
-              <View
-                style={{
-                  flexDirection: "row",
-                  flexWrap: "wrap",
-                  gap: 4,
-                  marginTop: 4,
-                  maxHeight: 44, // Máximo 2 filas de chips
-                  overflow: "hidden",
-                }}
-              >
-                {/* Permisos: etiquetas, no estados */}
-                {item.permissions?.slice(0, 8).map((permission: string) => (
-                  <AppChip key={permission} size="sm">
-                    {permission}
-                  </AppChip>
-                ))}
-                {permissionsCount(item) > 8 && (
-                  <AppChip size="sm" variant="primary">
-                    +{permissionsCount(item) - 8}
-                  </AppChip>
-                )}
-              </View>
+              {!!item.description && <AppList.Description>{item.description}</AppList.Description>}
+              <AppList.Description>
+                {permissionsCount(item) === 1 ? "1 permiso" : `${permissionsCount(item)} permisos`}
+              </AppList.Description>
             </React.Fragment>
           ),
           right: <ActiveBadge active={!!item.is_active} />,

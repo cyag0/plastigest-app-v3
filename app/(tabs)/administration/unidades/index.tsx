@@ -68,8 +68,9 @@ export default function UnidadesScreen() {
 
   const columns: AppListColumn<any>[] = [
     { title: "Nombre", dataIndex: "name", key: "name", width: 200 },
-    { title: "Abreviación", dataIndex: "abbreviation", key: "abbreviation", width: 120, align: "center" },
-    { title: "Descripción", dataIndex: "description", key: "description", width: 260 },
+    { title: "Abreviatura", dataIndex: "abbreviation", key: "abbreviation", width: 120, align: "center" },
+    // "1 dz = 12 pz" o "Unidad base" (el backend lo arma).
+    { title: "Equivalencia", dataIndex: "description", key: "description", width: 260 },
   ];
 
   return (

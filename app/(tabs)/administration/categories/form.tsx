@@ -1,93 +1,85 @@
-import { FormCheckBox } from "@/components/Form/AppCheckBox";
-import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
+/**
+ * Alta y edición de una categoría: nombre y, si ayuda, qué productos van en
+ * ella; al editar, si está activa.
+ *
+ * Antes iba en una caja blanca con «Información de la Categoría» en
+ * negritas, un select «Empresa» que solo repetía la actual (el backend la
+ * toma del contexto al crear) y una casilla «Categoría Activa». No validaba
+ * nada: guardar vacío iba al servidor y regresaba un error genérico.
+ */
+
+import { useLeaveScreen } from "@/components/Administration/Catalogs/useLeaveScreen";
+import AppForm from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
-import { FormProSelect } from "@/components/Form/AppProSelect/AppProSelect";
-import { useTheme } from "@/contexts/ThemeContext";
+import { FormSwitch } from "@/components/Form/AppSwitch";
 import useSelectedCompany from "@/hooks/useSelectedCompany";
 import Services from "@/utils/services";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useMemo, useRef } from "react";
-import { ScrollView, View } from "react-native";
-import { Text } from "react-native-paper";
+import { useLocalSearchParams } from "expo-router";
+import React, { useMemo } from "react";
+import * as Yup from "yup";
 
-interface CategoryFormData {
-  name: string;
-  description?: string;
-  company_id: number;
-  is_active: boolean;
-}
+const BASE = "/(tabs)/administration/categories";
 
-interface CategoriesFormProps {
-  id?: number;
-  readonly?: boolean;
-}
+/** Lo mismo que valida el backend (CategoryController). */
+const LIMITS = { name: 150, description: 255 };
 
-export default function CategoriesForm(props: CategoriesFormProps) {
-  const params = useLocalSearchParams();
-  const categoryId =
-    props.id || (params.id ? parseInt(params.id as string) : undefined);
-  const isEditing = !!categoryId;
-  const formRef = useRef<AppFormRef<CategoryFormData>>(null);
+const tooLong = (max: number) => `Máximo ${max} caracteres`;
 
-  const router = useRouter();
+const validationSchema = Yup.object({
+  name: Yup.string()
+    .trim()
+    .required("Escribe el nombre de la categoría")
+    .max(LIMITS.name, tooLong(LIMITS.name)),
+  description: Yup.string().nullable().max(LIMITS.description, tooLong(LIMITS.description)),
+  is_active: Yup.boolean(),
+});
+
+export default function CategoriesForm(props: { id?: number }) {
+  const params = useLocalSearchParams<{ id?: string }>();
+  const id = props.id ?? (params.id ? parseInt(params.id, 10) : undefined);
+  const isEditing = !!id;
   const { company } = useSelectedCompany();
-  const { colors } = useTheme();
-  // La empresa viene ya elegida (la del contexto); antes el campo salía vacío
-  // y, si no se tocaba, el guardado fallaba. Referencia estable: AppForm
-  // reinicia el formulario cada vez que cambia initialValues.
+  // A la lista o al detalle de donde se vino (o, si se recargó, a uno de ellos).
+  const leave = useLeaveScreen(isEditing ? `${BASE}/${id}` : BASE);
+
+  // Referencia estable: AppForm reinicia el formulario cada vez que cambia
+  // initialValues. company_id se sigue mandando; ya no se muestra.
   const initialValues = useMemo(
-    () => ({ name: "", description: "", company_id: company?.id, is_active: true }) as any,
+    () => ({ name: "", description: "", company_id: company?.id, is_active: true }),
     [company?.id],
   );
 
   return (
     <AppForm
       permissionPrefix="categories"
-      ref={formRef}
       api={Services.categories}
-      id={categoryId}
+      id={id}
       initialValues={initialValues}
-      readonly={props.readonly}
-      onSuccess={() => {
-        router.replace("/administration/categories");
-      }}
+      validationSchema={validationSchema}
+      submitButtonText={isEditing ? "Guardar cambios" : "Guardar categoría"}
+      successMessage={isEditing ? "Cambios guardados" : "Categoría guardada"}
+      // Antes router.replace a la lista: quedaba la lista dos veces y
+      // «Atrás» volvía a ella.
+      onSuccess={leave}
+      onCancel={leave}
     >
-      <ScrollView style={{ flex: 1, backgroundColor: colors.surface, padding: 24, shadowOffset: { width: 0, height: 0 } }}>
-        <View style={{ padding: 16 }}>
-          {/* Información básica de la categoría */}
-          <Text
-            variant="titleMedium"
-            style={{ marginBottom: 16, fontWeight: "bold" }}
-          >
-            Información de la Categoría
-          </Text>
+      <FormInput
+        name="name"
+        label="Nombre"
+        placeholder="Paletas"
+        maxLength={LIMITS.name}
+      />
+      <FormInput
+        name="description"
+        label="Descripción"
+        optional
+        placeholder="Paletas de agua y de crema de coco"
+        multiline
+        maxLength={LIMITS.description}
+      />
 
-          <FormInput
-            name="name"
-            label="Nombre de la Categoría"
-            placeholder="Ej: Envases Plásticos"
-            required
-          />
-
-          <FormInput
-            name="description"
-            label="Descripción"
-            placeholder="Descripción de la categoría"
-            multiline
-            numberOfLines={3}
-          />
-
-          <FormProSelect
-            name="company_id"
-            label="Empresa"
-            model="admin.companies"
-            placeholder="Seleccione una empresa"
-            required
-          />
-
-          <FormCheckBox name="is_active" text="Categoría Activa" />
-        </View>
-      </ScrollView>
+      {/* Una nueva siempre empieza activa: el interruptor solo al editar. */}
+      {isEditing && <FormSwitch name="is_active" text="Activa" />}
     </AppForm>
   );
 }

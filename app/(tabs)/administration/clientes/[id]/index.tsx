@@ -1,11 +1,10 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
+import PartyDetail from "@/components/Administration/Catalogs/PartyDetail";
+import { useLocalSearchParams } from "expo-router";
 import React from "react";
-import ClientsForm from "../form";
 
+/** Detalle de un cliente (antes, el formulario en solo lectura). */
 export default function ClientDetail() {
-  const router = useRouter();
-  const params = useLocalSearchParams();
-  const clientId = params.id as string;
+  const { id } = useLocalSearchParams<{ id: string }>();
 
-  return <ClientsForm id={parseInt(clientId)} readonly />;
+  return <PartyDetail kind="customer" id={Number(id)} />;
 }

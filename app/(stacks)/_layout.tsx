@@ -52,13 +52,13 @@ export default function _layout() {
       <Stack.Screen
         name="selectCompany"
         options={{
-          title: "Seleccionar Empresa",
+          title: "Seleccionar empresa",
         }}
       />
       <Stack.Screen
         name="selectLocation"
         options={{
-          title: "Seleccionar Ubicación",
+          title: "Seleccionar sucursal",
         }}
       />
       <Stack.Screen
@@ -70,19 +70,19 @@ export default function _layout() {
       <Stack.Screen
         name="notifications/[id]"
         options={{
-          title: "Detalle de Notificación",
+          title: "Notificación",
         }}
       />
       <Stack.Screen
         name="notification-preferences/index"
         options={{
-          title: "Preferencias de Notificaciones",
+          title: "Preferencias de notificaciones",
         }}
       />
       <Stack.Screen
         name="task-notification-guide"
         options={{
-          title: "Tareas y Notificaciones",
+          title: "Tareas y notificaciones",
         }}
       />
       <Stack.Screen
@@ -106,7 +106,7 @@ export default function _layout() {
       <Stack.Screen
         name="tasks/[id]"
         options={{
-          title: "Detalle de Tarea",
+          title: "Tarea",
         }}
       />
       <Stack.Screen

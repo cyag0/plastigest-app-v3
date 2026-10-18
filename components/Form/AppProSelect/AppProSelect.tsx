@@ -6,7 +6,7 @@ import { getIn, useFormikContext } from "formik";
 import React, { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { Text } from "react-native-paper";
-import MakeForm from "../AppForm/hoc";
+import MakeForm, { InputLabel } from "../AppForm/hoc";
 import AppSelect from "../AppSelect/AppSelect";
 import {
   SELECT_CACHE_RETRY_MS,
@@ -280,12 +280,8 @@ export default function AppProSelect(props: AppProSelectProps) {
     }
   };
 
-  const labelNode = label ? (
-    <Text style={{ marginBottom: 8, fontSize: 16, fontWeight: "bold" }}>
-      {label}
-    </Text>
-  ) : null;
-  const hintStyle = { fontSize: 12, color: colors.textMuted, marginTop: 4 };
+  const labelNode = label ? <InputLabel label={label} /> : null;
+  const hintStyle = { fontSize: 13, lineHeight: 18, color: colors.textSecondary, marginTop: 6 };
   const currentValue = value ?? (multiple ? [] : undefined);
 
   // Renderizar estados especiales

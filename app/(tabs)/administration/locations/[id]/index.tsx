@@ -1,440 +1,246 @@
+/**
+ * Detalle de una sucursal, como el de una compra: arriba el nombre, si está
+ * activa y Editar; abajo la dirección y el contacto (lo que sale en los
+ * tickets). Eliminar va en el menú ⋮.
+ *
+ * Antes eran tarjetas con sombra: un círculo gigante con la inicial, la
+ * compañía (siempre la actual), «Información del Sistema» con el ID y dos
+ * botones a todo lo ancho.
+ */
+
+import IconLabel from "@/components/App/IconLabel";
+import { ListGroup, ListRow, ListSection } from "@/components/App/ListGroup";
 import RecordLoadError, {
   recordLoadProblem,
   type RecordLoadProblem,
 } from "@/components/App/RecordLoadError";
-import { goBack } from "@/utils/navigation";
+import RowMenu, { type RowMenuAction } from "@/components/App/RowMenu";
+import StatusBadge from "@/components/App/StatusBadge";
+import { SkeletonBlock, SkeletonSection } from "@/components/App/SummaryLayout";
+import { FORM_MAX_WIDTH } from "@/components/Form/FormLayout";
+import { activeStatus } from "@/constants/statuses";
 import { useAuth } from "@/contexts/AuthContext";
-import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useCan } from "@/hooks/useCan";
+import { useResponsive } from "@/hooks/useResponsive";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
-import Services from "@/utils/services";
+import { formatDate } from "@/utils/dates";
+import { notifyError } from "@/utils/errorNotice";
+import { goBack } from "@/utils/navigation";
 import { formatPhone } from "@/utils/phone";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
-import {
-  ActivityIndicator,
-  Avatar,
-  Button,
-  Card,
-  Chip,
-  Text,
-} from "react-native-paper";
+import Services from "@/utils/services";
+import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import React, { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { ScrollView, Text, View } from "react-native";
+import { Button } from "react-native-paper";
+
+type LocationDetail = App.Entities.Location;
 
 export default function LocationDetailScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const alerts = useAlerts();
-  const { colors } = useTheme();
+  const { can } = useCan();
+  const { location: current } = useAuth();
+  const { isMobile } = useResponsive();
   const styles = useThemedStyles(makeStyles);
-  const { hasPermission } = useAuth();
-  const params = useLocalSearchParams();
-  const locationId = params.id as string;
-  // Sin el permiso el backend responde 403: los botones no se ofrecen.
-  const canEdit = hasPermission("locations_update");
-  const canDelete = hasPermission("locations_delete");
+  // Sin el permiso el backend responde 403: las acciones no se ofrecen.
+  const canEdit = can("locations_update");
+  const canDelete = can("locations_delete");
 
-  // El detalle trae la compañía anidada (el tipo base no la declara).
-  const [location, setLocation] = useState<
-    | (App.Entities.Location & {
-        company?: { name?: string; business_name?: string } | null;
-      })
-    | null
-  >(null);
-  const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(false);
-  // 404 (otra sucursal u otra empresa) o falla: se explica aquí; antes se
-  // regresaba a Inicio con un aviso.
-  const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
-  const loadedRef = useRef(false);
+  const [location, setLocation] = useState<LocationDetail | null>(null);
+  // 404 (otra sucursal u otra empresa), sin permiso o falla de red: se explica
+  // aquí en lugar del detalle.
+  const [problem, setProblem] = useState<RecordLoadProblem | null>(null);
+  const loaded = useRef(false);
+  const { submitting: deleting, run } = useSubmitGuard();
 
-  const loadLocationData = async () => {
-    // La primera carga muestra el spinner; al volver (p. ej. de editar) se
-    // refresca sin parpadeo.
-    const firstLoad = !loadedRef.current;
+  const load = useCallback(async () => {
     try {
-      if (firstLoad) setLoading(true);
       // silent: la falla se explica en la pantalla.
-      const response = await Services.admin.locations.show(locationId, undefined, { silent: true });
+      const response = await Services.admin.locations.show(id, undefined, { silent: true });
       setLocation(response.data.data);
-      setLoadProblem(null);
-      loadedRef.current = true;
-    } catch (error: any) {
-      // Al volver a una que ya se veía, se queda como estaba.
-      if (firstLoad) {
-        setLoadProblem(
-          recordLoadProblem(error, "No se pudo cargar la información de la sucursal."),
-        );
-      }
-    } finally {
-      setLoading(false);
+      setProblem(null);
+      loaded.current = true;
+    } catch (error) {
+      // Al volver a una que ya se veía (p. ej. de editar), se queda como estaba.
+      if (!loaded.current) setProblem(recordLoadProblem(error, "No se pudo cargar la sucursal."));
     }
-  };
+  }, [id]);
 
-  // Se recarga al volver a la pantalla: después de editar se veían los datos
-  // viejos.
+  // Se recarga al volver de editar.
   useFocusEffect(
     useCallback(() => {
-      loadLocationData();
-      // loadLocationData solo depende de locationId.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [locationId]),
+      load();
+    }, [load]),
   );
 
-  const handleEdit = () => {
-    router.push(`/(tabs)/administration/locations/form?id=${locationId}`);
-  };
-
-  // Antes era Alert.alert con botones: en web no hace nada y la sucursal no
-  // se podía eliminar desde aquí.
-  const handleDelete = async () => {
-    const confirmed = await alerts.confirm(
-      `¿Estás seguro de que deseas eliminar la sucursal "${location?.name ?? ""}"?`,
-      {
-        title: "Confirmar eliminación",
-        okText: "Eliminar",
-        cancelText: "Cancelar",
-      },
-    );
-    if (!confirmed) return;
-
-    try {
-      setDeleting(true);
-      await Services.admin.locations.destroy(locationId);
-      alerts.success("Sucursal eliminada correctamente");
-      goBack();
-    } catch (error: any) {
-      console.error("Error deleting location:", error);
-      alerts.error(
-        error?.response?.data?.message || "No se pudo eliminar la sucursal",
+  const remove = () =>
+    run(async () => {
+      if (!location) return;
+      const ok = await alerts.confirm(
+        "Se elimina y no se puede deshacer. Si ya tiene ventas, compras o inventario no se puede eliminar: desactívala desde Editar.",
+        { title: `¿Eliminar ${location.name}?`, okText: "Eliminar", cancelText: "Volver" },
       );
-    } finally {
-      setDeleting(false);
-    }
-  };
+      if (!ok) return;
+      try {
+        await Services.admin.locations.destroy(location.id);
+        alerts.success("Sucursal eliminada");
+        goBack("/(tabs)/administration/locations");
+      } catch (error) {
+        // El backend explica por qué no (p. ej. ya tiene movimientos).
+        notifyError(error, "No se pudo eliminar la sucursal.");
+      }
+    });
 
-  if (loadProblem && !location) {
+  const menu: RowMenuAction[] =
+    location && canDelete
+      ? [{ label: "Eliminar sucursal", icon: "delete-outline", onPress: remove, destructive: true }]
+      : [];
+
+  // El layout la llama por el nombre de la ruta; el menú depende de la
+  // sucursal cargada (sus acciones leen la de este render).
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: "Sucursal",
+      headerRight: () => (menu.length ? <RowMenu actions={menu} /> : null),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, location, canDelete]);
+
+  if (problem) {
     return (
       <RecordLoadError
-        problem={loadProblem}
+        problem={problem}
         notFoundTitle="No se encontró la sucursal"
         errorTitle="No se pudo cargar la sucursal"
-        onRetry={loadLocationData}
+        onRetry={load}
       />
-    );
-  }
-
-  if (loading) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text variant="bodyMedium" style={styles.loadingText}>
-            Cargando información...
-          </Text>
-        </View>
-      </View>
     );
   }
 
   if (!location) {
     return (
-      <View style={styles.container}>
-        <View style={styles.centerContainer}>
-          <Text variant="bodyLarge" style={styles.errorText}>
-            No se encontró la sucursal
-          </Text>
-        </View>
+      <View style={styles.screen}>
+        <ScrollView contentContainerStyle={[styles.content, !isMobile && styles.contentWide]}>
+          <View style={styles.skeletonHeader}>
+            <SkeletonBlock width={260} height={26} radius={8} />
+            <SkeletonBlock width={180} height={13} />
+            <SkeletonBlock width={70} height={22} radius={11} />
+          </View>
+          <SkeletonSection rows={2} />
+        </ScrollView>
       </View>
     );
   }
 
+  const active = location.is_active !== false;
+  const isCurrent = current?.id === location.id;
+  const created = location.created_at ? formatDate(location.created_at) : null;
+  const updated = location.updated_at ? formatDate(location.updated_at) : null;
+  const meta = [
+    created && `Alta: ${created}`,
+    updated && updated !== created && `Último cambio: ${updated}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Header card */}
-        <Card style={styles.headerCard}>
-          <Card.Content style={styles.headerContent}>
-            <Avatar.Text
-              size={80}
-              label={location.name?.charAt(0)?.toUpperCase() || "S"}
-              style={styles.avatar}
-            />
-
-            <View style={styles.headerInfo}>
-              <Text variant="headlineSmall" style={styles.locationName}>
-                {location.name}
-              </Text>
-
-              {location.description && (
-                <Text variant="bodyMedium" style={styles.description}>
-                  {location.description}
-                </Text>
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={[styles.content, !isMobile && styles.contentWide]}>
+        <View style={[styles.header, !isMobile && styles.headerWide]}>
+          <View style={styles.headerText}>
+            <Text style={styles.title} accessibilityRole="header" selectable>
+              {location.name}
+            </Text>
+            {!!location.description && <Text style={styles.subtitle}>{location.description}</Text>}
+            <View style={styles.statusRow}>
+              {/* En un View cada uno se centra con el otro (sueltos se alinean arriba). */}
+              <View>
+                <StatusBadge {...activeStatus(active, true)} />
+              </View>
+              {isCurrent && (
+                <View>
+                  <IconLabel icon="map-marker-outline" label="Estás en esta sucursal" />
+                </View>
               )}
-
-              <Chip
-                style={[
-                  styles.statusChip,
-                  location.is_active ? styles.activeChip : styles.inactiveChip,
-                ]}
-                textStyle={[
-                  styles.statusText,
-                  location.is_active ? styles.activeText : styles.inactiveText,
-                ]}
-                compact
-              >
-                {location.is_active ? "✓ Activa" : "✗ Inactiva"}
-              </Chip>
             </View>
-          </Card.Content>
-        </Card>
+            {!active && <Text style={styles.hint}>No aparece al elegir sucursal.</Text>}
+          </View>
 
-        {/* Contact information */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Información de Contacto
-            </Text>
-
-            <View style={styles.infoRow}>
-              <Text variant="bodyMedium" style={styles.label}>
-                Dirección:
-              </Text>
-              <Text variant="bodyMedium" style={styles.value}>
-                {location.address}
-              </Text>
-            </View>
-
-            {location.phone && (
-              <View style={styles.infoRow}>
-                <Text variant="bodyMedium" style={styles.label}>
-                  Teléfono:
-                </Text>
-                <Text variant="bodyMedium" style={styles.value}>
-                  {formatPhone(location.phone)}
-                </Text>
-              </View>
-            )}
-
-            {location.email && (
-              <View style={styles.infoRow}>
-                <Text variant="bodyMedium" style={styles.label}>
-                  Email:
-                </Text>
-                <Text variant="bodyMedium" style={styles.value}>
-                  {location.email}
-                </Text>
-              </View>
-            )}
-          </Card.Content>
-        </Card>
-
-        {/* Company information */}
-        {location.company && (
-          <Card style={styles.card}>
-            <Card.Content>
-              <Text variant="titleMedium" style={styles.sectionTitle}>
-                Compañía
-              </Text>
-
-              <View style={styles.infoRow}>
-                <Text variant="bodyMedium" style={styles.label}>
-                  Nombre:
-                </Text>
-                <Text variant="bodyMedium" style={styles.companyName}>
-                  {location.company.name}
-                </Text>
-              </View>
-
-              <View style={styles.infoRow}>
-                <Text variant="bodyMedium" style={styles.label}>
-                  Razón Social:
-                </Text>
-                <Text variant="bodyMedium" style={styles.value}>
-                  {location.company.business_name}
-                </Text>
-              </View>
-            </Card.Content>
-          </Card>
-        )}
-
-        {/* Metadata */}
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Información del Sistema
-            </Text>
-
-            <View style={styles.infoRow}>
-              <Text variant="bodyMedium" style={styles.label}>
-                ID:
-              </Text>
-              <Text variant="bodyMedium" style={styles.value}>
-                #{location.id}
-              </Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text variant="bodyMedium" style={styles.label}>
-                Creada:
-              </Text>
-              <Text variant="bodyMedium" style={styles.value}>
-                {new Date(location.created_at).toLocaleDateString()}
-              </Text>
-            </View>
-
-            <View style={styles.infoRow}>
-              <Text variant="bodyMedium" style={styles.label}>
-                Actualizada:
-              </Text>
-              <Text variant="bodyMedium" style={styles.value}>
-                {new Date(location.updated_at).toLocaleDateString()}
-              </Text>
-            </View>
-          </Card.Content>
-        </Card>
-      </ScrollView>
-      {/* Action buttons */}
-      {(canEdit || canDelete) && (
-        <View style={[styles.actions, { padding: 16 }]}>
           {canEdit && (
-            <Button
-              mode="contained"
-              onPress={handleEdit}
-              style={styles.editButton}
-              buttonColor={colors.primary}
-              textColor={colors.primaryForeground}
-              icon="pencil"
-            >
-              Editar Sucursal
-            </Button>
-          )}
-
-          {canDelete && (
-            <Button
-              mode="outlined"
-              onPress={handleDelete}
-              style={styles.deleteButton}
-              textColor={colors.error}
-              loading={deleting}
-              disabled={deleting}
-              icon="delete"
-            >
-              Eliminar
-            </Button>
+            <View style={isMobile ? styles.headerActionPhone : undefined}>
+              <Button
+                mode="contained"
+                icon="pencil-outline"
+                onPress={() => router.push(`/(tabs)/administration/locations/${location.id}/edit` as any)}
+                disabled={deleting}
+              >
+                Editar
+              </Button>
+            </View>
           )}
         </View>
-      )}
+
+        <ListSection title="Ubicación y contacto">
+          <ListGroup>
+            <ListRow
+              icon="map-marker-outline"
+              title={location.address || "Sin dirección"}
+              chevron={false}
+              alignTop
+            />
+            {!!location.phone && (
+              <ListRow icon="phone-outline" title={formatPhone(location.phone)} chevron={false} />
+            )}
+            {!!location.email && (
+              <ListRow icon="email-outline" title={location.email} chevron={false} />
+            )}
+          </ListGroup>
+          <Text style={styles.hint}>
+            {location.phone
+              ? "La dirección y el teléfono salen en los tickets."
+              : "La dirección sale en los tickets; el teléfono también, si lo agregas."}
+          </Text>
+        </ListSection>
+
+        {!!meta && <Text style={styles.meta}>{meta}</Text>}
+      </ScrollView>
     </View>
   );
 }
 
 const makeStyles = themedStyles((c) => ({
-  container: {
-    flex: 1,
-    backgroundColor: "transparent" as any,
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 32,
-  },
-  loadingText: {
-    marginTop: 16,
-    color: c.textSecondary,
-  },
-  errorText: {
-    textAlign: "center",
-    color: c.error,
-  },
-  scrollContainer: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  headerCard: {
-    marginBottom: 16,
-    backgroundColor: c.surface,
-    elevation: 2,
-  },
-  headerContent: {
+  screen: { flex: 1, backgroundColor: c.background },
+  content: { padding: 16, paddingBottom: 40, gap: 22 },
+  contentWide: { padding: 28, maxWidth: FORM_MAX_WIDTH + 56, width: "100%", alignSelf: "center" },
+
+  // Encabezado sin tarjeta, como el de una compra: el estado va en el badge
+  // y Editar a la derecha en pantallas anchas, debajo en el teléfono.
+  header: { gap: 14 },
+  headerWide: {
     flexDirection: "row",
-    alignItems: "center",
-    padding: 20,
+    flexWrap: "wrap",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    columnGap: 24,
+    rowGap: 14,
   },
-  avatar: {
-    backgroundColor: c.primary,
-    marginRight: 16,
-  },
-  headerInfo: {
-    flex: 1,
-  },
-  locationName: {
-    color: c.text,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  description: {
-    color: c.primary,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  statusChip: {
-    alignSelf: "flex-start",
-  },
-  activeChip: {
-    backgroundColor: c.success,
-  },
-  inactiveChip: {
-    backgroundColor: c.error,
-  },
-  statusText: {
-    fontWeight: "600",
-  },
-  activeText: {
-    color: c.textInverse,
-  },
-  inactiveText: {
-    color: c.textInverse,
-  },
-  card: {
-    marginBottom: 16,
-    backgroundColor: c.surface,
-    elevation: 1,
-  },
-  sectionTitle: {
-    color: c.textSecondary,
-    fontWeight: "600",
-    marginBottom: 16,
-  },
-  infoRow: {
+  headerText: { gap: 4, flexShrink: 1, minWidth: 0 },
+  headerActionPhone: { alignSelf: "stretch" },
+  title: { fontSize: 24, lineHeight: 30, fontWeight: "700", color: c.text, letterSpacing: -0.3 },
+  subtitle: { fontSize: 14, lineHeight: 20, color: c.textSecondary },
+  statusRow: {
     flexDirection: "row",
-    marginBottom: 8,
-    alignItems: "flex-start",
+    flexWrap: "wrap",
+    alignItems: "center",
+    columnGap: 12,
+    rowGap: 6,
+    marginTop: 6,
   },
-  label: {
-    color: c.textSecondary,
-    fontWeight: "500",
-    width: 100,
-    marginRight: 8,
-  },
-  value: {
-    color: c.text,
-    flex: 1,
-  },
-  companyName: {
-    color: c.primary,
-    fontWeight: "600",
-    flex: 1,
-  },
-  actions: {
-    gap: 12,
-    marginTop: 8,
-  },
-  editButton: {
-    borderRadius: 8,
-  },
-  deleteButton: {
-    borderRadius: 8,
-    borderColor: c.error,
-  },
+  hint: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+  meta: { fontSize: 12, lineHeight: 16, color: c.textMuted },
+  skeletonHeader: { gap: 8 },
 }));

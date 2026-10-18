@@ -3,7 +3,7 @@ import React from "react";
 import SuppliersForm from "../form";
 
 export default function EditSupplier() {
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams<{ id: string }>();
 
-  return <SuppliersForm id={parseInt(id as string)} />;
+  return <SuppliersForm id={parseInt(id, 10)} />;
 }

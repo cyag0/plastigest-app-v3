@@ -62,6 +62,8 @@ export default function CustomerPicker({ visible, onClose, onSelect }: Props) {
           setFailed(false);
           const res: any = await Services.customers.index({
             per_page: PAGE_SIZE,
+            // Un cliente desactivado ya no se ofrece al vender.
+            is_active: 1,
             ...(search ? { search } : {}),
           } as any);
           if (requestId !== requestIdRef.current) return;

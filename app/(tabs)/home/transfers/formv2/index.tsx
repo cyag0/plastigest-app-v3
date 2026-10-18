@@ -1,25 +1,39 @@
-import { SafeAreaView } from "react-native-safe-area-context";
-import { formatMoney } from "@/utils/format";
+import AppMenu from "@/components/App/AppMenu";
 import EmptyState from "@/components/App/EmptyState";
+import { ListGroup, ListSectionTitle, ListValueRow } from "@/components/App/ListGroup";
 import PermissionGate from "@/components/App/PermissionGate";
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
-import { tokens } from "@/constants/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
-import transferService, {
-  type TransferOrigin,
-} from "@/utils/services/transferService";
+import { formatMoney } from "@/utils/format";
+import transferService, { type TransferOrigin } from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
-import { useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
-import { Modal, ScrollView, Text as RNText, TextInput, TouchableOpacity, View } from "react-native";
-import { Button, Card, Menu, Text } from "react-native-paper";
+import { useNavigation, useRouter } from "expo-router";
+import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import {
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Button, IconButton, Portal } from "react-native-paper";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { TransferProvider, useTransferContext } from "./TransferContext";
+
+/**
+ * Nueva solicitud de transferencia, con el mismo arreglo que la compra nueva:
+ * arriba de qué sucursal se pide y su catálogo; al lado (en el celular, en un
+ * modal) la solicitud con sus datos, el costo estimado y el botón para
+ * enviarla. Llega siempre a la sucursal actual.
+ */
 
 type ListSelectedProduct = {
   product_id: number;
@@ -28,23 +42,39 @@ type ListSelectedProduct = {
   price: number;
 };
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** ¿Está abierto el teclado en pantalla? (en web no hay eventos: no). */
+function useKeyboardOpen() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setOpen(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setOpen(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
+  return open;
+}
+
 function CartHeaderButton({ count, onPress }: { count: number; onPress: () => void }) {
   const { colors } = useTheme();
   const cartBtnStyles = useThemedStyles(makeCartBtnStyles);
   return (
-    <TouchableOpacity
+    <Pressable
       onPress={onPress}
-      style={cartBtnStyles.btn}
-      activeOpacity={0.7}
-      accessibilityLabel="Ver carrito"
+      style={({ pressed }) => [cartBtnStyles.btn, pressed && { opacity: 0.7 }]}
+      accessibilityRole="button"
+      accessibilityLabel="Ver solicitud"
     >
       <MaterialCommunityIcons name="cart-outline" size={24} color={colors.text} />
       {count > 0 && (
         <View style={cartBtnStyles.badge}>
-          <RNText style={cartBtnStyles.badgeText}>{count > 99 ? "99+" : count}</RNText>
+          <Text style={cartBtnStyles.badgeText}>{count > 99 ? "99+" : count}</Text>
         </View>
       )}
-    </TouchableOpacity>
+    </Pressable>
   );
 }
 
@@ -77,36 +107,33 @@ function TransferFormContent() {
 
   const [locations, setLocations] = useState<TransferOrigin[]>([]);
   const [notes, setNotes] = useState("");
-  // Candado de "Crear Solicitud": un doble toque abría otra confirmación y
+  // Candado de "Enviar solicitud": un doble toque abría otra confirmación y
   // mandaba la solicitud dos veces.
   const { submitting, run } = useSubmitGuard();
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [fromMenuVisible, setFromMenuVisible] = useState(false);
   const [cartVisible, setCartVisible] = useState(false);
+  // En la tableta, con el teclado abierto, el total y el botón fijos no
+  // dejaban ver lo que se escribe.
+  const keyboardOpen = useKeyboardOpen();
 
   const company = auth.selectedCompany;
   const currentLocation = auth.location;
-
-  // Cargar ubicaciones al montar
-  useEffect(() => {
-    if (company) {
-      loadLocations();
-    }
-  }, [company]);
 
   // El destino siempre es la sucursal actual
   useEffect(() => {
     if (currentLocation) {
       transferContext.setToLocation(currentLocation.id);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentLocation]);
 
   // "Pedir a": las sucursales activas de la empresa menos la actual. Antes
   // salían de /admin/locations, que a un rol de sucursal (sin locations_list)
   // solo le devuelve su propia sucursal: la lista quedaba vacía.
+  // (`loadingLocations` empieza en true.)
   const loadLocations = async () => {
     try {
-      setLoadingLocations(true);
       setLocations(await transferService.origins());
     } catch (error: any) {
       console.error("Error loading locations:", error);
@@ -121,82 +148,98 @@ function TransferFormContent() {
     }
   };
 
+  // Cargar ubicaciones al montar
+  useEffect(() => {
+    if (!company) return;
+    void (async () => {
+      await loadLocations();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company]);
+
   // Convertir selectedProducts a formato de CartItemData
   const cartItems = useMemo(() => {
-    return Object.entries(transferContext.selectedProducts).map(
-      ([productId, item]) => {
-        const product = transferContext.products.find(
-          (p) => p.id.toString() === productId,
-        );
-        const selectedUnit = product?.available_units?.find(
-          (u) => u.id === item.unit_id,
-        );
+    return Object.entries(transferContext.selectedProducts).map(([productId, item]) => {
+      const product = transferContext.products.find((p) => p.id.toString() === productId);
+      const selectedUnit = product?.available_units?.find((u) => u.id === item.unit_id);
 
-        return {
-          id: productId as any,
-          product_id: item.product_id,
-          code: product?.code || "",
-          name: product?.name || "",
+      return {
+        id: productId as any,
+        product_id: item.product_id,
+        code: product?.code || "",
+        name: product?.name || "",
+        price: item.unit_cost,
+        quantity: item.quantity,
+        total: item.quantity * item.unit_cost,
+        unit_id: item.unit_id,
+        unit_name: selectedUnit?.name,
+        unit_abbreviation: selectedUnit?.abbreviation,
+        main_image: product?.main_image,
+        available_units: product?.available_units?.map((u) => ({
+          id: u.id,
+          name: u.name,
+          abbreviation: u.abbreviation,
           price: item.unit_cost,
-          quantity: item.quantity,
-          total: item.quantity * item.unit_cost,
-          unit_id: item.unit_id,
-          unit_name: selectedUnit?.name,
-          unit_abbreviation: selectedUnit?.abbreviation,
-          main_image: product?.main_image,
-          available_units: product?.available_units?.map((u) => ({
-            id: u.id,
-            name: u.name,
-            abbreviation: u.abbreviation,
-            price: item.unit_cost,
-          })),
-        };
-      },
-    );
+        })),
+      };
+    });
   }, [transferContext.selectedProducts, transferContext.products]);
 
   const totalCost = useMemo(() => {
     return cartItems.reduce((sum, item) => sum + item.total, 0);
   }, [cartItems]);
 
-  const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const lineCount = cartItems.length;
 
-  // En mobile inyectamos el botón del carrito en el AppBar.
-  useEffect(() => {
-    if (!isMobile) return;
+  // En el celular, el botón de la solicitud en la barra de arriba.
+  useLayoutEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
-        <CartHeaderButton count={itemCount} onPress={() => setCartVisible(true)} />
-      ),
+      headerRight: isMobile
+        ? () => <CartHeaderButton count={lineCount} onPress={() => setCartVisible(true)} />
+        : undefined,
     });
-  }, [isMobile, itemCount]);
+  }, [navigation, isMobile, lineCount]);
 
   const selectedProductsForList = transferContext.selectedProducts as Record<
     number | string,
     ListSelectedProduct
   >;
 
+  // El origen no puede ser la misma sucursal actual (destino fijo)
+  const availableFromLocations = locations.filter((loc) => loc.id !== transferContext.toLocationId);
+
+  const fromLocationName = locations.find((l) => l.id === transferContext.fromLocationId)?.name;
+
+  // Lo que falta para poder enviarla (el botón queda deshabilitado).
+  const blocker = !transferContext.fromLocationId
+    ? "Elige de qué sucursal pides."
+    : !transferContext.toLocationId
+      ? "Elige la sucursal en la que estás."
+      : lineCount === 0
+        ? "Agrega al menos un producto."
+        : null;
+
   const handleConfirmTransfer = () =>
     run(async () => {
       try {
         if (!transferContext.fromLocationId || !transferContext.toLocationId) {
-          alerts.error("Debes seleccionar ubicación de origen y destino");
+          alerts.error("Elige de qué sucursal pides los productos.");
           return;
         }
 
         if (cartItems.length === 0) {
-          alerts.error("Debes agregar al menos un producto");
+          alerts.error("Agrega al menos un producto.");
           return;
         }
 
-        // El diálogo vive en el Portal de la app: con el modal del carrito abierto
-        // (mobile) quedaba detrás y el botón parecía no hacer nada.
+        // El diálogo vive en el Portal de la app: con el modal de la solicitud
+        // abierto (celular) quedaba detrás y el botón parecía no hacer nada.
         setCartVisible(false);
         const confirmed = await alerts.confirm(
-          "¿Deseas crear esta solicitud de transferencia?",
+          `Pides ${plural(lineCount, "producto", "productos")} a ${fromLocationName ?? "la otra sucursal"} por un costo estimado de ${formatMoney(totalCost)}.\n\nLa solicitud queda pendiente hasta que esa sucursal la apruebe.`,
           {
-            title: "Confirmar Transferencia",
-            okText: "Crear Solicitud",
+            title: "Enviar solicitud",
+            okText: "Enviar solicitud",
             cancelText: "Cancelar",
           },
         );
@@ -220,103 +263,75 @@ function TransferFormContent() {
       }
     });
 
-  // El origen no puede ser la misma sucursal actual (destino fijo)
-  const availableFromLocations = locations.filter(
-    (loc) => loc.id !== transferContext.toLocationId,
+  /* ─── La solicitud (carrito) ─── */
+
+  const requestData = (
+    <View style={styles.section}>
+      <ListSectionTitle title="Datos de la solicitud" />
+      <ListGroup inset={14}>
+        <ListValueRow label="Pedir a" value={fromLocationName ?? "Sin elegir"} />
+        <ListValueRow label="Llega a" value={currentLocation?.name ?? "Tu sucursal"} />
+      </ListGroup>
+      <TextInput
+        value={notes}
+        onChangeText={setNotes}
+        placeholder="Notas (opcional)"
+        placeholderTextColor={colors.textMuted}
+        accessibilityLabel="Notas"
+        multiline
+        maxLength={2000}
+        style={styles.notes}
+      />
+    </View>
   );
 
-  const cartContent = (
+  const checkout = (
+    <View style={styles.checkout}>
+      <View style={styles.totalRow}>
+        <View>
+          <Text style={styles.totalLabel}>Costo estimado</Text>
+          {lineCount > 0 && (
+            <Text style={styles.totalMeta}>{plural(lineCount, "producto", "productos")}</Text>
+          )}
+        </View>
+        <Text style={styles.totalValue}>{formatMoney(totalCost)}</Text>
+      </View>
+      {!!blocker && <Text style={styles.hint}>{blocker}</Text>}
+      <View style={styles.choice}>
+        <Button
+          mode="contained"
+          icon="send-outline"
+          onPress={handleConfirmTransfer}
+          loading={submitting}
+          disabled={!!blocker || submitting}
+        >
+          Enviar solicitud
+        </Button>
+        <Text style={styles.hint}>
+          Queda pendiente hasta que {fromLocationName ?? "la otra sucursal"} la apruebe.
+        </Text>
+      </View>
+    </View>
+  );
+
+  const cart = (
     <Cart
+      title="Productos"
+      count={lineCount}
       items={cartItems}
       onRemoveItem={(itemId) => transferContext.handleRemoveProduct(itemId)}
       onItemChange={(item, action, data) => transferContext.handleItemChange(item, action, data)}
-      // En celular el carrito es un modal: que todo se desplace junto.
-      scrollAll={isMobile}
+      showFooter={false}
+      // Los productos y los datos se desplazan juntos; en el celular también
+      // el total y el botón.
+      scrollAll
     >
-      <ScrollView style={{ maxHeight: 400 }} contentContainerStyle={{ padding: 16 }}>
-          {/* Información de transferencia dentro del carrito */}
-          <Text style={styles.sectionTitle}>
-            Configuración de Transferencia
-          </Text>
-
-          {/* Ubicación de Destino */}
-          {/* <View style={{ marginBottom: 16 }}>
-            <Text style={styles.label}>Ubicación de Destino</Text>
-            <Text style={styles.sublabel}>
-              Se establece automáticamente como tu sucursal actual
-            </Text>
-            {loadingLocations ? (
-              <Text style={styles.loadingText}>Cargando ubicaciones...</Text>
-            ) : (
-              <Button
-                mode="outlined"
-                disabled
-                style={styles.selectButton}
-                contentStyle={styles.selectButtonContent}
-                icon="map-marker"
-              >
-                {locations.find((l) => l.id === transferContext.toLocationId)
-                  ?.name || "Sucursal actual"}
-              </Button>
-            )}
-          </View> */}
-
-          {/* Notas */}
-          <View style={{ marginBottom: 16 }}>
-            <Text style={styles.label}>Notas (Opcional)</Text>
-            <Text style={styles.sublabel}>
-              Información adicional sobre esta transferencia
-            </Text>
-            <TextInput
-              style={styles.notesInput}
-              placeholder="Escribe notas sobre esta transferencia..."
-              placeholderTextColor={colors.textMuted}
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-          </View>
-
-          {/* Resumen */}
-          <Card style={[styles.card, styles.summaryCard]}>
-            <Card.Content>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Total de productos:</Text>
-                <Text style={styles.summaryValue}>{cartItems.length}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Costo estimado:</Text>
-                <Text style={styles.summaryValue}>{formatMoney(totalCost)}</Text>
-              </View>
-            </Card.Content>
-          </Card>
-          </ScrollView>
-
-          {/* Botón confirmar */}
-          <Button
-            mode="contained"
-            onPress={handleConfirmTransfer}
-            loading={submitting}
-            disabled={
-              submitting ||
-              !transferContext.fromLocationId ||
-              !transferContext.toLocationId ||
-              cartItems.length === 0
-            }
-            style={styles.confirmButton}
-            buttonColor={colors.success}
-            icon="check-circle"
-          >
-            Crear Solicitud de Transferencia
-          </Button>
-        </Cart>
+      <View style={styles.extras}>
+        {requestData}
+        {isMobile && checkout}
+      </View>
+    </Cart>
   );
-
-  const fromLocationName = locations.find(
-    (l) => l.id === transferContext.fromLocationId,
-  )?.name;
 
   // Primer paso de la solicitud: de qué sucursal se piden los productos. Va
   // arriba del catálogo (antes estaba al fondo del carrito y en celular ni se
@@ -326,13 +341,11 @@ function TransferFormContent() {
       <MaterialCommunityIcons name="store-marker-outline" size={20} color={colors.primary} />
       <Text style={styles.originLabel}>Pedir a</Text>
       {loadingLocations ? (
-        <Text style={styles.loadingText}>Cargando sucursales...</Text>
+        <Text style={styles.loadingText}>Cargando sucursales…</Text>
       ) : availableFromLocations.length === 0 ? (
-        <Text style={styles.loadingText}>
-          No hay otras sucursales activas a las que pedir
-        </Text>
+        <Text style={styles.loadingText}>No hay otras sucursales activas a las que pedir</Text>
       ) : (
-        <Menu
+        <AppMenu
           visible={fromMenuVisible}
           onDismiss={() => setFromMenuVisible(false)}
           contentStyle={styles.menuContent}
@@ -349,16 +362,18 @@ function TransferFormContent() {
           }
         >
           {availableFromLocations.map((location) => (
-            <Menu.Item
+            <AppMenu.Item
               key={location.id}
               onPress={() => {
                 transferContext.setFromLocation(location.id);
                 setFromMenuVisible(false);
               }}
               title={location.name}
+              leadingIcon={location.id === transferContext.fromLocationId ? "check" : undefined}
+              titleStyle={{ color: colors.text }}
             />
           ))}
-        </Menu>
+        </AppMenu>
       )}
     </View>
   );
@@ -368,60 +383,102 @@ function TransferFormContent() {
       {/* Lista de productos */}
       <View style={styles.productsSection}>
         {originBar}
-        {!transferContext.fromLocationId && !loadingLocations ? (
-          availableFromLocations.length === 0 ? (
-            <EmptyState
-              icon="store-off-outline"
-              title="No hay sucursales a las que pedir"
-              description="Solo puedes pedir productos a otras sucursales activas de la empresa."
-            />
+        <View style={styles.catalogBody}>
+          {!transferContext.fromLocationId && !loadingLocations ? (
+            availableFromLocations.length === 0 ? (
+              <EmptyState
+                icon="store-off-outline"
+                title="No hay sucursales a las que pedir"
+                description="Solo puedes pedir productos a otras sucursales activas de la empresa."
+              />
+            ) : (
+              <EmptyState
+                icon="store-search-outline"
+                title="Elige de qué sucursal pides"
+                description="Verás el catálogo y las existencias de esa sucursal para armar tu solicitud."
+                actionLabel="Elegir sucursal"
+                onAction={() => setFromMenuVisible(true)}
+              />
+            )
           ) : (
-            <EmptyState
-              icon="store-search-outline"
-              title="Elige de qué sucursal pides"
-              description="Verás el catálogo y las existencias de esa sucursal para armar tu solicitud."
-              actionLabel="Elegir sucursal"
-              onAction={() => setFromMenuVisible(true)}
+            <ListProducts
+              loading={transferContext.loading || loadingLocations}
+              categories={transferContext.categories}
+              products={transferContext.products}
+              selectedProducts={selectedProductsForList}
+              onAddProduct={transferContext.handleAddProduct}
+              onRemoveProduct={transferContext.handleRemoveProduct}
+              onItemChange={transferContext.handleItemChange}
             />
-          )
-        ) : (
-          <ListProducts
-            loading={transferContext.loading || loadingLocations}
-            categories={transferContext.categories}
-            products={transferContext.products}
-            selectedProducts={selectedProductsForList}
-            onAddProduct={transferContext.handleAddProduct}
-            onRemoveProduct={transferContext.handleRemoveProduct}
-            onItemChange={transferContext.handleItemChange}
-          />
+          )}
+        </View>
+
+        {/* En el celular la solicitud se abre desde aquí (o desde el carrito
+            de la barra). Mientras se envía, el modal ya se cerró: aquí se ve. */}
+        {isMobile && (
+          <View style={styles.bottomBar}>
+            <Text style={styles.bottomSummary} numberOfLines={1}>
+              {submitting
+                ? "Enviando la solicitud…"
+                : lineCount === 0
+                  ? "Sin productos"
+                  : `${plural(lineCount, "producto", "productos")} · ${formatMoney(totalCost)}`}
+            </Text>
+            <Button
+              mode="contained"
+              icon="clipboard-list-outline"
+              onPress={() => setCartVisible(true)}
+              loading={submitting}
+              disabled={submitting}
+            >
+              Ver solicitud
+            </Button>
+          </View>
         )}
       </View>
 
-      {/* Carrito lateral — solo desktop */}
+      {/* La solicitud al lado del catálogo — escritorio y tableta */}
       {!isMobile && (
-        <View style={styles.cartSection}>{cartContent}</View>
+        <View style={styles.cartSection}>
+          {cart}
+          {!keyboardOpen && <View style={styles.checkoutPinned}>{checkout}</View>}
+        </View>
       )}
 
-      {/* Modal carrito — solo mobile */}
+      {/* La solicitud en un modal — celular */}
       {isMobile && (
         <Modal
           visible={cartVisible}
           animationType="slide"
-          onRequestClose={() => setCartVisible(false)}
+          // Mientras se envía no se cierra.
+          onRequestClose={() => {
+            if (!submitting) setCartVisible(false);
+          }}
         >
-          <SafeAreaView style={styles.cartModal} edges={["top", "bottom"]}>
-            <View style={styles.cartModalHeader}>
-              <Text style={styles.cartModalTitle}>Carrito</Text>
-              <TouchableOpacity
-                onPress={() => setCartVisible(false)}
-                style={styles.cartModalClose}
-                activeOpacity={0.7}
+          {/* Los menús (unidad de cada producto) se abren dentro del modal:
+              en el Portal de la app quedaban detrás. */}
+          <Portal.Host>
+            <SafeAreaView style={styles.modal} edges={["top", "bottom"]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle} numberOfLines={1}>
+                  Nueva solicitud
+                </Text>
+                <IconButton
+                  icon="close"
+                  iconColor={colors.text}
+                  onPress={() => setCartVisible(false)}
+                  disabled={submitting}
+                  accessibilityLabel="Cerrar"
+                />
+              </View>
+              <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
               >
-                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
-            </View>
-            {cartContent}
-          </SafeAreaView>
+                {cart}
+              </KeyboardAvoidingView>
+            </SafeAreaView>
+          </Portal.Host>
         </Modal>
       )}
     </View>
@@ -444,7 +501,7 @@ const makeStyles = themedStyles((c) => ({
   container: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "transparent" as any,
+    backgroundColor: c.background,
   },
   originBar: {
     flexDirection: "row",
@@ -457,116 +514,88 @@ const makeStyles = themedStyles((c) => ({
     borderBottomWidth: 1,
     borderBottomColor: c.border,
   },
-  originLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: c.text,
-  },
-  productsSection: {
-    flex: 1,
-  },
-  // Modal del carrito en mobile
-  cartModal: {
-    flex: 1,
-    backgroundColor: c.background,
-  },
-  cartModalHeader: {
+  originLabel: { fontSize: 14, fontWeight: "600", color: c.text },
+  loadingText: { fontSize: 14, color: c.textSecondary, paddingVertical: 8 },
+  menuContent: { backgroundColor: c.surface },
+  productsSection: { flex: 1, minWidth: 0 },
+  catalogBody: { flex: 1 },
+
+  bottomBar: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: c.surface,
+    borderTopWidth: 1,
+    borderTopColor: c.border,
+  },
+  bottomSummary: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
+    fontWeight: "600",
+    color: c.text,
+    fontVariant: ["tabular-nums"],
+  },
+
+  cartSection: {
+    width: 400,
+    borderLeftWidth: 1,
+    borderLeftColor: c.border,
+    backgroundColor: c.surface,
+  },
+  checkoutPinned: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: c.border,
+    backgroundColor: c.surface,
+  },
+  extras: {
+    padding: 16,
+    gap: 20,
+    borderTopWidth: 1,
+    borderTopColor: c.border,
+  },
+  section: { gap: 8 },
+  notes: {
+    minHeight: 80,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: c.text,
+    textAlignVertical: "top",
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : null),
+  },
+
+  checkout: { gap: 14 },
+  totalRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
     justifyContent: "space-between",
-    paddingHorizontal: tokens.spacing[4],
-    paddingVertical: tokens.spacing[3],
+    gap: 12,
+  },
+  totalLabel: { fontSize: 15, fontWeight: "600", color: c.text },
+  totalMeta: { fontSize: 13, color: c.textSecondary, marginTop: 2 },
+  totalValue: { fontSize: 18, fontWeight: "700", color: c.text, fontVariant: ["tabular-nums"] },
+  choice: { gap: 4 },
+  hint: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+
+  modal: { flex: 1, backgroundColor: c.background },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingLeft: 16,
+    paddingRight: 4,
+    paddingVertical: 4,
     borderBottomWidth: 1,
     borderBottomColor: c.border,
     backgroundColor: c.surface,
   },
-  cartModalTitle: {
-    ...tokens.typography.h3,
-    color: c.text,
-  },
-  cartModalClose: {
-    padding: tokens.spacing[2],
-  },
-  cartSection: {
-    width: 420,
-    borderLeftWidth: 1,
-    borderLeftColor: c.border,
-  },
-  transferSection: {
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: c.text,
-    marginBottom: 16,
-  },
-  card: {
-    marginBottom: 12,
-    backgroundColor: c.surface,
-    borderRadius: 8,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: c.text,
-    marginBottom: 4,
-  },
-  sublabel: {
-    fontSize: 12,
-    color: c.textSecondary,
-    marginBottom: 8,
-  },
-  loadingText: {
-    fontSize: 14,
-    color: c.textSecondary,
-    fontStyle: "italic",
-    paddingVertical: 8,
-  },
-  selectButton: {
-    marginTop: 4,
-    justifyContent: "flex-start",
-  },
-  selectButtonContent: {
-    justifyContent: "flex-start",
-  },
-  menuContent: {
-    backgroundColor: c.surface,
-  },
-  notesInput: {
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: 6,
-    padding: 12,
-    fontSize: 14,
-    color: c.text,
-    backgroundColor: "transparent" as any,
-    minHeight: 80,
-    marginTop: 4,
-  },
-  summaryCard: {
-    backgroundColor: c.primary + "10",
-    borderWidth: 1,
-    borderColor: c.primary + "30",
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: c.text,
-  },
-  summaryValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: c.primary,
-  },
-  confirmButton: {
-    marginTop: 16,
-    paddingVertical: 8,
-  },
+  modalTitle: { flex: 1, fontSize: 18, fontWeight: "600", color: c.text },
 }));

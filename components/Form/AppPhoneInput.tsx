@@ -22,7 +22,8 @@ import {
   type TextInputInstance,
   View,
 } from "react-native";
-import { Menu, TextInput } from "react-native-paper";
+import { TextInput } from "react-native-paper";
+import Menu from "@/components/App/AppMenu";
 import MakeForm from "./AppForm/hoc";
 import ReadonlyText from "./AppForm/ReadonlyText";
 import { useInputPaperTheme } from "./AppInput";
@@ -122,6 +123,7 @@ export default function AppPhoneInput(props: AppPhoneInputProps) {
         placeholderTextColor={colors.textMuted}
         style={styles.input}
         contentStyle={styles.inputContent}
+        outlineStyle={styles.outline}
         render={(inputProps) => (
           <View style={styles.row}>
             {/* El menú envuelve la lada en una vista propia: en una fila esa
@@ -174,15 +176,17 @@ export default function AppPhoneInput(props: AppPhoneInputProps) {
 }
 
 const makeStyles = themedStyles((c) => ({
-  container: {
-    marginVertical: tokens.spacing[2],
-  },
+  container: {},
   input: {
     backgroundColor: c.surface,
+    height: 48,
   },
   inputContent: {
-    ...tokens.typography.body,
+    fontSize: 15,
     color: c.text,
+  },
+  outline: {
+    borderRadius: tokens.radius.md,
   },
   row: {
     flexDirection: "row" as const,
@@ -202,7 +206,7 @@ const makeStyles = themedStyles((c) => ({
     paddingRight: 8,
   },
   prefixText: {
-    ...tokens.typography.body,
+    fontSize: 15,
     color: c.text,
   },
   divider: {

@@ -1,7 +1,8 @@
 import { useTheme } from "@/contexts/ThemeContext";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useState } from "react";
-import { IconButton, Menu } from "react-native-paper";
+import { IconButton } from "react-native-paper";
+import Menu from "./AppMenu";
 
 export interface RowMenuAction {
   label: string;

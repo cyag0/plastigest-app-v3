@@ -1,221 +1,245 @@
-import { useAuth } from "@/contexts/AuthContext";
-import { formatQuantity } from "@/utils/format";
-import { formatDate } from "@/utils/dates";
+/**
+ * Ajustes de inventario: qué se movió, por qué, quién y cuándo.
+ *
+ * Antes la tabla tenía ID, "Tipo" con dos íconos casi iguales y un menú ⋮
+ * con solo "Ver"; en el teléfono, círculos rojo/verde enormes y "Acción:
+ * Daño", sin quién ni hora. Ahora el movimiento lleva su signo ("−3 pz",
+ * "+2 kg" en verde), el motivo su ícono, quién lo registró y la hora, y
+ * "Deshecho" cuando se deshizo. Tocar el renglón abre el detalle.
+ *
+ * También la usa Inventario (inventory/adjustment) con su propia ruta.
+ */
+
 import AppList from "@/components/App/AppList/AppList";
-import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import type { AppListColumn } from "@/components/App/AppList/AppListDataTable";
+import type { FilterConfig } from "@/components/App/AppList/AppListFilter";
 import IconLabel from "@/components/App/IconLabel";
 import PermissionGate from "@/components/App/PermissionGate";
-import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import StatusBadge from "@/components/App/StatusBadge";
+import {
+  isReverted,
+  ORIGINS,
+  REASONS,
+  reasonInfo,
+  signedQuantity,
+  whenText,
+  type AdjustmentRecord,
+  type OriginType,
+  type ReasonCode,
+} from "@/components/Adjustments/adjustmentFormat";
+import { dateRangeFilter } from "@/constants/listFilters";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCan } from "@/hooks/useCan";
+import { useLocationFilter } from "@/hooks/useListFilters";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { shortLocationName } from "@/utils/locations";
 import Services from "@/utils/services";
-import { useTheme } from "@/contexts/ThemeContext";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Href, useRouter } from "expo-router";
-import React from "react";
-import { View } from "react-native";
-import { Text } from "react-native-paper";
+import type { CrudService, IndexParams, RequestOptions } from "@/utils/services/crudService";
+import { type Href, useNavigation, useRouter } from "expo-router";
+import React, { useLayoutEffect, useMemo } from "react";
+import { Text, View } from "react-native";
 
 interface AdjustmentsIndexProps {
   route?: Href;
 }
 
-interface InventoryAdjustmentItem {
-  id: number;
-  direction: "in" | "out";
-  quantity: number;
-  product?: {
-    id: number;
-    name: string;
-  };
-  unit?: {
-    id: number;
-    name: string;
-    code?: string;
-  };
-  reason_code?: string;
-  reason_code_label?: string;
-  applied_at?: string;
-  /** reverted_at: merma de una producción cancelada; su stock ya se devolvió. */
-  content?: { reverted_at?: string | null } | null;
-}
-
-/** Motivo del ajuste, con "Revertida" si su stock ya se devolvió. */
-const reasonText = (item: InventoryAdjustmentItem, label?: string) => {
-  const reason = label || item.reason_code_label || item.reason_code || "Sin especificar";
-  return item.content?.reverted_at ? `${reason} · Revertida` : reason;
+/** Los filtros en "Todos" (vacíos) no se mandan. */
+const listService: CrudService<AdjustmentRecord> = {
+  ...Services.inventoryAdjustments,
+  index: (params?: IndexParams, options?: RequestOptions) =>
+    Services.inventoryAdjustments.index(
+      Object.fromEntries(
+        Object.entries(params ?? {}).filter(([, value]) => value !== "" && value !== null && value !== undefined),
+      ),
+      options,
+    ),
 };
 
-const tableColumns: AppListColumn<InventoryAdjustmentItem>[] = [
-  {
-    title: "ID",
-    dataIndex: "id",
-    width: 90,
-  },
-  {
-    title: "Producto",
-    dataIndex: "product.name",
-    width: 240,
-  },
-  {
-    title: "Tipo",
-    key: "direction",
-    width: 170,
-    // Tipo y razón son atributos del ajuste, no estados: texto con ícono.
-    render: (_, item) => {
-      const isIn = item.direction === "in";
+const TYPE_FILTER: FilterConfig = {
+  type: "simple",
+  name: "direction",
+  label: "Tipo",
+  options: [
+    { label: "Todos", value: "" },
+    { label: "Entradas", value: "in" },
+    { label: "Salidas", value: "out" },
+  ],
+};
 
-      return (
-        <IconLabel
-          icon={isIn ? "arrow-up-bold-circle" : "arrow-down-bold-circle"}
-          label={isIn ? "Entrada" : "Salida"}
-        />
-      );
-    },
-  },
-  {
-    title: "Cantidad",
-    key: "quantity",
-    width: 170,
-    align: "right",
-    render: (_, item) =>
-      formatQuantity(item.quantity, item.unit?.code || item.unit?.name),
-  },
-  {
-    title: "Razón",
-    key: "reason",
-    dataIndex: "reason_code_label",
-    width: 220,
-    render: (value, item) => (
-      <IconLabel
-        icon={getReasonIcon(item.reason_code || "")}
-        label={reasonText(item, value || item.reason_code || "-")}
-      />
-    ),
-  },
-  {
-    title: "Fecha",
-    key: "applied_at",
-    width: 130,
-    render: (_, item) => formatDate(item.applied_at || "") || "-",
-  },
-];
+const REASON_FILTER: FilterConfig = {
+  type: "simple",
+  name: "reason_code",
+  label: "Motivo",
+  options: [
+    { label: "Todos", value: "" },
+    ...(Object.keys(REASONS) as ReasonCode[]).map((code) => ({ label: REASONS[code].label, value: code })),
+  ],
+};
+
+const ORIGIN_LABELS: Record<OriginType, string> = {
+  manual: "Manual",
+  production_order: "Producción",
+  inventory_count: "Conteo",
+  transfer: "Transferencia",
+};
+
+const ORIGIN_FILTER: FilterConfig = {
+  type: "simple",
+  name: "origin",
+  label: "Origen",
+  options: [
+    { label: "Todos", value: "" },
+    ...(Object.keys(ORIGINS) as OriginType[]).map((type) => ({ label: ORIGIN_LABELS[type], value: type })),
+  ],
+};
+
+const STATUS_FILTER: FilterConfig = {
+  type: "simple",
+  name: "status",
+  label: "Estado",
+  options: [
+    { label: "Todos", value: "" },
+    { label: "Vigentes", value: "active" },
+    { label: "Deshechos", value: "reverted" },
+  ],
+};
 
 export default function AdjustmentsIndex(props: AdjustmentsIndexProps) {
-  const { colors } = useTheme();
   const router = useRouter();
-  const { selectedLocation, isLoadingLocations } = useSelectedLocation();
+  const navigation = useNavigation();
+  const { can } = useCan();
+  const { selectedCompany } = useAuth();
+  const base = String(props.route || "/(tabs)/home/adjustment");
+  // Registrar pide inventory_manage; abrir uno, inventory_read.
+  const canManage = can("inventory_manage");
+  // Quien entra a todas las sucursales las ve juntas (y cada renglón dice cuál).
+  const locationFilter = useLocationFilter();
+  const showLocation = !!locationFilter;
 
-  const route: Href = props.route || "/(tabs)/home/adjustment";
-  const { hasPermission } = useAuth();
-  const canManage = hasPermission("inventory_manage");
+  useLayoutEffect(() => {
+    navigation.setOptions({ title: "Ajustes de inventario" });
+  }, [navigation]);
 
-  if (isLoadingLocations) {
-    return <Text>Cargando...</Text>;
-  }
+  const styles = useThemedStyles((c) => ({
+    movement: { fontSize: 13, lineHeight: 18, fontWeight: "600", color: c.text, fontVariant: ["tabular-nums"] },
+    movementIn: { color: c.successStrong },
+    movementMuted: { color: c.textMuted },
+    cardLine: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+  }));
+
+  const movementStyle = (item: AdjustmentRecord) => [
+    styles.movement,
+    item.direction === "in" && styles.movementIn,
+    // Lo deshecho ya no cuenta: en gris.
+    isReverted(item) && styles.movementMuted,
+  ];
+
+  const locationName = (item: AdjustmentRecord) =>
+    item.location?.name ? shortLocationName(item.location.name, selectedCompany?.name) : null;
+
+  const filters = useMemo<FilterConfig[]>(
+    () => [
+      TYPE_FILTER,
+      REASON_FILTER,
+      ORIGIN_FILTER,
+      dateRangeFilter,
+      STATUS_FILTER,
+      ...(locationFilter ? [locationFilter] : []),
+    ],
+    [locationFilter],
+  );
+
+  const columns: AppListColumn<AdjustmentRecord>[] = [
+    {
+      title: "Producto",
+      key: "product",
+      width: 250,
+      render: (_, item) => item.product?.name ?? "Producto",
+    },
+    {
+      title: "Movimiento",
+      key: "movement",
+      width: 110,
+      align: "right",
+      render: (_, item) => <Text style={movementStyle(item)}>{signedQuantity(item)}</Text>,
+    },
+    {
+      title: "Motivo",
+      key: "reason",
+      width: 190,
+      render: (_, item) => {
+        const reason = reasonInfo(item.reason_code);
+        return <IconLabel icon={reason.icon} label={reason.label} />;
+      },
+    },
+    {
+      title: "Registró",
+      key: "user",
+      width: 150,
+      render: (_, item) => item.created_by_user?.name ?? null,
+    },
+    ...(showLocation
+      ? [
+          {
+            title: "Sucursal",
+            key: "location",
+            width: 140,
+            render: (_: unknown, item: AdjustmentRecord) => locationName(item),
+          },
+        ]
+      : []),
+    {
+      title: "Fecha",
+      key: "when",
+      width: 150,
+      render: (_, item) => whenText(item),
+    },
+    {
+      title: "",
+      key: "status",
+      width: 100,
+      // Solo los deshechos: los demás quedan en blanco (sin "—").
+      render: (_, item) => (isReverted(item) ? <StatusBadge label="Deshecho" /> : <View />),
+    },
+  ];
 
   return (
-    // Ver la lista pide inventory_list (igual que el backend); registrar un
-    // ajuste, inventory_manage.
+    // Ver la lista pide inventory_list (igual que el backend).
     <PermissionGate permission="inventory_list">
-      <AppList<InventoryAdjustmentItem>
-      title="Ajustes de Inventario"
-      service={Services.inventoryAdjustments}
-      // Abrir un ajuste pide inventory_read; crear, inventory_manage.
-      permissions={{ read: "inventory_read" }}
-      defaultFilters={{
-        location_id: selectedLocation?.id,
-      }}
-      filters={[
-        {
-          type: "simple",
-          name: "direction",
-          label: "Tipo",
-          options: [
-            { label: "Todos", value: "" },
-            { label: "Entrada", value: "in" },
-            { label: "Salida", value: "out" },
-          ],
-        },
-        {
-          type: "simple",
-          name: "reason_code",
-          label: "Razón",
-          options: [
-            { label: "Todas", value: "" },
-            { label: "Diferencia de conteo", value: "count_diff" },
-            { label: "Daño", value: "damage" },
-            { label: "Pérdida", value: "loss" },
-            { label: "Vencimiento", value: "expiry" },
-            { label: "Robo", value: "theft" },
-            { label: "Encontrado", value: "found" },
-            { label: "Otro", value: "other" },
-          ],
-        },
-      ]}
-      onPressCreate={
-        canManage ? () => router.push(`${route}/form` as any) : undefined
-      }
-      renderCard={({ item }: { item: InventoryAdjustmentItem }) => {
-        const isIncrease = item.direction === "in";
-
-        return {
-          title: item.product?.name || `Ajuste #${item.id}`,
-          description: (
-            <>
-              <AppList.Description>
-                {`${Number(item.quantity || 0)} ${item.unit?.code || item.unit?.name || ""}`.trim()}
-              </AppList.Description>
-            </>
-          ),
-          right: (
-            <View style={{ justifyContent: "center", alignItems: "flex-end" }}>
-              <MaterialCommunityIcons
-                name={isIncrease ? "arrow-up-circle" : "arrow-down-circle"}
-                size={32}
-                color={isIncrease ? colors.success : colors.error}
-              />
-            </View>
-          ),
-          bottom: [
-            {
-              label: "Fecha",
-              value: formatDate(item.applied_at || "") || "Sin fecha",
-            },
-            {
-              label: "Acción",
-              value: reasonText(item),
-            },
-          ],
-        };
-      }}
-      onItemPress={(item) => router.push(`${route}/${item.id}` as any)}
-      searchPlaceholder="Buscar ajustes..."
-      emptyMessage="No hay ajustes registrados"
-      columns={tableColumns}
-      menu={{
-        showView: true,
-        showEdit: false,
-        showDelete: false,
-      }}
-    />
+      <AppList<AdjustmentRecord>
+        title="Ajustes de inventario"
+        service={listService}
+        permissions={{ read: "inventory_read", create: "inventory_manage" }}
+        filters={filters}
+        onPressCreate={canManage ? () => router.push(`${base}/form` as any) : undefined}
+        onItemPress={(item) => router.push(`${base}/${item.id}` as any)}
+        searchPlaceholder="Buscar por producto o nota"
+        emptyMessage="No hay ajustes que mostrar"
+        columns={columns}
+        // Sin menú ⋮: tocar el renglón abre el detalle.
+        menu={{ showView: false, showEdit: false, showDelete: false }}
+        renderCard={({ item }) => {
+          const reason = reasonInfo(item.reason_code);
+          return {
+            title: item.product?.name ?? "Producto",
+            description: (
+              <Text style={styles.cardLine}>
+                <Text style={movementStyle(item)}>{signedQuantity(item)}</Text>
+                {` · ${reason.label}`}
+              </Text>
+            ),
+            right: isReverted(item) ? <StatusBadge label="Deshecho" /> : undefined,
+            bottom: [
+              {
+                label: "",
+                value: [whenText(item), item.created_by_user?.name, showLocation ? locationName(item) : null]
+                  .filter(Boolean)
+                  .join(" · "),
+              },
+            ],
+          };
+        }}
+      />
     </PermissionGate>
   );
-}
-
-function getReasonIcon(reasonCode: string) {
-  switch (reasonCode) {
-    case "count_diff":
-      return "scale-balance";
-    case "damage":
-      return "package-variant-closed-remove";
-    case "loss":
-      return "close-circle-outline";
-    case "expiry":
-      return "calendar-remove";
-    case "theft":
-      return "alert-octagon-outline";
-    case "found":
-      return "check-circle-outline";
-    default:
-      return "information-outline";
-  }
 }

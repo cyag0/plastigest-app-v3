@@ -7,27 +7,31 @@ import {
   canManageUser,
   isProtectedUser,
 } from "@/components/Administration/Users/userAccess";
-import { UserScope, apiMessage, shortLocationName } from "@/components/Administration/Users/userDisplay";
+import { UserScope, shortLocationName } from "@/components/Administration/Users/userDisplay";
 import { useCompanyRoles } from "@/components/Administration/Users/useCompanyRoles";
 import { useUserScope } from "@/components/Administration/Users/useUserScope";
+import EmptyState from "@/components/App/EmptyState";
+import { ListGroup, ListRow } from "@/components/App/ListGroup";
+import RecordLoadError, { recordLoadProblem, type RecordLoadProblem } from "@/components/App/RecordLoadError";
+import FormNote from "@/components/Auth/FormNote";
 import AppDependency from "@/components/Form/AppDependency";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
-import MakeForm from "@/components/Form/AppForm/hoc";
+import MakeForm, { InputLabel } from "@/components/Form/AppForm/hoc";
+import ReadonlyText from "@/components/Form/AppForm/ReadonlyText";
 import { FormInput } from "@/components/Form/AppInput";
 import { FormSwitch } from "@/components/Form/AppSwitch";
-import { tokens } from "@/constants/tokens";
+import { FormSection } from "@/components/Form/FormLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
-import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
 import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
 import { goBack } from "@/utils/navigation";
 import axiosClient from "@/utils/axios";
 import Services from "@/utils/services";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { Button, TextInput } from "react-native-paper";
 import * as Yup from "yup";
 import LocationRoleList, { LocationRoleItem } from "../Administration/CompanyAssignmentWidget";
@@ -48,14 +52,27 @@ interface UserFormSharedProps {
 
 const FormRolePicker = MakeForm(RolePicker, { label: false });
 
+/** Lo que cabe en la tabla users (name y email son string de 255). */
+const MAX_LENGTH = 255;
+
+/** Sucursal y rol de cada acceso, para saber si cambiaron. */
+function accessKey(items: { location_id?: number | string | null; role_id?: number | string | null }[]) {
+  return items
+    .filter((item) => item.location_id)
+    .map((item) => `${item.location_id}:${item.role_id ?? ""}`)
+    .sort()
+    .join(",");
+}
+
 /**
- * Alta y edición de usuarios. En celular cabe en una pantalla: foto chica a
- * un lado del nombre, los datos, y al final el acceso (el rol en la sucursal
- * o las sucursales y roles en la empresa).
+ * Alta y edición de usuarios: foto chica al lado, nombre, correo (con el que
+ * entra) y contraseña; luego su acceso (el rol en la sucursal o las sucursales
+ * y roles en la empresa) y, al editar, si está activo.
  *
  * Solo ofrece lo que quien edita puede cambiar (el backend rechaza lo demás
  * con 403): a un administrador del sistema solo lo edita otro, y nadie se
- * desactiva ni se cambia el rol a sí mismo desde aquí.
+ * desactiva ni se cambia el rol a sí mismo desde aquí. Guardar ya no pregunta
+ * «¿Estás seguro?» cada vez: solo cuando cambias tus propias sucursales.
  */
 export default function UserFormShared(props: UserFormSharedProps) {
   const { id, companyId } = props;
@@ -78,8 +95,9 @@ export default function UserFormShared(props: UserFormSharedProps) {
   // cambió).
   const [target, setTarget] = useState<AdminUser | null>(null);
   const initialRef = useRef<UserFormData | null>(null);
-  // No se pudo abrir (403/404: no existe o no hay acceso a él).
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // No se pudo abrir (404: no existe o no hay acceso a él; 403; red): se
+  // explica en lugar del formulario, como en los demás registros.
+  const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
   const { roleIds } = useCompanyRoles(isEditing);
 
   const branch = shortLocationName(location?.name ?? "esta sucursal", selectedCompany?.name);
@@ -97,19 +115,26 @@ export default function UserFormShared(props: UserFormSharedProps) {
     navigation.setOptions({ title: isEditing ? "Editar usuario" : "Nuevo usuario" });
   }, [navigation, isEditing]);
 
-  // Password validation depends on whether we are creating or editing
+  // La contraseña es obligatoria al crear; al editar solo se revisa si se
+  // escribió una nueva.
   const validationSchema = useMemo(
     () =>
       Yup.object().shape({
-        name: Yup.string().trim().required("El nombre es requerido"),
-        email: Yup.string().email("Email inválido").required("El email es requerido"),
+        name: Yup.string().trim().required("Escribe su nombre").max(MAX_LENGTH, `Máximo ${MAX_LENGTH} caracteres`),
+        email: Yup.string()
+          .trim()
+          .required("Escribe su correo: con él entra a la app")
+          .email("Revisa el correo; parece incompleto")
+          .max(MAX_LENGTH, `Máximo ${MAX_LENGTH} caracteres`),
         password: isEditing
-          ? // Editing: optional — but if the user typed something it must be ≥8 chars
-            Yup.string().test("password-edit", "Mínimo 8 caracteres", (v) => !v || v.length >= 8)
-          : // Creating: required and must be ≥8 chars
-            Yup.string().min(8, "Mínimo 8 caracteres").required("La contraseña es requerida"),
+          ? Yup.string().test("password-edit", "Debe tener al menos 8 caracteres", (v) => !v || v.length >= 8)
+          : Yup.string().required("Escribe una contraseña").min(8, "Debe tener al menos 8 caracteres"),
         ...(canChangeRole
-          ? { location_role_id: Yup.number().required("Elige su rol en esta sucursal").typeError("Elige su rol en esta sucursal") }
+          ? {
+              location_role_id: Yup.number()
+                .required("Elige su rol en esta sucursal")
+                .typeError("Elige su rol en esta sucursal"),
+            }
           : {}),
       }),
     [isEditing, canChangeRole],
@@ -127,19 +152,15 @@ export default function UserFormShared(props: UserFormSharedProps) {
 
     let response: any;
     try {
-      // silent: si falla, el motivo se muestra en el formulario (loadError).
+      // silent: si falla, el motivo se muestra en la pantalla (loadProblem).
       response = await axiosClient.get(`/auth/admin/users/${id}`, { silent: true });
-    } catch (error: any) {
+    } catch (error) {
       initialRef.current = null;
-      setLoadError(
-        error?.response?.status === 404
-          ? "Este usuario no existe o no tienes acceso a él."
-          : apiMessage(error, "No se pudo cargar el usuario."),
-      );
+      setLoadProblem(recordLoadProblem(error, "No se pudo cargar el usuario."));
       return empty;
     }
     const user: AdminUser = response?.data?.data ?? response?.data ?? {};
-    setLoadError(null);
+    setLoadProblem(null);
     setTarget(user);
 
     if (!isBranch) {
@@ -147,6 +168,8 @@ export default function UserFormShared(props: UserFormSharedProps) {
         (user.location_roles ?? []).map((lr) => ({
           location_id: lr.location_id,
           role_id: lr.role_id ?? undefined,
+          location_name: lr.location_name,
+          role_name: lr.role_name,
         })),
       );
     }
@@ -171,6 +194,7 @@ export default function UserFormShared(props: UserFormSharedProps) {
       alerts.error("No se cargó el usuario; vuelve a abrir el formulario.");
       return;
     }
+    const sendLocationRoles = !isBranch && !restricted && locationRolesTouched;
     const payload = buildUserPayload({
       values,
       initial: isEditing ? initialRef.current : null,
@@ -178,26 +202,109 @@ export default function UserFormShared(props: UserFormSharedProps) {
       canChangePassword: !locked && !restricted,
       canChangeActive,
       canChangeRole,
-      locationRoles: !isBranch && !restricted && locationRolesTouched ? locationRoles : null,
+      locationRoles: sendLocationRoles ? locationRoles : null,
     });
 
-    const confirmed = await alerts.confirm("¿Estás seguro de guardar los cambios?", {
-      okText: "Sí, guardar",
-      cancelText: "Cancelar",
-      title: "Confirmar guardado",
-    });
-    if (!confirmed) return;
+    // Antes se preguntaba «¿Estás seguro?» en cada guardado. Solo hace falta
+    // cuando cambias tu propio acceso: puedes quedarte sin esta pantalla.
+    if (
+      isSelf &&
+      sendLocationRoles &&
+      accessKey(locationRoles) !== accessKey(target?.location_roles ?? [])
+    ) {
+      const confirmed = await alerts.confirm(
+        "Cambiaste tus propias sucursales o roles. Si te quitas esta sucursal o tu rol cambia, puedes perder el acceso a esta pantalla.",
+        { title: "¿Guardar tu acceso?", okText: "Guardar", cancelText: "Revisar" },
+      );
+      if (!confirmed) return;
+    }
 
     const body = (await objectToFormDataWithNestedInputsAsync(payload)) as any;
     if (id) {
       await Services.admin.users.update(id, body);
-      alerts.success("Actualizado correctamente");
+      alerts.success("Cambios guardados");
     } else {
       await Services.admin.users.store(body);
-      alerts.success("Creado correctamente");
+      alerts.success("Usuario creado");
     }
     goBack();
   };
+
+  const accessSection = restricted ? null : isBranch ? (
+    <FormSection
+      title={`Rol en ${branch}`}
+      description={
+        canChangeRole
+          ? isEditing
+            ? "Solo cambia su rol en esta sucursal; sus otras sucursales no se tocan."
+            : "Entra a esta sucursal con el rol que elijas."
+          : undefined
+      }
+    >
+      {canChangeRole ? (
+        <FormRolePicker name="location_role_id" />
+      ) : (
+        <ListGroup>
+          <ListRow
+            icon="shield-account-outline"
+            title={target?.location_role?.role_name ?? "Sin rol"}
+            subtitle="Tu propio rol lo cambia otra persona con permiso para editar usuarios."
+            chevron={false}
+          />
+        </ListGroup>
+      )}
+    </FormSection>
+  ) : (
+    <FormSection
+      title="Sucursales y roles"
+      description={isSelf ? undefined : "A qué sucursales entra y con qué rol en cada una."}
+    >
+      {isSelf && (
+        <View style={styles.note}>
+          <FormNote tone="warning">
+            Es tu propio usuario: si te quitas una sucursal o cambias tu rol, puedes perder el acceso.
+          </FormNote>
+        </View>
+      )}
+      <LocationRoleList
+        value={locationRoles}
+        onChange={(items) => {
+          setLocationRoles(items);
+          setLocationRolesTouched(true);
+        }}
+        companyId={companyId}
+      />
+    </FormSection>
+  );
+
+  if (loadProblem) {
+    return (
+      <RecordLoadError
+        problem={loadProblem}
+        notFoundTitle="No se encontró el usuario"
+        notFoundDescription="No existe o no tienes acceso a él."
+        errorTitle="No se pudo cargar el usuario"
+        // Vuelve a montar el formulario, que lo pide de nuevo.
+        onRetry={() => setLoadProblem(null)}
+      />
+    );
+  }
+
+  // A un administrador del sistema solo lo edita otro: se explica en lugar
+  // del formulario.
+  if (locked) {
+    return (
+      <View style={styles.centered}>
+        <EmptyState
+          icon="shield-lock-outline"
+          title={`${target?.name ?? "Este usuario"} es administrador del sistema`}
+          description="Solo otro administrador del sistema puede cambiar sus datos, su contraseña, su acceso o sus roles."
+          actionLabel="Volver"
+          onAction={() => goBack()}
+        />
+      </View>
+    );
+  }
 
   return (
     <AppForm
@@ -208,257 +315,174 @@ export default function UserFormShared(props: UserFormSharedProps) {
       permissionPrefix="users"
       validationSchema={validationSchema}
       initialValues={loadInitialValues}
-      showResetButton={false}
-      showButtons={!locked && !loadError}
       submitButtonText={isEditing ? "Guardar cambios" : "Crear usuario"}
       onSubmit={(_formData, formik) => submit(formik.values as UserFormData)}
     >
-      {loadError ? (
-        <View style={styles.wrapper}>
-          <View style={styles.lockedBox}>
-            <MaterialCommunityIcons name="account-question-outline" size={22} color={colors.textSecondary} />
-            <Text style={[styles.helper, { flex: 1 }]}>{loadError}</Text>
-          </View>
-          <Button mode="outlined" icon="arrow-left" onPress={() => goBack()} style={styles.lockedBack}>
-            Volver
-          </Button>
+      {/* Foto: chica, al lado; antes ocupaba media pantalla con el logo de la app. */}
+      <View style={styles.photoRow}>
+        <AppDependency name="name">
+          {(name) => (
+            <AppDependency name="avatar">
+              {(avatar) => <UserAvatar name={name} uri={avatar?.[0]?.uri} size={64} />}
+            </AppDependency>
+          )}
+        </AppDependency>
+        <View style={styles.photoBody}>
+          <InputLabel label="Foto" optional />
+          <FormUpload
+            name="avatar"
+            accept="images"
+            multiple={false}
+            maxFiles={1}
+            showPreview={false}
+            containerStyle={{ marginBottom: 0 }}
+            renderButtons={({ handleCameraPick, handleImagePick, uploading, disabled }) => (
+              <View style={styles.photoButtons}>
+                <Button
+                  compact
+                  mode="outlined"
+                  icon="camera-outline"
+                  onPress={handleCameraPick}
+                  disabled={disabled || uploading}
+                >
+                  Cámara
+                </Button>
+                <Button
+                  compact
+                  mode="outlined"
+                  icon="image-outline"
+                  onPress={handleImagePick}
+                  disabled={disabled || uploading}
+                >
+                  Galería
+                </Button>
+              </View>
+            )}
+          />
         </View>
-      ) : locked ? (
-        <View style={styles.wrapper}>
-          <View style={styles.lockedBox}>
-            <MaterialCommunityIcons name="shield-lock-outline" size={22} color={colors.info} />
-            <View style={styles.photoBody}>
-              <Text style={styles.lockedTitle}>{target?.name} es administrador del sistema</Text>
-              <Text style={styles.helper}>
-                Solo otro administrador del sistema puede cambiar sus datos, su contraseña, su acceso o
-                sus roles.
-              </Text>
-            </View>
-          </View>
-          <Button mode="outlined" icon="arrow-left" onPress={() => goBack()} style={styles.lockedBack}>
-            Volver
-          </Button>
+      </View>
+
+      {restricted && (
+        <View style={styles.note}>
+          <FormNote icon="shield-lock-outline">
+            {target?.name} tiene permisos que tú no tienes: puedes cambiar su nombre y su foto; su correo,
+            contraseña, estado, rol y sucursales los cambia alguien con esos permisos.
+          </FormNote>
+        </View>
+      )}
+
+      {/* autoComplete off / new-password: son los datos de otra persona; el
+          navegador no debe llenarlos con los de quien está dando de alta. */}
+      <FormInput
+        name="name"
+        label="Nombre"
+        placeholder="Ana López"
+        autoCapitalize="words"
+        autoComplete="off"
+        maxLength={MAX_LENGTH}
+      />
+      {restricted ? (
+        // Sin permiso para cambiarlo se lee como dato, no como un campo
+        // deshabilitado que se ve igual a los demás.
+        <View style={styles.fieldBlock}>
+          <InputLabel label="Correo electrónico" />
+          <ReadonlyText text={target?.email ?? ""} />
         </View>
       ) : (
-        <View style={styles.wrapper}>
-          {/* Foto: chica, al lado; antes ocupaba media pantalla con el logo de la app. */}
-          <View style={styles.photoRow}>
-            <AppDependency name="name">
-              {(name) => (
-                <AppDependency name="avatar">
-                  {(avatar) => <UserAvatar name={name} uri={avatar?.[0]?.uri} size={64} />}
-                </AppDependency>
-              )}
-            </AppDependency>
-            <View style={styles.photoBody}>
-              <Text style={styles.photoLabel}>Foto (opcional)</Text>
-              <FormUpload
-                name="avatar"
-                accept="images"
-                multiple={false}
-                maxFiles={1}
-                showPreview={false}
-                containerStyle={{ marginBottom: 0 }}
-                renderButtons={({ handleCameraPick, handleImagePick, uploading, disabled }) => (
-                  <View style={styles.photoButtons}>
-                    <Button
-                      compact
-                      mode="outlined"
-                      icon="camera-outline"
-                      onPress={handleCameraPick}
-                      disabled={disabled || uploading}
-                    >
-                      Cámara
-                    </Button>
-                    <Button
-                      compact
-                      mode="outlined"
-                      icon="image-outline"
-                      onPress={handleImagePick}
-                      disabled={disabled || uploading}
-                    >
-                      Galería
-                    </Button>
-                  </View>
-                )}
-              />
-            </View>
-          </View>
+        <FormInput
+          name="email"
+          label="Correo electrónico"
+          placeholder="ana@cocosfrancisco.mx"
+          hint="Con este correo entra a la app."
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoComplete="off"
+          autoCorrect={false}
+          maxLength={MAX_LENGTH}
+        />
+      )}
 
-          <Text style={styles.sectionTitle}>Datos</Text>
-          {restricted && (
-            <View style={styles.lockedBox}>
-              <MaterialCommunityIcons name="shield-lock-outline" size={22} color={colors.info} />
-              <Text style={[styles.helper, { flex: 1 }]}>
-                {target?.name} tiene permisos que tú no tienes: puedes cambiar su nombre y su foto; su
-                correo, contraseña, estado, rol y sucursales los cambia alguien con esos permisos.
-              </Text>
-            </View>
-          )}
-          <FormInput name="name" label="Nombre completo" placeholder="Ej: Juan Pérez" required autoCapitalize="words" />
-          <FormInput
-            name="email"
-            label="Correo electrónico"
-            placeholder="Ej: juan@empresa.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            required
-            disabled={restricted}
-          />
-
-          {restricted ? null : showPasswordField ? (
-            <FormInput
-              name="password"
-              label={isEditing ? "Nueva contraseña" : "Contraseña"}
-              placeholder="Mínimo 8 caracteres"
-              secureTextEntry={!passwordVisible}
-              autoCapitalize="none"
-              autoCorrect={false}
-              required={!isEditing}
-              right={
-                <TextInput.Icon
-                  icon={passwordVisible ? "eye-off-outline" : "eye-outline"}
-                  onPress={() => setPasswordVisible((v) => !v)}
-                  forceTextInputFocus={false}
-                />
-              }
+      {restricted ? null : showPasswordField ? (
+        <FormInput
+          name="password"
+          label={isEditing ? "Nueva contraseña" : "Contraseña"}
+          hint={
+            isEditing
+              ? "Al menos 8 caracteres. Al guardarla se cierran sus sesiones abiertas."
+              : "Al menos 8 caracteres. Después la puede cambiar en su perfil."
+          }
+          secureTextEntry={!passwordVisible}
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoComplete="new-password"
+          textContentType="newPassword"
+          right={
+            <TextInput.Icon
+              icon={passwordVisible ? "eye-off-outline" : "eye-outline"}
+              color={colors.textMuted}
+              onPress={() => setPasswordVisible((v) => !v)}
+              forceTextInputFocus={false}
+              accessibilityLabel={passwordVisible ? "Ocultar contraseña" : "Mostrar contraseña"}
             />
-          ) : (
-            <Button
-              mode="text"
-              icon="lock-reset"
-              onPress={() => setShowPasswordField(true)}
-              style={styles.passwordButton}
-              contentStyle={{ justifyContent: "flex-start" }}
-            >
-              Cambiar contraseña
-            </Button>
-          )}
-
-          {canChangeActive && (
-            <View style={styles.switchBox}>
-              <FormSwitch name="is_active" text="Usuario activo" />
-              <Text style={styles.helper}>Si lo desactivas no puede entrar a la app y se cierran sus sesiones.</Text>
-            </View>
-          )}
-
-          {/* Acceso */}
-          {restricted ? null : isBranch ? (
-            <>
-              <Text style={styles.sectionTitle}>Rol en {branch}</Text>
-              {canChangeRole ? (
-                <>
-                  <Text style={styles.helper}>
-                    {isEditing
-                      ? "Solo cambia su rol en esta sucursal; sus otras sucursales no se tocan."
-                      : "Queda con acceso a esta sucursal con el rol que elijas."}
-                  </Text>
-                  <FormRolePicker name="location_role_id" containerStyle={{ marginTop: tokens.spacing[3] }} />
-                </>
-              ) : (
-                <Text style={styles.helper}>
-                  {target?.location_role?.role_name ?? "Sin rol"}. Tu propio rol lo cambia otra persona con
-                  permiso para editar usuarios.
-                </Text>
-              )}
-            </>
-          ) : (
-            <>
-              <Text style={styles.sectionTitle}>Sucursales y roles</Text>
-              <Text style={styles.helper}>
-                {isSelf
-                  ? "Es tu propio usuario: si te quitas una sucursal o cambias tu rol puedes perder el acceso."
-                  : "Las sucursales a las que puede entrar y su rol en cada una."}
-              </Text>
-              <View style={{ marginTop: tokens.spacing[3] }}>
-                <LocationRoleList
-                  value={locationRoles}
-                  onChange={(items) => {
-                    setLocationRoles(items);
-                    setLocationRolesTouched(true);
-                  }}
-                  companyId={companyId}
-                />
-              </View>
-            </>
-          )}
+          }
+        />
+      ) : (
+        <View style={styles.fieldBlock}>
+          <InputLabel label="Contraseña" />
+          <Button
+            mode="outlined"
+            icon="lock-reset"
+            onPress={() => setShowPasswordField(true)}
+            style={styles.passwordButton}
+          >
+            Cambiar contraseña
+          </Button>
         </View>
+      )}
+
+      {accessSection}
+
+      {canChangeActive && (
+        <FormSwitch
+          name="is_active"
+          text="Activo"
+          description="Si lo desactivas, no puede entrar a la app y se cierran sus sesiones."
+        />
       )}
     </AppForm>
   );
 }
 
-const makeStyles = (c: ReturnType<typeof useTheme>["colors"]) => ({
-  wrapper: {
-    width: "100%" as const,
-    maxWidth: 640,
-    alignSelf: "center" as const,
-    paddingBottom: tokens.spacing[4],
+const makeStyles = themedStyles((c) => ({
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    backgroundColor: c.background,
   },
   photoRow: {
-    flexDirection: "row" as const,
-    alignItems: "center" as const,
-    gap: tokens.spacing[4],
-    padding: tokens.spacing[4],
-    backgroundColor: c.surface,
-    borderRadius: tokens.radius.md,
-    borderWidth: 1,
-    borderColor: c.border,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+    marginBottom: 22,
   },
   photoBody: {
     flex: 1,
     minWidth: 0,
-    gap: tokens.spacing[2],
-  },
-  photoLabel: {
-    ...tokens.typography.caption,
-    color: c.textSecondary,
   },
   photoButtons: {
-    flexDirection: "row" as const,
-    flexWrap: "wrap" as const,
-    gap: tokens.spacing[2],
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
-  sectionTitle: {
-    ...tokens.typography.bodyMd,
-    fontWeight: "700" as const,
-    color: c.text,
-    marginTop: tokens.spacing[6],
-    marginBottom: tokens.spacing[1],
+  note: {
+    marginBottom: 18,
   },
-  helper: {
-    ...tokens.typography.caption,
-    color: c.textSecondary,
+  // Lo que va en lugar de un campo (la contraseña sin cambiar, el correo que
+  // no se puede cambiar): con el mismo espacio abajo que los campos.
+  fieldBlock: {
+    marginBottom: 18,
   },
   passwordButton: {
-    alignSelf: "flex-start" as const,
-    marginBottom: tokens.spacing[2],
+    alignSelf: "flex-start",
   },
-  switchBox: {
-    marginTop: tokens.spacing[2],
-    padding: tokens.spacing[3],
-    paddingTop: tokens.spacing[1],
-    backgroundColor: c.surface,
-    borderRadius: tokens.radius.md,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  lockedBox: {
-    flexDirection: "row" as const,
-    alignItems: "flex-start" as const,
-    gap: tokens.spacing[3],
-    padding: tokens.spacing[4],
-    backgroundColor: c.infoSoft,
-    borderRadius: tokens.radius.md,
-  },
-  lockedTitle: {
-    ...tokens.typography.bodyMd,
-    fontWeight: "700" as const,
-    color: c.text,
-  },
-  lockedBack: {
-    alignSelf: "flex-start" as const,
-    marginTop: tokens.spacing[4],
-  },
-});
+}));

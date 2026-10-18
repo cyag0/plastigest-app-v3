@@ -1,57 +1,128 @@
-import { goBack } from "@/utils/navigation";
+/**
+ * Gasto de la sucursal (gas, renta, sueldos, transporte…). Arriba qué fue y
+ * cuánto; abajo cómo se pagó: el efectivo que sale de la caja se descuenta en
+ * el corte, y el que pagó el dueño de su bolsa no.
+ *
+ * Un gasto que ya entró en un turno de caja cerrado no cambia de monto,
+ * método, fecha ni «pagado con caja» (el corte ya se firmó): al guardar, el
+ * servidor lo dice, esos campos vuelven a lo guardado y se bloquean; la
+ * categoría y la descripción sí se pueden cambiar.
+ */
+
 import RecordLoadError, {
   recordLoadProblem,
   type RecordLoadProblem,
 } from "@/components/App/RecordLoadError";
+import SegmentedControl from "@/components/App/SegmentedControl";
+import { InputLabel } from "@/components/Form/AppForm/hoc";
+import ReadonlyText from "@/components/Form/AppForm/ReadonlyText";
+import AppDatePicker from "@/components/Form/AppDatePicker";
+import AppInput from "@/components/Form/AppInput";
+import AppSelect from "@/components/Form/AppSelect";
+import AppSwitch from "@/components/Form/AppSwitch";
+import { FORM_MAX_WIDTH, FormFooter, FormRow, FormSection } from "@/components/Form/FormLayout";
 import AmountPreview from "@/components/Pos/AmountPreview";
 import { apiErrorCode, apiErrorMessage, SALE_ERROR_CODES } from "@/components/Pos/saleErrors";
-import { useAlerts } from "@/hooks/useAlerts";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
-import { parseMoney } from "@/utils/format";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
+import { parseLocalDate, toLocalDateString } from "@/utils/dates";
+import { claimErrorAlert } from "@/utils/errorNotice";
+import { formatMoney, parseMoney } from "@/utils/format";
 import { roundMoney } from "@/utils/money";
+import { goBack } from "@/utils/navigation";
 import Services from "@/utils/services";
-import { router, useLocalSearchParams } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useLocalSearchParams, useNavigation } from "expo-router";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Button,
-  Card,
-  Switch,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   Text,
-  TextInput,
-} from "react-native-paper";
-import { parseLocalDate, toLocalDateString } from "@/utils/dates";
-import AppSelect from "@/components/Form/AppSelect";
-import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
-import { DatePickerInput } from "react-native-paper-dates";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from "react-native";
+import { Button } from "react-native-paper";
 
 interface ExpenseFormProps {
   id?: number;
   readonly?: boolean;
 }
 
+type PaymentMethod = "efectivo" | "tarjeta" | "transferencia";
+
+/** Los del backend (Expense::getPaymentMethods): tarjeta y transferencia nunca salen de la caja. */
+const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
+  { value: "efectivo", label: "Efectivo" },
+  { value: "tarjeta", label: "Tarjeta" },
+  { value: "transferencia", label: "Transferencia" },
+];
+
+/** La descripción admite 1000 caracteres (validación del backend). */
+const DESCRIPTION_MAX = 1000;
+
+const listRoute = "/(tabs)/home/expenses";
+
+/**
+ * Etiqueta, campo y, debajo, el error (al intentar guardar) o una ayuda
+ * corta: lo mismo que pintan los campos de AppForm.
+ */
+function Field({
+  label,
+  optional,
+  error,
+  hint,
+  children,
+  style,
+}: {
+  label: string;
+  optional?: boolean;
+  error?: string | null;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const styles = useThemedStyles(makeStyles);
+  return (
+    <View style={[styles.field, style]}>
+      <InputLabel label={label} optional={optional} />
+      {children}
+      {error ? (
+        <Text style={styles.error}>{error}</Text>
+      ) : typeof hint === "string" ? (
+        <Text style={styles.hint}>{hint}</Text>
+      ) : (
+        (hint ?? null)
+      )}
+    </View>
+  );
+}
+
 export default function ExpenseForm(props: ExpenseFormProps) {
   const params = useLocalSearchParams();
-  const expenseId =
-    props.id || (params.id ? parseInt(params.id as string) : undefined);
+  const expenseId = props.id || (params.id ? parseInt(params.id as string) : undefined);
   const alerts = useAlerts();
+  const navigation = useNavigation();
 
-  const { location, selectedCompany } = useAuth();
+  const { location } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const { can } = useCan();
   // Guardar cambios pide expenses_update (crear, expenses_create): sin él el
   // gasto se ve en «Solo lectura» en lugar de responder 403 al guardar.
   const canSave = can(expenseId ? "expenses_update" : "expenses_create");
+  // Sin permiso para guardar, los datos se ven pero no se pueden cambiar.
+  const readOnly = !canSave || !!props.readonly;
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!!expenseId);
   // El gasto no se pudo cargar (404 de otra sucursal o borrado, red…): en
-  // lugar del formulario vacío con "Actualizar" se explica por qué.
+  // lugar del formulario vacío se explica por qué.
   const [loadProblem, setLoadProblem] = useState<RecordLoadProblem | null>(null);
   // Candado del guardado: un doble toque no crea dos gastos.
   const { submitting: saving, run } = useSubmitGuard();
@@ -59,44 +130,44 @@ export default function ExpenseForm(props: ExpenseFormProps) {
   // "pagado con caja" no se pueden cambiar (el corte ya se firmó).
   const [moneyLocked, setMoneyLocked] = useState(false);
   const [lockMessage, setLockMessage] = useState<string | null>(null);
-  // Sin permiso para guardar, los campos se ven pero no se pueden cambiar
-  // (antes se escribía en un gasto marcado «Solo lectura»).
-  const readOnly = !canSave;
+  // Se intentó guardar: desde ahí se marcan los campos que faltan.
+  const [attempted, setAttempted] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
   // Lo cargado del gasto, para devolver los campos de dinero al bloquearlos.
-  const loadedRef = useRef<{ amount: string; paymentMethod: string; paidFromCash: boolean; expenseDate: Date } | null>(null);
+  const loadedRef = useRef<{
+    amount: string;
+    paymentMethod: PaymentMethod;
+    paidFromCash: boolean;
+    expenseDate: string;
+  } | null>(null);
 
-  // Form fields
   const [category, setCategory] = useState("");
-  const [amount, setAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("efectivo");
-  // ¿El efectivo salió de la caja de la sucursal? Si lo pagó el dueño de su
-  // bolsa, no debe descontarse en el corte. Tarjeta y transferencia nunca
-  // salen de la caja.
-  const [paidFromCash, setPaidFromCash] = useState(true);
   const [description, setDescription] = useState("");
-  const [expenseDate, setExpenseDate] = useState<Date>(new Date());
+  const [amount, setAmount] = useState("");
+  const [expenseDate, setExpenseDate] = useState(toLocalDateString());
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("efectivo");
+  // ¿El efectivo salió de la caja de la sucursal? Si lo pagó el dueño de su
+  // bolsa, no debe descontarse en el corte.
+  const [paidFromCash, setPaidFromCash] = useState(true);
 
-  const [categories, setCategories] = useState<
-    Array<{ label: string; value: string }>
-  >([]);
+  const [categories, setCategories] = useState<{ label: string; value: string }[]>([]);
 
-  useEffect(() => {
-    loadCategories();
-    if (expenseId) {
-      loadExpense();
-    }
-  }, [expenseId]);
+  // Título de la barra en el teléfono (en web lo ponen las migas de la ruta).
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: !expenseId ? "Nuevo gasto" : readOnly ? "Gasto" : "Editar gasto",
+    });
+  }, [navigation, expenseId, readOnly]);
 
   const loadCategories = async () => {
     try {
       const response = await Services.expenses.getCategories();
-      const categoriesData = Object.entries(response.data).map(
-        ([value, label]) => ({
+      setCategories(
+        Object.entries(response.data).map(([value, label]) => ({
           label: label as string,
           value,
-        })
+        })),
       );
-      setCategories(categoriesData);
     } catch (error) {
       console.error("Error loading categories:", error);
     }
@@ -106,20 +177,17 @@ export default function ExpenseForm(props: ExpenseFormProps) {
     if (!expenseId) return;
 
     try {
-      setLoading(true);
-      setLoadProblem(null);
       // silent: si falla, la pantalla lo explica en lugar del formulario.
       const response = await Services.expenses.show(expenseId, undefined, { silent: true });
       // El backend responde un ExpenseResource: { data: { ...gasto } }.
       const body: any = response.data;
-      const expense: App.Entities.Expense & { paid_from_cash?: boolean } =
-        body?.data ?? body;
+      const expense: App.Entities.Expense & { paid_from_cash?: boolean } = body?.data ?? body;
 
       const loaded = {
         amount: expense.amount != null ? String(expense.amount) : "",
-        paymentMethod: expense.payment_method,
+        paymentMethod: expense.payment_method as PaymentMethod,
         paidFromCash: expense.paid_from_cash ?? true,
-        expenseDate: parseLocalDate(expense.expense_date),
+        expenseDate: toLocalDateString(parseLocalDate(expense.expense_date)),
       };
       loadedRef.current = loaded;
       setCategory(expense.category);
@@ -135,8 +203,37 @@ export default function ExpenseForm(props: ExpenseFormProps) {
     }
   };
 
+  // Al abrir, `loading` ya empieza en true si hay gasto que cargar.
+  useEffect(() => {
+    void (async () => {
+      await Promise.all([loadCategories(), loadExpense()]);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expenseId]);
+
+  const retryLoad = () => {
+    setLoadProblem(null);
+    setLoading(true);
+    loadExpense();
+  };
+
   /** Monto escrito en formato mexicano ("1,500" son mil quinientos; antes se leía 1). */
   const parsedAmount = parseMoney(amount);
+
+  // Lo que falta o está mal; se marca después del primer intento de guardar.
+  const problems = {
+    category: !category ? "Elige la categoría" : null,
+    description: !description.trim() ? "Escribe en qué se gastó" : null,
+    amount: !amount.trim()
+      ? "Escribe el monto"
+      : parsedAmount === null
+        ? "Escríbelo como 1500 o 1,500.50"
+        : parsedAmount <= 0
+          ? "El monto debe ser mayor a 0"
+          : null,
+  };
+  const invalid = Object.values(problems).some(Boolean);
+  const shown = (key: keyof typeof problems) => (attempted ? problems[key] : null);
 
   /**
    * Turno cerrado: los campos de dinero vuelven a lo guardado y se bloquean;
@@ -152,25 +249,15 @@ export default function ExpenseForm(props: ExpenseFormProps) {
     }
     setMoneyLocked(true);
     setLockMessage(
-      `${message} Solo puedes cambiar la categoría y la descripción; los demás campos se dejaron como estaban.`,
+      `${message} Solo puedes cambiar la categoría y la descripción; los demás datos se dejaron como estaban.`,
     );
   };
 
   const handleSubmit = () =>
     run(async () => {
-      // Validations
-      if (!category) {
-        alerts.error("Selecciona una categoría");
-        return;
-      }
-      if (parsedAmount === null || parsedAmount <= 0) {
-        alerts.error("Ingresa un monto válido: escríbelo como 1500 o 1,500.50");
-        return;
-      }
-      if (!description) {
-        alerts.error("Ingresa una descripción");
-        return;
-      }
+      setAttempted(true);
+      setServerError(null);
+      if (invalid || parsedAmount === null) return;
 
       try {
         const data = {
@@ -184,45 +271,36 @@ export default function ExpenseForm(props: ExpenseFormProps) {
               : paymentMethod === "efectivo"
                 ? paidFromCash
                 : false,
-          description,
-          expense_date: toLocalDateString(expenseDate),
+          description: description.trim(),
+          expense_date: expenseDate,
         };
 
         if (expenseId) {
           await Services.expenses.update(expenseId, data);
-          alerts.success("Gasto actualizado correctamente");
         } else {
           await Services.expenses.store(data);
-          alerts.success("Gasto creado correctamente");
         }
-
-        goBack();
+        alerts.success("Gasto guardado");
+        goBack(listRoute);
       } catch (error: any) {
         console.error("Error saving expense:", error);
-        const message = apiErrorMessage(error, "Error al guardar el gasto");
+        const message = apiErrorMessage(error, "No se pudo guardar el gasto. Inténtalo de nuevo.");
+        // El motivo va en la barra de abajo: que el aviso global de la app no
+        // salga encima (en el teléfono tapaba los botones). store/update no
+        // aceptan `silent`.
+        claimErrorAlert(message);
         if (expenseId && apiErrorCode(error) === SALE_ERROR_CODES.closedSession) {
           lockMoneyFields(message);
           return;
         }
-        alerts.error(message);
+        setServerError(message);
       }
     });
 
-  const paymentMethods = [
-    { label: "Efectivo", value: "efectivo", icon: "cash" },
-    { label: "Tarjeta", value: "tarjeta", icon: "credit-card" },
-    {
-      label: "Transferencia",
-      value: "transferencia",
-      icon: "bank-transfer",
-    },
-  ];
-
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ marginTop: 16 }}>Cargando gasto...</Text>
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
@@ -233,254 +311,190 @@ export default function ExpenseForm(props: ExpenseFormProps) {
         problem={loadProblem}
         notFoundTitle="No se encontró el gasto"
         errorTitle="No se pudo cargar el gasto"
-        onRetry={loadExpense}
+        onRetry={retryLoad}
       />
     );
   }
 
-  return (
-    <View style={{ flex: 1, backgroundColor: "transparent" as any }}>
-      <ScrollView style={styles.container}>
-        <Card style={styles.card}>
-          <Card.Content>
-            {!!lockMessage && (
-              <View style={styles.lockBanner}>
-                <MaterialCommunityIcons name="lock-outline" size={18} color={colors.warning} />
-                <Text variant="bodySmall" style={styles.lockText}>
-                  {lockMessage}
-                </Text>
-              </View>
-            )}
+  const paymentLabel =
+    PAYMENT_METHODS.find((method) => method.value === paymentMethod)?.label ?? paymentMethod;
+  const moneyDisabled = moneyLocked || readOnly;
+  // Lo bloqueado se ve atenuado y no responde (la fecha y el método no
+  // tienen "disabled" propio).
+  const lockedStyle: StyleProp<ViewStyle> = moneyLocked ? styles.locked : undefined;
 
-            {/* Categoría */}
-            <View style={styles.input}>
+  // La barra de abajo dice qué pasó al guardar: el error del servidor, lo
+  // que falta o, con el turno cerrado, qué se puede cambiar todavía.
+  let note: string | null = null;
+  let noteTone: "error" | "warning" = "error";
+  if (serverError) note = serverError;
+  else if (attempted && invalid) note = "Falta completar o corregir los campos marcados.";
+  else if (lockMessage) {
+    note = lockMessage;
+    noteTone = "warning";
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.screen}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
+        <View style={styles.column}>
+          <FormSection
+            title="Gasto"
+            description={location ? `Se registra en ${location.name}.` : undefined}
+          >
+            <Field label="Categoría" error={shown("category")}>
               <AppSelect
                 value={category}
                 onChange={(value) => setCategory(String(value))}
                 data={categories}
-                placeholder="Selecciona una categoría"
-                disabled={readOnly}
+                placeholder="Elige una categoría"
+                hideSearchBox
+                readonly={readOnly}
               />
-            </View>
+            </Field>
 
-            {/* Monto */}
-            <TextInput
-              label="Monto"
-              value={amount}
-              onChangeText={setAmount}
-              keyboardType="decimal-pad"
-              mode="outlined"
-              style={[styles.input, { marginBottom: 0 }]}
-              left={<TextInput.Icon icon="currency-usd" />}
-              error={!!amount.trim() && (parsedAmount === null || parsedAmount <= 0)}
-              disabled={moneyLocked || readOnly}
-            />
-            <View style={styles.amountPreview}>
-              <AmountPreview value={amount} label="Se registrará" />
-            </View>
+            <Field label="Descripción" error={shown("description")}>
+              <AppInput
+                value={description}
+                onChange={setDescription}
+                placeholder="Por ejemplo, Gas para la cocina"
+                multiline
+                numberOfLines={3}
+                maxLength={DESCRIPTION_MAX}
+                hasError={!!shown("description")}
+                readonly={readOnly}
+              />
+            </Field>
 
-            {/* Método de Pago */}
-            <Text variant="labelLarge" style={styles.label}>
-              Método de Pago
-            </Text>
-            <View style={styles.paymentMethodsContainer}>
-              {paymentMethods.map((method) => (
-                <Button
-                  key={method.value}
-                  mode={paymentMethod === method.value ? "contained" : "outlined"}
-                  onPress={() => setPaymentMethod(method.value)}
-                  disabled={moneyLocked || readOnly}
-                  icon={method.icon}
-                  style={styles.paymentButton}
-                  buttonColor={
-                    paymentMethod === method.value ? colors.primary : undefined
-                  }
-                  textColor={
-                    paymentMethod === method.value ? colors.primaryForeground : colors.primary
-                  }
-                  compact
-                >
-                  {method.label}
-                </Button>
-              ))}
-            </View>
-
-            {paymentMethod === "efectivo" && (
-              <View style={styles.cashRow}>
-                <View style={{ flex: 1 }}>
-                  <Text variant="bodyMedium">Pagado con dinero de la caja</Text>
-                  <Text variant="bodySmall" style={{ color: colors.textSecondary }}>
-                    {paidFromCash
-                      ? "Se descontará del efectivo en el corte de caja."
-                      : "No afecta el corte (lo pagó el dueño u otra fuente)."}
-                  </Text>
+            <FormRow>
+              <Field
+                label="Monto"
+                error={moneyDisabled ? null : shown("amount")}
+                hint={
+                  // Cómo se leyó lo escrito ("1,500" → $1,500.00).
+                  !moneyDisabled && parsedAmount !== null && parsedAmount > 0 ? (
+                    <AmountPreview value={amount} label="Se registrará" />
+                  ) : undefined
+                }
+              >
+                {readOnly ? (
+                  <ReadonlyText text={parsedAmount !== null ? formatMoney(parsedAmount) : ""} />
+                ) : (
+                  <AppInput
+                    value={amount}
+                    onChange={setAmount}
+                    placeholder="0.00"
+                    keyboardType="decimal-pad"
+                    inputMode="decimal"
+                    hasError={!!shown("amount")}
+                    disabled={moneyLocked}
+                  />
+                )}
+              </Field>
+              <Field label="Fecha">
+                <View style={lockedStyle}>
+                  <AppDatePicker
+                    value={expenseDate}
+                    onChange={(value) => setExpenseDate(value)}
+                    readonly={readOnly}
+                  />
                 </View>
-                <Switch
+              </Field>
+            </FormRow>
+          </FormSection>
+
+          <FormSection title="Pago">
+            <Field label="Método de pago">
+              {readOnly ? (
+                <ReadonlyText text={paymentLabel} />
+              ) : (
+                <View style={lockedStyle}>
+                  <SegmentedControl
+                    options={PAYMENT_METHODS}
+                    value={paymentMethod}
+                    onChange={setPaymentMethod}
+                    stretch
+                    style={styles.segmented}
+                    accessibilityLabel="Método de pago"
+                  />
+                </View>
+              )}
+            </Field>
+
+            {/* Tarjeta y transferencia nunca salen de la caja. */}
+            {paymentMethod === "efectivo" && (
+              <View style={styles.field}>
+                <AppSwitch
+                  label="Pagado con dinero de la caja"
+                  description={
+                    paidFromCash
+                      ? "Se descuenta en el corte de caja."
+                      : "No afecta el corte: lo pagó el dueño u otra fuente."
+                  }
                   value={paidFromCash}
-                  onValueChange={setPaidFromCash}
-                  disabled={moneyLocked || readOnly}
+                  onChange={setPaidFromCash}
+                  disabled={moneyLocked}
+                  readonly={readOnly}
                 />
               </View>
             )}
-
-            {/* Fecha */}
-            <DatePickerInput
-              locale="es"
-              label="Fecha del Gasto"
-              value={expenseDate}
-              onChange={(date) => date && setExpenseDate(date)}
-              inputMode="start"
-              mode="outlined"
-              style={styles.input}
-              disabled={moneyLocked || readOnly}
-            />
-
-            {/* Descripción */}
-            <TextInput
-              label="Descripción"
-              value={description}
-              onChangeText={setDescription}
-              multiline
-              numberOfLines={4}
-              mode="outlined"
-              style={styles.input}
-              placeholder="Describe el gasto..."
-              disabled={readOnly}
-            />
-
-            {location && (
-              <View style={styles.infoSection}>
-                <MaterialCommunityIcons
-                  name="map-marker"
-                  size={16}
-                  color={colors.textSecondary}
-                />
-                <Text
-                  variant="bodySmall"
-                  style={{ color: colors.textSecondary }}
-                >
-                  Ubicación: {location.name}
-                </Text>
-              </View>
-            )}
-          </Card.Content>
-        </Card>
-
-        <View style={styles.actions}>
-          <Button
-            mode="outlined"
-            onPress={() => goBack()}
-            style={styles.button}
-            disabled={saving}
-          >
-            {canSave ? "Cancelar" : "Volver"}
-          </Button>
-          {canSave ? (
-            <Button
-              mode="contained"
-              onPress={handleSubmit}
-              style={styles.button}
-              loading={saving}
-              disabled={saving}
-              buttonColor={colors.primary}
-            >
-              {expenseId ? "Actualizar" : "Guardar"}
-            </Button>
-          ) : (
-            <View style={[styles.button, styles.readOnlyHint]}>
-              <MaterialCommunityIcons name="lock-outline" size={16} color={colors.textMuted} />
-              <Text variant="bodySmall" style={{ color: colors.textMuted }}>
-                Solo lectura
-              </Text>
-            </View>
-          )}
+          </FormSection>
         </View>
       </ScrollView>
-    </View>
+
+      {readOnly ? (
+        <FormFooter>
+          <Button mode="outlined" onPress={() => goBack(listRoute)} style={{ flex: 1 }}>
+            Volver
+          </Button>
+          <View style={styles.readOnlyHint}>
+            <MaterialCommunityIcons name="lock-outline" size={16} color={colors.textMuted} />
+            <Text style={styles.readOnlyText}>Solo lectura</Text>
+          </View>
+        </FormFooter>
+      ) : (
+        <FormFooter
+          onCancel={() => goBack(listRoute)}
+          submitLabel={expenseId ? "Guardar cambios" : "Guardar gasto"}
+          onSubmit={handleSubmit}
+          loading={saving}
+          note={note}
+          noteTone={noteTone}
+        />
+      )}
+    </KeyboardAvoidingView>
   );
 }
 
 const makeStyles = themedStyles((c) => ({
-  container: {
+  screen: { flex: 1, backgroundColor: c.background },
+  center: {
     flex: 1,
-    padding: 16,
-  },
-  loadingContainer: {
-    flex: 1,
+    alignItems: "center",
     justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "transparent" as any,
+    backgroundColor: c.background,
   },
-  card: {
-    backgroundColor: c.surface,
-    marginBottom: 16,
-  },
-  input: {
-    marginBottom: 16,
-    backgroundColor: c.surface,
-  },
-  label: {
-    marginBottom: 12,
-    marginTop: 4,
-    color: c.text,
-  },
-  cashRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 16,
-  },
-  amountPreview: {
-    marginBottom: 16,
-    minHeight: 4,
-  },
-  lockBanner: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    padding: 12,
-    marginBottom: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: c.warning,
-  },
-  lockText: {
-    flex: 1,
-    color: c.text,
-    lineHeight: 18,
-  },
-  // Envuelve a otra línea si no caben (en celular "Transferencia" se salía).
-  paymentMethodsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 16,
-  },
-  paymentButton: {
-    flexGrow: 1,
-    flexBasis: 110,
-  },
-  infoSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 8,
-    padding: 12,
-    backgroundColor: "transparent" as any,
-    borderRadius: 8,
-  },
-  actions: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 32,
-  },
-  button: {
-    flex: 1,
-  },
+  content: { padding: 16, paddingBottom: 32 },
+  // La columna mide lo mismo que la de la barra de abajo.
+  column: { width: "100%", maxWidth: FORM_MAX_WIDTH, alignSelf: "center" },
+  segmented: { minHeight: 48 },
+  field: { marginBottom: 18 },
+  error: { color: c.error, fontSize: 13, lineHeight: 18, marginTop: 6 },
+  hint: { color: c.textSecondary, fontSize: 13, lineHeight: 18, marginTop: 6 },
+  locked: { opacity: 0.55, pointerEvents: "none" },
   readOnlyHint: {
+    flex: 1.4,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
   },
+  readOnlyText: { fontSize: 13, color: c.textMuted },
 }));

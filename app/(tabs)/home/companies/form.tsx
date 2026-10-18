@@ -1,38 +1,68 @@
-import { goBack } from "@/utils/navigation";
-import { FormCheckBox } from "@/components/Form/AppCheckBox";
-import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
-import { FormInput } from "@/components/Form/AppInput";
+/**
+ * Datos de una empresa (alta, edición y vista de solo lectura): el nombre, el
+ * contacto y los datos fiscales, que salen en el encabezado de los tickets.
+ * Es también «Datos de la empresa» en Administración.
+ *
+ * El RFC se escribe en mayúsculas y sin espacios: el backend lo valida así
+ * antes de normalizarlo (en minúsculas respondía «formato inválido»).
+ * «Activa» solo al editar y para quien administra todas las empresas
+ * (companies_list); a la empresa propia no le cambia nada desactivarla.
+ */
+
+import AppForm, { AppFormRef, useAppForm } from "@/components/Form/AppForm/AppForm";
+import MakeForm from "@/components/Form/AppForm/hoc";
+import AppInput, { FormInput } from "@/components/Form/AppInput";
 import { FormPhoneInput } from "@/components/Form/AppPhoneInput";
-import Services from "@/utils/services";
+import { FormSwitch } from "@/components/Form/AppSwitch";
+import { FormRow, FormSection } from "@/components/Form/FormLayout";
+import { useCan } from "@/hooks/useCan";
+import { goBack } from "@/utils/navigation";
 import { phoneSchema } from "@/utils/phone";
-import { useRouter } from "expo-router";
-import React, { useRef } from "react";
-import { StyleSheet, View } from "react-native";
+import Services from "@/utils/services";
+import { useNavigation } from "expo-router";
+import React, { useLayoutEffect, useRef } from "react";
 import * as yup from "yup";
 
-// Esquema de validación
-const validationSchema = yup.object().shape({
+/** Lo que cabe en la tabla companies (el backend valida lo mismo). */
+const LIMITS = { name: 150, business_name: 255, rfc: 13, email: 100, address: 255 };
+
+/**
+ * El mismo patrón que valida el backend: 12 caracteres (empresa) o 13
+ * (persona física); la Ñ y el & existen en RFC reales.
+ */
+const RFC_PATTERN = /^[A-ZÑ&]{3,4}[0-9]{6}[A-Z0-9]{3}$/;
+
+const tooLong = (max: number) => `Máximo ${max} caracteres`;
+
+const validationSchema = yup.object({
   name: yup
     .string()
-    .required("El nombre de la compañía es requerido")
-    .min(2, "El nombre debe tener al menos 2 caracteres"),
-  business_name: yup
-    .string()
-    .required("La razón social es requerida")
-    .min(2, "La razón social debe tener al menos 2 caracteres"),
-  rfc: yup
-    .string()
-    .required("El RFC es requerido")
-    .matches(
-      /^[A-Z]{3,4}[0-9]{6}[A-Z0-9]{3}$/,
-      "El RFC no tiene un formato válido"
-    ),
+    .trim()
+    .required("Escribe el nombre de la empresa")
+    .max(LIMITS.name, tooLong(LIMITS.name)),
+  // Razón social, RFC y correo son opcionales: un negocio sin RFC también
+  // tiene que poder guardar su dirección.
   email: yup
     .string()
-    .email("Debe ser un email válido")
-    .required("El email es requerido"),
+    .trim()
+    .nullable()
+    .email("Revisa el correo; parece incompleto")
+    .max(LIMITS.email, tooLong(LIMITS.email)),
   phone: phoneSchema(),
-  address: yup.string(),
+  address: yup.string().nullable().max(LIMITS.address, tooLong(LIMITS.address)),
+  business_name: yup
+    .string()
+    .trim()
+    .nullable()
+    .max(LIMITS.business_name, tooLong(LIMITS.business_name)),
+  rfc: yup
+    .string()
+    .trim()
+    .nullable()
+    .matches(RFC_PATTERN, {
+      message: "Revisa el RFC: son 12 caracteres si es empresa o 13 si es persona física",
+      excludeEmptyString: true,
+    }),
   is_active: yup.boolean(),
 });
 
@@ -46,6 +76,23 @@ interface Company {
   is_active: boolean;
 }
 
+/**
+ * RFC en mayúsculas y sin espacios ni guiones mientras se escribe o se pega
+ * ("cdp-180312-ab1" → "CDP180312AB1"). El largo se corta ya limpio: con
+ * maxLength en el campo, un RFC pegado con espacios perdía sus últimas letras.
+ */
+function RfcInput(props: React.ComponentProps<typeof AppInput>) {
+  const { onChange } = props;
+  return (
+    <AppInput
+      {...props}
+      onChange={(text) => onChange?.(text.toUpperCase().replace(/[\s.-]/g, "").slice(0, LIMITS.rfc))}
+    />
+  );
+}
+
+const FormRfcInput = MakeForm(RfcInput);
+
 interface CompaniesProps {
   id?: number;
   readonly?: boolean;
@@ -53,99 +100,108 @@ interface CompaniesProps {
 
 export default function CompaniesForm(props: CompaniesProps) {
   const formRef = useRef<AppFormRef<Company>>(null);
-  const router = useRouter();
+  const { can } = useCan();
+  const isEditing = !!props.id;
+  // Ver y administrar todas las empresas es del administrador del sistema.
+  const managesAll = can("companies_list");
 
   return (
-    <View style={styles.container}>
-      <AppForm
-        permissionPrefix="companies"
-        ref={formRef}
-        api={Services.admin.companies}
-        initialValues={{
-          name: "",
-          business_name: "",
-          rfc: "",
-          address: "",
-          phone: "",
-          email: "",
-          is_active: true,
-        }}
-        validationSchema={validationSchema}
-        id={props.id}
-        readonly={props.readonly}
-        card
-        onSuccess={() => {
-          goBack();
-        }}
-        onError={(error) => {
-          console.error("Error al guardar compañía:", error);
-        }}
-      >
-        {/* Información básica */}
-        <View style={styles.section}>
-          <FormInput
-            name="name"
-            label="Nombre de la Compañía"
-            placeholder="Ingrese el nombre comercial"
-          />
-
-          <FormInput
-            name="business_name"
-            label="Razón Social"
-            placeholder="Ingrese la razón social completa"
-          />
-
-          <FormInput
-            name="rfc"
-            label="RFC"
-            placeholder="ABCD123456ABC"
-            autoCapitalize="characters"
-          />
-        </View>
-
-        {/* Información de contacto */}
-        <View style={styles.section}>
-          <FormInput
-            name="email"
-            label="Correo Electrónico"
-            placeholder="correo@empresa.com"
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-
-          <FormPhoneInput
-            name="phone"
-            label="Teléfono"
-          />
-
-          <FormInput
-            name="address"
-            label="Dirección"
-            placeholder="Ingrese la dirección completa"
-            multiline
-            numberOfLines={3}
-          />
-        </View>
-
-        {/* Estado */}
-        <View style={styles.section}>
-          <FormCheckBox
-            name="is_active"
-            label="Compañía Activa"
-            text="La compañía está activa y operativa"
-          />
-        </View>
-      </AppForm>
-    </View>
+    <AppForm
+      permissionPrefix="companies"
+      ref={formRef}
+      api={Services.admin.companies}
+      initialValues={{
+        name: "",
+        business_name: "",
+        rfc: "",
+        address: "",
+        phone: "",
+        email: "",
+        is_active: true,
+      }}
+      validationSchema={validationSchema}
+      id={props.id}
+      readonly={props.readonly}
+      submitButtonText={isEditing ? "Guardar cambios" : "Guardar empresa"}
+      successMessage={isEditing ? "Cambios guardados" : "Empresa guardada"}
+      onSuccess={() => goBack()}
+    >
+      <CompanyFields isEditing={isEditing} showActive={isEditing && managesAll} />
+    </AppForm>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "transparent" as any,
-  },
-  section: {
-    marginBottom: 20,
-  },
-});
+/**
+ * Los campos. Van dentro de AppForm para saber si está en solo lectura
+ * (también después de tocar «Editar»): ahí sobra «(opcional)» y el título es
+ * «Empresa».
+ */
+function CompanyFields({ isEditing, showActive }: { isEditing: boolean; showActive: boolean }) {
+  const { readonly } = useAppForm();
+  const optional = !readonly;
+  const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: readonly ? "Empresa" : isEditing ? "Editar empresa" : "Nueva empresa",
+    });
+  }, [navigation, readonly, isEditing]);
+
+  return (
+    <>
+      <FormInput
+        name="name"
+        label="Nombre"
+        placeholder="Cocos Francisco"
+        maxLength={LIMITS.name}
+      />
+
+      <FormSection title="Contacto">
+        <FormRow>
+          <FormInput
+            name="email"
+            label="Correo electrónico"
+            placeholder="contacto@cocosfrancisco.mx"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+            autoCorrect={false}
+            maxLength={LIMITS.email}
+            optional={optional}
+          />
+          <FormPhoneInput name="phone" label="Teléfono" optional={optional} />
+        </FormRow>
+        <FormInput
+          name="address"
+          label="Dirección"
+          optional={optional}
+          placeholder="Av. México #210, Puerto Vallarta, Jalisco"
+          multiline
+          maxLength={LIMITS.address}
+        />
+      </FormSection>
+
+      <FormSection title="Datos fiscales" description="La razón social y el RFC salen en los tickets.">
+        <FormRow widths={[3, 2]}>
+          <FormInput
+            name="business_name"
+            label="Razón social"
+            placeholder="Cocos Francisco SA de CV"
+            maxLength={LIMITS.business_name}
+            optional={optional}
+          />
+          <FormRfcInput
+            name="rfc"
+            label="RFC"
+            placeholder="CFR180312AB1"
+            autoCapitalize="characters"
+            autoCorrect={false}
+            optional={optional}
+          />
+        </FormRow>
+      </FormSection>
+
+      {showActive && <FormSwitch name="is_active" text="Activa" />}
+    </>
+  );
+}

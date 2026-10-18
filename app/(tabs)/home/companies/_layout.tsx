@@ -32,13 +32,13 @@ export default function CompaniesLayout() {
       <Stack.Screen
         name="form"
         options={{
-          title: "Crear Compañía",
+          title: "Nueva empresa",
         }}
       />
       <Stack.Screen
         name="[id]/index"
         options={{
-          title: "Detalle Compañía",
+          title: "Empresa",
         }}
       />
     </Stack>
