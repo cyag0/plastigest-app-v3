@@ -2,8 +2,6 @@ import ActiveBadge from "@/components/App/ActiveBadge";
 import AppList from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import { activeFilter } from "@/constants/listFilters";
-import { AppModalRef } from "@/components/Feedback/Modal/AppModal";
-import FilterModal from "@/components/Feedback/Modal/FilterModal";
 import PermissionGate from "@/components/App/PermissionGate";
 import Services from "@/utils/services";
 import { useRouter } from "expo-router";
@@ -16,7 +14,6 @@ function permissionsCount(item: any): number {
 
 export default function RolesListScreen() {
   const navigation = useRouter();
-  const modalRef = React.useRef<AppModalRef>(null);
 
   const columns: AppListColumn<any>[] = [
     { title: "Nombre", dataIndex: "name", key: "name", width: 200 },
@@ -63,9 +60,6 @@ export default function RolesListScreen() {
           navigation.push("/(tabs)/home/roles/" + entity.id);
         }}
         onPressCreate={() => {
-          /* console.log("hola");
-          modalRef.current?.show(); */
-
           navigation.push("/(tabs)/home/roles/form");
         }}
         permissionPrefix="roles"
@@ -76,8 +70,6 @@ export default function RolesListScreen() {
         }}
         searchPlaceholder="Buscar roles..."
       />
-
-      <FilterModal ref={modalRef} />
     </PermissionGate>
   );
 }
