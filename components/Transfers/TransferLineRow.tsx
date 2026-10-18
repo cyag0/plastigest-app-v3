@@ -65,13 +65,14 @@ export default function TransferLineRow({
   const pkg = linePackage(line);
   const [main, ...earlier] = stages;
 
-  // Las etapas anteriores solo si cambió la cantidad (lo aprobado que se
-  // envió completo no se repite).
+  // Las etapas anteriores solo si cambió la cantidad (lo pedido que se aprobó
+  // y envió completo no se repite), de la primera a la última: "Pedido 10 pz
+  // · Enviado 8 pz".
   const changes: string[] = [];
   let previous = main?.value;
   for (const stage of earlier) {
     if (previous !== undefined && Math.abs(stage.value - previous) > 1e-9) {
-      changes.push(`${stage.label} ${lineQty(line, stage.value)}`);
+      changes.unshift(`${stage.label} ${lineQty(line, stage.value)}`);
     }
     previous = stage.value;
   }

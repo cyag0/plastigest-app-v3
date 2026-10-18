@@ -30,6 +30,7 @@ import {
 import {
   getCurrentStepFromTransfer,
   receivingNotes,
+  rejectionReason,
   shippingNotes,
   statusHint,
   stepPhotos,
@@ -227,6 +228,8 @@ export default function TransferDetailScreen() {
     <TransferHeader
       transfer={transfer}
       hint={hint}
+      // Lo eligió y escribió quien la rechazó; quien la pidió lo ve aquí.
+      reason={rejectionReason(transfer)}
       currentLocationId={currentLocationId}
       companyName={auth.selectedCompany?.name}
     />

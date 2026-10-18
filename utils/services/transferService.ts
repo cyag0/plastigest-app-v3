@@ -39,7 +39,10 @@ export interface TransferDetail {
   transfer_id: number;
   product_id: number;
   product: Product;
+  /** Lo que se pidió (ya no se reescribe al aprobar). */
   quantity_requested: number;
+  /** Lo que aprobó el origen; null mientras no se aprueba. */
+  quantity_approved?: number | null;
   quantity_shipped?: number;
   quantity_received?: number;
   unit_cost?: number;

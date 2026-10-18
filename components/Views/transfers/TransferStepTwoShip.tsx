@@ -5,7 +5,8 @@
  * lectura.
  *
  * POST ship (multipart): items[{detail_id, quantity_shipped}] con lo
- * aprobado de cada renglón y evidence[] con las fotos.
+ * aprobado de cada renglón (quantity_approved; el backend no deja mandar más)
+ * y evidence[] con las fotos.
  */
 
 import { ListSection } from "@/components/App/ListGroup";
@@ -16,6 +17,7 @@ import { TransferLayout, TransferProducts, transferPlaces } from "@/components/T
 import TransferLineRow from "@/components/Transfers/TransferLineRow";
 import {
   exceedsStock,
+  lineApproved,
   lineName,
   lineQty,
   lineStages,
@@ -72,9 +74,10 @@ export default function TransferStepTwoShip({ transfer, header, intro, side, can
     transferStatus === "closed";
 
   const lines = useMemo(() => (transfer.details ?? []) as TransferLine[], [transfer.details]);
-  // Se envía lo aprobado de cada renglón (o lo ya enviado, si ya salió).
+  // Se envía lo aprobado de cada renglón (o lo ya enviado, si ya salió). Lo
+  // pedido ya no se reescribe al aprobar: lo aprobado va aparte.
   const rows = lines.map((line) => {
-    const approvedQuantity = Number(line.quantity_requested || (line as any).quantity || 0);
+    const approvedQuantity = lineApproved(line);
     const shippedQuantity = Number(line.quantity_shipped ?? 0);
     return {
       line,

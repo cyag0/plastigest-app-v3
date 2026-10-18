@@ -108,8 +108,8 @@ export const transferencias: HelpTopic = {
           type: "steps",
           items: [
             "Revisa los productos que te pidieron; en cada uno ves cuánto hay en tu sucursal.",
-            "Si no puedes surtir todo, cambia la cantidad en **Enviar** (puede ser 0).",
-            "Toca **Aprobar** en la barra de abajo y confirma con **Aprobar**. Si no procede, toca **Rechazar** y confirma.",
+            "Si no puedes surtir todo, cambia la cantidad en **Enviar** (puede ser 0). Quien la pidió ve lo que pidió y lo que aprobaste.",
+            "Toca **Aprobar** en la barra de abajo y confirma con **Aprobar**. Si no procede, toca **Rechazar**, elige el motivo (con **Otro**, escríbelo; si quieres, agrega una nota) y toca **Rechazar solicitud**.",
           ],
         },
         {
@@ -124,7 +124,7 @@ export const transferencias: HelpTopic = {
         },
         {
           type: "p",
-          text: "Al aprobar, a quien pidió le llega un aviso y tu sucursal recibe la tarea **Enviar transferencia**. Si la rechazas, termina como **Rechazada** y también se le avisa.",
+          text: "Al aprobar, a quien pidió le llega un aviso y tu sucursal recibe la tarea **Enviar transferencia**. Si la rechazas, termina como **Rechazada** y se le avisa con el motivo, que también ve en el detalle.",
         },
       ],
     },
@@ -262,7 +262,7 @@ export const transferencias: HelpTopic = {
         },
         {
           type: "p",
-          text: "Cada producto dice la cantidad de la etapa en la que va: **Pedido**, **Aprobado**, **Enviado** o **Recibido**. Si llegó incompleto, dice cuánto faltó, el motivo, qué pasó y sus fotos, y con **Ver ajuste** abres el ajuste que se generó. Al lado están las fotos del envío y de la recepción y el **Historial**.",
+          text: "Cada producto dice la cantidad de la etapa en la que va: **Pedido**, **Aprobado**, **Enviado** o **Recibido**; si se aprobó menos de lo pedido, debajo dice cuánto se pidió. Si llegó incompleto, dice cuánto faltó, el motivo, qué pasó y sus fotos, y con **Ver ajuste** abres el ajuste que se generó. Si se rechazó, arriba está el **Motivo**. Al lado están las fotos del envío y de la recepción y el **Historial**.",
         },
         {
           type: "p",
@@ -339,7 +339,7 @@ export const transferencias: HelpTopic = {
             },
             {
               term: "Rechazada",
-              description: "La sucursal de origen no aceptó la solicitud.",
+              description: "La sucursal de origen no aceptó la solicitud; el detalle dice el motivo.",
               color: palette.error,
             },
             {
@@ -373,7 +373,7 @@ export const transferencias: HelpTopic = {
         },
         {
           type: "p",
-          text: "Además llegan avisos: a quien pidió cuando se aprueba, se rechaza o se envía; a quien envió cuando se recibe. Si se rechaza o se cancela, las tareas abiertas se cancelan.",
+          text: "Además llegan avisos: a quien pidió cuando se aprueba, se rechaza (con el motivo) o se envía; a quien envió cuando se recibe. Si se rechaza o se cancela, las tareas abiertas se cancelan.",
         },
         {
           type: "links",
