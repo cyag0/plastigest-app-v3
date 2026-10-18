@@ -1,23 +1,25 @@
 import AppList, { FilterConfig } from "@/components/App/AppList/AppList";
 import { AppListColumn } from "@/components/App/AppList/AppListDataTable";
 import StatusBadge from "@/components/App/StatusBadge";
-import AppModal, { AppModalRef } from "@/components/Feedback/Modal/AppModal";
 import { FormDatePicker } from "@/components/Form/AppDatePicker";
 import AppForm, { AppFormRef } from "@/components/Form/AppForm/AppForm";
 import { FormInput } from "@/components/Form/AppInput";
 import { inventoryCountStatus } from "@/constants/statuses";
+import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { AlertsDialogs, AlertsProvider } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { usePdfDownload } from "@/hooks/usePdfDownload";
 import { useSelectedLocation } from "@/hooks/useSelectedLocation";
+import { useThemedStyles } from "@/hooks/useThemedStyles";
 import axios from "@/utils/axios";
 import Services from "@/utils/services";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useRef } from "react";
-import { View } from "react-native";
+import React, { useMemo, useRef, useState } from "react";
+import { Modal, Pressable, Text as RNText, View } from "react-native";
 import { ProgressChart } from "react-native-chart-kit";
-import { Text } from "react-native-paper";
+import { Portal, Text } from "react-native-paper";
 import * as Yup from "yup";
 import { toLocalDateString, formatDate } from "@/utils/dates";
 
@@ -68,10 +70,17 @@ const inventoryColumns: AppListColumn<App.Entities.InventoryCount.InventoryCount
   },
 ];
 
+// Lo mismo que pide el backend (InventoryCountController: nombre ≤ 150,
+// fecha obligatoria, notas opcionales).
 const inventoryValidationSchema = Yup.object().shape({
-  name: Yup.string().required("El nombre del inventario es requerido"),
-  count_date: Yup.date().required("La fecha es requerida"),
-  notes: Yup.string(),
+  name: Yup.string()
+    .trim()
+    .required("Escribe un nombre para el conteo")
+    .max(150, "Usa 150 caracteres o menos"),
+  count_date: Yup.date()
+    .typeError("Elige la fecha del conteo")
+    .required("Elige la fecha del conteo"),
+  notes: Yup.string().nullable(),
 });
 
 const inventoryFilters: FilterConfig[] = [
@@ -97,7 +106,8 @@ export default function InventoryIndex() {
   const router = useRouter();
   const { selectedLocation } = useSelectedLocation();
   const { colors } = useTheme();
-  const modalRef = useRef<AppModalRef>(null);
+  // «Iniciar conteo semanal»: un diálogo con el formulario.
+  const [creating, setCreating] = useState(false);
   const formRef = useRef<AppFormRef<any>>(null);
   const { can } = useCan();
   // Capturar renglones pide inventory_create (POST inventory-counts-details)
@@ -114,7 +124,7 @@ export default function InventoryIndex() {
     try {
       const response = await Services.inventoryCounts.store(values);
 
-      modalRef.current?.hide();
+      setCreating(false);
       formRef.current?.resetForm();
 
       // Navegar a la captura del inventario creado (o a su detalle si el
@@ -140,13 +150,7 @@ export default function InventoryIndex() {
         // InventoryCountController usa el prefijo inventory.
         permissionPrefix="inventory"
         filters={inventoryFilters}
-        onPressCreate={() =>
-          modalRef.current?.show({
-            title: "Iniciar Inventario Semanal",
-            dismissable: true,
-            width: "90%",
-          })
-        }
+        onPressCreate={() => setCreating(true)}
         columns={inventoryColumns}
         renderCard={({ item }: { item: any }) => {
           return {
@@ -249,52 +253,147 @@ export default function InventoryIndex() {
         }}
       />
 
-      <AppModal ref={modalRef}>
-        <AlertsProvider>
-          <AppForm
-            ref={formRef}
-            validationSchema={inventoryValidationSchema}
-            initialValues={{
-              name: `Conteo Semanal ${
-                selectedLocation?.name || ""
-              } - ${new Date().toLocaleDateString("es-MX", {
-                year: "numeric",
-                month: "short",
-                day: "numeric",
-              })}`,
-              count_date: toLocalDateString(),
-              location_id: selectedLocation?.id || null,
-              notes: "",
-            }}
-            onSubmit={async (values) => {
-              await handleCreateInventory(values);
-            }}
-          >
-            <FormInput
-              name="name"
-              label="Nombre del Inventario"
-              placeholder="Ej: Conteo Semanal Almacén Principal"
-              required
-            />
-
-            <FormDatePicker
-              name="count_date"
-              label="Fecha del Conteo"
-              required
-            />
-
-            <FormInput
-              name="notes"
-              label="Notas"
-              placeholder="Observaciones generales del inventario"
-              multiline
-              numberOfLines={4}
-            />
-          </AppForm>
-          <AlertsDialogs />
-        </AlertsProvider>
-      </AppModal>
+      {creating && (
+        <StartCountDialog
+          formRef={formRef}
+          locationName={selectedLocation?.name}
+          locationId={selectedLocation?.id}
+          onClose={() => setCreating(false)}
+          onSubmit={handleCreateInventory}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ * «Iniciar conteo semanal»: nombre (ya propuesto), fecha y notas. Antes era
+ * un modal de 80 % de alto con el título en grande y «Cancelar» salía de la
+ * pantalla en vez de cerrarlo.
+ */
+function StartCountDialog({
+  formRef,
+  locationName,
+  locationId,
+  onClose,
+  onSubmit,
+}: {
+  formRef: React.RefObject<AppFormRef<any> | null>;
+  locationName?: string;
+  locationId?: number;
+  onClose: () => void;
+  onSubmit: (values: any) => Promise<unknown>;
+}) {
+  const { colors } = useTheme();
+  const styles = useThemedStyles((c) => ({
+    overlay: {
+      flex: 1,
+      backgroundColor: c.overlay,
+      justifyContent: "center",
+      alignItems: "center",
+      padding: tokens.spacing[4],
+    },
+    // Fondo de la página: los campos y la barra de abajo se ven como en
+    // cualquier formulario.
+    sheet: {
+      width: "100%",
+      maxWidth: 520,
+      maxHeight: "92%",
+      backgroundColor: c.background,
+      borderRadius: tokens.radius.lg,
+      borderWidth: 1,
+      borderColor: c.border,
+      overflow: "hidden",
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: tokens.spacing[3],
+      // Igual que la barra de abajo, para que todo quede alineado.
+      paddingHorizontal: 16,
+      paddingTop: 18,
+      paddingBottom: 14,
+    },
+    title: { ...tokens.typography.h3, color: c.text },
+    subtitle: { ...tokens.typography.bodySm, color: c.textSecondary, marginTop: 4 },
+  }));
+
+  // Una sola vez al abrir: AppForm vuelve a empezar si cambia el objeto.
+  const initialValues = useMemo(
+    () => ({
+      name: `Conteo semanal ${locationName || ""} - ${new Date().toLocaleDateString("es-MX", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })}`,
+      count_date: toLocalDateString(),
+      location_id: locationId || null,
+      notes: "",
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      {/* Los avisos (Snackbar) y el calendario se abren dentro del modal: en
+          el Portal de la app quedaban detrás. */}
+      <Portal.Host>
+        <View style={styles.overlay}>
+          {/* Tocar fuera cierra, como antes. */}
+          <Pressable
+            style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+            onPress={onClose}
+            accessibilityLabel="Cerrar"
+          />
+          <View style={styles.sheet}>
+            <View style={styles.header}>
+              <View style={{ flex: 1 }}>
+                <RNText style={styles.title} accessibilityRole="header">
+                  Iniciar conteo semanal
+                </RNText>
+                <RNText style={styles.subtitle}>
+                  Se cuenta lo que hay en {locationName || "esta sucursal"}. Al completarlo, las
+                  diferencias ajustan la existencia.
+                </RNText>
+              </View>
+              <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Cerrar">
+                <MaterialCommunityIcons name="close" size={22} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+
+            <AlertsProvider>
+              <AppForm
+                ref={formRef}
+                validationSchema={inventoryValidationSchema}
+                initialValues={initialValues}
+                onSubmit={async (values) => {
+                  await onSubmit(values);
+                }}
+                submitButtonText="Iniciar conteo"
+                onCancel={onClose}
+                // Del alto de su contenido (no de toda la pantalla).
+                containerStyle={{ flexGrow: 0, flexShrink: 1, flexBasis: "auto" }}
+                style={{ flexGrow: 0, flexShrink: 1, paddingHorizontal: 16, paddingTop: 0, paddingBottom: 0 }}
+              >
+                <FormInput name="name" label="Nombre" maxLength={150} />
+
+                <FormDatePicker name="count_date" label="Fecha" />
+
+                <FormInput
+                  name="notes"
+                  label="Notas"
+                  optional
+                  multiline
+                  numberOfLines={3}
+                />
+              </AppForm>
+              <AlertsDialogs />
+            </AlertsProvider>
+          </View>
+        </View>
+      </Portal.Host>
+    </Modal>
   );
 }
 
