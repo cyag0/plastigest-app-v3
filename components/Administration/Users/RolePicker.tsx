@@ -99,6 +99,13 @@ export default function RolePicker({ value, onChange, disabled }: Props) {
                   No puedes asignarlo: tiene permisos que tú no tienes.
                 </Text>
               )}
+              {/* Solo aparece si es el rol que ya tenía: los desactivados no
+                  se ofrecen y el backend no deja asignarlos. */}
+              {role.is_active === false && (
+                <Text style={[styles.optionMeta, { color: colors.warningStrong }]}>
+                  Desactivado: no da permisos. Elige otro o actívalo en Roles.
+                </Text>
+              )}
             </View>
           </Pressable>
         );

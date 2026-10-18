@@ -8,14 +8,14 @@ import { useAlerts } from "@/hooks/useAlerts";
 import { useCan } from "@/hooks/useCan";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
-import { isApiError, notifyError } from "@/utils/errorNotice";
+import { errorMessageOf, isApiError, notifyError } from "@/utils/errorNotice";
 import { objectToFormDataWithNestedInputsAsync } from "@/utils/formDataUtils";
 import { goBack } from "@/utils/navigation";
 import type { PermissionRule } from "@/utils/permissions/permissions";
 import { CrudService } from "@/utils/services/crudService";
 import { logCaughtError } from "@/utils/silenceLogs";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { FormikProps, FormikProvider, getIn, setNestedObjectValues, useFormik } from "formik";
+import { FormikProps, FormikProvider, getIn, setIn, setNestedObjectValues, useFormik } from "formik";
 import React, {
   createContext,
   forwardRef,
@@ -196,6 +196,9 @@ interface FormProps<T> {
    * "¿Estás seguro de guardar los cambios?" de siempre solo agregaba un paso.
    */
   confirmMessage?: string;
+  /** Aviso fijo en la barra de abajo (p. ej. qué pasa al guardar). */
+  footerNote?: React.ReactNode;
+  footerNoteTone?: "error" | "warning" | "info";
   readonly?: boolean;
   showButtons?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -478,13 +481,15 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
 
         let response;
 
+        // silent: el error se muestra en la barra de abajo (serverError), junto
+        // a la acción, en vez de un aviso flotante que desaparece.
         // Si hay ID, es actualización
         if (props.id) {
-          response = await props.api.update(props.id, values as T);
+          response = await props.api.update(props.id, values as T, { silent: true });
         }
         // Si no hay ID, es creación
         else {
-          response = await props.api.store(values as T);
+          response = await props.api.store(values as T, { silent: true });
         }
         alerts.success(props.successMessage ?? (props.id ? "Cambios guardados" : "Guardado"));
 
@@ -492,13 +497,22 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
       }
     } catch (error: any) {
       logCaughtError("Error submitting form:", error);
-      // Mensaje del servidor; en un 422 con el primer error de campo (sin él
-      // el usuario no sabe qué corregir). Un error propio de onSubmit
-      // (throw new Error("…")) muestra su texto.
-      notifyError(
-        error,
-        (!isApiError(error) && error?.message) || "No se pudo guardar.",
-      );
+      if (!props.onSubmit && props.api) {
+        // Guardado con `api`: el motivo va en la barra de abajo y los campos
+        // que el servidor señala (422) se marcan en rojo.
+        // Con errores de campo basta el primero: el genérico "Error de
+        // validación" no dice nada que el campo marcado no diga ya.
+        const firstFieldError = markServerFieldErrors(error);
+        setServerError(firstFieldError ?? errorMessageOf(error, "No se pudo guardar."));
+      } else {
+        // Mensaje del servidor; en un 422 con el primer error de campo (sin él
+        // el usuario no sabe qué corregir). Un error propio de onSubmit
+        // (throw new Error("…")) muestra su texto.
+        notifyError(
+          error,
+          (!isApiError(error) && error?.message) || "No se pudo guardar.",
+        );
+      }
       props.onError?.(error, _values);
     } finally {
       setLoading(false);
@@ -546,8 +560,34 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
   // iniciales, que Formik no toca solo) y la barra de abajo dice qué pasa.
   const [invalidAttempt, setInvalidAttempt] = useState(false);
   const showInvalid = invalidAttempt && !formInstance.isValid;
+  // Lo que respondió el servidor al guardar (se limpia al volver a intentar).
+  const [serverError, setServerError] = useState<string | null>(null);
+
+  /**
+   * Errores de campo de un 422 ({ errors: { "name": ["…"] } }) en el
+   * formulario. Devuelve el primero (o null si no había).
+   */
+  function markServerFieldErrors(error: any): string | null {
+    const fieldErrors = error?.response?.status === 422 ? error.response.data?.errors : null;
+    if (!fieldErrors || typeof fieldErrors !== "object") return null;
+    let errors: any = {};
+    let touched: any = { ...formInstance.touched };
+    let first: string | null = null;
+    for (const [key, messages] of Object.entries(fieldErrors)) {
+      const message = Array.isArray(messages) ? messages[0] : messages;
+      if (!message) continue;
+      first ??= String(message);
+      errors = setIn(errors, key, String(message));
+      touched = setIn(touched, key, true);
+    }
+    if (!first) return null;
+    formInstance.setTouched(touched, false);
+    formInstance.setErrors(errors);
+    return first;
+  }
 
   async function attemptSubmit() {
+    setServerError(null);
     const errors = await formInstance.validateForm();
     if (errors && Object.keys(errors).length > 0) {
       formInstance.setTouched(
@@ -687,7 +727,12 @@ const AppForm = forwardRef<AppFormRef<any>, FormProps<any>>(function AppForm<
     ) {
       footer = (
         <FormFooter
-          note={showInvalid ? "Falta completar o corregir los campos marcados." : undefined}
+          note={
+            showInvalid
+              ? "Falta completar o corregir los campos marcados."
+              : serverError ?? props.footerNote
+          }
+          noteTone={showInvalid || serverError ? "error" : props.footerNoteTone ?? "info"}
         >
           {props.showCancelButton !== false && (
             <Button
