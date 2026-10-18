@@ -1063,9 +1063,10 @@ function makeAppListStyles(c: ReturnType<typeof useTheme>["colors"]) {
       alignItems: "center" as const,
       marginTop: 16,
     },
+    // textMuted sin opacidad: con textSecondary al 60 % no llegaba a 3:1
+    // sobre el fondo claro.
     paginationText: {
-      color: c.textSecondary,
-      opacity: 0.6,
+      color: c.textMuted,
     },
     paginationContainer: {
       alignItems: "center" as const,
