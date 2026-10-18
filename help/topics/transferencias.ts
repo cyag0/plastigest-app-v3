@@ -15,7 +15,7 @@ export const transferencias: HelpTopic = {
     "/home/transfers/formv2": "solicitar",
     "/home/transfers/pending": "seguimiento",
     "/home/transfers/history": "seguimiento",
-    // El detalle afina la sección según el paso que se ve (useHelpSection).
+    // El detalle afina la sección según el paso en el que va (useHelpSection).
     "/home/transfers/[id]": "detalle",
   },
   sections: [
@@ -102,20 +102,20 @@ export const transferencias: HelpTopic = {
       blocks: [
         {
           type: "p",
-          text: "Le toca a la **sucursal de origen**. Abre la transferencia desde **Solicitudes Pendientes** o desde la tarea **Aprobar transferencia**; verás el paso **Aprobación**.",
+          text: "Le toca a la **sucursal de origen**. Abre la transferencia desde **Solicitudes Pendientes** o desde la tarea **Aprobar transferencia**; arriba dice **Te toca aprobarla**.",
         },
         {
           type: "steps",
           items: [
-            "Revisa los productos que te pidieron.",
-            "Si no puedes surtir todo, cambia la **Cantidad a enviar** de cada producto (puede ser 0).",
-            "Toca **Aceptar** y confirma con **Aprobar**. Si no procede, toca **Rechazar**.",
+            "Revisa los productos que te pidieron; en cada uno ves cuánto hay en tu sucursal.",
+            "Si no puedes surtir todo, cambia la cantidad en **Enviar** (puede ser 0).",
+            "Toca **Aprobar** en la barra de abajo y confirma con **Aprobar**. Si no procede, toca **Rechazar** y confirma.",
           ],
         },
         {
           type: "image",
           image: "transferencias/aprobar",
-          caption: "2. Ajusta la cantidad a enviar · 3. Aceptar o Rechazar",
+          caption: "2. Cambia la cantidad a enviar · 3. Aprobar o Rechazar",
         },
         {
           type: "callout",
@@ -134,20 +134,20 @@ export const transferencias: HelpTopic = {
       blocks: [
         {
           type: "p",
-          text: "También lo hace la **sucursal de origen**, con la transferencia ya **Aprobada** (paso **Envío**).",
+          text: "También lo hace la **sucursal de origen**, con la transferencia ya **Aprobada**; arriba dice **Te toca enviarla**.",
         },
         {
           type: "steps",
           items: [
             "Prepara los productos: se envía exactamente la cantidad aprobada.",
-            "En **Subir fotos del transporte**, sube al menos una foto con **Cámara** o **Galería** (hasta 8).",
-            "Toca **Transferir productos** y confirma con **Transferir**.",
+            "En **Fotos del envío**, sube al menos una foto con **Tomar foto** o **Galería** (en la computadora, **Agregar foto**); hasta 8.",
+            "Toca **Enviar productos** y confirma con **Enviar**.",
           ],
         },
         {
           type: "image",
           image: "transferencias/enviar",
-          caption: "2. Sube las fotos del transporte · 3. Transferir productos",
+          caption: "2. Sube las fotos del envío · 3. Enviar productos",
         },
         {
           type: "callout",
@@ -162,21 +162,21 @@ export const transferencias: HelpTopic = {
       blocks: [
         {
           type: "p",
-          text: "Le toca a la **sucursal destino** cuando llega la mercancía. Abre la transferencia **En tránsito** desde **Solicitudes Pendientes** o desde la tarea **Recibir transferencia** (paso **Recepción**).",
+          text: "Le toca a la **sucursal destino** cuando llega la mercancía. Abre la transferencia **En tránsito** desde **Solicitudes Pendientes** o desde la tarea **Recibir transferencia**; arriba dice **Te toca recibirla**.",
         },
         {
           type: "steps",
           items: [
-            "En cada producto, responde **¿Llegó correctamente?**: toca **Sí** si llegó completo y en buen estado.",
-            "Si faltó algo o llegó dañado, toca **No** y registra la diferencia como se explica en **Recibir con faltantes o daños**.",
-            "Opcional: escribe **Notas generales de recepción** y sube fotos en **Subir imágenes de recepción**.",
-            "Toca **Confirmar recepción** y confirma.",
+            "En cada producto, **Llegó** ya trae lo que se envió: si llegó completo y en buen estado, no cambies nada.",
+            "Si faltó algo o llegó dañado, escribe en **Llegó** lo que sí llegó en buen estado y registra la diferencia como se explica en **Recibir con faltantes o daños**.",
+            "Opcional: escribe la **Nota de la recepción** y sube **Fotos de la recepción**.",
+            "Toca **Confirmar recepción** y confirma con **Confirmar**.",
           ],
         },
         {
           type: "image",
           image: "transferencias/recibir",
-          caption: "1. Indica si cada producto llegó correctamente",
+          caption: "1. Revisa cuánto llegó de cada producto",
         },
         {
           type: "p",
@@ -195,12 +195,11 @@ export const transferencias: HelpTopic = {
         {
           type: "steps",
           items: [
-            "En el producto que no llegó bien, toca **No**.",
-            "Escribe la **Cantidad recibida**: la que sí llegó en buen estado.",
-            "Elige el **Motivo del ajuste**: **Extravío** o **Daño**.",
-            "Describe lo ocurrido en **¿Qué pasó?**.",
-            "Sube al menos una foto en **Subir imágenes del faltante o daño** (hasta 4).",
-            "Revisa el cuadro **Ajuste a generar** y toca **Confirmar recepción**.",
+            "En el producto que no llegó bien, escribe en **Llegó** la cantidad que sí llegó en buen estado; debajo ves cuánto falta.",
+            "En **Motivo**, elige **Se perdió** o **Llegó dañado**.",
+            "Describe lo ocurrido en **¿Qué pasó?**. Si quieres, toca **Agregar nota del ajuste**.",
+            "Sube al menos una foto en **Fotos del faltante o daño** (hasta 4).",
+            "Toca **Confirmar recepción**: la confirmación dice cuánto llegó de cada producto con diferencia.",
           ],
         },
         {
@@ -259,16 +258,20 @@ export const transferencias: HelpTopic = {
       blocks: [
         {
           type: "p",
-          text: "El detalle muestra los cuatro pasos: **Aprobación**, **Envío**, **Recepción** y **Resumen**. Se abre en el paso actual y puedes tocar los anteriores para revisarlos. Solo la sucursal a la que le toca ve los botones para avanzar; las demás lo ven como consulta.",
+          text: "Arriba ves de qué sucursal a cuál va, el folio, quién la pidió, el estado y a quién le toca, con los pasos **Solicitud**, **Aprobación**, **Envío** y **Recepción**. Solo la sucursal a la que le toca ve la acción en la barra de abajo; las demás la ven como consulta.",
         },
         {
           type: "p",
-          text: "Cuando la transferencia termina, el **Resumen** muestra la línea de tiempo, los totales **Solicitado**, **Enviado** y **Recibido**, los productos con diferencia, los ajustes generados y las fotos de cada paso.",
+          text: "Cada producto dice la cantidad de la etapa en la que va: **Pedido**, **Aprobado**, **Enviado** o **Recibido**. Si llegó incompleto, dice cuánto faltó, el motivo, qué pasó y sus fotos, y con **Ver ajuste** abres el ajuste que se generó. Al lado están las fotos del envío y de la recepción y el **Historial**.",
+        },
+        {
+          type: "p",
+          text: "En el menú **⋮** está **Imprimir remisión**: la hoja que viaja con la mercancía.",
         },
         {
           type: "image",
           image: "transferencias/resumen",
-          caption: "Resumen de una transferencia completada",
+          caption: "Una transferencia completada",
         },
         {
           type: "links",
@@ -291,8 +294,8 @@ export const transferencias: HelpTopic = {
         {
           type: "steps",
           items: [
-            "En **Solicitudes Pendientes**, abre el menú **⋮** de la transferencia.",
-            "Toca **Cancelar solicitud** y confirma con **Sí, cancelar**.",
+            "En **Solicitudes Pendientes**, abre el menú **⋮** de la transferencia (o el **⋮** de arriba en su detalle).",
+            "Toca **Cancelar solicitud** (en el detalle, **Cancelar transferencia**) y confirma con **Sí, cancelar**.",
           ],
         },
         {
