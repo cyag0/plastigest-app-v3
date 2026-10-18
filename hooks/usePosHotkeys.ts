@@ -12,6 +12,7 @@ export interface PosHotkeyHandlers {
   onRemoveSelected: () => void;
   onMoveSelection: (delta: 1 | -1) => void;
   onScan: (code: string) => void;
+  isProductCode: (code: string) => boolean;
 }
 
 export function usePosHotkeys(_handlers: PosHotkeyHandlers) {}

@@ -470,6 +470,7 @@ function PosRegister({
       cart.setSelectedKey(cart.lines[next].key);
     },
     onScan,
+    isProductCode: (code) => catalog.findByCode(code) !== null,
   });
 
   // Ancho del rollo de la impresora de esta caja (se guarda en el equipo).
@@ -600,6 +601,7 @@ function PosRegister({
           open={searchOpen}
           onOpenChange={setSearchOpen}
           search={catalog.search}
+          findByCode={catalog.findByCode}
           onSelect={(item) => {
             addItem(item);
             setSearchOpen(false);

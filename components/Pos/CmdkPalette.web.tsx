@@ -12,15 +12,20 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   search: (query: string, limit?: number) => Item[];
+  findByCode: (code: string) => Item | null;
   onSelect: (item: Item) => void;
 }
 
 /**
- * Paleta de búsqueda de productos (web de escritorio). Se abre con F2 / Ctrl+K
- * o "/", flechas para moverse, Enter agrega y ESC cierra. El filtrado lo hace
+ * Paleta de búsqueda de productos (web de escritorio). Se abre con F2 / Ctrl+K,
+ * flechas para moverse, Enter agrega y ESC cierra. El filtrado lo hace
  * fuse.js (búsqueda difusa por nombre y código), no cmdk.
+ *
+ * Enter con un código exacto (lo que manda el lector) agrega ese producto sin
+ * esperar al renglón resaltado: el Enter del lector llega antes de que cmdk
+ * resalte el primer resultado, y un producto sin existencia ni se resalta.
  */
-export default function CmdkPalette({ open, onOpenChange, search, onSelect }: Props) {
+export default function CmdkPalette({ open, onOpenChange, search, findByCode, onSelect }: Props) {
   const { colors } = useTheme();
   const css = useMemo(() => makeCss(colors), [colors]);
   const [query, setQuery] = useState("");
@@ -46,6 +51,15 @@ export default function CmdkPalette({ open, onOpenChange, search, onSelect }: Pr
         <Command.Input
           value={query}
           onValueChange={setQuery}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+            const exact = findByCode(e.currentTarget.value);
+            if (!exact) return;
+            // cmdk no procesa un Enter con preventDefault.
+            e.preventDefault();
+            onSelect(exact);
+            onOpenChange(false);
+          }}
           placeholder="Escanea o escribe nombre o código…"
           autoFocus
         />

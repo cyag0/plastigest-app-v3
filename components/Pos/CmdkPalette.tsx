@@ -6,6 +6,7 @@ export default function CmdkPalette(_props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   search: (query: string, limit?: number) => App.Entities.PosCatalogItem[];
+  findByCode: (code: string) => App.Entities.PosCatalogItem | null;
   onSelect: (item: App.Entities.PosCatalogItem) => void;
 }) {
   return null;
