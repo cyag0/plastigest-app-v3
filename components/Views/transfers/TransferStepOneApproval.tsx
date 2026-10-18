@@ -1,442 +1,293 @@
-import { useTheme } from "@/contexts/ThemeContext";
-import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
-import { resolveImageUri } from "@/utils/imageUtils";
-import type { InventoryTransfer } from "@/utils/services/transferService";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Image, View } from "react-native";
-import {
-  Button,
-  Card,
-  Chip,
-  Divider,
-  Text,
-  TextInput,
-} from "react-native-paper";
+/**
+ * Paso 1, aprobación: la sucursal de origen escribe cuánto va a enviar de
+ * cada producto (por omisión, lo pedido; puede ser 0) y la aprueba, o la
+ * rechaza. Para los demás (quien la pidió, quien no tiene permiso) es solo
+ * lectura y el encabezado dice a quién le toca.
+ *
+ * Aprobar: POST approve con items[{detail_id, quantity_requested}]; rechazar:
+ * POST reject con un motivo fijo. Ninguno mueve inventario. Antes las
+ * cantidades no aceptaban decimales («1.5» se volvía 1) y un campo vacío se
+ * aprobaba en 0 sin avisar.
+ */
 
-interface TransferStepOneApprovalProps {
+import EmptyState from "@/components/App/EmptyState";
+import { FormFooter } from "@/components/Form/FormLayout";
+import { TransferLayout, TransferProducts } from "@/components/Transfers/TransferDetailParts";
+import TransferLineRow, { TransferQuantityInput } from "@/components/Transfers/TransferLineRow";
+import {
+  captureUnit,
+  exceedsStock,
+  lineName,
+  lineQty,
+  lineStages,
+  num,
+  quantityInput,
+  readQuantity,
+  shortName,
+  stockText,
+  stockWarning,
+  type TransferLine,
+} from "@/components/Transfers/transferFormat";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useAlerts } from "@/hooks/useAlerts";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
+import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
+import { errorMessageOf } from "@/utils/errorNotice";
+import type { InventoryTransfer } from "@/utils/services/transferService";
+import transferService from "@/utils/services/transferService";
+import React, { useMemo, useState } from "react";
+import { Text, useWindowDimensions } from "react-native";
+import { Button } from "react-native-paper";
+
+/** El motivo que manda "Rechazar" (el backend lo pide). */
+const REJECTION_REASON = "Rechazada desde wizard de transferencias";
+
+const lowerFirst = (value: string) => value.charAt(0).toLowerCase() + value.slice(1);
+
+interface Props {
   transfer: InventoryTransfer;
-  canApproveInStep1: boolean;
-  canEditQuantitiesInStep1: boolean;
-  isRequester: boolean;
-  editableQuantities: Record<number, number>;
-  submitting: boolean;
-  onChangeQuantity: (detailId: number, value: string) => void;
-  onApprove: () => void;
-  onReject: () => void;
-  formatDate: (dateString?: string) => string;
+  header: React.ReactNode;
+  /** Arriba de los productos (la nota de quien pidió). */
+  intro?: React.ReactNode;
+  side: React.ReactNode;
+  /** Origen con transfers_update en el paso 1: ajusta cantidades, aprueba o rechaza. */
+  canApprove: boolean;
+  /** Existencia del origen en cada renglón (la ve quien surte). */
+  showStock: boolean;
+  onCompleted: () => Promise<void>;
 }
 
 export default function TransferStepOneApproval({
   transfer,
-  canApproveInStep1,
-  canEditQuantitiesInStep1,
-  isRequester,
-  editableQuantities,
-  submitting,
-  onChangeQuantity,
-  onApprove,
-  onReject,
-  formatDate,
-}: TransferStepOneApprovalProps) {
+  header,
+  intro,
+  side,
+  canApprove,
+  showStock,
+  onCompleted,
+}: Props) {
+  const alerts = useAlerts();
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
+  const narrow = useWindowDimensions().width < 520;
+  // Candado de aprobar/rechazar: un doble toque no manda la acción dos veces.
+  const { submitting, run } = useSubmitGuard();
+  const [pending, setPending] = useState<"approve" | "reject" | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+
+  const lines = useMemo(() => (transfer.details ?? []) as TransferLine[], [transfer.details]);
+  // Cuánto se va a enviar de cada renglón, tal como se escribe (por omisión, lo pedido).
+  const initialTexts = () =>
+    Object.fromEntries(lines.map((line) => [line.id, quantityInput(num(line.quantity_requested))]));
+  // La pantalla monta esta vista con key por transferencia y updated_at: al
+  // recargarla, lo capturado vuelve a empezar.
+  const [texts, setTexts] = useState<Record<number, string>>(initialTexts);
+
+  const rows = lines.map((line) => {
+    const requested = num(line.quantity_requested);
+    const text = texts[line.id] ?? quantityInput(requested);
+    const read = readQuantity(text, "Escribe cuánto vas a enviar (puede ser 0)");
+    return { line, requested, text, quantity: read.value, error: read.error };
+  });
+  const invalid = rows.filter((row) => row.error);
+
+  // Lo que dice la barra: el error del servidor o, después de intentar, lo que falta.
+  let note: string | null = serverError;
+  if (!note && attempted && invalid.length > 0) {
+    note =
+      invalid.length === 1
+        ? `${shortName(lineName(invalid[0].line))}: ${lowerFirst(invalid[0].error!)}.`
+        : `Revisa los ${invalid.length} productos marcados.`;
+  }
+
+  const change = (lineId: number, value: string) => {
+    setServerError(null);
+    setTexts((prev) => ({ ...prev, [lineId]: value }));
+  };
+
+  /** Lo que dice la confirmación: las cantidades que cambiaron y qué pasa al aprobar. */
+  const approveMessage = () => {
+    const changed = rows.filter((row) => Math.abs((row.quantity ?? 0) - row.requested) > 1e-9);
+    const sending = rows.filter((row) => (row.quantity ?? 0) > 0);
+    let message: string;
+    if (sending.length === 0) {
+      message = "Todos los productos quedan en 0: no se va a enviar nada. Si no puedes surtirla, mejor recházala.";
+    } else if (changed.length === 0) {
+      message = "Vas a enviar lo que pidieron.";
+    } else {
+      const shown = changed.slice(0, 6).map((row) => {
+        const quantity = row.quantity ?? 0;
+        return `• ${lineName(row.line)}: ${quantity > 0 ? lineQty(row.line, quantity) : "no se envía"} (pidieron ${lineQty(row.line, row.requested)})`;
+      });
+      if (changed.length > shown.length) shown.push(`• y ${changed.length - shown.length} más`);
+      message = `Cambiaste ${changed.length === 1 ? "una cantidad" : `${changed.length} cantidades`}:\n${shown.join("\n")}`;
+    }
+    const stock = stockWarning(rows.map((row) => ({ line: row.line, quantity: row.quantity ?? 0 })));
+    return (
+      `${message}\n\nAprobar todavía no mueve inventario: sale de tu sucursal cuando registres el envío. A quien la pidió le llega un aviso.` +
+      (stock ? `\n\n${stock}` : "")
+    );
+  };
+
+  const approve = () =>
+    run(async () => {
+      setAttempted(true);
+      setServerError(null);
+      if (invalid.length > 0) return;
+      const ok = await alerts.confirm(approveMessage(), {
+        title: "¿Aprobar la transferencia?",
+        okText: "Aprobar",
+        cancelText: "Volver",
+      });
+      if (!ok) return;
+      setPending("approve");
+      try {
+        await transferService.approve(
+          transfer.id,
+          {
+            items: rows.map((row) => ({
+              detail_id: row.line.id,
+              quantity_requested: row.quantity as number,
+            })),
+          },
+          { silent: true },
+        );
+        alerts.success("Transferencia aprobada");
+        await onCompleted();
+      } catch (error) {
+        setServerError(errorMessageOf(error, "No se pudo aprobar la transferencia."));
+      } finally {
+        setPending(null);
+      }
+    });
+
+  const reject = () =>
+    run(async () => {
+      setServerError(null);
+      const ok = await alerts.confirm(
+        "La solicitud termina como rechazada y a quien la pidió le llega un aviso. No se mueve inventario y no se puede deshacer.",
+        { title: "¿Rechazar la solicitud?", okText: "Rechazar", cancelText: "Volver" },
+      );
+      if (!ok) return;
+      setPending("reject");
+      try {
+        await transferService.reject(transfer.id, REJECTION_REASON, { silent: true });
+        alerts.success("Transferencia rechazada");
+        await onCompleted();
+      } catch (error) {
+        setServerError(errorMessageOf(error, "No se pudo rechazar la transferencia."));
+      } finally {
+        setPending(null);
+      }
+    });
+
+  const showThumbs = lines.some((line) => !!line.product?.main_image);
+
+  const products = (
+    <TransferProducts
+      count={lines.length}
+      hint={
+        canApprove && lines.length > 0
+          ? "Escribe cuánto vas a enviar de cada producto; por omisión, lo que pidieron. Puede ser 0."
+          : null
+      }
+    >
+      {lines.length === 0 ? (
+        <EmptyState compact icon="package-variant" title="Sin productos" />
+      ) : (
+        rows.map((row) => {
+          const { line } = row;
+          const quantity = row.quantity;
+          // Los errores de lo escrito se ven al escribir; el campo vacío, al aprobar.
+          const showError = !!row.error && (attempted || row.text.trim() !== "");
+          let rowNote: React.ReactNode = null;
+          if (canApprove) {
+            if (showError) rowNote = <Text style={styles.error}>{row.error}</Text>;
+            else if (quantity !== null && quantity <= 0) rowNote = <Text style={styles.muted}>No se envía</Text>;
+            else if (quantity !== null && showStock && exceedsStock(line, quantity))
+              rowNote = <Text style={styles.warning}>{`Solo hay ${stockText(line)} en tu sucursal`}</Text>;
+            else if (quantity !== null && quantity > row.requested + 1e-9)
+              rowNote = <Text style={styles.warning}>Más de lo que pidieron</Text>;
+          }
+          return (
+            <TransferLineRow
+              key={line.id}
+              line={line}
+              thumb={showThumbs}
+              stages={lineStages(transfer, line)}
+              showStock={showStock}
+              warning={
+                !canApprove && showStock && exceedsStock(line, row.requested)
+                  ? `Solo hay ${stockText(line)} en tu sucursal`
+                  : null
+              }
+            >
+              {canApprove && (
+                <>
+                  <TransferQuantityInput
+                    label="Enviar"
+                    value={row.text}
+                    onChangeText={(value) => change(line.id, value)}
+                    unit={captureUnit(line)}
+                    invalid={showError}
+                    accessibilityLabel={`Cuánto vas a enviar de ${lineName(line)}`}
+                  />
+                  {rowNote}
+                </>
+              )}
+            </TransferLineRow>
+          );
+        })
+      )}
+    </TransferProducts>
+  );
+
+  const footer = canApprove ? (
+    <FormFooter note={note}>
+      {/* En el teléfono "Rechazar" ocupa solo lo suyo. */}
+      <Button
+        mode="outlined"
+        onPress={reject}
+        disabled={submitting}
+        loading={pending === "reject"}
+        textColor={colors.error}
+        compact={narrow}
+        style={narrow ? undefined : { flex: 1 }}
+      >
+        Rechazar
+      </Button>
+      <Button
+        mode="contained"
+        onPress={approve}
+        disabled={submitting}
+        loading={pending === "approve"}
+        compact={narrow}
+        style={{ flex: narrow ? 1 : 1.4 }}
+      >
+        Aprobar
+      </Button>
+    </FormFooter>
+  ) : null;
+
   return (
-    <>
-      <Card style={styles.card}>
-        <Card.Content>
-          <View style={styles.sectionHeader}>
-            <MaterialCommunityIcons
-              name="check-decagram-outline"
-              size={22}
-              color={colors.info}
-            />
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Paso 1: Aprobación
-            </Text>
-          </View>
-
-          <Divider style={styles.divider} />
-
-          <Text style={styles.stepHelpText}>
-            {canApproveInStep1
-              ? "Debes revisar los productos solicitados, ajustar cantidades si hace falta y confirmar la aprobación o rechazo."
-              : isRequester
-                ? "Tu solicitud está en revisión. Espera a que la otra sucursal confirme si aprueba o rechaza esta transferencia."
-                : "Esta etapa está en revisión por el responsable de la sucursal origen."}
-          </Text>
-
-          <View style={styles.infoRowCompact}>
-            <Text style={styles.label}>Folio:</Text>
-            <Text style={styles.value}>
-              {transfer.transfer_number || `#${transfer.id}`}
-            </Text>
-          </View>
-
-          <View style={styles.infoRowCompact}>
-            <Text style={styles.label}>Solicitado por:</Text>
-            <Text style={styles.value}>
-              {transfer.requested_by_user?.name || "N/A"}
-            </Text>
-          </View>
-
-          <View style={styles.infoRowWithBadges}>
-            <Text style={styles.label}>Origen:</Text>
-
-            <Chip
-              style={[styles.badge, styles.badgeSender]}
-              textStyle={styles.badgeText}
-              icon="arrow-right-bold"
-              onPress={() => {}}
-            >
-              {transfer.from_location?.name || "N/A"}
-            </Chip>
-          </View>
-
-          <View style={styles.infoRowWithBadges}>
-            <Text style={styles.label}>Destino:</Text>
-            <Chip
-              style={[styles.badge, styles.badgeReceiver]}
-              textStyle={styles.badgeText}
-              icon="arrow-left-bold"
-              onPress={() => {}}
-            >
-              {transfer.to_location?.name || "N/A"}
-            </Chip>
-          </View>
-          <View style={styles.infoRowCompact}>
-            <Text style={styles.label}>Fecha:</Text>
-            <Text style={styles.value}>
-              {formatDate(transfer.requested_at || transfer.created_at)}
-            </Text>
-          </View>
-
-          {!!transfer.notes && (
-            <View style={styles.notesBlock}>
-              <Text style={styles.notesLabel}>Notas</Text>
-              <Text style={styles.notesValue}>{transfer.notes}</Text>
-            </View>
-          )}
-
-          {!!transfer.rejection_reason && (
-            <View style={styles.rejectionBlock}>
-              <Text style={styles.rejectionLabel}>Motivo de rechazo</Text>
-              <Text style={styles.rejectionValue}>
-                {transfer.rejection_reason}
-              </Text>
-            </View>
-          )}
-        </Card.Content>
-      </Card>
-
-      <Card style={styles.card}>
-        <Card.Content>
-          <View style={styles.sectionHeader}>
-            <MaterialCommunityIcons
-              name="package-variant-closed"
-              size={22}
-              color={colors.warning}
-            />
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Productos Solicitados
-            </Text>
-          </View>
-
-          <Divider style={styles.divider} />
-
-          {(transfer.details || []).length === 0 ? (
-            <Text style={styles.emptyText}>
-              No hay productos en esta transferencia
-            </Text>
-          ) : (
-            (transfer.details || []).map((detail, index) => (
-              <View key={detail.id || index} style={styles.productRow}>
-                <View style={styles.productMainRow}>
-                  <View style={styles.productImageBox}>
-                    {resolveImageUri((detail as any).product?.main_image) ? (
-                      <Image
-                        source={{
-                          uri: resolveImageUri((detail as any).product?.main_image) || "",
-                        }}
-                        style={styles.productImage}
-                      />
-                    ) : (
-                      <MaterialCommunityIcons
-                        name="image-off-outline"
-                        size={18}
-                        color={colors.textMuted}
-                      />
-                    )}
-                  </View>
-
-                  <View style={{ flex: 1 }}>
-                  <Text style={styles.productName}>
-                    {detail.product?.name || "Producto"}
-                  </Text>
-                  <Text style={styles.productCode}>
-                    Código: {detail.product?.code || "N/A"}
-                  </Text>
-
-                  {canEditQuantitiesInStep1 ? (
-                    <TextInput
-                      mode="outlined"
-                      label="Cantidad a enviar"
-                      keyboardType="numeric"
-                      value={String(
-                        editableQuantities[detail.id] ??
-                          Number(detail.quantity_requested || 0),
-                      )}
-                      onChangeText={(value) =>
-                        onChangeQuantity(detail.id, value)
-                      }
-                      style={styles.qtyInput}
-                    />
-                  ) : (
-                    <Text style={styles.readOnlyHint}>Solo lectura</Text>
-                  )}
-                </View>
-                </View>
-
-                <View style={styles.qtyPill}>
-                  <Text style={styles.qtyText}>
-                    {Number(
-                      (editableQuantities[detail.id] ??
-                        detail.quantity_requested) ||
-                        0,
-                    ).toFixed(3)}{" "}
-                    {(detail as any).unit?.abbreviation || "ud"}
-                  </Text>
-                </View>
-              </View>
-            ))
-          )}
-
-          {!canApproveInStep1 && (
-            <Text style={styles.stepMutedText}>
-              {isRequester
-                ? "Cuando la otra sucursal confirme esta etapa, podrás dar seguimiento al avance del envío."
-                : "Esta pantalla es informativa para tu perfil. Solo quien aprueba en la sucursal origen puede editar cantidades y decidir."}
-            </Text>
-          )}
-
-          {canApproveInStep1 && (
-            <View style={styles.actionsRow}>
-              <Button
-                mode="contained"
-                icon="check-bold"
-                onPress={onApprove}
-                loading={submitting}
-                disabled={submitting}
-                style={[styles.actionButton, styles.approveButton]}
-                textColor={colors.textInverse}
-              >
-                Aceptar
-              </Button>
-
-              <Button
-                mode="contained"
-                icon="close-thick"
-                onPress={onReject}
-                loading={submitting}
-                disabled={submitting}
-                style={[styles.actionButton, styles.rejectButton]}
-                textColor={colors.textInverse}
-              >
-                Rechazar
-              </Button>
-            </View>
-          )}
-        </Card.Content>
-      </Card>
-    </>
+    <TransferLayout
+      header={header}
+      main={
+        <>
+          {intro}
+          {products}
+        </>
+      }
+      side={side}
+      footer={footer}
+    />
   );
 }
 
 const makeStyles = themedStyles((c) => ({
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.border,
-    elevation: 0,
-    shadowColor: "transparent",
-    shadowOpacity: 0,
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 0,
-    backgroundColor: c.surface,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  sectionTitle: {
-    color: c.text,
-    fontWeight: "700",
-  },
-  divider: {
-    marginVertical: 12,
-    backgroundColor: c.border,
-  },
-  infoRowCompact: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 4,
-    gap: 10,
-  },
-  infoRowWithBadges: {
-    marginVertical: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: c.surfaceMuted,
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: c.primary,
-  },
-  badge: {
-    marginTop: 8,
-  },
-  badgeSender: {
-    backgroundColor: c.infoSoft,
-  },
-  badgeReceiver: {
-    backgroundColor: c.accentSoft,
-  },
-  badgeText: {
-    color: c.text,
-    fontWeight: "600", 
-    fontSize: 12,
-  },
-  label: {
-    color: c.textSecondary,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  value: {
-    color: c.text,
-    fontSize: 13,
-    fontWeight: "700",
-    flexShrink: 1,
-    textAlign: "right",
-  },
-  notesBlock: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: c.surfaceMuted,
-  },
-  notesLabel: {
-    color: c.textSecondary,
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 2,
-  },
-  notesValue: {
-    color: c.textSecondary,
-  },
-  rejectionBlock: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: c.errorSoft,
-    borderWidth: 1,
-    borderColor: c.errorSoft,
-  },
-  rejectionLabel: {
-    color: c.error,
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 2,
-  },
-  rejectionValue: {
-    color: c.errorStrong,
-  },
-  emptyText: {
-    color: c.textSecondary,
-    textAlign: "center",
-    paddingVertical: 8,
-  },
-  productRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: c.border,
-    gap: 10,
-  },
-  productMainRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    flex: 1,
-  },
-  productImageBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.surfaceMuted,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  productImage: {
-    width: "100%",
-    height: "100%",
-  },
-  productName: {
-    color: c.text,
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  productCode: {
-    color: c.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  qtyInput: {
-    marginTop: 8,
-    backgroundColor: c.surface,
-  },
-  readOnlyHint: {
-    marginTop: 8,
-    color: c.textMuted,
-    fontSize: 12,
-  },
-  qtyPill: {
-    backgroundColor: c.primarySoft,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-  },
-  qtyText: {
-    color: c.primary,
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  stepHelpText: {
-    color: c.textSecondary,
-    marginBottom: 14,
-    lineHeight: 20,
-  },
-  stepMutedText: {
-    color: c.textMuted,
-    lineHeight: 20,
-  },
-  actionsRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  actionButton: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 6,
-  },
-  approveButton: {
-    backgroundColor: c.success,
-  },
-  rejectButton: {
-    backgroundColor: c.error,
-  },
+  muted: { fontSize: 13, lineHeight: 18, color: c.textSecondary, marginTop: 6 },
+  // Ocre "Strong": el ocre normal no llega a 4.5:1 en letra chica.
+  warning: { fontSize: 13, lineHeight: 18, fontWeight: "600", color: c.warningStrong, marginTop: 6 },
+  error: { fontSize: 13, lineHeight: 18, color: c.error, marginTop: 6 },
 }));

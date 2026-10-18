@@ -1,955 +1,421 @@
-import { formatQuantity } from "@/utils/format";
-import AppUpload, { UploadedFile } from "@/components/Form/AppUpload";
-import type { Palette } from "@/constants/palette";
+/**
+ * Paso 3, recepción: la sucursal destino escribe cuánto llegó en buen estado
+ * de cada producto (por omisión, lo enviado). Si llegó menos, dice el motivo
+ * (se perdió o llegó dañado), qué pasó y sube al menos una foto: con eso el
+ * backend registra un ajuste por la diferencia. La nota y las fotos de la
+ * recepción son opcionales. Para los demás es solo lectura.
+ *
+ * POST receive (multipart): items[{detail_id, quantity_received}] y, en los
+ * renglones que llegaron incompletos, adjustment_reason, adjustment_comment,
+ * adjustment_notes y adjustment_evidence[]; además receiving_notes y
+ * evidence[].
+ *
+ * Antes cada producto preguntaba «¿Llegó correctamente? Sí / No»; ahora se
+ * corrige la cantidad, como en la recepción de Compras. Y una cantidad mayor
+ * a la enviada ya no se cambiaba en silencio por la enviada: se avisa.
+ */
+
+import ChoiceChips from "@/components/Adjustments/ChoiceChips";
+import EmptyState from "@/components/App/EmptyState";
+import AppUpload, { type UploadedFile } from "@/components/Form/AppUpload";
+import { FormFooter } from "@/components/Form/FormLayout";
+import { TransferLayout, TransferProducts } from "@/components/Transfers/TransferDetailParts";
+import TransferLineRow, { TransferQuantityInput } from "@/components/Transfers/TransferLineRow";
+import {
+  captureUnit,
+  lineName,
+  lineQty,
+  lineStages,
+  quantityInput,
+  readQuantity,
+  reasonLabel,
+  shortName,
+  type TransferLine,
+} from "@/components/Transfers/transferFormat";
+import { tokens } from "@/constants/tokens";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { themedStyles, useThemedStyles } from "@/hooks/useThemedStyles";
-import { resolveImageUri } from "@/utils/imageUtils";
-import type {
-  TransferGeneratedAdjustment,
-  InventoryTransfer,
-  TransferReceiveStepItem,
-} from "@/utils/services/transferService";
+import { errorMessageOf } from "@/utils/errorNotice";
+import { formatQuantity } from "@/utils/format";
+import type { InventoryTransfer, TransferReceiveStepItem } from "@/utils/services/transferService";
 import transferService from "@/utils/services/transferService";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
-import { Image, View } from "react-native";
-import { Button, Card, Divider, Text, TextInput } from "react-native-paper";
+import React, { useMemo, useState } from "react";
+import { Platform, Pressable, Text, TextInput, View } from "react-native";
 
-interface ReceiveRow {
-  detail_id: number;
-  product_name: string;
-  product_image?: any;
-  unit: string;
-  expected: number;
-  quantity_received: number;
-  arrived_ok: boolean;
-  adjustment_reason?: "loss" | "damage";
-  adjustment_comment?: string;
-  adjustment_notes?: string;
-  adjustment_evidence: UploadedFile[];
-  adjustment_id?: number;
+type Reason = "loss" | "damage";
+
+const REASON_OPTIONS: { value: Reason; label: string }[] = [
+  { value: "loss", label: reasonLabel("loss") },
+  { value: "damage", label: reasonLabel("damage") },
+];
+
+/** Fotos por producto que llegó incompleto, y de la recepción. */
+const MAX_INCIDENT_PHOTOS = 4;
+const MAX_PHOTOS = 8;
+
+const EPS = 1e-9;
+
+const lowerFirst = (value: string) => value.charAt(0).toLowerCase() + value.slice(1);
+
+/** Lo que se captura de un renglón. */
+interface Draft {
+  /** Cuánto llegó, tal como se escribe. */
+  text: string;
+  reason: Reason | null;
+  comment: string;
+  notes: string;
+  showNotes: boolean;
+  photos: UploadedFile[];
 }
 
-interface TransferStepThreeReceiveProps {
+interface Props {
   transfer: InventoryTransfer;
-  canContinueReceiveInStep3: boolean;
-  isRequester: boolean;
+  header: React.ReactNode;
+  intro?: React.ReactNode;
+  side: React.ReactNode;
+  /** Destino con transfers_update en el paso 3: captura lo que llegó y confirma. */
+  canReceive: boolean;
   onCompleted: () => Promise<void>;
 }
 
-function formatQty(value: number | string | undefined) {
-  return formatQuantity(value);
-}
+/** Lo que debió llegar: lo enviado (o lo pedido, si no viene). */
+const expectedOf = (line: TransferLine): number =>
+  Number(line.quantity_shipped ?? line.quantity_requested ?? (line as any).quantity ?? 0);
 
-function getReasonLabel(reason?: string) {
-  if (reason === "loss") return "Extravío";
-  if (reason === "damage") return "Daño";
-  return "-";
-}
-
-function getReasonBadgeStyle(colors: Palette, reason?: string) {
-  if (reason === "loss") {
-    return {
-      backgroundColor: colors.error,
-      text: colors.textInverse,
-    };
-  }
-
-  if (reason === "damage") {
-    return {
-      backgroundColor: colors.warningStrong,
-      text: colors.textInverse,
-    };
-  }
-
-  return {
-    backgroundColor: colors.textSecondary,
-    text: colors.textInverse,
-  };
-}
-
-function rowHasDifference(row: ReceiveRow) {
-  return Number(row.quantity_received) < Number(row.expected);
-}
-
-export default function TransferStepThreeReceive({
-  transfer,
-  canContinueReceiveInStep3,
-  isRequester,
-  onCompleted,
-}: TransferStepThreeReceiveProps) {
+export default function TransferStepThreeReceive({ transfer, header, intro, side, canReceive, onCompleted }: Props) {
   const alerts = useAlerts();
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const [rows, setRows] = useState<ReceiveRow[]>([]);
+  const { submitting, run } = useSubmitGuard();
+  // Guardando (ya confirmado): el botón muestra que se está guardando.
+  const [saving, setSaving] = useState(false);
+  const [attempted, setAttempted] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
   const [receivingNotes, setReceivingNotes] = useState("");
   const [evidence, setEvidence] = useState<UploadedFile[]>([]);
-  const [existingEvidenceFiles, setExistingEvidenceFiles] = useState<
-    Array<{ name: string; uri: string }>
-  >([]);
-  const [saving, setSaving] = useState(false);
 
-  const generatedAdjustments = useMemo<TransferGeneratedAdjustment[]>(
-    () =>
-      Array.isArray((transfer as any)?.generated_adjustments)
-        ? ((transfer as any).generated_adjustments as TransferGeneratedAdjustment[])
-        : [],
-    [transfer],
-  );
+  const lines = useMemo(() => (transfer.details ?? []) as TransferLine[], [transfer.details]);
+  const initialDrafts = () =>
+    Object.fromEntries(
+      lines.map((line) => [
+        line.id,
+        { text: quantityInput(expectedOf(line)), reason: null, comment: "", notes: "", showNotes: false, photos: [] } as Draft,
+      ]),
+    );
+  // La pantalla monta esta vista con key por transferencia y updated_at: al
+  // recargarla, lo capturado vuelve a empezar.
+  const [drafts, setDrafts] = useState<Record<number, Draft>>(initialDrafts);
 
-  const generatedAdjustmentById = useMemo(
-    () =>
-      new Map<number, TransferGeneratedAdjustment>(
-        generatedAdjustments
-          .filter((item) => Number(item?.id) > 0)
-          .map((item) => [Number(item.id), item]),
-      ),
-    [generatedAdjustments],
-  );
+  const update = (lineId: number, patch: Partial<Draft>) => {
+    setServerError(null);
+    setDrafts((prev) => ({ ...prev, [lineId]: { ...prev[lineId], ...patch } }));
+  };
 
-  const step3Status = String((transfer.content as any)?.step_3?.status || "").toLowerCase();
-  const transferStatus = String(transfer.status || "").toLowerCase();
-  const isHistoricalStep3 =
-    step3Status === "received" ||
-    transferStatus === "completed" ||
-    transferStatus === "rejected" ||
-    transferStatus === "cancelled" ||
-    transferStatus === "closed";
-
-  useEffect(() => {
-    const workflowStep3Items = Array.isArray((transfer.content as any)?.workflow?.step_3?.items)
-      ? (transfer.content as any).workflow.step_3.items
-      : [];
-
-    const mapped: ReceiveRow[] = (transfer.details || []).map((detail: any) => {
-      const expected = Number(
-        detail.quantity_shipped ??
-          detail.quantity_requested ??
-          detail.quantity ??
-          0,
-      );
-      const receivedFromPayload = Number(detail.quantity_received ?? expected);
-      const isHistoricalRow = isHistoricalStep3 && Number(detail.quantity_shipped ?? 0) > 0;
-
-      const step3Item = workflowStep3Items.find(
-        (item: any) => Number(item?.detail_id) === Number(detail.id),
-      );
-
+  const rows = lines.map((line) => {
+    const expected = expectedOf(line);
+    const draft: Draft = drafts[line.id] ?? {
+      text: quantityInput(expected),
+      reason: null,
+      comment: "",
+      notes: "",
+      showNotes: false,
+      photos: [],
+    };
+    // Lo que no se envió no se captura (el backend lo ignora).
+    if (expected <= EPS) {
       return {
-        detail_id: detail.id,
-        product_name: detail.product?.name || "Producto",
-        product_image: detail.product?.main_image,
-        unit:
-          detail.unit?.abbreviation ||
-          detail.product?.unit?.abbreviation ||
-          "ud",
+        line,
         expected,
-        quantity_received: isHistoricalRow ? receivedFromPayload : expected,
-        arrived_ok: isHistoricalRow ? receivedFromPayload >= expected : true,
-        adjustment_reason: isHistoricalRow
-          ? ((detail.adjustment_reason as "loss" | "damage" | undefined) ?? undefined)
-          : undefined,
-        adjustment_comment: isHistoricalRow
-          ? String(step3Item?.adjustment_comment || "")
-          : "",
-        adjustment_notes: isHistoricalRow
-          ? String(detail.adjustment_notes || detail.damage_report || "")
-          : "",
-        adjustment_evidence: [],
-        adjustment_id: step3Item?.adjustment_id
-          ? Number(step3Item.adjustment_id)
-          : undefined,
+        draft,
+        received: expected,
+        error: null,
+        short: false,
+        missing: 0,
+        problem: null,
+        problems: {} as Record<string, string | null>,
       };
-    });
-
-    setRows(mapped);
-    setEvidence([]);
-    setReceivingNotes("");
-
-    const existingFiles: Array<{ name: string; uri: string }> = [];
-    const step3Content = transfer.content as any;
-    const filesFromStep = Array.isArray(step3Content?.step_3?.evidence_files)
-      ? step3Content.step_3.evidence_files
-      : [];
-    const filesFromWorkflow = Array.isArray(step3Content?.workflow?.step_3?.evidence)
-      ? step3Content.workflow.step_3.evidence
-      : [];
-    const sourceFiles = filesFromStep.length > 0 ? filesFromStep : filesFromWorkflow;
-
-    if (Array.isArray(sourceFiles)) {
-      existingFiles.push(
-        ...sourceFiles.map((file: any) => ({
-          name: file.name || "archivo",
-          uri: file.uri || file.url || file.path || "",
-        })),
-      );
     }
-    setExistingEvidenceFiles(existingFiles);
-  }, [transfer.id, transfer.updated_at, isHistoricalStep3]);
+    const read = readQuantity(draft.text, "Escribe cuánto llegó (puede ser 0)");
+    let error = read.error;
+    if (!error && (read.value as number) > expected + EPS) {
+      error = `No puede ser más de lo enviado (${lineQty(line, expected)})`;
+    }
+    const received = error ? null : read.value;
+    const short = received !== null && received < expected - EPS;
+    const problems: Record<string, string | null> = short
+      ? {
+          reason: draft.reason ? null : "Elige si se perdió o llegó dañado",
+          comment: draft.comment.trim() ? null : "Escribe qué pasó",
+          photos: draft.photos.length > 0 ? null : "Sube al menos una foto",
+        }
+      : {};
+    const problem = error ?? problems.reason ?? problems.comment ?? problems.photos ?? null;
+    return { line, expected, draft, received, error, short, missing: short ? expected - (received as number) : 0, problem, problems };
+  });
 
-  const hasAnyProductNotArrived = useMemo(
-    () => rows.some((row) => rowHasDifference(row)),
-    [rows],
-  );
+  const withProblems = rows.filter((row) => row.problem);
+  const shortRows = rows.filter((row) => row.short);
 
-  const canSubmit = useMemo(() => {
-    if (!rows.length) return false;
+  let note: string | null = serverError;
+  if (!note && attempted) {
+    if (rows.length === 0) note = "No hay productos para recibir.";
+    else if (withProblems.length === 1)
+      note = `${shortName(lineName(withProblems[0].line))}: ${lowerFirst(withProblems[0].problem!)}.`;
+    else if (withProblems.length > 1) note = `Revisa los ${withProblems.length} productos marcados.`;
+  }
 
-    return rows.every((row) => {
-      if (!rowHasDifference(row)) return true;
-
-      return (
-        row.quantity_received >= 0 &&
-        row.quantity_received < row.expected &&
-        !!row.adjustment_reason &&
-        !!String(row.adjustment_comment || "").trim() &&
-        row.adjustment_evidence.length > 0
-      );
-    });
-  }, [rows, evidence, hasAnyProductNotArrived]);
-
-  const updateRow = (detailId: number, patch: Partial<ReceiveRow>) => {
-    setRows((prev) =>
-      prev.map((row) =>
-        row.detail_id === detailId ? { ...row, ...patch } : row,
-      ),
+  const receiveMessage = () => {
+    if (shortRows.length === 0) return "Llegó todo lo enviado: entra al inventario de tu sucursal.";
+    const shown = shortRows.slice(0, 6).map(
+      (row) =>
+        `• ${lineName(row.line)}: ${formatQuantity(row.received)} de ${lineQty(row.line, row.expected)} (${lowerFirst(reasonLabel(row.draft.reason))})`,
+    );
+    if (shortRows.length > shown.length) shown.push(`• y ${shortRows.length - shown.length} más`);
+    return (
+      `Llegó menos en ${shortRows.length === 1 ? "un producto" : `${shortRows.length} productos`}:\n${shown.join("\n")}\n\n` +
+      "Entra al inventario solo lo que llegó bien. Lo que falta queda registrado como ajuste por pérdida o daño y se crea la tarea de revisar las diferencias."
     );
   };
 
-  const handleSubmit = async () => {
-    for (const row of rows) {
-      if (!rowHasDifference(row)) {
-        continue;
-      }
+  const receive = () =>
+    run(async () => {
+      setAttempted(true);
+      setServerError(null);
+      if (rows.length === 0 || withProblems.length > 0) return;
 
-      if (row.quantity_received < 0) {
-        alerts.error("Las cantidades no pueden ser negativas");
-        return;
-      }
-      if (row.quantity_received > row.expected) {
-        alerts.error(
-          `La cantidad recibida de ${row.product_name} no puede superar la esperada`,
-        );
-        return;
-      }
-      if (row.quantity_received < row.expected && !row.adjustment_reason) {
-        alerts.error(
-          `Debes indicar si el faltante de ${row.product_name} fue por extravío o daño`,
-        );
-        return;
-      }
-
-      if (row.quantity_received < row.expected && !String(row.adjustment_comment || "").trim()) {
-        alerts.error(`Debes describir que paso con ${row.product_name}`);
-        return;
-      }
-
-      if (row.quantity_received < row.expected && row.adjustment_evidence.length === 0) {
-        alerts.error(`Debes subir evidencia para ${row.product_name}`);
-        return;
-      }
-    }
-
-    const confirmed = await alerts.confirm(
-      "¿Deseas confirmar la recepción de esta transferencia?",
-      {
-        title: "Confirmar recepción",
+      const ok = await alerts.confirm(receiveMessage(), {
+        title: "¿Confirmar la recepción?",
         okText: "Confirmar",
-        cancelText: "Cancelar",
-      },
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    const payloadItems: TransferReceiveStepItem[] = rows.map((row) => ({
-      detail_id: row.detail_id,
-      quantity_received: Number(
-        rowHasDifference(row) ? row.quantity_received : row.expected,
-      ),
-      adjustment_reason:
-        rowHasDifference(row)
-          ? row.adjustment_reason
-          : undefined,
-      adjustment_comment:
-        rowHasDifference(row)
-          ? row.adjustment_comment
-          : undefined,
-      adjustment_notes:
-        rowHasDifference(row)
-          ? row.adjustment_notes
-          : undefined,
-      adjustment_evidence:
-        rowHasDifference(row)
-          ? row.adjustment_evidence
-          : undefined,
-    }));
-
-    try {
-      setSaving(true);
-      await transferService.receive(transfer.id, {
-        items: payloadItems,
-        receiving_notes: receivingNotes,
-        evidence,
+        cancelText: "Volver",
       });
+      if (!ok) return;
 
-      alerts.success("Recepción confirmada correctamente");
-      await onCompleted();
-    } catch (error: any) {
-      alerts.error(
-        error?.response?.data?.message ||
-          error?.message ||
-          "No se pudo confirmar la recepción",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
+      const payloadItems: TransferReceiveStepItem[] = rows.map((row) => ({
+        detail_id: row.line.id,
+        quantity_received: Number(row.short ? row.received : row.expected),
+        adjustment_reason: row.short ? (row.draft.reason ?? undefined) : undefined,
+        adjustment_comment: row.short ? row.draft.comment : undefined,
+        adjustment_notes: row.short ? row.draft.notes : undefined,
+        adjustment_evidence: row.short ? row.draft.photos : undefined,
+      }));
 
-  return (
-    <Card style={styles.card}>
-      <Card.Content>
-        <View style={styles.sectionHeader}>
-          <MaterialCommunityIcons
-            name="archive-check-outline"
-            size={22}
-            color={colors.success}
-          />
-          <Text variant="titleMedium" style={styles.sectionTitle}>
-            Paso 3: Recepción
-          </Text>
-        </View>
+      setSaving(true);
+      try {
+        await transferService.receive(
+          transfer.id,
+          { items: payloadItems, receiving_notes: receivingNotes, evidence },
+          { silent: true },
+        );
+        alerts.success(
+          shortRows.length > 0
+            ? "Recepción registrada con diferencias: entró a tu inventario lo que llegó bien."
+            : "Recepción registrada: ya entró a tu inventario.",
+        );
+        await onCompleted();
+      } catch (error) {
+        setServerError(errorMessageOf(error, "No se pudo registrar la recepción."));
+      } finally {
+        setSaving(false);
+      }
+    });
 
-        <Divider style={styles.divider} />
+  const showThumbs = lines.some((line) => !!line.product?.main_image);
 
-        <Text style={styles.stepHelpText}>
-          {canContinueReceiveInStep3
-            ? "Debes confirmar la recepción y registrar diferencias si existe faltante o daño."
-            : isRequester
-              ? "El pedido ya va en camino. Estás esperando que la sucursal destino confirme la recepción."
-              : "Esta etapa la completa la sucursal que recibe la transferencia."}
-        </Text>
-
-        {!canContinueReceiveInStep3 && (
-          <Text style={styles.stepMutedText}>
-            {isRequester
-              ? "Modo historial: puedes ver el resultado de la recepción, sin modificar datos."
-              : "Modo historial: este paso ya fue procesado y solo esta disponible en lectura."}
-          </Text>
-        )}
-
-        {rows.map((row) => {
-          const hasDifference = rowHasDifference(row);
-          const differenceQty = Math.max(row.expected - row.quantity_received, 0);
-          const generatedAdjustment = row.adjustment_id
-            ? generatedAdjustmentById.get(Number(row.adjustment_id))
-            : undefined;
-          const rowReasonBadge = getReasonBadgeStyle(colors, row.adjustment_reason);
-          const generatedReasonBadge = getReasonBadgeStyle(colors, generatedAdjustment?.reason);
-          const generatedAdjustmentEvidence = Array.isArray(
-            generatedAdjustment?.content?.evidence_files,
-          )
-            ? generatedAdjustment?.content?.evidence_files || []
-            : [];
-
+  const products = (
+    <TransferProducts
+      count={lines.length}
+      hint={
+        canReceive && lines.length > 0
+          ? "Escribe cuánto llegó en buen estado de cada producto; por omisión, lo que se envió."
+          : null
+      }
+    >
+      {lines.length === 0 ? (
+        <EmptyState compact icon="package-variant" title="Sin productos" />
+      ) : (
+        rows.map((row) => {
+          const { line, draft } = row;
+          const name = lineName(line);
+          const capture = canReceive && row.expected > EPS;
+          // Lo escrito mal se ve al escribir; el campo vacío y lo que falta, al confirmar.
+          const showError = !!row.error && (attempted || draft.text.trim() !== "");
+          const marked = (key: string) => (attempted ? row.problems[key] ?? null : null);
           return (
-            <View key={row.detail_id} style={styles.productRow}>
-              <View style={styles.productMainRow}>
-                <View style={styles.productImageBox}>
-                  {resolveImageUri(row.product_image) ? (
-                    <Image
-                      source={{ uri: resolveImageUri(row.product_image) || "" }}
-                      style={styles.productImage}
-                    />
-                  ) : (
-                    <MaterialCommunityIcons
-                      name="image-off-outline"
-                      size={18}
-                      color={colors.textMuted}
-                    />
-                  )}
-                </View>
-
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.productName}>{row.product_name}</Text>
-                  <Text style={styles.productMeta}>
-                    Debio llegar: {row.expected.toFixed(3)} {row.unit}
-                  </Text>
-                </View>
-              </View>
-
-              {canContinueReceiveInStep3 ? (
+            <TransferLineRow key={line.id} line={line} thumb={showThumbs} stages={lineStages(transfer, line)}>
+              {capture && (
                 <>
-                  <View style={styles.checklistBlock}>
-                    <Text style={styles.checklistLabel}>
-                      Llego correctamente?
-                    </Text>
-                    <View style={styles.checklistRow}>
-                      <Button
-                        mode={!hasDifference ? "contained" : "outlined"}
-                        onPress={() =>
-                          updateRow(row.detail_id, {
-                            arrived_ok: true,
-                            quantity_received: row.expected,
-                            adjustment_reason: undefined,
-                            adjustment_comment: "",
-                            adjustment_notes: "",
-                            adjustment_evidence: [],
-                          })
-                        }
-                        style={styles.checklistButton}
-                      >
-                        Si
-                      </Button>
-                      <Button
-                        mode={hasDifference ? "contained" : "outlined"}
-                        onPress={() =>
-                          updateRow(row.detail_id, {
-                            arrived_ok: false,
-                            quantity_received:
-                              row.quantity_received >= row.expected
-                                ? Math.max(row.expected - 1, 0)
-                                : row.quantity_received,
-                          })
-                        }
-                        style={styles.checklistButton}
-                      >
-                        No
-                      </Button>
-                    </View>
-                  </View>
+                  <TransferQuantityInput
+                    label="Llegó"
+                    value={draft.text}
+                    onChangeText={(text) => update(line.id, { text })}
+                    unit={captureUnit(line)}
+                    invalid={showError}
+                    accessibilityLabel={`Cuánto llegó de ${name}`}
+                  />
+                  {showError ? (
+                    <Text style={styles.error}>{row.error}</Text>
+                  ) : row.short ? (
+                    <Text style={styles.warning}>{`Faltan ${lineQty(line, row.missing)}: se registra como ajuste`}</Text>
+                  ) : null}
 
-                  {hasDifference ? (
-                    <TextInput
-                      label="Cantidad recibida"
-                      mode="outlined"
-                      keyboardType="numeric"
-                      value={String(row.quantity_received)}
-                      onChangeText={(value) => {
-                        const nextQuantity = Number(value || 0);
-
-                        updateRow(row.detail_id, {
-                          quantity_received: nextQuantity,
-                          arrived_ok: nextQuantity >= row.expected,
-                        });
-                      }}
-                      style={styles.input}
-                    />
-                  ) : (
-                    <Text style={styles.okHintText}>
-                      Se registrará recepción completa:{" "}
-                      {row.expected.toFixed(3)} {row.unit}
-                    </Text>
-                  )}
-
-                  {hasDifference && (
-                    <>
-                      <Text style={styles.adjustmentTitle}>
-                        Motivo del ajuste
-                      </Text>
-                      <View style={styles.reasonRow}>
-                        <Button
-                          mode={
-                            row.adjustment_reason === "loss"
-                              ? "contained"
-                              : "outlined"
-                          }
-                          onPress={() =>
-                            updateRow(row.detail_id, {
-                              adjustment_reason: "loss",
-                            })
-                          }
-                          style={styles.reasonButton}
-                        >
-                          Extravío
-                        </Button>
-                        <Button
-                          mode={
-                            row.adjustment_reason === "damage"
-                              ? "contained"
-                              : "outlined"
-                          }
-                          onPress={() =>
-                            updateRow(row.detail_id, {
-                              adjustment_reason: "damage",
-                            })
-                          }
-                          style={styles.reasonButton}
-                        >
-                          Daño
-                        </Button>
+                  {row.short && (
+                    <View style={styles.incident}>
+                      <View style={styles.block}>
+                        <Text style={styles.question}>Motivo</Text>
+                        <ChoiceChips<Reason>
+                          options={REASON_OPTIONS}
+                          value={draft.reason}
+                          onChange={(reason) => update(line.id, { reason })}
+                          accessibilityLabel={`Motivo de lo que falta de ${name}`}
+                        />
+                        {!!marked("reason") && <Text style={styles.error}>{marked("reason")}</Text>}
                       </View>
 
-                      <TextInput
-                        label="Que paso?"
-                        mode="outlined"
-                        value={row.adjustment_comment}
-                        onChangeText={(value) =>
-                          updateRow(row.detail_id, { adjustment_comment: value })
-                        }
-                        style={styles.input}
-                      />
+                      <View style={styles.block}>
+                        <Text style={styles.question}>¿Qué pasó?</Text>
+                        <TextInput
+                          value={draft.comment}
+                          onChangeText={(comment) => update(line.id, { comment })}
+                          placeholder="Dos cocos llegaron rajados"
+                          placeholderTextColor={colors.textMuted}
+                          maxLength={500}
+                          accessibilityLabel={`Qué pasó con ${name}`}
+                          style={[styles.input, !!marked("comment") && styles.inputInvalid]}
+                        />
+                        {!!marked("comment") && <Text style={styles.error}>{marked("comment")}</Text>}
+                      </View>
 
-                      <TextInput
-                        label="Notas del ajuste"
-                        mode="outlined"
-                        value={row.adjustment_notes}
-                        onChangeText={(value) =>
-                          updateRow(row.detail_id, { adjustment_notes: value })
-                        }
-                        style={styles.input}
-                      />
-
-                      <AppUpload
-                        label="Evidencia del incidente"
-                        placeholder="Subir imágenes del faltante o daño"
-                        value={row.adjustment_evidence}
-                        onChange={(files: UploadedFile[]) =>
-                          updateRow(row.detail_id, { adjustment_evidence: files })
-                        }
-                        multiple
-                        maxFiles={4}
-                        accept="images"
-                        helperText="Obligatorio cuando el producto no llega correctamente"
-                      />
-
-                      <View style={styles.adjustmentCard}>
-                        <View style={styles.adjustmentCardHeader}>
-                          <MaterialCommunityIcons
-                            name="alert-circle-outline"
-                            size={16}
-                            color={colors.errorStrong}
+                      {draft.showNotes && (
+                        <View style={styles.block}>
+                          <Text style={styles.question}>Nota del ajuste (opcional)</Text>
+                          <TextInput
+                            value={draft.notes}
+                            onChangeText={(notes) => update(line.id, { notes })}
+                            placeholder="Se separaron para merma"
+                            placeholderTextColor={colors.textMuted}
+                            maxLength={500}
+                            accessibilityLabel={`Nota del ajuste de ${name}`}
+                            style={styles.input}
                           />
-                          <Text style={styles.adjustmentCardTitle}>Ajuste a generar</Text>
                         </View>
+                      )}
 
-                        <Text style={styles.adjustmentCardText}>
-                          Producto: {row.product_name}
-                        </Text>
-                        <Text style={styles.adjustmentCardText}>
-                          Cantidad: {formatQty(differenceQty)} {row.unit}
-                        </Text>
-                        <View style={styles.reasonBadgeRow}>
-                          <Text style={styles.adjustmentCardText}>Motivo:</Text>
-                          <View
-                            style={[
-                              styles.reasonBadge,
-                              { backgroundColor: rowReasonBadge.backgroundColor },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.reasonBadgeText,
-                                { color: rowReasonBadge.text },
-                              ]}
-                            >
-                              {getReasonLabel(row.adjustment_reason)}
-                            </Text>
-                          </View>
-                        </View>
-                        {!!String(row.adjustment_comment || "").trim() && (
-                          <Text style={styles.adjustmentCardText}>
-                            Que paso: {row.adjustment_comment}
-                          </Text>
-                        )}
-                        {!!String(row.adjustment_notes || "").trim() && (
-                          <Text style={styles.adjustmentCardText}>
-                            Nota: {row.adjustment_notes}
-                          </Text>
-                        )}
+                      <View style={styles.block}>
+                        <Text style={styles.question}>Fotos del faltante o daño</Text>
+                        <AppUpload
+                          value={draft.photos}
+                          onChange={(photos: UploadedFile[]) => update(line.id, { photos })}
+                          multiple
+                          maxFiles={MAX_INCIDENT_PHOTOS}
+                          accept="images"
+                          error={!!marked("photos")}
+                          helperText={marked("photos") ?? undefined}
+                        />
                       </View>
-                    </>
+
+                      {!draft.showNotes && (
+                        <Pressable
+                          onPress={() => update(line.id, { showNotes: true })}
+                          hitSlop={6}
+                          style={({ pressed }) => [styles.extra, pressed && { opacity: 0.6 }]}
+                          accessibilityRole="button"
+                        >
+                          <MaterialCommunityIcons name="note-text-outline" size={16} color={colors.primary} />
+                          <Text style={styles.extraText}>Agregar nota del ajuste</Text>
+                        </Pressable>
+                      )}
+                    </View>
                   )}
                 </>
-              ) : (
-                <View style={styles.readOnlyInfoBlock}>
-                  {!!row.adjustment_id && (
-                    <Text style={styles.readOnlyInfoText}>
-                      Ajuste ID: #{row.adjustment_id}
-                    </Text>
-                  )}
-                  <Text style={styles.readOnlyInfoText}>
-                    Recibido: {row.quantity_received.toFixed(3)} {row.unit}
-                  </Text>
-                  {hasDifference && (
-                    <Text style={styles.readOnlyInfoText}>
-                      Diferencia: {(row.expected - row.quantity_received).toFixed(3)} {row.unit}
-                    </Text>
-                  )}
-                  {!!row.adjustment_reason && (
-                    <Text style={styles.readOnlyInfoText}>
-                      Motivo: {row.adjustment_reason === "loss" ? "Extravío" : "Daño"}
-                    </Text>
-                  )}
-                  {!!row.adjustment_comment && (
-                    <Text style={styles.readOnlyInfoText}>
-                      Que paso: {row.adjustment_comment}
-                    </Text>
-                  )}
-                  {!!row.adjustment_notes && (
-                    <Text style={styles.readOnlyInfoText}>
-                      Nota: {row.adjustment_notes}
-                    </Text>
-                  )}
-
-                  {!!generatedAdjustment && (
-                    <View style={styles.adjustmentCard}>
-                      <View style={styles.adjustmentCardHeader}>
-                        <MaterialCommunityIcons
-                          name="alert-circle-outline"
-                          size={16}
-                          color={colors.errorStrong}
-                        />
-                        <Text style={styles.adjustmentCardTitle}>
-                          Ajuste generado #{generatedAdjustment.id}
-                        </Text>
-                      </View>
-
-                      <Text style={styles.adjustmentCardText}>
-                        Producto: {generatedAdjustment.product_name || row.product_name}
-                      </Text>
-                      <Text style={styles.adjustmentCardText}>
-                        Cantidad: {formatQty(generatedAdjustment.quantity)}{" "}
-                        {generatedAdjustment.unit?.abbreviation || row.unit}
-                      </Text>
-                      <View style={styles.reasonBadgeRow}>
-                        <Text style={styles.adjustmentCardText}>Motivo:</Text>
-                        <View
-                          style={[
-                            styles.reasonBadge,
-                            { backgroundColor: generatedReasonBadge.backgroundColor },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.reasonBadgeText,
-                              { color: generatedReasonBadge.text },
-                            ]}
-                          >
-                            {generatedAdjustment.reason_label ||
-                              getReasonLabel(generatedAdjustment.reason)}
-                          </Text>
-                        </View>
-                      </View>
-                      {!!generatedAdjustment.content?.adjustment_comment && (
-                        <Text style={styles.adjustmentCardText}>
-                          Que paso: {generatedAdjustment.content.adjustment_comment}
-                        </Text>
-                      )}
-                      {!!generatedAdjustment.notes && (
-                        <Text style={styles.adjustmentCardText}>
-                          Nota: {generatedAdjustment.notes}
-                        </Text>
-                      )}
-                      {generatedAdjustmentEvidence.length > 0 && (
-                        <Text style={styles.adjustmentCardText}>
-                          Evidencias: {generatedAdjustmentEvidence.length}
-                        </Text>
-                      )}
-                    </View>
-                  )}
-                </View>
               )}
-            </View>
+            </TransferLineRow>
           );
-        })}
+        })
+      )}
+    </TransferProducts>
+  );
 
-        {!canContinueReceiveInStep3 && (
-          <>
-            {existingEvidenceFiles.length > 0 ? (
-              <View style={styles.existingEvidenceSection}>
-                <View style={styles.existingEvidenceHeader}>
-                  <MaterialCommunityIcons
-                    name="file-check-outline"
-                    size={18}
-                    color={colors.success}
-                  />
-                  <Text
-                    variant="labelMedium"
-                    style={styles.existingEvidenceTitle}
-                  >
-                    Evidencias de recepción ({existingEvidenceFiles.length})
-                  </Text>
-                </View>
+  const reception = canReceive && lines.length > 0 && (
+    <View style={styles.reception}>
+      <View style={styles.block}>
+        <Text style={styles.sectionLabel}>Nota de la recepción (opcional)</Text>
+        <TextInput
+          value={receivingNotes}
+          onChangeText={(value) => {
+            setServerError(null);
+            setReceivingNotes(value);
+          }}
+          placeholder="Llegó en la camioneta de la tarde"
+          placeholderTextColor={colors.textMuted}
+          multiline
+          maxLength={1000}
+          accessibilityLabel="Nota de la recepción"
+          style={[styles.input, styles.inputMultiline]}
+        />
+      </View>
+      <View style={styles.block}>
+        <Text style={styles.sectionLabel}>Fotos de la recepción (opcional)</Text>
+        <AppUpload
+          value={evidence}
+          onChange={(files: UploadedFile[]) => {
+            setServerError(null);
+            setEvidence(files);
+          }}
+          multiple
+          maxFiles={MAX_PHOTOS}
+          accept="images"
+        />
+      </View>
+    </View>
+  );
 
-                <View style={styles.evidenceGrid}>
-                  {existingEvidenceFiles.map((item, index) => (
-                    <View key={`${item.uri}-${index}`} style={styles.evidenceItem}>
-                      <Image
-                        source={{ uri: item.uri }}
-                        style={styles.evidenceImage}
-                        resizeMode="cover"
-                      />
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ) : (
-              <Text style={styles.stepMutedText}>
-                {isHistoricalStep3
-                  ? "No se registraron evidencias de recepción."
-                  : "Este paso todavia no se procesa y no hay evidencias."}
-              </Text>
-            )}
-          </>
-        )}
+  const footer = canReceive ? (
+    <FormFooter submitLabel="Confirmar recepción" onSubmit={receive} loading={saving} disabled={submitting} note={note} />
+  ) : null;
 
-        {canContinueReceiveInStep3 && (
-          <>
-            <TextInput
-              label="Notas generales de recepción"
-              mode="outlined"
-              value={receivingNotes}
-              onChangeText={setReceivingNotes}
-              multiline
-              numberOfLines={3}
-              style={styles.input}
-            />
-
-            <AppUpload
-              label="Evidencia de recepción"
-              placeholder="Subir imágenes de recepción"
-              value={evidence}
-              onChange={(files: UploadedFile[]) => setEvidence(files)}
-              multiple
-              maxFiles={8}
-              accept="images"
-              helperText={
-                hasAnyProductNotArrived
-                  ? "Obligatorio: sube evidencia porque hay productos marcados en NO"
-                  : "Opcional si todos los productos llegaron correctamente"
-              }
-            />
-
-            <Button
-              mode="contained"
-              icon="check-circle-outline"
-              onPress={handleSubmit}
-              disabled={!canSubmit || saving}
-              loading={saving}
-              style={[styles.actionButton, styles.receiveButton]}
-              textColor={colors.textInverse}
-            >
-              Confirmar recepción
-            </Button>
-          </>
-        )}
-      </Card.Content>
-    </Card>
+  return (
+    <TransferLayout
+      header={header}
+      main={
+        <>
+          {intro}
+          {products}
+          {reception}
+        </>
+      }
+      side={side}
+      footer={footer}
+    />
   );
 }
 
 const makeStyles = themedStyles((c) => ({
-  card: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: c.border,
-    elevation: 0,
-    shadowColor: "transparent",
-    shadowOpacity: 0,
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 0,
-    backgroundColor: c.surface,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  sectionTitle: {
-    color: c.text,
-    fontWeight: "700",
-  },
-  divider: {
-    marginVertical: 12,
-    backgroundColor: c.border,
-  },
-  stepHelpText: {
-    color: c.textSecondary,
-    marginBottom: 14,
-    lineHeight: 20,
-  },
-  stepMutedText: {
-    color: c.textMuted,
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  productRow: {
-    borderWidth: 1,
-    borderColor: c.border,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 10,
-  },
-  productMainRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  productImageBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.surfaceMuted,
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  productImage: {
-    width: "100%",
-    height: "100%",
-  },
-  productName: {
-    color: c.text,
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  productMeta: {
-    color: c.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  checklistBlock: {
-    marginTop: 10,
-    backgroundColor: c.surfaceMuted,
-    borderRadius: 10,
-    padding: 8,
-  },
-  checklistLabel: {
-    color: c.text,
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  checklistRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-  },
-  checklistButton: {
-    flex: 1,
-  },
-  okHintText: {
-    marginTop: 10,
-    color: c.primary,
-    fontSize: 12,
-    fontWeight: "600",
-  },
+  // Ocre "Strong": el ocre normal no llega a 4.5:1 en letra chica.
+  warning: { fontSize: 13, lineHeight: 18, fontWeight: "600", color: c.warningStrong, marginTop: 6 },
+  error: { fontSize: 13, lineHeight: 18, color: c.error, marginTop: 6 },
+  incident: { gap: 14, marginTop: 14 },
+  block: { gap: 8 },
+  reception: { gap: 18 },
+  // Como el título de una ListSection: lo de la recepción va fuera de los productos.
+  sectionLabel: { fontSize: 14, fontWeight: "600", color: c.textSecondary },
+  question: { fontSize: 13, lineHeight: 18, fontWeight: "600", color: c.textSecondary },
   input: {
-    marginTop: 10,
+    minHeight: 44,
+    borderRadius: tokens.radius.md,
+    borderWidth: 1,
+    borderColor: c.borderStrong,
     backgroundColor: c.surface,
-  },
-  adjustmentTitle: {
-    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
     color: c.text,
-    fontWeight: "700",
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : null),
   },
-  reasonRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 8,
-  },
-  reasonButton: {
-    flex: 1,
-  },
-  actionButton: {
-    marginTop: 12,
-    borderRadius: 12,
-    paddingVertical: 6,
-  },
-  receiveButton: {
-    backgroundColor: c.success,
-  },
-  readOnlyInfoBlock: {
-    marginTop: 10,
-    borderRadius: 10,
-    backgroundColor: c.surfaceMuted,
-    padding: 8,
-    gap: 4,
-  },
-  readOnlyInfoText: {
-    color: c.textSecondary,
-    fontSize: 12,
-  },
-  adjustmentCard: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: c.errorSoft,
-    borderRadius: 10,
-    backgroundColor: c.errorSoft,
-    padding: 10,
-    gap: 4,
-  },
-  adjustmentCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    marginBottom: 2,
-  },
-  adjustmentCardTitle: {
-    color: c.errorStrong,
-    fontWeight: "700",
-    fontSize: 12,
-  },
-  adjustmentCardText: {
-    color: c.errorStrong,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  reasonBadgeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  reasonBadge: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    alignSelf: "flex-start",
-  },
-  reasonBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  existingEvidenceSection: {
-    borderWidth: 1,
-    borderColor: c.successSoft,
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 6,
-    backgroundColor: c.successSoft,
-  },
-  existingEvidenceHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 10,
-  },
-  existingEvidenceTitle: {
-    color: c.successStrong,
-    fontWeight: "600",
-  },
-  evidenceGrid: {
-    marginTop: 10,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  evidenceItem: {
-    width: 96,
-    height: 96,
-    borderRadius: 10,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: c.border,
-    backgroundColor: c.surface,
-  },
-  evidenceImage: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: c.border,
-  },
+  inputMultiline: { minHeight: 72, textAlignVertical: "top" },
+  inputInvalid: { borderColor: c.error, backgroundColor: c.errorSoft },
+  extra: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", gap: 6, paddingVertical: 2 },
+  extraText: { fontSize: 14, fontWeight: "600", color: c.primary },
 }));
