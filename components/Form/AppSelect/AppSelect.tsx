@@ -216,7 +216,10 @@ export default function AppSelect(props: AppSelectProps) {
         // Deshabilitado (cargando, sin permiso o a propósito) ya no se abre:
         // antes solo se veía gris.
         disabled={props.disabled || props.readonly || false}
-        search={!props.hideSearchBox}
+        // Sin buscador va undefined, no false: la librería pasa
+        // `stickyHeaderIndices={search && [0]}` a la lista y react-native-web
+        // 0.21 truena con false («boolean false is not iterable») al abrirla.
+        search={props.hideSearchBox ? undefined : true}
         searchInputStyle={styles.searchInput}
         searchPlaceHolder="Buscar..."
         searchPlaceHolderColor={colors.textMuted}
