@@ -3,6 +3,7 @@ import RecordLoadError, {
   recordLoadProblem,
   type RecordLoadProblem,
 } from "@/components/App/RecordLoadError";
+import ShiftCashMovements from "@/components/Cash/ShiftCashMovements";
 import CloseShiftModal from "@/components/Pos/CloseShiftModal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -112,6 +113,7 @@ export default function CashSessionDetail() {
               value={t.expense > 0 ? `${formatMoney(t.income)} − ${formatMoney(t.expense)} = ${formatMoney(t.net)}` : formatMoney(t.net)}
             />
           ))}
+          <ShiftCashMovements movements={summary.cash_movements} cashierId={session.user_id} />
           <View style={styles.divider} />
           <Row label="Efectivo esperado" value={formatMoney(summary.expected_cash)} strong />
           {!isOpen && (
@@ -147,6 +149,7 @@ export default function CashSessionDetail() {
       <CloseShiftModal
         visible={closing}
         sessionId={session.id}
+        cashierId={session.user_id}
         onClose={() => setClosing(false)}
         onClosed={() => {
           setClosing(false);

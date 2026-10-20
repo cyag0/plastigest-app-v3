@@ -22,6 +22,13 @@ export const SALE_ERROR_CODES = {
   clientRequestConflict: "client_request_conflict",
   /** El pedido del kiosko que se quería cobrar o cancelar ya se cobró o se canceló. */
   kioskOrderUnavailable: "kiosk_order_unavailable",
+  /**
+   * Efectivo fuera del punto de venta (gasto, compra, movimiento) sin turno
+   * propio: hay que elegir de qué caja sale.
+   */
+  cashSessionRequired: "cash_session_required",
+  /** El turno elegido para sacar el efectivo ya se cerró o es de otra sucursal. */
+  cashSessionClosed: "cash_session_closed",
 } as const;
 
 /** `code` de la respuesta de error, si el backend lo mandó. */

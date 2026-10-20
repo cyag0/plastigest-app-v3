@@ -1,3 +1,4 @@
+import ShiftCashMovements from "@/components/Cash/ShiftCashMovements";
 import AmountPreview from "@/components/Pos/AmountPreview";
 import { apiErrorMessage } from "@/components/Pos/saleErrors";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -14,6 +15,8 @@ import { ActivityIndicator, Button, Text } from "react-native-paper";
 interface Props {
   visible: boolean;
   sessionId: number;
+  /** El cajero del turno: lo que otro sacó o metió a la caja se resalta. */
+  cashierId?: number;
   onClose: () => void;
   onClosed: (session: App.Entities.CashRegisterSession) => void;
 }
@@ -29,7 +32,7 @@ const METHOD_LABELS: Record<string, string> = { cash: "Efectivo", card: "Tarjeta
  * se muestra cómo se leyó. Un turno cerrado no se puede corregir, así que con
  * diferencia se pide confirmar antes de cerrar (Enter ya no lo cierra solo).
  */
-export default function CloseShiftModal({ visible, sessionId, onClose, onClosed }: Props) {
+export default function CloseShiftModal({ visible, sessionId, cashierId, onClose, onClosed }: Props) {
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [summary, setSummary] = useState<App.Entities.CashRegisterSessionSummary | null>(null);
@@ -128,6 +131,7 @@ export default function CloseShiftModal({ visible, sessionId, onClose, onClosed 
                   {Object.entries(summary.by_method).map(([method, t]) => (
                     <Row key={method} label={METHOD_LABELS[method] ?? method} value={formatMoney(t.net)} />
                   ))}
+                  <ShiftCashMovements movements={summary.cash_movements} cashierId={cashierId} />
                   <View style={styles.divider} />
                   <Row label="Efectivo esperado" value={formatMoney(summary.expected_cash)} strong />
 

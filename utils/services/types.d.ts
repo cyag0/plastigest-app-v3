@@ -44,7 +44,33 @@ namespace App {
       sales_total: number;
       cancelled_count: number;
       by_method: Record<string, { income: number; expense: number; net: number }>;
+      /**
+       * Efectivo que entró o salió sin ser un cobro (gastos, compras,
+       * devoluciones, movimientos a mano), con quién lo registró. Los cortes
+       * cerrados antes de oct 2026 no lo traen.
+       */
+      cash_movements?: CashSessionMovement[];
       expected_cash: number;
+    }
+
+    interface CashSessionMovement {
+      type: "income" | "expense" | "adjustment";
+      amount: number;
+      concept: string;
+      user_id: number | null;
+      user_name: string | null;
+      created_at: string | null;
+    }
+
+    /** Turno abierto de la sucursal, para elegir de qué caja sale el efectivo. */
+    interface OpenCashSession {
+      id: number;
+      cash_register_name: string | null;
+      user_id: number;
+      user_name: string | null;
+      opened_at: string;
+      /** Es el turno de quien pregunta. */
+      mine: boolean;
     }
 
     type PosPaymentMethod = "cash" | "card" | "transfer";

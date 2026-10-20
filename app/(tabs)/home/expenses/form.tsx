@@ -3,12 +3,22 @@
  * cuánto; abajo cómo se pagó: el efectivo que sale de la caja se descuenta en
  * el corte, y el que pagó el dueño de su bolsa no.
  *
+ * El efectivo de la caja sale del turno de una caja: el de quien lo registra
+ * o, si no tiene, el que elige de los abiertos en la sucursal (Caja 1 · turno
+ * de Juan); así lo ve el cajero en su corte. Si nadie tiene turno, no se
+ * puede pagar con la caja.
+ *
  * Un gasto que ya entró en un turno de caja cerrado no cambia de monto,
  * método, fecha ni «pagado con caja» (el corte ya se firmó): al guardar, el
  * servidor lo dice, esos campos vuelven a lo guardado y se bloquean; la
  * categoría y la descripción sí se pueden cambiar.
  */
 
+import CashSourcePicker, {
+  CASH_SOURCE_CODES,
+  useOpenCashSessions,
+  type CurrentCashSession,
+} from "@/components/Cash/CashSourcePicker";
 import RecordLoadError, {
   recordLoadProblem,
   type RecordLoadProblem,
@@ -63,6 +73,14 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "tarjeta", label: "Tarjeta" },
   { value: "transferencia", label: "Transferencia" },
 ];
+
+/** Lo guardado de los campos que mueven la caja. */
+type LoadedMoney = {
+  amount: string;
+  paymentMethod: PaymentMethod;
+  paidFromCash: boolean;
+  expenseDate: string;
+};
 
 /** La descripción admite 1000 caracteres (validación del backend). */
 const DESCRIPTION_MAX = 1000;
@@ -134,12 +152,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
   const [attempted, setAttempted] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   // Lo cargado del gasto, para devolver los campos de dinero al bloquearlos.
-  const loadedRef = useRef<{
-    amount: string;
-    paymentMethod: PaymentMethod;
-    paidFromCash: boolean;
-    expenseDate: string;
-  } | null>(null);
+  const loadedRef = useRef<LoadedMoney | null>(null);
 
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
@@ -149,6 +162,12 @@ export default function ExpenseForm(props: ExpenseFormProps) {
   // ¿El efectivo salió de la caja de la sucursal? Si lo pagó el dueño de su
   // bolsa, no debe descontarse en el corte.
   const [paidFromCash, setPaidFromCash] = useState(true);
+  // De qué caja sale el efectivo cuando quien lo registra no tiene turno.
+  const [cashSessionId, setCashSessionId] = useState<number | null>(null);
+  // Al editar: el turno donde ya está el egreso.
+  const [currentSession, setCurrentSession] = useState<CurrentCashSession | null>(null);
+  // Lo guardado (como loadedRef), para saber si la edición mueve la caja.
+  const [loadedMoney, setLoadedMoney] = useState<LoadedMoney | null>(null);
 
   const [categories, setCategories] = useState<{ label: string; value: string }[]>([]);
 
@@ -181,7 +200,10 @@ export default function ExpenseForm(props: ExpenseFormProps) {
       const response = await Services.expenses.show(expenseId, undefined, { silent: true });
       // El backend responde un ExpenseResource: { data: { ...gasto } }.
       const body: any = response.data;
-      const expense: App.Entities.Expense & { paid_from_cash?: boolean } = body?.data ?? body;
+      const expense: App.Entities.Expense & {
+        paid_from_cash?: boolean;
+        cash_session?: CurrentCashSession | null;
+      } = body?.data ?? body;
 
       const loaded = {
         amount: expense.amount != null ? String(expense.amount) : "",
@@ -190,12 +212,14 @@ export default function ExpenseForm(props: ExpenseFormProps) {
         expenseDate: toLocalDateString(parseLocalDate(expense.expense_date)),
       };
       loadedRef.current = loaded;
+      setLoadedMoney(loaded);
       setCategory(expense.category);
       setAmount(loaded.amount);
       setPaymentMethod(loaded.paymentMethod);
       setPaidFromCash(loaded.paidFromCash);
       setDescription(expense.description ?? "");
       setExpenseDate(loaded.expenseDate);
+      setCurrentSession(expense.cash_session ?? null);
     } catch (error) {
       setLoadProblem(recordLoadProblem(error, "No se pudo cargar el gasto. Inténtalo de nuevo."));
     } finally {
@@ -232,7 +256,21 @@ export default function ExpenseForm(props: ExpenseFormProps) {
           ? "El monto debe ser mayor a 0"
           : null,
   };
-  const invalid = Object.values(problems).some(Boolean);
+
+  // ¿Sale efectivo de la caja con lo que se va a guardar? Al editar, solo si
+  // cambia el dinero: si no, el servidor no toca la caja.
+  const moneyChanged =
+    !expenseId ||
+    !loadedMoney ||
+    loadedMoney.paymentMethod !== paymentMethod ||
+    loadedMoney.paidFromCash !== paidFromCash ||
+    loadedMoney.expenseDate !== expenseDate ||
+    parseMoney(loadedMoney.amount) !== parsedAmount;
+  const cashOut = paymentMethod === "efectivo" && paidFromCash && !moneyLocked && moneyChanged;
+  const cash = useOpenCashSessions(cashOut, currentSession);
+  const cashProblem = cash.problem(cashSessionId);
+
+  const invalid = Object.values(problems).some(Boolean) || !!cashProblem;
   const shown = (key: keyof typeof problems) => (attempted ? problems[key] : null);
 
   /**
@@ -273,6 +311,8 @@ export default function ExpenseForm(props: ExpenseFormProps) {
                 : false,
           description: description.trim(),
           expense_date: expenseDate,
+          // Sin turno propio: la caja de donde sale el efectivo.
+          ...(cashOut && cashSessionId ? { cash_register_session_id: cashSessionId } : {}),
         };
 
         if (expenseId) {
@@ -293,6 +333,8 @@ export default function ExpenseForm(props: ExpenseFormProps) {
           lockMoneyFields(message);
           return;
         }
+        // Se cerró el turno elegido o el propio: se vuelven a pedir los abiertos.
+        if (CASH_SOURCE_CODES.includes(apiErrorCode(error) ?? "")) cash.reload();
         setServerError(message);
       }
     });
@@ -328,6 +370,7 @@ export default function ExpenseForm(props: ExpenseFormProps) {
   let note: string | null = null;
   let noteTone: "error" | "warning" = "error";
   if (serverError) note = serverError;
+  else if (attempted && cashProblem && !Object.values(problems).some(Boolean)) note = cashProblem;
   else if (attempted && invalid) note = "Falta completar o corregir los campos marcados.";
   else if (lockMessage) {
     note = lockMessage;
@@ -435,13 +478,28 @@ export default function ExpenseForm(props: ExpenseFormProps) {
                   label="Pagado con dinero de la caja"
                   description={
                     paidFromCash
-                      ? "Se descuenta en el corte de caja."
+                      ? "Sale del cajón: se descuenta en el corte del turno de esa caja."
                       : "No afecta el corte: lo pagó el dueño u otra fuente."
                   }
                   value={paidFromCash}
                   onChange={setPaidFromCash}
                   disabled={moneyLocked}
                   readonly={readOnly}
+                />
+              </View>
+            )}
+
+            {paymentMethod === "efectivo" && paidFromCash && (
+              <View style={styles.field}>
+                <CashSourcePicker
+                  state={cash}
+                  active={cashOut || currentSession?.status === "open"}
+                  value={cashSessionId}
+                  onChange={setCashSessionId}
+                  current={currentSession}
+                  emptyHint="quita «Pagado con dinero de la caja» si lo pagó el dueño u otra fuente"
+                  showError={attempted}
+                  readonly={readOnly || moneyLocked}
                 />
               </View>
             )}

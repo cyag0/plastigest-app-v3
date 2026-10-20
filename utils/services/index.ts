@@ -284,6 +284,8 @@ const Services = {
          * WhatsApp). Sin él queda pedida y se recibe desde el detalle.
          */
         receive_now?: boolean;
+        /** De qué caja sale el efectivo, si quien la registra no tiene turno. */
+        cash_register_session_id?: number;
       },
     ): Promise<{
       success: boolean;
@@ -321,6 +323,8 @@ const Services = {
         /** Lo que de verdad se pagó, si no es el precio del pedido. */
         unit_price?: number;
       }[],
+      /** De qué caja sale el pago, si quien recibe no tiene turno. */
+      cashRegisterSessionId?: number | null,
     ): Promise<{
       success: boolean;
       message?: string;
@@ -333,7 +337,7 @@ const Services = {
     }> {
       const response = await axiosClient.post(
         `/auth/admin/purchases-v2/${id}/receive`,
-        { details },
+        cashRegisterSessionId ? { details, cash_register_session_id: cashRegisterSessionId } : { details },
         { silent: true },
       );
       return response.data;
@@ -827,6 +831,17 @@ const Services = {
         data: App.Entities.CashRegisterSession | null;
         summary: App.Entities.CashRegisterSessionSummary | null;
       };
+    },
+    /**
+     * Turnos abiertos de la sucursal (el propio primero): de qué caja sale el
+     * efectivo de un gasto, una compra o un movimiento sin turno propio.
+     * silent: el selector dice que no se pudieron cargar.
+     */
+    async openAtLocation() {
+      const response = await axiosClient.get("/auth/admin/cash-register-sessions/open-at-location", {
+        silent: true,
+      });
+      return (response.data?.data ?? []) as App.Entities.OpenCashSession[];
     },
     // open, show y close van con silent: quien los llama (abrir turno, corte,
     // detalle del turno) muestra el error en su lugar.

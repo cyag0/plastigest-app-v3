@@ -12,6 +12,12 @@
  */
 
 import EmptyState from "@/components/App/EmptyState";
+import CashSourcePicker, {
+  CASH_SOURCE_CODES,
+  cashSessionLabel,
+  useOpenCashSessions,
+} from "@/components/Cash/CashSourcePicker";
+import { apiErrorCode } from "@/components/Pos/saleErrors";
 import IconLabel from "@/components/App/IconLabel";
 import {
   LIST_TEXT_INSET,
@@ -175,6 +181,11 @@ export default function PurchaseDetailScreen() {
 
   // Solo una compra en efectivo pagada con la caja registra egreso al recibir.
   const paidFromCash = purchase?.payment_method === "cash" && purchase?.paid_from_cash !== false;
+  // De qué caja sale el pago, si quien recibe no tiene turno abierto.
+  const cash = useOpenCashSessions(receiving && paidFromCash);
+  const [cashSessionId, setCashSessionId] = useState<number | null>(null);
+  const [cashAttempted, setCashAttempted] = useState(false);
+  const chosenSession = cash.sessions.find((session) => session.id === cashSessionId) ?? null;
   const folio = purchase ? purchase.purchase_number || `#${purchase.id}` : "";
 
   const continuePurchase = () => {
@@ -244,8 +255,17 @@ export default function PurchaseDetailScreen() {
         return;
       }
 
+      // El pago sale ahora: tiene que salir del turno de alguna caja.
+      const cashProblem = paidFromCash && summary.received > 0 ? cash.problem(cashSessionId) : null;
+      if (cashProblem) {
+        setCashAttempted(true);
+        alerts.error(cashProblem);
+        return;
+      }
+
       const { short, received } = summary;
-      const cashText = paidFromCash ? ` y sale un egreso de caja por ${formatMoney(received)}` : "";
+      const cashFrom = chosenSession && !cash.mine ? ` de ${cashSessionLabel(chosenSession)}` : "";
+      const cashText = paidFromCash ? ` y sale un egreso de caja${cashFrom} por ${formatMoney(received)}` : "";
       const repricedCount = receiveRows.filter((row) => row.repriced).length;
       const repricedNote =
         repricedCount > 0
@@ -278,7 +298,11 @@ export default function PurchaseDetailScreen() {
           // Solo si cambió: sin él se queda el precio del pedido.
           ...(row.repriced ? { unit_price: row.price as number } : {}),
         }));
-        const response = await Services.purchasesV2.receive(purchase.id, details);
+        const response = await Services.purchasesV2.receive(
+          purchase.id,
+          details,
+          paidFromCash && !cash.mine ? cashSessionId : null,
+        );
         if (response?.success === false) {
           alerts.error(response.message || "No se pudo registrar la recepción.");
         } else if (response?.cash_out_of_shift) {
@@ -297,6 +321,8 @@ export default function PurchaseDetailScreen() {
         }
       } catch (e) {
         alerts.error(errorMessageOf(e, "No se pudo registrar la recepción."));
+        // Se cerró el turno elegido o el propio: se vuelven a pedir los abiertos.
+        if (CASH_SOURCE_CODES.includes(apiErrorCode(e) ?? "")) cash.reload();
       }
       await load();
     });
@@ -499,6 +525,14 @@ export default function PurchaseDetailScreen() {
           Se pagó con la caja: al registrar la recepción sale un egreso por {formatMoney(summary.received)}.
         </Text>
       )}
+      <CashSourcePicker
+        state={cash}
+        active={paidFromCash}
+        value={cashSessionId}
+        onChange={setCashSessionId}
+        emptyHint="deja la compra pendiente hasta que haya un turno abierto"
+        showError={cashAttempted}
+      />
       <Button
         mode="contained"
         icon="package-variant-closed-check"

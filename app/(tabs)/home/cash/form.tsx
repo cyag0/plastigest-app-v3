@@ -7,10 +7,13 @@
  *   Concepto
  *   Monto       "1,500" son mil quinientos; debajo, cómo se leyó
  *   Método de pago · Fecha
+ *   Caja        en efectivo y sin turno propio: de cuál caja sale o a cuál
+ *               entra (el corte de ese turno lo cuenta, con tu nombre)
  *   Notas (opcional)
  */
 
 import SegmentedControl from "@/components/App/SegmentedControl";
+import CashSourcePicker, { useOpenCashSessions } from "@/components/Cash/CashSourcePicker";
 import AppForm, { useAppForm } from "@/components/Form/AppForm/AppForm";
 import { InputLabel } from "@/components/Form/AppForm/hoc";
 import ReadonlyText from "@/components/Form/AppForm/ReadonlyText";
@@ -29,7 +32,7 @@ import { goBack } from "@/utils/navigation";
 import Services from "@/utils/services";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { FormikProps, useField, useFormikContext } from "formik";
-import React, { useLayoutEffect } from "react";
+import React, { useEffect, useLayoutEffect, useRef } from "react";
 import { Text, View } from "react-native";
 import * as Yup from "yup";
 
@@ -152,6 +155,41 @@ function AmountField() {
   );
 }
 
+/**
+ * De qué caja sale (o a cuál entra) el efectivo, al capturar uno nuevo. Lo que
+ * falta elegir queda en `problemRef` para que el guardado lo revise.
+ */
+function CashSourceField({ problemRef }: { problemRef: React.MutableRefObject<string | null> }) {
+  const { values, setFieldValue, submitCount } = useFormikContext<{
+    type: MovementType;
+    payment_method: string;
+    cash_register_session_id: number | null;
+  }>();
+  const { readonly } = useAppForm();
+  const styles = useFieldStyles();
+  const active = values.payment_method === "cash" && !readonly;
+  const cash = useOpenCashSessions(active);
+  const problem = cash.problem(values.cash_register_session_id);
+  useEffect(() => {
+    problemRef.current = problem;
+  }, [problem, problemRef]);
+
+  if (!active) return null;
+
+  return (
+    <View style={styles.field}>
+      <CashSourcePicker
+        state={cash}
+        active
+        value={values.cash_register_session_id}
+        onChange={(sessionId) => setFieldValue("cash_register_session_id", sessionId)}
+        incoming={values.type !== "expense"}
+        showError={submitCount > 0}
+      />
+    </View>
+  );
+}
+
 export default function CashMovementForm() {
   const params = useLocalSearchParams();
   const movementId = params.id ? parseInt(params.id as string) : undefined;
@@ -159,6 +197,7 @@ export default function CashMovementForm() {
   const navigation = useNavigation();
   const { can } = useCan();
   const canSave = can(movementId ? "cash_movements_update" : "cash_movements_create");
+  const cashProblem = useRef<string | null>(null);
 
   // Título de la barra en el teléfono (en web lo ponen las migas de la ruta).
   useLayoutEffect(() => {
@@ -177,7 +216,12 @@ export default function CashMovementForm() {
    * pregunta «¿Estás seguro de guardar los cambios?»: solo era un paso más.
    */
   const save = async (_formData: any, form: FormikProps<any>) => {
-    const { type, concept, amount, payment_method, movement_date, notes } = form.values;
+    const { type, concept, amount, payment_method, movement_date, notes, cash_register_session_id } = form.values;
+    // En efectivo y sin turno propio hay que elegir la caja (el servidor
+    // también lo rechaza).
+    if (!movementId && payment_method === "cash" && cashProblem.current) {
+      throw new Error(cashProblem.current);
+    }
     const data = {
       type,
       concept: String(concept ?? "").trim(),
@@ -185,6 +229,9 @@ export default function CashMovementForm() {
       payment_method,
       movement_date,
       notes,
+      ...(!movementId && payment_method === "cash" && cash_register_session_id
+        ? { cash_register_session_id }
+        : {}),
     };
 
     if (movementId) {
@@ -210,6 +257,7 @@ export default function CashMovementForm() {
         payment_method: "cash",
         movement_date: toLocalDateString(),
         notes: "",
+        cash_register_session_id: null,
       }}
       validationSchema={validationSchema}
       onSubmit={save}
@@ -232,6 +280,7 @@ export default function CashMovementForm() {
         />
         <FormDatePicker name="movement_date" label="Fecha" />
       </FormRow>
+      {!movementId && <CashSourceField problemRef={cashProblem} />}
       <FormInput
         name="notes"
         label="Notas"

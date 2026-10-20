@@ -185,6 +185,7 @@ export default function PosScreen() {
         <CloseShiftModal
           visible={closeOtherOpen}
           sessionId={session.id}
+          cashierId={session.user_id}
           onClose={() => setCloseOtherOpen(false)}
           onClosed={(closed) => {
             setCloseOtherOpen(false);
@@ -672,6 +673,7 @@ function PosRegister({
       <CloseShiftModal
         visible={closeOpen}
         sessionId={session.id}
+        cashierId={session.user_id}
         onClose={() => setCloseOpen(false)}
         onClosed={(closed) => {
           setCloseOpen(false);

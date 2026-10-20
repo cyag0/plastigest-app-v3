@@ -2,6 +2,11 @@ import AppBar from "@/components/App/AppBar";
 import EmptyState from "@/components/App/EmptyState";
 import { ListGroup, ListRow, ListSectionTitle } from "@/components/App/ListGroup";
 import SearchInput from "@/components/App/SearchInput";
+import CashSourcePicker, {
+  CASH_SOURCE_CODES,
+  cashSessionLabel,
+  useOpenCashSessions,
+} from "@/components/Cash/CashSourcePicker";
 import AppDatePicker from "@/components/Form/AppDatePicker";
 import { Cart, ListProducts } from "@/components/Views/POSV3/components";
 import type { ListProductsHandle } from "@/components/Views/POSV3/components/ListProducts";
@@ -12,6 +17,7 @@ import { useCan } from "@/hooks/useCan";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useSubmitGuard } from "@/hooks/useSubmitGuard";
 import { useThemedStyles } from "@/hooks/useThemedStyles";
+import { apiErrorCode } from "@/components/Pos/saleErrors";
 import { errorMessageOf, isApiError } from "@/utils/errorNotice";
 import { formatMoney } from "@/utils/format";
 import { toLocalDateString } from "@/utils/dates";
@@ -325,6 +331,10 @@ export default function PurchaseFormScreen() {
   const [paymentMenuVisible, setPaymentMenuVisible] = useState(false);
   // Por qué no se pudo confirmar, dentro del modal (celular).
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  // De qué caja sale el efectivo al registrarla recibida, si quien la
+  // registra no tiene turno abierto.
+  const [cashSessionId, setCashSessionId] = useState<number | null>(null);
+  const [cashAttempted, setCashAttempted] = useState(false);
   // En la tableta, con el teclado abierto, el total y los botones fijos no
   // dejaban ver el renglón que se escribe.
   const keyboardOpen = useKeyboardOpen();
@@ -342,6 +352,8 @@ export default function PurchaseFormScreen() {
   const paymentLabel =
     PAYMENT_OPTIONS.find((option) => option.value === header.payment_method)?.label ?? "Otro";
   const paidFromCash = header.payment_method === "cash" && header.paid_from_cash;
+  const cash = useOpenCashSessions(paidFromCash && canConfirm);
+  const chosenSession = cash.sessions.find((session) => session.id === cashSessionId) ?? null;
 
   const dismissNotices = () => {
     setConfirmError(null);
@@ -395,6 +407,17 @@ export default function PurchaseFormScreen() {
         alerts.error("Una compra que ya llegó no puede tener fecha posterior a hoy.");
         return;
       }
+      // El efectivo sale ahora: tiene que salir del turno de alguna caja.
+      const cashProblem = receiveNow && paidFromCash ? cash.problem(cashSessionId) : null;
+      if (cashProblem) {
+        setCashAttempted(true);
+        alerts.error(cashProblem);
+        if (isMobile) {
+          setConfirmError(cashProblem);
+          setCartVisible(true);
+        }
+        return;
+      }
 
       // En centavos, como se guarda: $0.004/g queda en $0.00 y antes no se
       // contaba porque no era exactamente 0.
@@ -409,11 +432,13 @@ export default function PurchaseFormScreen() {
       // El pago siempre, también cuando no sale de la caja: el método por
       // defecto es «Otro» y los datos quedan debajo de los productos, fuera de
       // la vista. Antes solo se mencionaba la caja con efectivo. El egreso va
-      // al turno abierto de quien la recibe; si no tiene, a ningún corte (el
-      // servidor lo dice al registrarla).
+      // al turno de la caja de donde sale: el de quien la recibe o el que
+      // eligió de los abiertos.
       const paymentNote = paidFromCash
         ? receiveNow
-          ? "Pago: efectivo de la caja, se descuenta de tu turno abierto."
+          ? chosenSession && !cash.mine
+            ? `Pago: efectivo de ${cashSessionLabel(chosenSession)}, se descuenta en ese corte.`
+            : "Pago: efectivo de la caja, se descuenta de tu turno abierto."
           : "Pago: efectivo de la caja, se descuenta del turno de quien la reciba."
         : `Pago: ${paymentLabel} (no sale de la caja).`;
 
@@ -447,6 +472,9 @@ export default function PurchaseFormScreen() {
           notes: header.notes.trim(),
           document_number: header.document_number || undefined,
           receive_now: receiveNow,
+          ...(receiveNow && paidFromCash && !cash.mine && cashSessionId
+            ? { cash_register_session_id: cashSessionId }
+            : {}),
         });
         // Ya había una confirmación en curso.
         if (!result) return;
@@ -481,6 +509,8 @@ export default function PurchaseFormScreen() {
           ? errorMessageOf(error, "No se pudo confirmar la compra.")
           : error?.message || "No se pudo confirmar la compra.";
         alerts.error(message);
+        // Se cerró el turno elegido o el propio: se vuelven a pedir los abiertos.
+        if (CASH_SOURCE_CODES.includes(apiErrorCode(error) ?? "")) cash.reload();
         // En el celular se vuelve a abrir la compra para corregirla, con el
         // motivo adentro (el aviso de la app queda detrás del modal).
         if (isMobile) {
@@ -810,6 +840,16 @@ export default function PurchaseFormScreen() {
           </View>
         )}
       </ListGroup>
+      {/* Al registrarla recibida el efectivo sale ya; guardada como pedido,
+          sale al recibirla (y ahí se elige). */}
+      <CashSourcePicker
+        state={cash}
+        active={paidFromCash && canConfirm}
+        value={cashSessionId}
+        onChange={setCashSessionId}
+        emptyHint="quita «Pagado con dinero de la caja» si la pagó el dueño u otra fuente, o guárdala como pedido"
+        showError={cashAttempted}
+      />
       <TextInput
         value={header.notes}
         onChangeText={(notes) => updateHeader({ notes })}

@@ -94,6 +94,8 @@ interface ConfirmPurchaseData {
    * entra al inventario. Sin él queda pedida.
    */
   receive_now?: boolean;
+  /** De qué caja sale el efectivo, si quien la registra no tiene turno. */
+  cash_register_session_id?: number;
 }
 
 /** Cómo quedó la compra al confirmarla. */
